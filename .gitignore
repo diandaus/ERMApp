@@ -1,0 +1,16 @@
+# Environment variables — JANGAN di-commit
+backend/.env
+
+# Build output
+backend/backend
+backend/ermapp-backend
+backend/*.exe
+backend/*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
