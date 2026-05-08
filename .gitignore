@@ -4,6 +4,7 @@ backend/.env
 # Build output
 backend/backend
 backend/ermapp-backend
+backend/server
 backend/*.exe
 backend/*.log
 
