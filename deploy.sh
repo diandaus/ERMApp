@@ -1,14 +1,15 @@
 #!/bin/bash
 # Script deploy ERMApp ke server Linux Mint
-# Jalankan di server: bash deploy.sh
+# Jalankan dari dalam folder ERMApp: bash deploy.sh
 
 set -e
 
-APP_DIR="/opt/ermapp"
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_NAME="ermapp-backend"
 GO_VERSION="1.22.3"
 
 echo "=== Deploy ERMApp Backend ==="
+echo "Direktori: $APP_DIR"
 
 # 1. Cek Go
 if ! command -v go &>/dev/null; then
@@ -21,35 +22,32 @@ if ! command -v go &>/dev/null; then
   echo "Go terinstall: $(go version)"
 fi
 
-# 2. Buat direktori app
-sudo mkdir -p $APP_DIR
-sudo chown $USER:$USER $APP_DIR
-
-# 3. Build backend
-echo "Build backend..."
-cd $APP_DIR/backend
-go build -o ermapp-backend .
-echo "Build selesai."
-
-# 4. Setup .env jika belum ada
+# 2. Setup .env jika belum ada
 if [ ! -f "$APP_DIR/backend/.env" ]; then
-  cp $APP_DIR/backend/.env.example $APP_DIR/backend/.env
+  cp "$APP_DIR/backend/.env.example" "$APP_DIR/backend/.env"
   echo ""
   echo "PERHATIAN: Edit file .env terlebih dahulu:"
   echo "  nano $APP_DIR/backend/.env"
-  echo ""
+  echo "Lalu jalankan deploy.sh lagi."
+  exit 1
 fi
 
-# 5. Setup direktori worklist Orthanc
+# 3. Build backend
+echo "Build backend..."
+cd "$APP_DIR/backend"
+go build -o ermapp-backend .
+echo "Build selesai."
+
+# 4. Setup direktori worklist Orthanc
 sudo mkdir -p /var/lib/orthanc/worklists
-sudo chown $USER:$USER /var/lib/orthanc/worklists
+sudo chown "$USER:$USER" /var/lib/orthanc/worklists
 echo "Worklist dir: /var/lib/orthanc/worklists"
 
-# 6. Buat systemd service
+# 5. Buat systemd service
 sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=ERMApp Backend
-After=network.target mysql.service
+After=network.target
 
 [Service]
 Type=simple
@@ -65,7 +63,7 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-# 7. Aktifkan service
+# 6. Aktifkan service
 sudo systemctl daemon-reload
 sudo systemctl enable $SERVICE_NAME
 sudo systemctl restart $SERVICE_NAME
