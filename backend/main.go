@@ -235,9 +235,11 @@ func ensureSatuSehatTables(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS satu_sehat_mwl_radiologi (
 			id INT AUTO_INCREMENT PRIMARY KEY,
 			noorder VARCHAR(20) NOT NULL UNIQUE,
-			wl_file VARCHAR(500) DEFAULT '',
-			status VARCHAR(20) DEFAULT 'sent',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			accession_number VARCHAR(20) DEFAULT '',
+			worklist_file VARCHAR(500) DEFAULT '',
+			status VARCHAR(20) DEFAULT 'terkirim',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 		`CREATE TABLE IF NOT EXISTS satu_sehat_imagingstudy (
 			id INT AUTO_INCREMENT PRIMARY KEY,

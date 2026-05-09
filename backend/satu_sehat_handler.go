@@ -210,9 +210,13 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 			dokterPerujuk  string
 			diagnosaKlinis string
 			idEncounter    sql.NullString
+			noRkmMedis     string
+			nmPasien       string
+			tglLahir       sql.NullString
+			jk             sql.NullString
+			nmDokter       string
 			ihsNumber      sql.NullString
 			ihsDokter      sql.NullString
-			noRkmMedis     string
 		)
 		err = db.QueryRow(`
 			SELECT
@@ -222,20 +226,26 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 				IFNULL(pr.dokter_perujuk,'') as dokter_perujuk,
 				IFNULL(pr.diagnosa_klinis,'') as diagnosa_klinis,
 				se.id_encounter,
-				IFNULL(rp.no_rkm_medis,'') as no_rkm_medis
+				IFNULL(rp.no_rkm_medis,'') as no_rkm_medis,
+				IFNULL(p.nm_pasien,'') as nm_pasien,
+				p.tgl_lahir,
+				p.jk,
+				IFNULL(d.nm_dokter,'') as nm_dokter
 			FROM permintaan_radiologi pr
 			LEFT JOIN reg_periksa rp ON pr.no_rawat = rp.no_rawat
+			LEFT JOIN pasien p ON rp.no_rkm_medis = p.no_rkm_medis
+			LEFT JOIN dokter d ON pr.dokter_perujuk = d.kd_dokter
 			LEFT JOIN satu_sehat_encounter se ON se.no_rawat = pr.no_rawat
 			WHERE pr.noorder = ?
-		`, noOrder).Scan(&noRawat, &tglPermintaan, &jamPermintaan, &dokterPerujuk, &diagnosaKlinis, &idEncounter, &noRkmMedis)
+		`, noOrder).Scan(&noRawat, &tglPermintaan, &jamPermintaan, &dokterPerujuk, &diagnosaKlinis,
+			&idEncounter, &noRkmMedis, &nmPasien, &tglLahir, &jk, &nmDokter)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Data order radiologi tidak ditemukan"})
 			return
 		}
 
-		// IHS number pasien (dari tabel satu_sehat_pasien jika ada, fallback kosong)
+		// IHS number pasien dan dokter perujuk
 		db.QueryRow(`SELECT ihs_number FROM satu_sehat_pasien WHERE no_rkm_medis = ?`, noRkmMedis).Scan(&ihsNumber)
-		// IHS number dokter perujuk
 		db.QueryRow(`SELECT ihs_number FROM satu_sehat_dokter WHERE kd_dokter = ?`, dokterPerujuk).Scan(&ihsDokter)
 
 		// Ambil daftar pemeriksaan untuk order ini
@@ -275,6 +285,21 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
+		// ── PRE-STEP: Lazy Modify — sinkronisasi tag DICOM di Orthanc ────────
+		var descList []string
+		for _, p := range pemeriksaanList {
+			descList = append(descList, p.NmPerawatan)
+		}
+		tglLahirStr := ""
+		if tglLahir.Valid {
+			tglLahirStr = tglLahir.String
+		}
+		jkStr := ""
+		if jk.Valid {
+			jkStr = jk.String
+		}
+		pacsMsg := lazyModifyPACS(db, noOrder, noRkmMedis, nmPasien, tglLahirStr, jkStr, tglPermintaan, strings.Join(descList, ", "))
+
 		// Dapatkan token
 		token, err := getSatuSehatToken(cfg)
 		if err != nil {
@@ -308,8 +333,18 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 
 			payload := map[string]interface{}{
 				"resourceType": "ServiceRequest",
-				"status":       "active",
-				"intent":       "order",
+				"identifier": []map[string]interface{}{
+					{
+						"system": fmt.Sprintf("http://sys-ids.kemkes.go.id/servicerequest/%s", cfg.OrgID),
+						"value":  fmt.Sprintf("%s.%s", noOrder, p.KdJenisPrw),
+					},
+					{
+						"system": fmt.Sprintf("http://sys-ids.kemkes.go.id/acsn/%s", cfg.OrgID),
+						"value":  noOrder,
+					},
+				},
+				"status": "active",
+				"intent": "order",
 				"category": []map[string]interface{}{
 					{
 						"coding": []map[string]interface{}{
@@ -357,13 +392,19 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 
 			// Requester (dokter perujuk)
 			if ihsDokter.Valid && ihsDokter.String != "" {
-				payload["requester"] = map[string]string{"reference": "Practitioner/" + ihsDokter.String}
+				payload["requester"] = map[string]interface{}{
+					"reference": "Practitioner/" + ihsDokter.String,
+					"display":   nmDokter,
+				}
 			}
 
-			// Performer (organisasi)
+			// Performer (organisasi radiologi)
 			if cfg.OrgID != "" {
-				payload["performer"] = []map[string]string{
-					{"reference": "Organization/" + cfg.OrgID},
+				payload["performer"] = []map[string]interface{}{
+					{
+						"reference": "Organization/" + cfg.OrgID,
+						"display":   "Ruang Radiologi",
+					},
 				}
 			}
 
@@ -403,8 +444,9 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"noorder": noOrder,
-			"results": results,
+			"noorder":   noOrder,
+			"pacs_sync": pacsMsg,
+			"results":   results,
 		})
 	}
 }

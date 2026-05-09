@@ -53,6 +53,83 @@ func (o *orthancClient) do(method, path string, body interface{}) ([]byte, int, 
 	return data, resp.StatusCode, nil
 }
 
+// lazyModifyPACS — sinkronisasi tag DICOM di Orthanc sebelum kirim ke Satu Sehat.
+// Kegagalan TIDAK menghentikan proses; hanya mengembalikan pesan log.
+func lazyModifyPACS(db *sql.DB, noOrder, noRkmMedis, nmPasien, tglLahir, jk, tglPermintaan, studyDesc string) string {
+	orthanc := newOrthancClient(db)
+
+	// Cari study by AccessionNumber = noorder
+	findResp, _, err := orthanc.do("POST", "/tools/find", map[string]interface{}{
+		"Level":  "Study",
+		"Query":  map[string]string{"AccessionNumber": noOrder},
+		"Expand": true,
+		"Limit":  1,
+	})
+	if err != nil {
+		return "PACS sync skip: " + err.Error()
+	}
+
+	var studies []map[string]interface{}
+	json.Unmarshal(findResp, &studies)
+
+	// Fallback: cari by PatientID + StudyDate
+	if len(studies) == 0 {
+		dicomDate := strings.ReplaceAll(tglPermintaan, "-", "")
+		findResp2, _, _ := orthanc.do("POST", "/tools/find", map[string]interface{}{
+			"Level":  "Study",
+			"Query":  map[string]string{"PatientID": noRkmMedis, "StudyDate": dicomDate},
+			"Expand": true,
+			"Limit":  1,
+		})
+		json.Unmarshal(findResp2, &studies)
+	}
+
+	if len(studies) == 0 {
+		return "PACS sync skip: study belum ada di Orthanc"
+	}
+
+	studyID, _ := studies[0]["ID"].(string)
+	if studyID == "" {
+		return "PACS sync skip: ID study tidak valid"
+	}
+
+	sex := "O"
+	switch strings.ToUpper(jk) {
+	case "L":
+		sex = "M"
+	case "P":
+		sex = "F"
+	}
+
+	replaceTags := map[string]string{
+		"PatientID":        noRkmMedis,
+		"PatientName":      strings.ToUpper(nmPasien),
+		"PatientBirthDate": strings.ReplaceAll(tglLahir, "-", ""),
+		"PatientSex":       sex,
+		"AccessionNumber":  noOrder,
+		"StudyDescription": studyDesc,
+	}
+
+	_, status, err := orthanc.do("POST", "/studies/"+studyID+"/modify", map[string]interface{}{
+		"Replace":    replaceTags,
+		"KeepSource": false,
+		"Force":      true,
+	})
+	if err != nil {
+		return "PACS sync error: " + err.Error()
+	}
+	if status != 200 {
+		// Fallback: AccessionNumber + StudyDescription saja (tanpa patient tags)
+		orthanc.do("POST", "/studies/"+studyID+"/modify", map[string]interface{}{
+			"Replace":    map[string]string{"AccessionNumber": noOrder, "StudyDescription": studyDesc},
+			"KeepSource": false,
+			"Force":      true,
+		})
+		return fmt.Sprintf("PACS sync: partial modify (full gagal HTTP %d)", status)
+	}
+	return "PACS sync OK: tag DICOM diperbarui (" + studyID[:8] + "...)"
+}
+
 // POST /api/satu-sehat/dicom/send/*noorder
 // Cari study di Orthanc berdasarkan AccessionNumber lalu kirim ke DICOM Router
 func sendDicomToSatuSehat(db *sql.DB) gin.HandlerFunc {
