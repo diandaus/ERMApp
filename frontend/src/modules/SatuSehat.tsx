@@ -1,4 +1,5 @@
 import React from 'react';
+import DicomMonitor from '../components/DicomMonitor';
 
 type TabKey = 'dashboard' | 'konfigurasi' | 'pasien' | 'imaging-study' | 'log';
 
@@ -150,7 +151,7 @@ export const SatuSehatView: React.FC = () => {
   const [patientError, setPatientError] = React.useState<string | null>(null);
 
   // ImagingStudy state
-  const [isSubTab, setIsSubTab] = React.useState<'daftar' | 'mapping'>('daftar');
+  const [isSubTab, setIsSubTab] = React.useState<'daftar' | 'mapping' | 'monitor'>('daftar');
   const [isTglDari, setIsTglDari] = React.useState(new Date().toISOString().split('T')[0]);
   const [isTglSampai, setIsTglSampai] = React.useState(new Date().toISOString().split('T')[0]);
   const [isStatusFilter, setIsStatusFilter] = React.useState('');
@@ -545,20 +546,24 @@ export const SatuSehatView: React.FC = () => {
 
           {/* Resource grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-            {filteredResources.map(r => (
-              <div key={r.key} style={{
+            {filteredResources.map(r => {
+              const isClickable = r.key === 'imagingstudy';
+              return (
+              <div key={r.key}
+                onClick={() => { if (isClickable) setActiveTab('imaging-study'); }}
+                style={{
                 background: '#fff',
-                border: `1px solid ${(r.count ?? 0) > 0 ? '#e5e7eb' : '#f3f4f6'}`,
+                border: `1px solid ${isClickable ? '#bfdbfe' : (r.count ?? 0) > 0 ? '#e5e7eb' : '#f3f4f6'}`,
                 borderRadius: 12,
                 padding: '14px 16px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 6,
-                opacity: r.count === null ? 0.6 : 1,
+                opacity: r.count === null && !isClickable ? 0.6 : 1,
                 transition: 'box-shadow 0.15s',
-                cursor: 'default',
+                cursor: isClickable ? 'pointer' : 'default',
               }}
-              onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)')}
+              onMouseEnter={e => (e.currentTarget.style.boxShadow = isClickable ? '0 2px 12px rgba(37,99,235,0.15)' : '0 2px 8px rgba(0,0,0,0.08)')}
               onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -582,12 +587,16 @@ export const SatuSehatView: React.FC = () => {
                   {r.count !== null && (
                     <span style={{ fontSize: 10, color: '#9ca3af' }}>data terkirim</span>
                   )}
-                  {r.count === null && (
+                  {r.count === null && !isClickable && (
                     <span style={{ fontSize: 10, color: '#9ca3af' }}>belum dikonfigurasi</span>
+                  )}
+                  {isClickable && (
+                    <span style={{ fontSize: 10, color: '#2563eb', fontWeight: 500 }}>Lihat Monitor →</span>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -775,15 +784,19 @@ export const SatuSehatView: React.FC = () => {
 
           {/* Sub-tab */}
           <div style={{ display: 'flex', gap: 6 }}>
-            {(['daftar', 'mapping'] as const).map(t => (
-              <button key={t} onClick={() => setIsSubTab(t)} style={{
+            {([
+              { key: 'daftar',   label: '🩻 Daftar Studi' },
+              { key: 'monitor',  label: '📊 Monitor DICOM' },
+              { key: 'mapping',  label: '🗺️ Mapping Modalitas' },
+            ] as const).map(t => (
+              <button key={t.key} onClick={() => setIsSubTab(t.key)} style={{
                 padding: '6px 16px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
-                border: isSubTab === t ? '1px solid #2563eb' : '1px solid #e5e7eb',
-                background: isSubTab === t ? '#eff6ff' : '#fff',
-                color: isSubTab === t ? '#2563eb' : '#6b7280',
-                fontWeight: isSubTab === t ? 600 : 400
+                border: isSubTab === t.key ? '1px solid #2563eb' : '1px solid #e5e7eb',
+                background: isSubTab === t.key ? '#eff6ff' : '#fff',
+                color: isSubTab === t.key ? '#2563eb' : '#6b7280',
+                fontWeight: isSubTab === t.key ? 600 : 400,
               }}>
-                {t === 'daftar' ? '🩻 Daftar Studi' : '🗺️ Mapping Modalitas'}
+                {t.label}
               </button>
             ))}
           </div>
@@ -950,6 +963,16 @@ export const SatuSehatView: React.FC = () => {
                 <strong>Catatan:</strong> Sebelum mengirim, pastikan (1) konfigurasi Client ID & Secret sudah diisi, (2) mapping modalitas sudah dilengkapi, (3) Encounter untuk kunjungan sudah dikirim terlebih dahulu.
               </div>
             </div>
+          )}
+
+          {/* ── Sub: Monitor DICOM ── */}
+          {isSubTab === 'monitor' && (
+            <DicomMonitor
+              onSelectOrder={noorder => {
+                setIsSubTab('daftar');
+                // scroll ke order tersebut setelah daftar dimuat
+              }}
+            />
           )}
 
           {/* ── Sub: Mapping ── */}

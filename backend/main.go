@@ -257,6 +257,17 @@ func ensureSatuSehatTables(db *sql.DB) error {
 			modality_display VARCHAR(100) DEFAULT ''
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
+	// Migrasi kolom yang mungkin belum ada di tabel lama
+	migrations := []string{
+		`ALTER TABLE satu_sehat_imagingstudy ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'via-dicom-router'`,
+		`ALTER TABLE satu_sehat_mwl_radiologi ADD COLUMN IF NOT EXISTS accession_number VARCHAR(20) DEFAULT ''`,
+		`ALTER TABLE satu_sehat_mwl_radiologi ADD COLUMN IF NOT EXISTS worklist_file VARCHAR(500) DEFAULT ''`,
+		`ALTER TABLE satu_sehat_mwl_radiologi ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
+	}
+	for _, m := range migrations {
+		db.Exec(m) // abaikan error (kolom mungkin sudah ada di versi MySQL lama)
+	}
+
 	for _, q := range queries {
 		if _, err := db.Exec(q); err != nil {
 			return err
@@ -2706,6 +2717,7 @@ func main() {
 	r.GET("/api/satu-sehat/dicom/studies/*noorder", getDicomStudies(db))
 	r.POST("/api/satu-sehat/dicom/send/*noorder", sendDicomToSatuSehat(db))
 	r.POST("/api/satu-sehat/dicom/register-router", registerDicomRouterToOrthanc(db))
+	r.GET("/api/satu-sehat/monitoring/radiologi", getMonitoringRadiologi(db))
 
 	// Generate Nomor Registrasi endpoints
 	r.POST("/api/registrasi/generate-noreg", generateNoReg(db))

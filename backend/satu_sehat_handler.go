@@ -485,6 +485,89 @@ func getServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// ─── Monitoring Radiologi ─────────────────────────────────────────────────────
+
+// GET /api/satu-sehat/monitoring/radiologi
+func getMonitoringRadiologi(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tglDari := c.DefaultQuery("tgl_dari", time.Now().Format("2006-01-02"))
+		tglSampai := c.DefaultQuery("tgl_sampai", time.Now().Format("2006-01-02"))
+
+		rows, err := db.Query(`
+			SELECT
+				pr.noorder,
+				pr.no_rawat,
+				pr.tgl_permintaan,
+				IFNULL(p.nm_pasien,'') as nm_pasien,
+				IFNULL(rp.no_rkm_medis,'') as no_rkm_medis,
+				IFNULL(mwl.status,'') as mwl_status,
+				COUNT(DISTINCT ppr.kd_jenis_prw) as sr_total,
+				COUNT(DISTINCT ssr.kd_jenis_prw) as sr_done,
+				IFNULL(si.id_imagingstudy,'') as imagingstudy_id,
+				IFNULL(si.status,'') as imagingstudy_status
+			FROM permintaan_radiologi pr
+			LEFT JOIN reg_periksa rp ON pr.no_rawat = rp.no_rawat
+			LEFT JOIN pasien p ON rp.no_rkm_medis = p.no_rkm_medis
+			LEFT JOIN satu_sehat_mwl_radiologi mwl ON mwl.noorder = pr.noorder
+			LEFT JOIN permintaan_pemeriksaan_radiologi ppr ON ppr.noorder = pr.noorder
+			LEFT JOIN satu_sehat_servicerequest_radiologi ssr
+				ON ssr.noorder = ppr.noorder AND ssr.kd_jenis_prw = ppr.kd_jenis_prw
+				AND ssr.id_servicerequest != ''
+			LEFT JOIN satu_sehat_imagingstudy si ON si.noorder = pr.noorder
+			WHERE pr.tgl_permintaan BETWEEN ? AND ?
+			GROUP BY pr.noorder, pr.no_rawat, pr.tgl_permintaan, nm_pasien, no_rkm_medis,
+				mwl_status, imagingstudy_id, imagingstudy_status
+			ORDER BY pr.tgl_permintaan DESC, pr.noorder DESC
+		`, tglDari, tglSampai)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type MonitorItem struct {
+			NoOrder            string `json:"noorder"`
+			NoRawat            string `json:"no_rawat"`
+			TglPermintaan      string `json:"tgl_permintaan"`
+			NmPasien           string `json:"nm_pasien"`
+			NoRkmMedis         string `json:"no_rkm_medis"`
+			MWLStatus          string `json:"mwl_status"`
+			SRTotal            int    `json:"sr_total"`
+			SRDone             int    `json:"sr_done"`
+			ImagingStudyID     string `json:"imagingstudy_id"`
+			ImagingStudyStatus string `json:"imagingstudy_status"`
+		}
+		type Summary struct {
+			Total       int `json:"total"`
+			MWLDone     int `json:"mwl_done"`
+			SRDone      int `json:"sr_done"`
+			ImagingDone int `json:"imaging_done"`
+		}
+
+		items := []MonitorItem{}
+		sum := Summary{}
+		for rows.Next() {
+			var item MonitorItem
+			rows.Scan(&item.NoOrder, &item.NoRawat, &item.TglPermintaan, &item.NmPasien,
+				&item.NoRkmMedis, &item.MWLStatus, &item.SRTotal, &item.SRDone,
+				&item.ImagingStudyID, &item.ImagingStudyStatus)
+			items = append(items, item)
+			sum.Total++
+			if item.MWLStatus != "" {
+				sum.MWLDone++
+			}
+			if item.SRDone > 0 && item.SRDone >= item.SRTotal {
+				sum.SRDone++
+			}
+			if item.ImagingStudyID != "" {
+				sum.ImagingDone++
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"orders": items, "summary": sum})
+	}
+}
+
 // ─── ImagingStudy ─────────────────────────────────────────────────────────────
 
 // GET /api/satu-sehat/imaging-study
