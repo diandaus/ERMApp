@@ -111,6 +111,11 @@ const CATEGORY_LABELS: Record<ResourceItem['category'], string> = {
   lainnya:   'Lainnya',
 };
 
+const TH: React.CSSProperties = {
+  padding: '7px 10px', textAlign: 'left', fontSize: 11,
+  fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap',
+};
+
 const INPUT_STYLE: React.CSSProperties = {
   width: '100%',
   padding: '8px 12px',
@@ -163,6 +168,9 @@ export const SatuSehatView: React.FC = () => {
   const [mappingLoading, setMappingLoading] = React.useState(false);
   const [editingMapping, setEditingMapping] = React.useState<Record<string, MappingRadiologi>>({});
   const [savingMapping, setSavingMapping] = React.useState<Set<string>>(new Set());
+  const [importingKhanza, setImportingKhanza] = React.useState(false);
+  const [importMsg, setImportMsg] = React.useState('');
+  const [mappingFilter, setMappingFilter] = React.useState<'semua' | 'belum-loinc' | 'belum-modality'>('semua');
   // MWL state
   const [mwlSending, setMwlSending] = React.useState<Set<string>>(new Set());
   const [mwlResults, setMwlResults] = React.useState<Record<string, { ok: boolean; msg: string }>>({});
@@ -340,6 +348,21 @@ export const SatuSehatView: React.FC = () => {
       fetchMapping();
     } finally {
       setSavingMapping(prev => { const s = new Set(prev); s.delete(kd); return s; });
+    }
+  };
+
+  const handleImportKhanza = async () => {
+    setImportingKhanza(true);
+    setImportMsg('');
+    try {
+      const res = await fetch('/api/satu-sehat/mapping/import-khanza', { method: 'POST' });
+      const data = await res.json();
+      setImportMsg(data.message || 'Selesai');
+      fetchMapping();
+    } catch {
+      setImportMsg('Gagal menghubungi server');
+    } finally {
+      setImportingKhanza(false);
     }
   };
 
@@ -978,40 +1001,140 @@ export const SatuSehatView: React.FC = () => {
           {/* ── Sub: Mapping ── */}
           {isSubTab === 'mapping' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, color: '#374151' }}>
-                  Petakan setiap jenis pemeriksaan radiologi ke kode DICOM dan modalitas FHIR ImagingStudy.
-                </span>
-                <button onClick={fetchMapping} disabled={mappingLoading}
-                  style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer', color: '#374151' }}>
+
+              {/* Toolbar */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
+                  Petakan setiap jenis pemeriksaan radiologi ke <strong>kode LOINC</strong> (ServiceRequest) dan <strong>Modality DICOM</strong> (MWL/ImagingStudy).
+                </div>
+                <button onClick={handleImportKhanza} disabled={importingKhanza}
+                  style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid #7c3aed', background: importingKhanza ? '#f5f3ff' : '#faf5ff', fontSize: 12, cursor: 'pointer', color: '#7c3aed', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                  {importingKhanza ? '⏳ Mengimport...' : '⬇️ Import dari Khanza'}
+                </button>
+                <button onClick={() => { fetchMapping(); setImportMsg(''); }} disabled={mappingLoading}
+                  style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer', color: '#374151' }}>
                   {mappingLoading ? 'Memuat...' : '↺ Refresh'}
                 </button>
               </div>
 
+              {/* Import result message */}
+              {importMsg && (
+                <div style={{ padding: '8px 12px', borderRadius: 7, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#16a34a' }}>
+                  ✓ {importMsg}
+                </div>
+              )}
+
+              {/* Filter pills */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {([
+                  { key: 'semua',          label: `Semua (${mappingList.length})` },
+                  { key: 'belum-loinc',    label: `Belum LOINC (${mappingList.filter(m => !(editingMapping[m.kd_jenis_prw]?.code || m.code)).length})` },
+                  { key: 'belum-modality', label: `Belum Modality (${mappingList.filter(m => !(editingMapping[m.kd_jenis_prw]?.modality_code || m.modality_code)).length})` },
+                ] as const).map(f => (
+                  <button key={f.key} onClick={() => setMappingFilter(f.key)} style={{
+                    padding: '4px 12px', borderRadius: 20, fontSize: 11, cursor: 'pointer',
+                    border: mappingFilter === f.key ? '1px solid #2563eb' : '1px solid #e5e7eb',
+                    background: mappingFilter === f.key ? '#eff6ff' : '#fff',
+                    color: mappingFilter === f.key ? '#2563eb' : '#6b7280',
+                    fontWeight: mappingFilter === f.key ? 600 : 400,
+                  }}>{f.label}</button>
+                ))}
+              </div>
+
+              {/* Table */}
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', maxHeight: '58vh', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                       <tr style={{ background: '#f9fafb' }}>
-                        {['Kode', 'Nama Pemeriksaan', 'Modality Code', 'Modality Display', 'Procedure Code', 'System', 'Aksi'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
+                        <th style={TH}>Kode</th>
+                        <th style={TH}>Nama Pemeriksaan</th>
+                        <th style={{ ...TH, background: '#faf5ff', borderLeft: '2px solid #e9d5ff' }} colSpan={3}>
+                          🔬 LOINC (ServiceRequest)
+                        </th>
+                        <th style={{ ...TH, background: '#eff6ff', borderLeft: '2px solid #bfdbfe' }} colSpan={2}>
+                          🩻 Modality DICOM (MWL)
+                        </th>
+                        <th style={TH}>Aksi</th>
+                      </tr>
+                      <tr style={{ background: '#f9fafb' }}>
+                        <th style={TH}></th>
+                        <th style={TH}></th>
+                        <th style={{ ...TH, background: '#faf5ff', fontSize: 10 }}>Kode LOINC</th>
+                        <th style={{ ...TH, background: '#faf5ff', fontSize: 10 }}>System</th>
+                        <th style={{ ...TH, background: '#faf5ff', fontSize: 10 }}>Display</th>
+                        <th style={{ ...TH, background: '#eff6ff', borderLeft: '2px solid #bfdbfe', fontSize: 10 }}>Modality</th>
+                        <th style={{ ...TH, background: '#eff6ff', fontSize: 10 }}>Keterangan</th>
+                        <th style={TH}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {mappingLoading ? (
-                        <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+                        <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
                       ) : mappingList.length === 0 ? (
-                        <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Tidak ada jenis pemeriksaan radiologi aktif</td></tr>
-                      ) : mappingList.map(m => {
+                        <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Tidak ada jenis pemeriksaan radiologi aktif</td></tr>
+                      ) : mappingList
+                          .filter(m => {
+                            const ed = editingMapping[m.kd_jenis_prw] || m;
+                            if (mappingFilter === 'belum-loinc')    return !ed.code;
+                            if (mappingFilter === 'belum-modality') return !ed.modality_code;
+                            return true;
+                          })
+                          .map(m => {
                         const ed = editingMapping[m.kd_jenis_prw] || m;
                         const saving = savingMapping.has(m.kd_jenis_prw);
-                        const mapped = !!ed.modality_code;
+                        const hasLoinc    = !!ed.code;
+                        const hasModality = !!ed.modality_code;
+                        const rowBg = !hasLoinc ? '#fffbeb' : !hasModality ? '#f0f9ff' : '#fff';
+
                         return (
-                          <tr key={m.kd_jenis_prw} style={{ borderBottom: '1px solid #f3f4f6', background: mapped ? '#fff' : '#fffbeb' }}>
-                            <td style={{ padding: '6px 12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>{m.kd_jenis_prw}</td>
-                            <td style={{ padding: '6px 12px', color: '#111827', maxWidth: 180 }}>{m.nm_perawatan}</td>
-                            <td style={{ padding: '6px 8px' }}>
+                          <tr key={m.kd_jenis_prw} style={{ borderBottom: '1px solid #f3f4f6', background: rowBg }}>
+                            <td style={{ padding: '6px 12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>
+                              {m.kd_jenis_prw}
+                            </td>
+                            <td style={{ padding: '6px 12px', color: '#111827', maxWidth: 180 }}>
+                              {m.nm_perawatan}
+                              <div style={{ marginTop: 2, display: 'flex', gap: 3 }}>
+                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: hasLoinc ? '#dcfce7' : '#fef3c7', color: hasLoinc ? '#16a34a' : '#d97706', fontWeight: 600 }}>
+                                  {hasLoinc ? 'LOINC ✓' : 'LOINC ?'}
+                                </span>
+                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: hasModality ? '#dbeafe' : '#f3f4f6', color: hasModality ? '#1d4ed8' : '#9ca3af', fontWeight: 600 }}>
+                                  {hasModality ? `${ed.modality_code} ✓` : 'Modality ?'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* LOINC columns */}
+                            <td style={{ padding: '6px 8px', background: '#faf5ff' }}>
+                              <input
+                                value={ed.code}
+                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, code: e.target.value } }))}
+                                placeholder="mis: 24628-0"
+                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, width: 95 }}
+                              />
+                            </td>
+                            <td style={{ padding: '6px 8px', background: '#faf5ff' }}>
+                              <select
+                                value={ed.system}
+                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, system: e.target.value } }))}
+                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, minWidth: 110 }}>
+                                <option value="">-- pilih --</option>
+                                <option value="http://loinc.org">LOINC</option>
+                                <option value="http://snomed.info/sct">SNOMED CT</option>
+                                <option value="http://www.ama-assn.org/go/cpt">CPT</option>
+                              </select>
+                            </td>
+                            <td style={{ padding: '6px 8px', background: '#faf5ff' }}>
+                              <input
+                                value={ed.display}
+                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, display: e.target.value } }))}
+                                placeholder="Nama prosedur LOINC"
+                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, width: 160 }}
+                              />
+                            </td>
+
+                            {/* Modality columns */}
+                            <td style={{ padding: '6px 8px', background: '#eff6ff', borderLeft: '2px solid #bfdbfe' }}>
                               <select
                                 value={ed.modality_code}
                                 onChange={e => {
@@ -1021,35 +1144,20 @@ export const SatuSehatView: React.FC = () => {
                                     [m.kd_jenis_prw]: { ...ed, modality_code: e.target.value, modality_display: opt?.display || '' }
                                   }));
                                 }}
-                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, minWidth: 80 }}
-                              >
+                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, minWidth: 70 }}>
                                 <option value="">-- pilih --</option>
                                 {MODALITY_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.code}</option>)}
                               </select>
                             </td>
-                            <td style={{ padding: '6px 8px', fontSize: 11, color: '#6b7280' }}>{ed.modality_display || '-'}</td>
-                            <td style={{ padding: '6px 8px' }}>
-                              <input
-                                value={ed.code}
-                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, code: e.target.value } }))}
-                                placeholder="LOINC/kode"
-                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, width: 100 }}
-                              />
+                            <td style={{ padding: '6px 8px', background: '#eff6ff', fontSize: 11, color: '#6b7280' }}>
+                              {ed.modality_display || '-'}
                             </td>
-                            <td style={{ padding: '6px 8px' }}>
-                              <input
-                                value={ed.system}
-                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, system: e.target.value } }))}
-                                placeholder="http://loinc.org"
-                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, width: 160 }}
-                              />
-                            </td>
+
                             <td style={{ padding: '6px 8px' }}>
                               <button
                                 onClick={() => handleSaveMapping(m.kd_jenis_prw)}
                                 disabled={saving}
-                                style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 500 }}
-                              >
+                                style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 500 }}>
                                 {saving ? '...' : 'Simpan'}
                               </button>
                             </td>
@@ -1059,6 +1167,13 @@ export const SatuSehatView: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Legend */}
+              <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#6b7280', flexWrap: 'wrap' }}>
+                <span>🟡 Kuning = belum ada kode LOINC</span>
+                <span>🔵 Biru muda = belum ada Modality</span>
+                <span>⚪ Putih = lengkap</span>
               </div>
             </div>
           )}

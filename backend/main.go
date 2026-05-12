@@ -2709,6 +2709,7 @@ func main() {
 	r.POST("/api/satu-sehat/imaging-study/send/*noorder", sendImagingStudy(db))
 	r.GET("/api/satu-sehat/mapping/radiologi", getMappingRadiologi(db))
 	r.PUT("/api/satu-sehat/mapping/radiologi/:kd_jenis_prw", updateMappingRadiologi(db))
+	r.POST("/api/satu-sehat/mapping/import-khanza", importMappingFromKhanza(db))
 	r.POST("/api/satu-sehat/servicerequest-radiologi/send/*noorder", sendServiceRequestRadiologi(db))
 	r.GET("/api/satu-sehat/servicerequest-radiologi/*noorder", getServiceRequestRadiologi(db))
 	r.POST("/api/satu-sehat/mwl/send/*noorder", sendToMWL(db))

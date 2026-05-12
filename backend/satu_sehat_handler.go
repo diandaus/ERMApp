@@ -893,6 +893,58 @@ func updateMappingRadiologi(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// POST /api/satu-sehat/mapping/import-khanza
+// Baca satu_sehat_mapping_radiologi (tabel Khanza) lalu salin ke erm_mapping_radiologi.
+// Hanya mengisi kolom code/system/display; modality_code tidak ditimpa jika sudah ada.
+func importMappingFromKhanza(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rows, err := db.Query(`
+			SELECT
+				k.kd_jenis_prw,
+				IFNULL(k.code,'') as code,
+				IFNULL(k.system,'') as system,
+				IFNULL(k.display,'') as display
+			FROM satu_sehat_mapping_radiologi k
+			WHERE k.code != '' AND k.code IS NOT NULL
+		`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal baca tabel Khanza: " + err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type Row struct{ KdJenisPrw, Code, System, Display string }
+		var imported, skipped int
+		for rows.Next() {
+			var r Row
+			rows.Scan(&r.KdJenisPrw, &r.Code, &r.System, &r.Display)
+			if r.Code == "" {
+				skipped++
+				continue
+			}
+			// INSERT ... ON DUPLICATE KEY: jika sudah ada, hanya update code/system/display
+			// tidak menimpa modality_code/modality_display yang sudah diisi user
+			_, err := db.Exec(`
+				INSERT INTO erm_mapping_radiologi (kd_jenis_prw, code, system, display)
+				VALUES (?, ?, ?, ?)
+				ON DUPLICATE KEY UPDATE
+					code    = IF(VALUES(code) != '', VALUES(code), code),
+					system  = IF(VALUES(system) != '', VALUES(system), system),
+					display = IF(VALUES(display) != '', VALUES(display), display)
+			`, r.KdJenisPrw, r.Code, r.System, r.Display)
+			if err == nil {
+				imported++
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":  fmt.Sprintf("Import selesai: %d prosedur diimport, %d dilewati", imported, skipped),
+			"imported": imported,
+			"skipped":  skipped,
+		})
+	}
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func getSatuSehatConfig(db *sql.DB) (SatuSehatConfig, error) {
