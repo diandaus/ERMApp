@@ -281,7 +281,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient }) => {
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'Sudah':
-        return { bg: '#ecfdf3', color: '#166534', label: 'Sudah', dropdownLabel: 'Sudah Periksa' };
+        return { bg: '#ecfdf3', color: '#166534', label: 'Sudah', dropdownLabel: '' };
       case 'Belum':
         return { bg: '#fef3c7', color: '#92400e', label: 'Belum', dropdownLabel: 'Belum Periksa' };
       case 'Batal':

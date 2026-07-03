@@ -1551,7 +1551,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 10, color: patient.stts === 'Sudah' ? '#065f46' : '#991b1b', fontWeight: 600, marginBottom: 2 }}>Status Pemeriksaan</div>
                   <div style={{ fontSize: 12, color: patient.stts === 'Sudah' ? '#059669' : '#dc2626', fontWeight: 600 }}>
-                    {patient.stts === 'Sudah' ? 'Sudah Periksa' : 'Belum Periksa'}
+                    {patient.stts === 'Sudah' ? '' : 'Belum Periksa'}
                   </div>
                 </div>
               </div>

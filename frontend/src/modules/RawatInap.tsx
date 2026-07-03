@@ -1,5 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
+import { PemeriksaanRanapView } from './PemeriksaanRanap';
 
 type Patient = {
   no_rawat: string;
@@ -37,6 +38,7 @@ export const RawatInapView: React.FC = () => {
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
+  const [periksaPatient, setPeriksaPatient] = React.useState<Patient | null>(null);
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
 
   // Fetch data from API
@@ -86,6 +88,14 @@ export const RawatInapView: React.FC = () => {
       };
     }
   }, [showFilterDropdown]);
+
+  if (periksaPatient) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+        <PemeriksaanRanapView patient={periksaPatient} onBack={() => setPeriksaPatient(null)} />
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -446,14 +456,23 @@ export const RawatInapView: React.FC = () => {
                         }
                       }}
                     >
-                      <td style={{
-                        padding: '8px 12px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: '#2563eb',
-                        ...(isLastRow && { borderBottomLeftRadius: 10 })
-                      }}>
-                        {patient.no_rkm_medis}
+                      <td
+                        style={{ padding: '8px 12px', ...(isLastRow && { borderBottomLeftRadius: 10 }) }}
+                        onClick={(e) => { e.stopPropagation(); setPeriksaPatient(patient); }}
+                      >
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '3px 10px',
+                          borderRadius: 6,
+                          border: '1px solid #2563eb',
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: 11,
+                          background: '#2563eb'
+                        }}>
+                          {patient.no_rkm_medis}
+                        </span>
                       </td>
                       <td style={{ padding: '8px 12px' }}>
                         <div style={{ fontSize: 12, color: '#111827' }}>
@@ -473,13 +492,8 @@ export const RawatInapView: React.FC = () => {
                       <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
                         {patient.png_jawab || '-'}
                       </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        ...(isLastRow && { borderBottomRightRadius: 10 })
-                      }}>
-                        <span style={{ fontSize: 13, color: '#374151' }}>
-                          {patient.nm_dokter}
-                        </span>
+                      <td style={{ padding: '8px 12px', ...(isLastRow && { borderBottomRightRadius: 10 }) }}>
+                        <span style={{ fontSize: 13, color: '#374151' }}>{patient.nm_dokter}</span>
                       </td>
                     </tr>
                   );

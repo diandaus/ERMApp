@@ -6,6 +6,9 @@ type ResepModalProps = {
   patient: any;
   onClose: () => void;
   onResepSaved?: (planningText: string) => void; // Callback untuk update planning setelah simpan resep
+  isRanap?: boolean;   // true = pasien rawat inap, simpan ke resep_obat+detail_pemberian_obat
+  kdBangsal?: string;  // bangsal pasien ranap, untuk filter stok obat
+  editResep?: { no_resep: string; items: any[] }; // pre-fill untuk edit resep ranap yang sudah ada
 };
 
 type ObatItem = {
@@ -20,6 +23,10 @@ type ObatItem = {
   jml?: number;
   aturan_pakai?: string;
   kandungan?: string;
+  // ranap fields
+  h_beli?: number;
+  no_batch?: string;
+  no_faktur?: string;
 };
 
 type RacikanDetail = {
@@ -40,7 +47,7 @@ type Racikan = {
   detail: RacikanDetail[];
 };
 
-export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onResepSaved }) => {
+export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onResepSaved, isRanap = false, kdBangsal = '', editResep }) => {
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
 
   // Non Racikan State
@@ -58,14 +65,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [selectedObatRacikan, setSelectedObatRacikan] = React.useState<ObatItem | null>(null);
   const [showModalInputObatRacikan, setShowModalInputObatRacikan] = React.useState(false);
 
-  const [racikan, setRacikan] = React.useState<Racikan>({
-    nama_racikan: '',
-    keterangan: '',
-    metode_racik: '',
-    jml_dr: 1,
-    aturan_pakai: '',
-    detail: []
-  });
+  const [racikanList, setRacikanList] = React.useState<Racikan[]>([
+    { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }
+  ]);
+  const [activeRacikanIdx, setActiveRacikanIdx] = React.useState<number>(0);
 
   // Input Form State
   const [inputObatForm, setInputObatForm] = React.useState({
@@ -101,6 +104,26 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [showModalRiwayatResep, setShowModalRiwayatResep] = React.useState(false);
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
+
+  // Pre-fill items saat mode edit resep ranap
+  React.useEffect(() => {
+    if (editResep && editResep.items && editResep.items.length > 0) {
+      const prefilled = editResep.items.map((it: any) => ({
+        kode_brng: it.kode_brng,
+        nama_brng: it.nama_brng,
+        kode_sat: it.kode_sat || '',
+        stok: 0,
+        harga: 0,
+        jml: it.jml || 1,
+        aturan_pakai: it.aturan || '',
+        h_beli: 0,
+        no_batch: '',
+        no_faktur: '',
+        kapasitas: '',
+      }));
+      setResepNonRacikan(prefilled);
+    }
+  }, []);
 
   // Load aturan pakai history from localStorage on mount
   React.useEffect(() => {
@@ -364,10 +387,30 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     }
 
     try {
-      const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatNonRacikan)}`);
-      if (!response.ok) throw new Error('Failed to search obat');
-      const data = await response.json();
-      setObatList(data || []);
+      let data: ObatItem[];
+      if (isRanap) {
+        const url = `/api/resep-ranap/obat?search=${encodeURIComponent(searchObatNonRacikan)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to search obat');
+        const raw = await res.json();
+        // Map ranap API response ke ObatItem
+        data = (raw || []).map((o: any) => ({
+          kode_brng: o.kode_brng,
+          nama_brng: o.nama_brng,
+          kode_sat: o.kode_sat,
+          stok: o.stok,
+          harga: o.harga_jual,
+          h_beli: o.h_beli,
+          no_batch: o.no_batch,
+          no_faktur: o.no_faktur,
+          kapasitas: String(o.kapasitas ?? ''),
+        }));
+      } else {
+        const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatNonRacikan)}`);
+        if (!response.ok) throw new Error('Failed to search obat');
+        data = await response.json() || [];
+      }
+      setObatList(data);
       setShowObatDropdown(true);
     } catch (error) {
       console.error('Error searching obat:', error);
@@ -439,10 +482,29 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     }
 
     try {
-      const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatRacikan)}`);
-      if (!response.ok) throw new Error('Failed to search obat');
-      const data = await response.json();
-      setObatListRacikan(data || []);
+      let data: ObatItem[];
+      if (isRanap) {
+        const url = `/api/resep-ranap/obat?search=${encodeURIComponent(searchObatRacikan)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to search obat');
+        const raw = await res.json();
+        data = (raw || []).map((o: any) => ({
+          kode_brng: o.kode_brng,
+          nama_brng: o.nama_brng,
+          kode_sat: o.kode_sat,
+          stok: o.stok,
+          harga: o.harga_jual,
+          h_beli: o.h_beli,
+          no_batch: o.no_batch,
+          no_faktur: o.no_faktur,
+          kapasitas: String(o.kapasitas ?? ''),
+        }));
+      } else {
+        const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatRacikan)}`);
+        if (!response.ok) throw new Error('Failed to search obat');
+        data = await response.json() || [];
+      }
+      setObatListRacikan(data);
       setShowObatDropdownRacikan(true);
     } catch (error) {
       console.error('Error searching obat:', error);
@@ -455,6 +517,15 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
       });
     }
   };
+
+  const updateRacikanAt = (idx: number, updater: (prev: Racikan) => Racikan) => {
+    setRacikanList(prev => {
+      const copy = [...prev];
+      copy[idx] = updater(copy[idx]);
+      return copy;
+    });
+  };
+  const activeRacikan = racikanList[activeRacikanIdx] ?? racikanList[0];
 
   // Pilih Obat Racikan
   const pilihObatRacikan = (obat: ObatItem) => {
@@ -490,13 +561,13 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     if (kandungan.includes('/')) {
       const [num, denom] = kandungan.split('/').map(s => parseFloat(s.trim()));
       if (!isNaN(num) && !isNaN(denom) && denom !== 0 && kapasitas > 0) {
-        const jml = (num / denom) * racikan.jml_dr / kapasitas;
+        const jml = (num / denom) * activeRacikan.jml_dr / kapasitas;
         setInputObatRacikanForm(prev => ({ ...prev, jml: parseFloat(jml.toFixed(2)) }));
       }
     } else {
       const kandunganNum = parseFloat(kandungan);
       if (!isNaN(kandunganNum) && kapasitas > 0) {
-        const jml = kandunganNum * racikan.jml_dr / kapasitas;
+        const jml = kandunganNum * activeRacikan.jml_dr / kapasitas;
         setInputObatRacikanForm(prev => ({ ...prev, jml: parseFloat(jml.toFixed(2)) }));
       }
     }
@@ -517,7 +588,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
       jml: inputObatRacikanForm.jml
     };
 
-    setRacikan(prev => ({
+    updateRacikanAt(activeRacikanIdx, prev => ({
       ...prev,
       detail: [...prev.detail, newDetail]
     }));
@@ -528,7 +599,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
   // Hapus Obat Racikan
   const hapusObatRacikan = (index: number) => {
-    setRacikan(prev => ({
+    updateRacikanAt(activeRacikanIdx, prev => ({
       ...prev,
       detail: prev.detail.filter((_, i) => i !== index)
     }));
@@ -549,15 +620,15 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     });
     
     // Racikan (format: no_racik. nama_racik Jumlah jml_dr metode Aturan Pakai aturan_pakai)
-    if (racikan.nama_racikan && racikan.metode_racik && racikan.detail.length > 0) {
-      lines.push(`1. ${racikan.nama_racikan} Jumlah ${racikan.jml_dr} ${racikan.metode_racik} Aturan Pakai ${racikan.aturan_pakai || ''}`);
-      
-      // Detail racikan (format: -- nama_brng jml)
-      racikan.detail.forEach((det) => {
-        const jmlStr = det.jml % 1 === 0 ? det.jml.toString() : det.jml.toFixed(2);
-        lines.push(`-- ${det.nama_brng} ${jmlStr}`);
-      });
-    }
+    racikanList.forEach((rac, i) => {
+      if (rac.nama_racikan && rac.metode_racik && rac.detail.length > 0) {
+        lines.push(`${i + 1}. ${rac.nama_racikan} Jumlah ${rac.jml_dr} ${rac.metode_racik} Aturan Pakai ${rac.aturan_pakai || ''}`);
+        rac.detail.forEach((det) => {
+          const jmlStr = det.jml % 1 === 0 ? det.jml.toString() : det.jml.toFixed(2);
+          lines.push(`-- ${det.nama_brng} ${jmlStr}`);
+        });
+      }
+    });
     
     return lines.join('\n');
   };
@@ -565,18 +636,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   // Submit Resep Unified
   const submitResepUnified = async () => {
     try {
-      // Prepare payload based on active tab
-      let payload: any = {
-        no_rawat: patient.no_rawat,
-        kd_dokter: patient.kd_dokter || '',
-        non_racikan: [],
-        racikan: []
-      };
-
-      // Validate: at least one type must have data
       const hasNonRacikan = resepNonRacikan.length > 0;
-      // Changed validation: metode_racik is optional, only require nama_racikan and detail
-      const hasRacikan = racikan.nama_racikan && racikan.detail.length > 0;
+      const hasRacikan = racikanList.some(r => r.nama_racikan && r.detail.length > 0);
 
       if (!hasNonRacikan && !hasRacikan) {
         Swal.fire({
@@ -587,87 +648,128 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         return;
       }
 
-      // Map resep non racikan (if any)
-      if (hasNonRacikan) {
-        payload.non_racikan = resepNonRacikan.map(obat => ({
-          kode_brng: obat.kode_brng,
-          jml: obat.jml || 1,
-          aturan_pakai: obat.aturan_pakai || ''
-        }));
+      let result: any;
+
+      if (isRanap) {
+        // === RANAP: simpan ke resep_obat + resep_dokter (+ resep_dokter_racikan* untuk racikan) ===
+        const nonRacikanPayload = hasNonRacikan
+          ? resepNonRacikan.map(obat => ({
+              kode_brng: obat.kode_brng,
+              jml: obat.jml || 1,
+              aturan_pakai: obat.aturan_pakai || '',
+            }))
+          : [];
+
+        const racikanPayload = hasRacikan
+          ? racikanList.filter(r => r.nama_racikan && r.detail.length > 0).map(rac => ({
+              nama_racikan: rac.nama_racikan || '',
+              metode_racik: rac.metode_racik || 'R01',
+              jml_dr: rac.jml_dr || 1,
+              aturan_pakai: rac.aturan_pakai || '',
+              keterangan: rac.keterangan || '',
+              detail: rac.detail.map(det => ({
+                kode_brng: det.kode_brng,
+                jml: det.jml,
+                kandungan: det.kandungan || '',
+              })),
+            }))
+          : [];
+
+        const payload = {
+          no_rawat: patient.no_rawat,
+          kd_dokter: patient.kd_dokter || '',
+          non_racikan: nonRacikanPayload,
+          racikan: racikanPayload,
+        };
+
+        // Jika mode edit, hapus resep lama dulu
+        if (editResep?.no_resep) {
+          const delRes = await fetch(`/api/resep-ranap?no_resep=${encodeURIComponent(editResep.no_resep)}`, { method: 'DELETE' });
+          if (!delRes.ok) {
+            const delErr = await delRes.json();
+            throw new Error(delErr.error || 'Gagal menghapus resep lama');
+          }
+        }
+
+        const response = await fetch('/api/resep-ranap', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.message || 'Gagal menyimpan resep ranap');
+        }
+        result = await response.json();
+
+      } else {
+        // === RALAN: simpan ke tabel resep lama ===
+        const payload: any = {
+          no_rawat: patient.no_rawat,
+          kd_dokter: patient.kd_dokter || '',
+          non_racikan: [],
+          racikan: []
+        };
+
+        if (hasNonRacikan) {
+          payload.non_racikan = resepNonRacikan.map(obat => ({
+            kode_brng: obat.kode_brng,
+            jml: obat.jml || 1,
+            aturan_pakai: obat.aturan_pakai || ''
+          }));
+        }
+
+        if (hasRacikan) {
+          racikanList.filter(r => r.nama_racikan && r.detail.length > 0).forEach(rac => {
+            if (rac.nama_racikan.trim()) saveNamaRacikanToHistory(rac.nama_racikan);
+            if (rac.keterangan.trim()) saveKeteranganToHistory(rac.keterangan);
+            if (rac.aturan_pakai.trim()) saveAturanPakaiToHistory(rac.aturan_pakai);
+          });
+          payload.racikan = racikanList.filter(r => r.nama_racikan && r.detail.length > 0).map(rac => ({
+            nama_racikan: rac.nama_racikan,
+            keterangan: rac.keterangan || '',
+            metode_racik: rac.metode_racik,
+            jml_dr: rac.jml_dr,
+            aturan_pakai: rac.aturan_pakai,
+            detail: rac.detail.map(det => ({
+              kode_brng: det.kode_brng,
+              kandungan: det.kandungan,
+              jml: det.jml
+            }))
+          }));
+        }
+
+        const response = await fetch('/api/resep/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Gagal menyimpan resep');
+        }
+        result = await response.json();
       }
 
-      // Map resep racikan (if any)
-      if (hasRacikan) {
-        // Save racikan data to history
-        if (racikan.nama_racikan.trim()) {
-          saveNamaRacikanToHistory(racikan.nama_racikan);
-        }
-        if (racikan.keterangan.trim()) {
-          saveKeteranganToHistory(racikan.keterangan);
-        }
-        if (racikan.aturan_pakai.trim()) {
-          saveAturanPakaiToHistory(racikan.aturan_pakai);
-        }
-
-        payload.racikan = [{
-          nama_racikan: racikan.nama_racikan,
-          keterangan: racikan.keterangan || '',
-          metode_racik: racikan.metode_racik,
-          jml_dr: racikan.jml_dr,
-          aturan_pakai: racikan.aturan_pakai,
-          detail: racikan.detail.map(det => ({
-            kode_brng: det.kode_brng,
-            kandungan: det.kandungan,
-            jml: det.jml
-          }))
-        }];
-      }
-
-      console.log('Submitting payload:', payload);
-
-      // Submit to backend
-      const response = await fetch('/api/resep/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Gagal menyimpan resep');
-      }
-
-      const result = await response.json();
-
-      // Format resep untuk planning dan update kolom planning (seperti Khanza Java)
       if (onResepSaved) {
         const planningText = formatResepToPlanning();
         onResepSaved(planningText);
       }
 
-      // Reset both forms (since both can be submitted together)
       setResepNonRacikan([]);
       setSearchObatNonRacikan('');
-      setRacikan({
-        nama_racikan: '',
-        keterangan: '',
-        metode_racik: '',
-        jml_dr: 1,
-        aturan_pakai: '',
-        detail: []
-      });
+      setRacikanList([{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }]);
+      setActiveRacikanIdx(0);
       setSearchObatRacikan('');
 
-      // Close modal first
       onClose();
 
-      // Then show success message
       await Swal.fire({
         icon: 'success',
         title: 'Berhasil!',
-        text: `Resep berhasil disimpan!\nNo. Resep: ${result.no_resep || '-'}`,
+        text: `Resep berhasil disimpan!\nNo: ${result.no_permintaan || result.no_resep || '-'}`,
         timer: 3000,
         showConfirmButton: true
       });
@@ -727,17 +829,17 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
       hasNonRacikan = true;
     }
 
-    // Copy racikan (first one)
+    // Copy racikan (all entries)
     if (resep.racikan && resep.racikan.length > 0) {
-      const firstRacikan = resep.racikan[0];
-      setRacikan({
-        nama_racikan: firstRacikan.nama_racik || '',
+      setRacikanList(resep.racikan.map((r: any) => ({
+        nama_racikan: r.nama_racik || '',
         keterangan: '',
-        metode_racik: firstRacikan.metode || '',
-        jml_dr: firstRacikan.jml_dr || 1,
-        aturan_pakai: firstRacikan.aturan_pakai || '',
-        detail: firstRacikan.detail || []
-      });
+        metode_racik: r.metode || '',
+        jml_dr: r.jml_dr || 1,
+        aturan_pakai: r.aturan_pakai || '',
+        detail: r.detail || []
+      })));
+      setActiveRacikanIdx(0);
       hasRacikan = true;
     }
 
@@ -754,66 +856,52 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   return (
     <>
       {/* Main Modal Resep */}
-      <div className="modal-overlay">
-        <div className="modal-resep">
-          <div className="modal-header-resep">
-            <h5 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg fill="currentColor" width="20" height="20" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-                <path d="M480,224a31.991,31.991,0,0,0-32,32V448H64V256a32,32,0,0,0-64,0V480a31.991,31.991,0,0,0,32,32H480a31.991,31.991,0,0,0,32-32V256A31.991,31.991,0,0,0,480,224Z" fillRule="evenodd"/>
-                <path d="M288,224V28.091C288,12.578,273.688,0,256,0s-32,12.578-32,28.091V224H128L256,352,384,224Z" fillRule="evenodd"/>
-              </svg>
-              Input Resep - {patient.nm_pasien} ({patient.no_rkm_medis})
-            </h5>
-            <button onClick={onClose} className="btn-close-modal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }} onClick={onClose}>
+        <div style={{ background: '#F3F4F6', borderRadius: 20, padding: '35px 8px 8px 8px', position: 'relative', maxWidth: 900, width: '90%', height: '65vh', maxHeight: '65vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+
+          {/* Close Button */}
+          <button type="button" onClick={onClose} style={{ position: 'absolute', top: 12, right: 16, background: 'transparent', border: 'none', fontSize: 24, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>×</button>
+
+          {/* Header Title */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 20px', color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Input Resep
+            {isRanap && <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>RANAP</span>}
+            — {patient.nm_pasien} ({patient.no_rkm_medis})
           </div>
 
-          <div className="modal-body-resep">
+          {/* White Card Content */}
+          <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '12px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Tab Navigation */}
-            <ul className="nav nav-tabs mb-3">
-              <li className="nav-item">
-                <button
-                  type="button"
-                  className={`nav-link ${activeResepTab === 'non-racikan' ? 'active' : ''}`}
-                  onClick={() => setActiveResepTab('non-racikan')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <svg width="16" height="16" viewBox="-0.003 0 99.979 99.979" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="#EBECED" d="M92.869 7.105c9.478 9.476 9.478 24.832 0 34.308L41.411 92.869c-9.475 9.474-24.833 9.474-34.307 0-9.476-9.475-9.476-24.832 0-34.308L58.562 7.105c9.475-9.473 24.834-9.473 34.307 0z"/>
-                    <path fill="#3B97D3" d="M32.548 33.122L7.105 58.563c-9.476 9.476-9.476 24.833 0 34.308 9.474 9.475 24.832 9.475 34.307 0L66.85 67.43 32.548 33.122z"/>
-                    <path fill="#2086BF" d="M65.43 68.862L31.134 34.568l1.414-1.414 34.294 34.294z"/>
-                    <path fill="#55A6DC" d="M38.096 41.51L12.7 66.906a5.894 5.894 0 0 0 0 8.339 5.896 5.896 0 0 0 8.339 0l25.396-25.396-8.339-8.339z"/>
-                    <path fill="#EFF0F1" d="M75.244 12.7a5.897 5.897 0 0 0-8.343 0L39.51 40.096l8.339 8.339 27.396-27.396a5.899 5.899 0 0 0-.001-8.339z"/>
-                    <path fill="#4F9ED4" d="M47.862 48.444l-1.414 1.414-8.335-8.336 1.414-1.414z"/>
-                  </svg>
-                  Non Racikan
-                </button>
-              </li>
-              <li className="nav-item">
-                <button
-                  type="button"
-                  className={`nav-link ${activeResepTab === 'racikan' ? 'active' : ''}`}
-                  onClick={() => setActiveResepTab('racikan')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <svg fill="currentColor" width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13.51,19a4,4,0,0,0,4.61,1.9C19.87,20.37,21,18.68,21,16V7.15a4.39,4.39,0,0,0-2.79-4A4,4,0,0,0,13,7v3" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}></path>
-                    <line x1="14.32" y1="12" x2="21" y2="12" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}></line>
-                    <path d="M9,9a6,6,0,1,1-6,6A6,6,0,0,1,9,9ZM5,11l8,8" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}></path>
-                  </svg>
-                  Racikan
-                </button>
-              </li>
-            </ul>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
+                {(['non-racikan', 'racikan'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveResepTab(tab)}
+                    style={{
+                      padding: '6px 24px',
+                      borderRadius: 8,
+                      border: activeResepTab === tab ? '1px solid #2563eb' : '1px solid transparent',
+                      background: activeResepTab === tab ? '#ffffff' : 'transparent',
+                      color: activeResepTab === tab ? '#2563eb' : '#6b7280',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: activeResepTab === tab ? 600 : 400,
+                      transition: 'all 0.2s ease',
+                      boxShadow: 'none'
+                    }}
+                  >
+                    {tab === 'non-racikan' ? 'Non Racikan' : 'Racikan'}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Tab Content: Non Racikan */}
             {activeResepTab === 'non-racikan' && (
-              <div className="tab-content-resep">
-                <div className="mb-3">
+              <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto' }}>
+                <div className="mb-3" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingBottom: 4 }}>
                   <label className="form-label fw-bold">Cari Obat</label>
                   <div className="search-obat-wrapper">
                     <input
@@ -953,216 +1041,114 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
             {/* Tab Content: Racikan */}
             {activeResepTab === 'racikan' && (
-              <div className="tab-content-resep">
-                <div className="row mb-3">
-                  <div className="col-md-6" style={{ position: 'relative' }}>
-                    <label className="form-label fw-bold">Nama Racikan</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={racikan.nama_racikan}
-                      onChange={(e) => {
-                        setRacikan(prev => ({ ...prev, nama_racikan: e.target.value }));
-                        filterNamaRacikan(e.target.value);
-                      }}
-                      onFocus={() => {
-                        filterNamaRacikan(racikan.nama_racikan);
-                        setShowNamaRacikanDropdown(true);
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => setShowNamaRacikanDropdown(false), 200);
-                      }}
-                      placeholder="Contoh: Pulvis / Racikan Batuk"
-                      autoComplete="off"
-                    />
-                    {/* Dropdown Nama Racikan History */}
-                    {showNamaRacikanDropdown && filteredNamaRacikan.length > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        background: '#ffffff',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '6px',
-                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        zIndex: 1000,
-                        marginTop: '4px'
-                      }}>
-                        {filteredNamaRacikan.map((item, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setRacikan(prev => ({ ...prev, nama_racikan: item }));
-                              setShowNamaRacikanDropdown(false);
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              borderBottom: index < filteredNamaRacikan.length - 1 ? '1px solid #e5e7eb' : 'none',
-                              transition: 'background-color 0.15s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
-                          >
-                            {item}
-                          </div>
-                        ))}
+              <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto' }}>
+                {racikanList.map((rac, idx) => (
+                  <div key={idx} onClick={() => setActiveRacikanIdx(idx)} style={{
+                    display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start',
+                    padding: '8px', borderRadius: 8,
+                    border: `1px solid ${activeRacikanIdx === idx ? '#2563eb' : '#e5e7eb'}`,
+                    background: activeRacikanIdx === idx ? '#eff6ff' : '#fff',
+                    cursor: 'pointer',
+                  }}>
+                    {racikanList.length > 1 && (
+                      <div style={{ paddingTop: 28, fontSize: 11, color: '#6b7280', minWidth: 18, textAlign: 'center' }}>
+                        {idx + 1}
+                      </div>
+                    )}
+                    <div style={{ flex: 3, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Nama Racikan</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={rac.nama_racikan}
+                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value }))}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Contoh: Pulvis / Racikan Batuk"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div style={{ flex: 2, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Metode Racik</label>
+                      <select
+                        className="form-select"
+                        value={rac.metode_racik}
+                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, metode_racik: e.target.value }))}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="">Pilih Metode</option>
+                        <option value="Kapsul">Kapsul</option>
+                        <option value="Puyer">Puyer</option>
+                        <option value="Sirup">Sirup</option>
+                        <option value="Salep">Salep</option>
+                        <option value="Krim">Krim</option>
+                      </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Jml/Bgks</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={rac.jml_dr}
+                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, jml_dr: parseInt(e.target.value) || 1 }))}
+                        onClick={(e) => e.stopPropagation()}
+                        min="1"
+                        onFocus={(e) => e.target.select()}
+                      />
+                    </div>
+                    <div style={{ flex: 3, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Aturan Pakai</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={rac.aturan_pakai}
+                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, aturan_pakai: e.target.value }))}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="3x1 sehari"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div style={{ flex: 2, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Keterangan</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={rac.keterangan}
+                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, keterangan: e.target.value }))}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Keterangan"
+                        autoComplete="off"
+                      />
+                    </div>
+                    {racikanList.length > 1 && (
+                      <div style={{ paddingTop: 28 }}>
+                        <button type="button" onClick={(e) => {
+                          e.stopPropagation();
+                          setRacikanList(prev => prev.filter((_, i) => i !== idx));
+                          setActiveRacikanIdx(prev => Math.max(0, prev >= idx ? prev - 1 : prev));
+                        }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
                       </div>
                     )}
                   </div>
-                  <div className="col-md-6" style={{ position: 'relative' }}>
-                    <label className="form-label fw-bold">Keterangan</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={racikan.keterangan}
-                      onChange={(e) => {
-                        setRacikan(prev => ({ ...prev, keterangan: e.target.value }));
-                        filterKeterangan(e.target.value);
-                      }}
-                      onFocus={() => {
-                        filterKeterangan(racikan.keterangan);
-                        setShowKeteranganDropdown(true);
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => setShowKeteranganDropdown(false), 200);
-                      }}
-                      placeholder="Keterangan tambahan"
-                      autoComplete="off"
-                    />
-                    {/* Dropdown Keterangan History */}
-                    {showKeteranganDropdown && filteredKeterangan.length > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        background: '#ffffff',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '6px',
-                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        zIndex: 1000,
-                        marginTop: '4px'
-                      }}>
-                        {filteredKeterangan.map((item, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setRacikan(prev => ({ ...prev, keterangan: item }));
-                              setShowKeteranganDropdown(false);
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              borderBottom: index < filteredKeterangan.length - 1 ? '1px solid #e5e7eb' : 'none',
-                              transition: 'background-color 0.15s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
-                          >
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                ))}
 
-                <div className="row mb-3">
-                  <div className="col-md-4">
-                    <label className="form-label fw-bold">Metode Racik</label>
-                    <select
-                      className="form-select"
-                      value={racikan.metode_racik}
-                      onChange={(e) => setRacikan(prev => ({ ...prev, metode_racik: e.target.value }))}
-                    >
-                      <option value="">Pilih Metode</option>
-                      <option value="Kapsul">Kapsul</option>
-                      <option value="Puyer">Puyer</option>
-                      <option value="Sirup">Sirup</option>
-                      <option value="Salep">Salep</option>
-                      <option value="Krim">Krim</option>
-                    </select>
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label fw-bold">Jumlah Racikan /Bungkus</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={racikan.jml_dr}
-                      onChange={(e) => setRacikan(prev => ({ ...prev, jml_dr: parseInt(e.target.value) || 1 }))}
-                      placeholder="Jumlah"
-                      min="1"
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </div>
-                  <div className="col-md-4" style={{ position: 'relative' }}>
-                    <label className="form-label fw-bold">Aturan Pakai</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={racikan.aturan_pakai}
-                      onChange={(e) => {
-                        setRacikan(prev => ({ ...prev, aturan_pakai: e.target.value }));
-                        filterAturanPakaiRacikan(e.target.value);
-                      }}
-                      onFocus={() => {
-                        filterAturanPakaiRacikan(racikan.aturan_pakai);
-                        setShowAturanPakaiDropdownRacikan(true);
-                      }}
-                      onBlur={() => {
-                        // Delay to allow click on dropdown
-                        setTimeout(() => setShowAturanPakaiDropdownRacikan(false), 200);
-                      }}
-                      placeholder="3x1 sehari"
-                      autoComplete="off"
-                    />
-                    {/* Dropdown Aturan Pakai History for Racikan */}
-                    {showAturanPakaiDropdownRacikan && filteredAturanPakaiRacikan.length > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        background: '#ffffff',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '6px',
-                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        zIndex: 1000,
-                        marginTop: '4px'
-                      }}>
-                        {filteredAturanPakaiRacikan.map((item, index) => (
-                          <div
-                            key={index}
-                            onClick={() => {
-                              setRacikan(prev => ({ ...prev, aturan_pakai: item }));
-                              setShowAturanPakaiDropdownRacikan(false);
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              borderBottom: index < filteredAturanPakaiRacikan.length - 1 ? '1px solid #e5e7eb' : 'none',
-                              transition: 'background-color 0.15s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
-                          >
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div style={{ marginBottom: 12 }}>
+                  <button type="button" onClick={() => {
+                    setRacikanList(prev => [...prev, { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }]);
+                    setActiveRacikanIdx(racikanList.length);
+                  }} style={{
+                    padding: '7px 16px', borderRadius: 8, border: 'none',
+                    background: '#2563eb', color: '#fff', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Racikan Baru
+                  </button>
                 </div>
 
                 <hr />
@@ -1230,8 +1216,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label fw-bold">Daftar Obat dalam Racikan</label>
-                  {racikan.detail.length === 0 ? (
+                  <label className="form-label fw-bold">Daftar Obat — {activeRacikan?.nama_racikan || `Racikan ${activeRacikanIdx + 1}`}</label>
+                  {(activeRacikan?.detail ?? []).length === 0 ? (
                     <div className="alert alert-warning">
                       Belum ada obat dalam racikan
                     </div>
@@ -1249,7 +1235,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                           </tr>
                         </thead>
                         <tbody>
-                          {racikan.detail.map((obat, index) => (
+                          {(activeRacikan?.detail ?? []).map((obat, index) => (
                             <tr key={index}>
                               <td className="text-center">{index + 1}</td>
                               <td>{obat.nama_brng}</td>
@@ -1278,36 +1264,32 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Unified Save Button - Moved outside modal-body */}
-          <div className="modal-footer-actions">
-            <div className="d-flex justify-content-between align-items-center">
-              <button type="button" onClick={openModalRiwayatResep} className="btn btn-info" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {/* Footer Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
+              <button type="button" onClick={openModalRiwayatResep} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                   <polyline points="14 2 14 8 20 8"></polyline>
                   <line x1="16" y1="13" x2="8" y2="13"></line>
                   <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
                 </svg>
                 Riwayat Resep
               </button>
-              <div className="d-flex gap-2">
-                <button type="button" onClick={submitResepUnified} className="btn btn-success" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  Tutup
+                </button>
+                <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                     <polyline points="17 21 17 13 7 13 7 21"></polyline>
                     <polyline points="7 3 7 8 15 8"></polyline>
                   </svg>
                   Simpan Resep
-                </button>
-                <button type="button" onClick={onClose} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                  Tutup
                 </button>
               </div>
             </div>

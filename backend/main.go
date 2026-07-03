@@ -109,7 +109,9 @@ type RawatInapPatient struct {
 	SttsPulang    string  `json:"stts_pulang"`
 	Lama          string  `json:"lama"`
 	NmDokter      string  `json:"nm_dokter"`
+	KdDokter      string  `json:"kd_dokter"`
 	KdKamar       string  `json:"kd_kamar"`
+	KdBangsal     string  `json:"kd_bangsal"`
 	StatusBayar   string  `json:"status_bayar"`
 	Agama         string  `json:"agama"`
 }
@@ -263,6 +265,10 @@ func ensureSatuSehatTables(db *sql.DB) error {
 		`ALTER TABLE satu_sehat_mwl_radiologi ADD COLUMN IF NOT EXISTS accession_number VARCHAR(20) DEFAULT ''`,
 		`ALTER TABLE satu_sehat_mwl_radiologi ADD COLUMN IF NOT EXISTS worklist_file VARCHAR(500) DEFAULT ''`,
 		`ALTER TABLE satu_sehat_mwl_radiologi ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
+		// Kolom sampel_* pada tabel Khanza yang mungkin belum ada
+		`ALTER TABLE satu_sehat_mapping_radiologi ADD COLUMN IF NOT EXISTS sampel_code VARCHAR(100) DEFAULT ''`,
+		`ALTER TABLE satu_sehat_mapping_radiologi ADD COLUMN IF NOT EXISTS sampel_system VARCHAR(200) DEFAULT ''`,
+		`ALTER TABLE satu_sehat_mapping_radiologi ADD COLUMN IF NOT EXISTS sampel_display VARCHAR(200) DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // abaikan error (kolom mungkin sudah ada di versi MySQL lama)
@@ -618,7 +624,9 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				kamar_inap.stts_pulang,
 				kamar_inap.lama,
 				dokter.nm_dokter,
+				reg_periksa.kd_dokter,
 				kamar_inap.kd_kamar,
+				kamar.kd_bangsal,
 				reg_periksa.status_bayar,
 				CONCAT(reg_periksa.umurdaftar, ' ', reg_periksa.sttsumur) AS umur,
 				pasien.agama
@@ -653,7 +661,7 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				&p.TrfKamar, &p.DiagnosaAwal, &p.DiagnosaAkhir,
 				&p.TglMasuk, &p.JamMasuk, &p.TglKeluar, &p.JamKeluar,
 				&p.TtlBiaya, &p.SttsPulang, &p.Lama, &p.NmDokter,
-				&p.KdKamar, &p.StatusBayar, &p.Umur, &p.Agama,
+				&p.KdDokter, &p.KdKamar, &p.KdBangsal, &p.StatusBayar, &p.Umur, &p.Agama,
 			)
 			if err != nil {
 				log.Printf("Error scanning row: %v", err)
@@ -730,8 +738,9 @@ func main() {
 	// Static file serving untuk gambar
 	// Serve gambar asuhan medis IGD
 	r.Static("/asuhan-medis-igd", "./uploads/images/asuhan-medis-igd")
-	// Serve gambar radiologi (jika ada)
-	r.Static("/radiologi", "./uploads/images/radiologi")
+	// Serve file statis Khanza webapps (radiologi, berkasrawat, dll)
+	khanzaCfg := LoadKhanzaWebappsConfig()
+	RegisterKhanzaWebappsRoutes(r, khanzaCfg)
 	// Serve gambar lab PA (jika ada)
 	r.Static("/labpa", "./uploads/images/labpa")
 	// Serve gambar umum
@@ -1157,6 +1166,68 @@ func main() {
 
 		c.JSON(http.StatusOK, petugasList)
 	})
+
+	// GET /api/pegawai - Mengambil semua pegawai
+	r.GET("/api/pegawai", func(c *gin.Context) {
+		search := c.DefaultQuery("search", "")
+
+		var rows *sql.Rows
+		var err error
+
+		if search != "" {
+			rows, err = db.Query(`
+				SELECT nik, nama, COALESCE(jbtn,'') as jbtn
+				FROM pegawai
+				WHERE nik LIKE ? OR nama LIKE ? OR jbtn LIKE ?
+				ORDER BY nama
+				LIMIT 100
+			`, "%"+search+"%", "%"+search+"%", "%"+search+"%")
+		} else {
+			rows, err = db.Query(`
+				SELECT nik, nama, COALESCE(jbtn,'') as jbtn
+				FROM pegawai
+				ORDER BY nama
+				LIMIT 100
+			`)
+		}
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type PegawaiRow struct {
+			NIK  string `json:"nik"`
+			Nama string `json:"nama"`
+			Jbtn string `json:"jbtn"`
+		}
+		var list []PegawaiRow
+		for rows.Next() {
+			var p PegawaiRow
+			if err := rows.Scan(&p.NIK, &p.Nama, &p.Jbtn); err != nil {
+				continue
+			}
+			list = append(list, p)
+		}
+		if list == nil {
+			list = []PegawaiRow{}
+		}
+		c.JSON(http.StatusOK, list)
+	})
+
+	// === Modul Kepegawaian ===
+	r.GET("/api/admin/bridging", getBridgingConfigs(db))
+	r.POST("/api/admin/bridging", saveBridgingConfig(db))
+	r.DELETE("/api/admin/bridging/:kode", deleteBridgingConfig(db))
+
+	r.GET("/api/pegawai/list", getPegawaiList(db))
+	r.GET("/api/pegawai/departemen", getPegawaiDepartemen(db))
+	r.PUT("/api/pegawai/status", updatePegawaiStatus(db))
+	r.POST("/api/pegawai", tambahPegawai(db))
+	r.PUT("/api/pegawai/:nik", editPegawai(db))
+	r.DELETE("/api/pegawai/:nik", hapusPegawai(db))
+	r.GET("/api/pegawai/master", getPegawaiMaster(db))
 
 	// === Modul Pendaftaran (baca data dari skema Khanza) ===
 
@@ -2640,6 +2711,9 @@ func main() {
 	// RADIOLOGI ENDPOINTS
 	// ============================================================================
 
+	// Info rawat pasien untuk radiologi (replicates Khanza isRawat())
+	r.GET("/api/radiologi/info-rawat/*no_rawat", getInfoRawatRadiologi(db))
+
 	// Get jenis perawatan radiologi
 	r.GET("/api/radiologi/jenis-perawatan", getJenisPerawatanRadiologi(db))
 
@@ -2663,8 +2737,17 @@ func main() {
 	// Pemeriksaan Rawat Jalan endpoint
 	r.GET("/api/pemeriksaan-ralan/*no_rawat", getPemeriksaanRalan(db))
 
-	// Pemeriksaan Rawat Inap endpoint
+	// Pemeriksaan Rawat Inap endpoints
 	r.GET("/api/pemeriksaan-ranap/*no_rawat", getPemeriksaanRanap(db))
+	r.POST("/api/pemeriksaan-ranap", savePemeriksaanRanap(db))
+	r.PUT("/api/pemeriksaan-ranap", updatePemeriksaanRanap(db))
+	r.DELETE("/api/pemeriksaan-ranap", deletePemeriksaanRanap(db))
+
+	// ADIME Gizi endpoints
+	r.GET("/api/adime/*no_rawat", getAdime(db))
+	r.POST("/api/adime", saveAdime(db))
+	r.PUT("/api/adime", updateAdime(db))
+	r.DELETE("/api/adime", deleteAdime(db))
 
 	// Asuhan Keperawatan IGD endpoint
 	r.GET("/api/asuhan-keperawatan-igd/*no_rawat", getAsuhanKeperawatanIGD(db))
@@ -2674,6 +2757,12 @@ func main() {
 
 	// Radiologi Data endpoint (untuk riwayat perawatan lengkap)
 	r.GET("/api/radiologi-data/*no_rawat", getRadiologi(db))
+
+	// Berkas Digital Perawatan
+	r.GET("/api/berkas-rawat/master", getMasterBerkas(db))
+	r.GET("/api/berkas-rawat/list/*no_rawat", listBerkasRawat(db))
+	r.POST("/api/berkas-rawat/upload", uploadBerkasRawat(db, khanzaCfg))
+	r.DELETE("/api/berkas-rawat", deleteBerkasRawat(db, khanzaCfg))
 
 	// Tindakan Rawat Jalan endpoint
 	r.GET("/api/tindakan-ralan/*no_rawat", getTindakanRalan(db))
@@ -2720,6 +2809,14 @@ func main() {
 	r.POST("/api/satu-sehat/dicom/register-router", registerDicomRouterToOrthanc(db))
 	r.GET("/api/satu-sehat/monitoring/radiologi", getMonitoringRadiologi(db))
 
+	// Mapping Satu Sehat
+	r.GET("/api/mapping/radiologi", getMappingRadiologiSatuSehat(db))
+	r.PUT("/api/mapping/radiologi/:kd_jenis_prw", saveMappingRadiologiSatuSehat(db))
+	r.DELETE("/api/mapping/radiologi/:kd_jenis_prw", deleteMappingRadiologiSatuSehat(db))
+	r.GET("/api/mapping/loinc/search", searchLoinc(db))
+	r.GET("/api/mapping/loinc/config", getLoincConfig(db))
+	r.POST("/api/mapping/loinc/config", saveLoincConfig(db))
+
 	// Generate Nomor Registrasi endpoints
 	r.POST("/api/registrasi/generate-noreg", generateNoReg(db))
 	r.POST("/api/registrasi/generate-norawat", generateNoRawat(db))
@@ -2733,8 +2830,24 @@ func main() {
 	// Biaya endpoint
 	r.GET("/api/biaya/*no_rawat", getBiaya(db))
 
-	// Resume Perawatan endpoint
+	// Resume Perawatan endpoints
 	r.GET("/api/resume/*no_rawat", getResume(db))
+	r.POST("/api/resume-ranap", saveResumeRanap(db))
+	r.PUT("/api/resume-ranap", saveResumeRanap(db))
+	r.DELETE("/api/resume-ranap", deleteResumeRanap(db))
+
+	// === Resep Ranap Endpoints ===
+	r.GET("/api/resep-ranap/obat", searchObatRanap(db))
+	r.GET("/api/resep-ranap/aturan-pakai", getAturanPakai(db))
+	r.GET("/api/resep-ranap/list", getResepRanap(db))
+	r.POST("/api/resep-ranap", saveResepRanap(db))
+	r.DELETE("/api/resep-ranap", deleteResepRanap(db))
+
+	// === Resep Pulang (permintaan dokter ke apotek) ===
+	r.GET("/api/resep-pulang-req/list", getResepPulangReq(db))
+	r.POST("/api/resep-pulang-req", saveResepPulangReq(db))
+	r.PUT("/api/resep-pulang-req", updateResepPulangReq(db))
+	r.DELETE("/api/resep-pulang-req", deleteResepPulangReq(db))
 
 	// === Antrian Poli Endpoints ===
 	// Display endpoints (no auth required, untuk TV display)

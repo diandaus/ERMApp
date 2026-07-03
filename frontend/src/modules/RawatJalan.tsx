@@ -370,13 +370,22 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                     style={{
                       padding: '6px 8px',
                       borderBottom: '1px solid #e5e7eb',
-                      color: '#1AB1E5',
-                      cursor: 'pointer',
-                      fontWeight: 500
                     }}
                     onClick={() => onOpenSoap(p)}
                   >
-                    {p.no_rkm_medis}
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #1AB1E5',
+                      color: '#1AB1E5',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      fontSize: 11,
+                      background: '#f0faff'
+                    }}>
+                      {p.no_rkm_medis}
+                    </span>
                   </td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{p.nm_pasien}</td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{p.no_reg}</td>
@@ -469,13 +478,22 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                     style={{
                       padding: '6px 8px',
                       borderBottom: '1px solid #e5e7eb',
-                      color: '#1AB1E5',
-                      cursor: 'pointer',
-                      fontWeight: 500
                     }}
                     onClick={() => onOpenSoap(r)}
                   >
-                    {r.no_rkm_medis}
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #1AB1E5',
+                      color: '#1AB1E5',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      fontSize: 11,
+                      background: '#f0faff'
+                    }}>
+                      {r.no_rkm_medis}
+                    </span>
                   </td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{r.nm_pasien}</td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{r.nm_dokter}</td>

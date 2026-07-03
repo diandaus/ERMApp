@@ -15,6 +15,10 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true
       },
+      '/berkasrawat': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      },
       '/labpa': {
         target: 'http://localhost:8080',
         changeOrigin: true

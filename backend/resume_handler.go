@@ -46,6 +46,8 @@ type ResumePasien struct {
 type ResumePasienRanap struct {
 	KdDokter              string `json:"kd_dokter"`
 	NmDokter              string `json:"nm_dokter"`
+	KdDokterPengirim      string `json:"kd_dokter_pengirim"`
+	NmDokterPengirim      string `json:"nm_dokter_pengirim"`
 	DiagnosaAwal          string `json:"diagnosa_awal"`
 	Alasan                string `json:"alasan"`
 	KeluhanUtama          string `json:"keluhan_utama"`
@@ -169,9 +171,9 @@ func getResume(db *sql.DB) gin.HandlerFunc {
 		// 2. GET RESUME PASIEN RANAP (RAWAT INAP)
 		// ====================================================================
 		queryResumeRanap := `
-			SELECT 
+			SELECT
 				resume_pasien_ranap.kd_dokter,
-				dokter.nm_dokter,
+				COALESCE(dokter.nm_dokter, '') as nm_dokter,
 				COALESCE(resume_pasien_ranap.diagnosa_awal, '') as diagnosa_awal,
 				COALESCE(resume_pasien_ranap.alasan, '') as alasan,
 				COALESCE(resume_pasien_ranap.keluhan_utama, '') as keluhan_utama,
@@ -211,7 +213,7 @@ func getResume(db *sql.DB) gin.HandlerFunc {
 				COALESCE(resume_pasien_ranap.ket_keadaan, '') as ket_keadaan,
 				COALESCE(resume_pasien_ranap.obat_pulang, '') as obat_pulang
 			FROM resume_pasien_ranap
-			INNER JOIN dokter ON resume_pasien_ranap.kd_dokter = dokter.kd_dokter
+			LEFT JOIN dokter ON resume_pasien_ranap.kd_dokter = dokter.kd_dokter
 			WHERE resume_pasien_ranap.no_rawat = ?
 		`
 
@@ -252,6 +254,150 @@ func getResume(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, response)
+	}
+}
+
+// ─── POST & PUT /api/resume-ranap ─────────────────────────────────────────────
+
+type ResumeRanapPayload struct {
+	NoRawat              string `json:"no_rawat"`
+	KdDokter             string `json:"kd_dokter"`
+	NmDokter             string `json:"nm_dokter"`
+	KdDokterPengirim     string `json:"kd_dokter_pengirim"`
+	DiagnosaAwal         string `json:"diagnosa_awal"`
+	Alasan            string `json:"alasan"`
+	KeluhanUtama      string `json:"keluhan_utama"`
+	PemeriksaanFisik  string `json:"pemeriksaan_fisik"`
+	PemeriksaanPenunjang string `json:"pemeriksaan_penunjang"`
+	HasilLaborat      string `json:"hasil_laborat"`
+	ObatDiRS          string `json:"obat_di_rs"`
+	DiagnosaUtama     string `json:"diagnosa_utama"`
+	KdDiagnosaUtama   string `json:"kd_diagnosa_utama"`
+	DiagnosaSekunder  string `json:"diagnosa_sekunder"`
+	KdDiagnosaSekunder string `json:"kd_diagnosa_sekunder"`
+	DiagnosaSekunder2  string `json:"diagnosa_sekunder2"`
+	KdDiagnosaSekunder2 string `json:"kd_diagnosa_sekunder2"`
+	DiagnosaSekunder3  string `json:"diagnosa_sekunder3"`
+	KdDiagnosaSekunder3 string `json:"kd_diagnosa_sekunder3"`
+	DiagnosaSekunder4  string `json:"diagnosa_sekunder4"`
+	KdDiagnosaSekunder4 string `json:"kd_diagnosa_sekunder4"`
+	DiagnosaSekunder5  string `json:"diagnosa_sekunder5"`
+	KdDiagnosaSekunder5 string `json:"kd_diagnosa_sekunder5"`
+	ProsedurUtama     string `json:"prosedur_utama"`
+	KdProsedurUtama   string `json:"kd_prosedur_utama"`
+	ProsedurSekunder  string `json:"prosedur_sekunder"`
+	KdProsedurSekunder string `json:"kd_prosedur_sekunder"`
+	ProsedurSekunder2  string `json:"prosedur_sekunder2"`
+	KdProsedurSekunder2 string `json:"kd_prosedur_sekunder2"`
+	ProsedurSekunder3  string `json:"prosedur_sekunder3"`
+	KdProsedurSekunder3 string `json:"kd_prosedur_sekunder3"`
+	ProsedurSekunder4  string `json:"prosedur_sekunder4"`
+	KdProsedurSekunder4 string `json:"kd_prosedur_sekunder4"`
+	ProsedurSekunder5  string `json:"prosedur_sekunder5"`
+	KdProsedurSekunder5 string `json:"kd_prosedur_sekunder5"`
+	KonsulDokter      string `json:"konsul_dokter"`
+	Edukasi           string `json:"edukasi"`
+	CaraKeluar        string `json:"cara_keluar"`
+	KetKeluar         string `json:"ket_keluar"`
+	Keadaan           string `json:"keadaan"`
+	KetKeadaan        string `json:"ket_keadaan"`
+	ObatPulang        string `json:"obat_pulang"`
+}
+
+func saveResumeRanap(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var p ResumeRanapPayload
+		if err := c.ShouldBindJSON(&p); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if p.NoRawat == "" || p.KdDokter == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat dan kd_dokter wajib diisi"})
+			return
+		}
+		_, err := db.Exec(`
+			INSERT INTO resume_pasien_ranap
+				(no_rawat, kd_dokter, diagnosa_awal, alasan, keluhan_utama,
+				 pemeriksaan_fisik, pemeriksaan_penunjang, hasil_laborat, obat_di_rs,
+				 diagnosa_utama, kd_diagnosa_utama,
+				 diagnosa_sekunder, kd_diagnosa_sekunder,
+				 diagnosa_sekunder2, kd_diagnosa_sekunder2,
+				 diagnosa_sekunder3, kd_diagnosa_sekunder3,
+				 diagnosa_sekunder4, kd_diagnosa_sekunder4,
+				 diagnosa_sekunder5, kd_diagnosa_sekunder5,
+				 prosedur_utama, kd_prosedur_utama,
+				 prosedur_sekunder, kd_prosedur_sekunder,
+				 prosedur_sekunder2, kd_prosedur_sekunder2,
+				 prosedur_sekunder3, kd_prosedur_sekunder3,
+				 prosedur_sekunder4, kd_prosedur_sekunder4,
+				 prosedur_sekunder5, kd_prosedur_sekunder5,
+				 konsul_dokter, edukasi,
+				 cara_keluar, ket_keluar, keadaan, ket_keadaan, obat_pulang)
+			VALUES
+				(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			ON DUPLICATE KEY UPDATE
+				kd_dokter=VALUES(kd_dokter),
+				diagnosa_awal=VALUES(diagnosa_awal),
+				alasan=VALUES(alasan), keluhan_utama=VALUES(keluhan_utama),
+				pemeriksaan_fisik=VALUES(pemeriksaan_fisik),
+				pemeriksaan_penunjang=VALUES(pemeriksaan_penunjang),
+				hasil_laborat=VALUES(hasil_laborat), obat_di_rs=VALUES(obat_di_rs),
+				diagnosa_utama=VALUES(diagnosa_utama), kd_diagnosa_utama=VALUES(kd_diagnosa_utama),
+				diagnosa_sekunder=VALUES(diagnosa_sekunder), kd_diagnosa_sekunder=VALUES(kd_diagnosa_sekunder),
+				diagnosa_sekunder2=VALUES(diagnosa_sekunder2), kd_diagnosa_sekunder2=VALUES(kd_diagnosa_sekunder2),
+				diagnosa_sekunder3=VALUES(diagnosa_sekunder3), kd_diagnosa_sekunder3=VALUES(kd_diagnosa_sekunder3),
+				diagnosa_sekunder4=VALUES(diagnosa_sekunder4), kd_diagnosa_sekunder4=VALUES(kd_diagnosa_sekunder4),
+				diagnosa_sekunder5=VALUES(diagnosa_sekunder5), kd_diagnosa_sekunder5=VALUES(kd_diagnosa_sekunder5),
+				prosedur_utama=VALUES(prosedur_utama), kd_prosedur_utama=VALUES(kd_prosedur_utama),
+				prosedur_sekunder=VALUES(prosedur_sekunder), kd_prosedur_sekunder=VALUES(kd_prosedur_sekunder),
+				prosedur_sekunder2=VALUES(prosedur_sekunder2), kd_prosedur_sekunder2=VALUES(kd_prosedur_sekunder2),
+				prosedur_sekunder3=VALUES(prosedur_sekunder3), kd_prosedur_sekunder3=VALUES(kd_prosedur_sekunder3),
+				prosedur_sekunder4=VALUES(prosedur_sekunder4), kd_prosedur_sekunder4=VALUES(kd_prosedur_sekunder4),
+				prosedur_sekunder5=VALUES(prosedur_sekunder5), kd_prosedur_sekunder5=VALUES(kd_prosedur_sekunder5),
+				konsul_dokter=VALUES(konsul_dokter), edukasi=VALUES(edukasi),
+				cara_keluar=VALUES(cara_keluar), ket_keluar=VALUES(ket_keluar),
+				keadaan=VALUES(keadaan), ket_keadaan=VALUES(ket_keadaan),
+				obat_pulang=VALUES(obat_pulang)`,
+			p.NoRawat, p.KdDokter, p.DiagnosaAwal, p.Alasan, p.KeluhanUtama,
+			p.PemeriksaanFisik, p.PemeriksaanPenunjang, p.HasilLaborat, p.ObatDiRS,
+			p.DiagnosaUtama, p.KdDiagnosaUtama,
+			p.DiagnosaSekunder, p.KdDiagnosaSekunder,
+			p.DiagnosaSekunder2, p.KdDiagnosaSekunder2,
+			p.DiagnosaSekunder3, p.KdDiagnosaSekunder3,
+			p.DiagnosaSekunder4, p.KdDiagnosaSekunder4,
+			p.DiagnosaSekunder5, p.KdDiagnosaSekunder5,
+			p.ProsedurUtama, p.KdProsedurUtama,
+			p.ProsedurSekunder, p.KdProsedurSekunder,
+			p.ProsedurSekunder2, p.KdProsedurSekunder2,
+			p.ProsedurSekunder3, p.KdProsedurSekunder3,
+			p.ProsedurSekunder4, p.KdProsedurSekunder4,
+			p.ProsedurSekunder5, p.KdProsedurSekunder5,
+			p.KonsulDokter, p.Edukasi,
+			p.CaraKeluar, p.KetKeluar, p.Keadaan, p.KetKeadaan, p.ObatPulang,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Resume berhasil disimpan"})
+	}
+}
+
+// ─── DELETE /api/resume-ranap ─────────────────────────────────────────────────
+
+func deleteResumeRanap(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Query("no_rawat")
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+			return
+		}
+		_, err := db.Exec(`DELETE FROM resume_pasien_ranap WHERE no_rawat = ?`, noRawat)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Resume berhasil dihapus"})
 	}
 }
 

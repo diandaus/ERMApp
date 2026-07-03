@@ -1,4 +1,5 @@
 import React from 'react';
+import { khanzaRadiologiUrl } from '../utils/khanzaUrl';
 
 type RiwayatModalProps = {
   patient: any;
@@ -17,6 +18,7 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
   const [pemeriksaanRanap, setPemeriksaanRanap] = React.useState<any[]>([]);
   const [laboratorium, setLaboratorium] = React.useState<any>(null);
   const [radiologi, setRadiologi] = React.useState<any>(null);
+  const [gambarRadiolojiModal, setGambarRadiolojiModal] = React.useState<string | null>(null);
   const [tindakanRalan, setTindakanRalan] = React.useState<any>(null);
   const [tindakanRanap, setTindakanRanap] = React.useState<any>(null);
   const [kamarInap, setKamarInap] = React.useState<any[]>([]);
@@ -1583,67 +1585,47 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
 
     if (!hasPemeriksaan && !hasHasil && !hasGambar) return null;
 
+    const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap', fontSize: 12 };
+    const tdBase: React.CSSProperties = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #f3f4f6' };
+
     return (
       <>
         {/* PEMERIKSAAN RADIOLOGI */}
         {hasPemeriksaan && (
-          <div style={{
-            marginTop: '20px',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              background: '#ffffff',
-              color: '#374151',
-              borderBottom: '1px solid #e5e7eb',
-              padding: '12px 15px',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <span style={{ fontSize: '20px' }}>📷</span>
-              <span style={{ color: '#6610f2' }}>PEMERIKSAAN RADIOLOGI</span>
+          <div style={{ marginTop: 20, borderRadius: 8, overflow: 'hidden', border: '1px solid #bfdbfe' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', background: '#dbeafe', padding: '8px 14px', borderBottom: '1px solid #bfdbfe' }}>
+              📷 Pemeriksaan Radiologi
             </div>
-
-            <div style={{ padding: '15px' }}>
-              <table style={{ 
-                width: '100%', 
-                fontSize: '13px',
-                border: '1px solid #ddd',
-                borderCollapse: 'collapse'
-              }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#FFFAF8' }}>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '4%' }}>No.</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '15%' }}>Tanggal</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '10%' }}>Kode</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '26%' }}>Nama Pemeriksaan</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '18%' }}>Dokter PJ</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '17%' }}>Petugas</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '10%' }}>Biaya</th>
+                  <tr style={{ background: '#f3f4f6' }}>
+                    <th style={{ ...thStyle, width: '4%', textAlign: 'center' }}>No.</th>
+                    <th style={{ ...thStyle, width: '14%' }}>Tanggal/Jam</th>
+                    <th style={{ ...thStyle, width: '9%' }}>Kode</th>
+                    <th style={{ ...thStyle, width: '27%' }}>Nama Pemeriksaan</th>
+                    <th style={{ ...thStyle, width: '18%' }}>Dokter PJ</th>
+                    <th style={{ ...thStyle, width: '18%' }}>Petugas</th>
+                    <th style={{ ...thStyle, width: '10%', textAlign: 'right' }}>Biaya</th>
                   </tr>
                 </thead>
                 <tbody>
                   {radData.pemeriksaan.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>{idx + 1}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.tgl_periksa} {item.jam}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.kd_jenis_prw}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        {item.nm_perawatan}
-                        {item.proyeksi && (
-                          <>
-                            <br />
-                            <span style={{ fontSize: '12px', color: '#666' }}>{item.proyeksi}</span>
-                          </>
-                        )}
+                    <tr key={idx}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td style={{ ...tdBase, textAlign: 'center', color: '#6b7280' }}>{idx + 1}</td>
+                      <td style={{ ...tdBase, whiteSpace: 'nowrap' }}>{item.tgl_periksa}{item.jam ? ' ' + item.jam : ''}</td>
+                      <td style={{ ...tdBase, fontFamily: 'monospace', color: '#1AB1E5' }}>{item.kd_jenis_prw}</td>
+                      <td style={tdBase}>
+                        <div style={{ fontWeight: 500, color: '#111827' }}>{item.nm_perawatan}</div>
+                        {item.proyeksi && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{item.proyeksi}</div>}
                       </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.nm_dokter}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.nama_petugas}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'right' }}>
-                        {item.biaya.toLocaleString('id-ID')}
+                      <td style={{ ...tdBase, whiteSpace: 'nowrap' }}>{item.nm_dokter || '-'}</td>
+                      <td style={{ ...tdBase, whiteSpace: 'nowrap' }}>{item.nama_petugas || '-'}</td>
+                      <td style={{ ...tdBase, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                        {item.biaya > 0 ? 'Rp ' + Number(item.biaya).toLocaleString('id-ID') : '-'}
                       </td>
                     </tr>
                   ))}
@@ -1653,51 +1635,31 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
           </div>
         )}
 
-        {/* HASIL RADIOLOGI */}
+        {/* BACAAN / HASIL RADIOLOGI */}
         {hasHasil && (
-          <div style={{
-            marginTop: '20px',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              background: '#ffffff',
-              color: '#374151',
-              borderBottom: '1px solid #e5e7eb',
-              padding: '12px 15px',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <span style={{ fontSize: '20px' }}>📝</span>
-              <span style={{ color: '#e83e8c' }}>BACAAN / HASIL RADIOLOGI</span>
+          <div style={{ marginTop: 20, borderRadius: 8, overflow: 'hidden', border: '1px solid #a7f3d0' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46', background: '#d1fae5', padding: '8px 14px', borderBottom: '1px solid #a7f3d0' }}>
+              📝 Bacaan / Hasil Radiologi
             </div>
-
-            <div style={{ padding: '15px' }}>
-              <table style={{ 
-                width: '100%', 
-                fontSize: '13px',
-                border: '1px solid #ddd',
-                borderCollapse: 'collapse'
-              }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#FFFAF8' }}>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '4%' }}>No.</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '15%' }}>Tanggal</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '81%' }}>Hasil Pemeriksaan</th>
+                  <tr style={{ background: '#f3f4f6' }}>
+                    <th style={{ ...thStyle, width: '4%', textAlign: 'center' }}>No.</th>
+                    <th style={{ ...thStyle, width: '14%' }}>Tanggal/Jam</th>
+                    <th style={thStyle}>Hasil Pemeriksaan</th>
                   </tr>
                 </thead>
                 <tbody>
                   {radData.hasil.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>{idx + 1}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>{item.tgl_periksa} {item.jam}</td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                        <div dangerouslySetInnerHTML={{ 
-                          __html: item.hasil.replace(/(\r\n|\r|\n)/g, '<br>') 
-                        }} />
+                    <tr key={idx}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f0fdf4')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td style={{ ...tdBase, textAlign: 'center', color: '#6b7280', verticalAlign: 'top' }}>{idx + 1}</td>
+                      <td style={{ ...tdBase, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{item.tgl_periksa}{item.jam ? ' ' + item.jam : ''}</td>
+                      <td style={{ ...tdBase, lineHeight: 1.6 }}>
+                        <div dangerouslySetInnerHTML={{ __html: (item.hasil || '').replace(/(\r\n|\r|\n)/g, '<br>') }} />
                       </td>
                     </tr>
                   ))}
@@ -1709,64 +1671,39 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
 
         {/* GAMBAR RADIOLOGI */}
         {hasGambar && (
-          <div style={{
-            marginTop: '20px',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              background: '#ffffff',
-              color: '#374151',
-              borderBottom: '1px solid #e5e7eb',
-              padding: '12px 15px',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <span style={{ fontSize: '20px' }}>🖼️</span>
-              <span style={{ color: '#20c997' }}>GAMBAR RADIOLOGI</span>
+          <div style={{ marginTop: 20, borderRadius: 8, overflow: 'hidden', border: '1px solid #fed7aa' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '8px 14px', borderBottom: '1px solid #fed7aa' }}>
+              🖼️ Gambar Radiologi
             </div>
-
-            <div style={{ padding: '15px' }}>
-              <table style={{ 
-                width: '100%', 
-                fontSize: '13px',
-                border: '1px solid #ddd',
-                borderCollapse: 'collapse'
-              }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#FFFAF8' }}>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '4%' }}>No.</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '15%' }}>Tanggal</th>
-                    <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', width: '81%' }}>Gambar Radiologi</th>
+                  <tr style={{ background: '#f3f4f6' }}>
+                    <th style={{ ...thStyle, width: '4%', textAlign: 'center' }}>No.</th>
+                    <th style={{ ...thStyle, width: '14%' }}>Tanggal/Jam</th>
+                    <th style={thStyle}>Gambar</th>
                   </tr>
                 </thead>
                 <tbody>
                   {radData.gambar.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center', verticalAlign: 'top' }}>
-                        {idx + 1}
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', verticalAlign: 'top' }}>
-                        {item.tgl_periksa} {item.jam}
-                      </td>
-                      <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-                        <div style={{ marginTop: '10px' }}>
-                          <a 
-                            href={`/radiologi/${item.lokasi_gambar}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style={{ color: '#007bff', textDecoration: 'none' }}
-                          >
-                            <img 
-                              src={`/radiologi/${item.lokasi_gambar}`} 
-                              alt="Gambar Radiologi" 
-                              style={{ maxWidth: '450px', maxHeight: '450px', border: '1px solid #ddd' }}
-                            />
-                          </a>
-                        </div>
+                    <tr key={idx}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#fff7ed')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td style={{ ...tdBase, textAlign: 'center', color: '#6b7280', verticalAlign: 'top' }}>{idx + 1}</td>
+                      <td style={{ ...tdBase, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{item.tgl_periksa}{item.jam ? ' ' + item.jam : ''}</td>
+                      <td style={{ ...tdBase, textAlign: 'center', verticalAlign: 'top' }}>
+                        {item.lokasi_gambar ? (
+                          <img
+                            src={khanzaRadiologiUrl(item.lokasi_gambar)}
+                            alt="Gambar Radiologi"
+                            width={450}
+                            height={450}
+                            style={{ maxWidth: '100%', objectFit: 'contain', cursor: 'zoom-in', border: '1px solid #ddd' }}
+                            onClick={() => setGambarRadiolojiModal(khanzaRadiologiUrl(item.lokasi_gambar))}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : '-'}
                       </td>
                     </tr>
                   ))}
@@ -2963,6 +2900,7 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
   };
 
   return (
+    <>
     <div
       style={{
         position: 'fixed',
@@ -3250,7 +3188,7 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
                           fontSize: 12,
                           fontWeight: 600
                         }}>
-                          {visit.stts === 'Sudah' ? 'Sudah Periksa' : 'Belum Periksa'}
+                          {visit.stts === 'Sudah' ? '' : 'Belum Periksa'}
                         </span>
                       </div>
                     </div>
@@ -4722,5 +4660,25 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
         </div>
       </div>
     </div>
+
+    {/* Modal Gambar Radiologi */}
+    {gambarRadiolojiModal && (
+      <div
+        onClick={() => setGambarRadiolojiModal(null)}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, cursor: 'zoom-out' }}
+      >
+        <img
+          src={gambarRadiolojiModal}
+          alt="Gambar Radiologi"
+          style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <button
+          onClick={() => setGambarRadiolojiModal(null)}
+          style={{ position: 'fixed', top: 20, right: 20, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >✕</button>
+      </div>
+    )}
+    </>
   );
 };

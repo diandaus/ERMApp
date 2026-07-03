@@ -38,6 +38,11 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
 }
 
+/* Ensure SweetAlert appears above full-screen overlays (z-index 9999) */
+.swal2-container {
+  z-index: 99999 !important;
+}
+
 /* Default input styling */
 input[type="text"],
 input[type="password"],

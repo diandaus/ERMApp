@@ -334,6 +334,86 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// getInfoRawatRadiologi replicates Khanza Java isRawat() logic.
+// Returns status (ranap/ralan), kelas, kamar code, and nama_kamar for the patient.
+func getInfoRawatRadiologi(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+			return
+		}
+
+		var statusLanjut string
+		if err := db.QueryRow(
+			`SELECT IFNULL(status_lanjut,'Ralan') FROM reg_periksa WHERE no_rawat=? LIMIT 1`, noRawat,
+		).Scan(&statusLanjut); err != nil {
+			statusLanjut = "Ralan"
+		}
+
+		if statusLanjut == "Ranap" {
+			// Khanza: cek ranap_gabung — pasien bayi/gabungan memakai no_rawat ibu
+			var noRawatIbu string
+			db.QueryRow(`SELECT IFNULL(no_rawat,'') FROM ranap_gabung WHERE no_rawat2=? LIMIT 1`, noRawat).Scan(&noRawatIbu)
+			noRawatLookup := noRawat
+			if noRawatIbu != "" {
+				noRawatLookup = noRawatIbu
+			}
+
+			var kamar, kelas, nmBangsal string
+			db.QueryRow(
+				`SELECT IFNULL(kd_kamar,'') FROM kamar_inap WHERE no_rawat=? ORDER BY tgl_masuk DESC LIMIT 1`,
+				noRawatLookup,
+			).Scan(&kamar)
+
+			db.QueryRow(`
+				SELECT kamar.kelas FROM kamar
+				INNER JOIN kamar_inap ON kamar.kd_kamar=kamar_inap.kd_kamar
+				WHERE kamar_inap.no_rawat=? AND kamar_inap.stts_pulang='-'
+				ORDER BY STR_TO_DATE(CONCAT(kamar_inap.tgl_masuk,' ',kamar_inap.jam_masuk),'%Y-%m-%d %H:%i:%s') DESC LIMIT 1`,
+				noRawatLookup,
+			).Scan(&kelas)
+
+			db.QueryRow(`
+				SELECT IFNULL(bangsal.nm_bangsal,'') FROM bangsal
+				INNER JOIN kamar ON bangsal.kd_bangsal=kamar.kd_bangsal
+				WHERE kamar.kd_kamar=? LIMIT 1`, kamar,
+			).Scan(&nmBangsal)
+
+			namaKamar := kamar
+			if nmBangsal != "" {
+				namaKamar = kamar + ", " + nmBangsal
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"status":     "ranap",
+				"kelas":      kelas,
+				"kamar":      kamar,
+				"nama_kamar": namaKamar,
+			})
+			return
+		}
+
+		// Ralan
+		var nmPoli string
+		db.QueryRow(`
+			SELECT IFNULL(poliklinik.nm_poli,'') FROM poliklinik
+			INNER JOIN reg_periksa ON poliklinik.kd_poli=reg_periksa.kd_poli
+			WHERE reg_periksa.no_rawat=? LIMIT 1`, noRawat,
+		).Scan(&nmPoli)
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":     "ralan",
+			"kelas":      "Rawat Jalan",
+			"kamar":      "Poli",
+			"nama_kamar": nmPoli,
+		})
+	}
+}
+
 // Delete permintaan radiologi
 func deletePermintaanRadiologi(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
