@@ -15,6 +15,7 @@ type DisplaySettings struct {
 	NamaRS             string `json:"nama_rs"`
 	LogoURL            string `json:"logo_url"`
 	VideoURL           string `json:"video_url"`
+	LoginWallpaperURL  string `json:"login_wallpaper_url"`
 	RunningTextPoli    string `json:"running_text_poli"`
 	RunningTextApotek  string `json:"running_text_apotek"`
 	BackgroundColorPoli string `json:"background_color_poli"`
@@ -35,6 +36,7 @@ func ensureDisplaySettingsTable(db *sql.DB) error {
 		nama_rs VARCHAR(200) NOT NULL DEFAULT 'NAMA RUMAH SAKIT',
 		logo_url TEXT,
 		video_url TEXT,
+		login_wallpaper_url TEXT,
 		running_text_poli TEXT DEFAULT 'SELAMAT DATANG DI RUMAH SAKIT',
 		running_text_apotek TEXT DEFAULT 'HARAP MENUNGGU PANGGILAN NOMOR ANTRIAN ANDA',
 		background_color_poli VARCHAR(20) DEFAULT '#1565c0',
@@ -52,6 +54,13 @@ func ensureDisplaySettingsTable(db *sql.DB) error {
 	_, err := db.Exec(tableQuery)
 	if err != nil {
 		return fmt.Errorf("gagal create table display_settings: %v", err)
+	}
+
+	// Migrasi untuk tabel display_settings yang sudah ada sebelum kolom ini ditambahkan
+	if _, err := db.Exec(
+		`ALTER TABLE display_settings ADD COLUMN IF NOT EXISTS login_wallpaper_url TEXT`,
+	); err != nil {
+		return fmt.Errorf("gagal migrasi kolom login_wallpaper_url: %v", err)
 	}
 
 	// Insert default settings if not exists
@@ -90,6 +99,7 @@ func getDisplaySettings(db *sql.DB) gin.HandlerFunc {
 
 		row := db.QueryRow(`
 			SELECT id, nama_rs, COALESCE(logo_url, ''), COALESCE(video_url, ''),
+			       COALESCE(login_wallpaper_url, ''),
 			       running_text_poli, running_text_apotek,
 			       background_color_poli, background_color_apotek,
 			       polling_interval, tts_enabled, tts_rate, tts_pitch, tts_volume
@@ -100,6 +110,7 @@ func getDisplaySettings(db *sql.DB) gin.HandlerFunc {
 
 		err := row.Scan(
 			&settings.ID, &settings.NamaRS, &settings.LogoURL, &settings.VideoURL,
+			&settings.LoginWallpaperURL,
 			&settings.RunningTextPoli, &settings.RunningTextApotek,
 			&settings.BackgroundColorPoli, &settings.BackgroundColorApotek,
 			&settings.PollingInterval, &settings.TTSEnabled,
@@ -132,14 +143,15 @@ func updateDisplaySettings(db *sql.DB) gin.HandlerFunc {
 		// Update or insert settings
 		query := `
 		INSERT INTO display_settings
-		(id, nama_rs, logo_url, video_url, running_text_poli, running_text_apotek,
+		(id, nama_rs, logo_url, video_url, login_wallpaper_url, running_text_poli, running_text_apotek,
 		 background_color_poli, background_color_apotek, polling_interval,
 		 tts_enabled, tts_rate, tts_pitch, tts_volume)
-		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			nama_rs = VALUES(nama_rs),
 			logo_url = VALUES(logo_url),
 			video_url = VALUES(video_url),
+			login_wallpaper_url = VALUES(login_wallpaper_url),
 			running_text_poli = VALUES(running_text_poli),
 			running_text_apotek = VALUES(running_text_apotek),
 			background_color_poli = VALUES(background_color_poli),
@@ -153,7 +165,7 @@ func updateDisplaySettings(db *sql.DB) gin.HandlerFunc {
 		`
 
 		_, err := db.Exec(query,
-			req.NamaRS, req.LogoURL, req.VideoURL,
+			req.NamaRS, req.LogoURL, req.VideoURL, req.LoginWallpaperURL,
 			req.RunningTextPoli, req.RunningTextApotek,
 			req.BackgroundColorPoli, req.BackgroundColorApotek,
 			req.PollingInterval, req.TTSEnabled,

@@ -5,6 +5,7 @@ type DisplaySettingsType = {
   nama_rs: string;
   logo_url: string;
   video_url: string;
+  login_wallpaper_url: string;
   running_text_poli: string;
   running_text_apotek: string;
   background_color_poli: string;
@@ -85,6 +86,7 @@ const DEFAULTS: DisplaySettingsType = {
   nama_rs: 'PUSKESMAS PIDIE',
   logo_url: '',
   video_url: '',
+  login_wallpaper_url: '',
   running_text_poli: 'SELAMAT DATANG DI RUMAH SAKIT',
   running_text_apotek: 'HARAP MENUNGGU PANGGILAN NOMOR ANTRIAN ANDA',
   background_color_poli: '#1565c0',
@@ -103,9 +105,12 @@ export const DisplaySettingsView: React.FC<{ onBack?: () => void }> = ({ onBack 
   const [saving, setSaving] = React.useState(false);
   const [logoPreview, setLogoPreview] = React.useState('');
   const [logoUploading, setLogoUploading] = React.useState(false);
+  const [wallpaperPreview, setWallpaperPreview] = React.useState('');
+  const [wallpaperUploading, setWallpaperUploading] = React.useState(false);
   const [toast, setToast] = React.useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const videoFileRef = React.useRef<HTMLInputElement>(null);
+  const wallpaperFileRef = React.useRef<HTMLInputElement>(null);
 
   const showToast = (type: 'ok' | 'err', msg: string) => {
     setToast({ type, msg });
@@ -124,6 +129,7 @@ export const DisplaySettingsView: React.FC<{ onBack?: () => void }> = ({ onBack 
         const d: DisplaySettingsType = await res.json();
         setData(d);
         if (d.logo_url) setLogoPreview(d.logo_url);
+        if (d.login_wallpaper_url) setWallpaperPreview(d.login_wallpaper_url);
       } else {
         setData(DEFAULTS);
       }
@@ -181,6 +187,31 @@ export const DisplaySettingsView: React.FC<{ onBack?: () => void }> = ({ onBack 
       }
     } catch { showToast('err', 'Gagal upload logo'); }
     finally { setLogoUploading(false); }
+  };
+
+  // ── Wallpaper upload ──
+  const handleWallpaperFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) { showToast('err', 'Hanya file gambar yang diperbolehkan'); return; }
+    if (file.size / 1024 / 1024 >= 8) { showToast('err', 'Ukuran file maksimal 8MB'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => setWallpaperPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+    setWallpaperUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      if (res.ok) {
+        const d = await res.json();
+        const url = d.url || '';
+        set('login_wallpaper_url', url);
+        setWallpaperPreview(url);
+        showToast('ok', 'Wallpaper berhasil diupload');
+      } else {
+        showToast('err', 'Gagal upload wallpaper');
+      }
+    } catch { showToast('err', 'Gagal upload wallpaper'); }
+    finally { setWallpaperUploading(false); }
   };
 
   // ── Video upload ──
@@ -364,6 +395,61 @@ export const DisplaySettingsView: React.FC<{ onBack?: () => void }> = ({ onBack 
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoFile(f); }} />
               <FieldHint>Video/iklan yang ditampilkan di layar display (YouTube atau file lokal)</FieldHint>
             </div>
+          </div>
+
+          <SectionDivider label="Halaman Login" />
+
+          <div>
+            <FieldLabel>Wallpaper Halaman Login</FieldLabel>
+
+            {/* Drop zone */}
+            <div
+              onClick={() => wallpaperFileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#2563eb'; }}
+              onDragLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; }}
+              onDrop={e => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = '#d1d5db';
+                const f = e.dataTransfer.files[0];
+                if (f) handleWallpaperFile(f);
+              }}
+              style={{
+                border: '1px dashed #d1d5db', borderRadius: 8, padding: 12,
+                textAlign: 'center', cursor: 'pointer', marginBottom: 6,
+                background: wallpaperPreview ? `center/cover no-repeat url(${wallpaperPreview})` : '#f9fafb',
+                transition: 'border-color 0.15s',
+                minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {!wallpaperPreview && (
+                <div>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>🖼️</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{wallpaperUploading ? 'Mengupload...' : 'Klik atau drag file wallpaper'}</div>
+                  <div style={{ fontSize: 10, color: '#d1d5db', marginTop: 2 }}>JPG, PNG — maks 8MB</div>
+                </div>
+              )}
+            </div>
+            <input ref={wallpaperFileRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleWallpaperFile(f); }} />
+
+            {/* URL input */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input
+                style={{ ...inputStyle, flex: 1 }}
+                value={wallpaperPreview.startsWith('data:') ? '' : wallpaperPreview}
+                onChange={e => { setWallpaperPreview(e.target.value); set('login_wallpaper_url', e.target.value); }}
+                placeholder="Atau masukkan URL wallpaper..."
+              />
+              {wallpaperPreview && (
+                <button
+                  type="button"
+                  onClick={() => { setWallpaperPreview(''); set('login_wallpaper_url', ''); }}
+                  style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontSize: 12, cursor: 'pointer' }}
+                  title="Hapus wallpaper"
+                >✕</button>
+              )}
+            </div>
+            <FieldHint>Ditampilkan sebagai latar belakang halaman login. Kosongkan untuk memakai latar default.</FieldHint>
           </div>
         </div>
       )}

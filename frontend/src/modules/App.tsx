@@ -48,11 +48,37 @@ type LoginViewProps = {
   onLogin: (user: AppUser) => void;
 };
 
+type InstansiSettings = {
+  nama_instansi: string;
+  logo_url: string;
+};
+
+type LoginWallpaperSettings = {
+  login_wallpaper_url: string;
+};
+
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
-  const [username, setUsername] = React.useState<string>('admin');
-  const [password, setPassword] = React.useState<string>('admin123');
+  const [username, setUsername] = React.useState<string>('');
+  const [password, setPassword] = React.useState<string>('');
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [instansi, setInstansi] = React.useState<InstansiSettings | null>(null);
+  const [wallpaper, setWallpaper] = React.useState<LoginWallpaperSettings | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/settings')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (!cancelled && data) setInstansi(data); })
+      .catch(() => {});
+    fetch('/api/settings/display')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (!cancelled && data) setWallpaper(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const namaInstansi = instansi?.nama_instansi || 'SIMRS WEB';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,37 +114,43 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(circle at top left, #eff6ff 0, #e0f2fe 40%, #eef2ff 100%)',
+        background: wallpaper?.login_wallpaper_url
+          ? `linear-gradient(rgba(15,23,42,0.35), rgba(15,23,42,0.45)), center/cover no-repeat url(${wallpaper.login_wallpaper_url})`
+          : 'radial-gradient(circle at top left, #eff6ff 0, #e0f2fe 40%, #eef2ff 100%)',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
       }}
     >
       <div
         style={{
-          width: 360,
+          width: 380,
           maxWidth: '90%',
-          background: '#ffffff',
+          background: 'rgba(255,255,255,0.97)',
+          backdropFilter: 'blur(6px)',
           borderRadius: 16,
-          padding: 24,
-          boxShadow: '0 20px 40px rgba(15,23,42,0.15)',
+          padding: 28,
+          boxShadow: '0 20px 45px rgba(15,23,42,0.25)',
           border: '1px solid rgba(148,163,184,0.25)'
         }}
       >
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20 }}>
+          {instansi?.logo_url && (
+            <img
+              src={instansi.logo_url}
+              alt="Logo"
+              style={{ height: 112, maxWidth: '100%', objectFit: 'contain', marginBottom: 12 }}
+            />
+          )}
           <div
             style={{
-              fontSize: 13,
-              fontWeight: 600,
-              letterSpacing: 0.4,
-              color: '#2563eb',
-              textTransform: 'uppercase'
+              fontSize: 16,
+              fontWeight: 700,
+              color: '#111827',
+              textAlign: 'center',
+              lineHeight: 1.3
             }}
           >
-            SIMRS WEB
+            {namaInstansi}
           </div>
-          <h2 style={{ margin: '4px 0 4px 0', fontSize: 20 }}>Login Pengguna</h2>
-          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-            Masuk untuk mengakses modul sesuai hak akses Anda. (Default: admin / admin123)
-          </p>
         </div>
 
         {error && (
@@ -141,6 +173,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Username</label>
             <input
               type="text"
+              autoFocus
+              autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               style={{
@@ -148,7 +182,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 padding: '6px 10px',
                 borderRadius: 8,
                 border: '1px solid #d1d5db',
-                fontSize: 13
+                fontSize: 13,
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -156,6 +191,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Password</label>
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
@@ -163,7 +199,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 padding: '6px 10px',
                 borderRadius: 8,
                 border: '1px solid #d1d5db',
-                fontSize: 13
+                fontSize: 13,
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -185,6 +222,9 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             {loading ? 'Masuk...' : 'Masuk'}
           </button>
         </form>
+        <div style={{ marginTop: 16, textAlign: 'center', fontSize: 11, color: '#9ca3af' }}>
+          © 2026 Firdaus | All Rights Reserved
+        </div>
       </div>
     </div>
   );
@@ -1331,6 +1371,16 @@ export const App: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = React.useState<boolean>(false);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
   const [displayType, setDisplayType] = React.useState<string | null>(null);
+  const [instansi, setInstansi] = React.useState<{ nama_instansi: string; logo_url: string } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/settings')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (!cancelled && data) setInstansi(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Check if this is a display window (opened from dashboard)
   React.useEffect(() => {
@@ -1683,11 +1733,20 @@ export const App: React.FC = () => {
           height: '100vh'
         }}
       >
-        <div style={{ padding: '10px 10px 20px 10px', borderBottom: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: 0.4, color: '#2563eb' }}>
-            SIMRS WEB
+        <div style={{ padding: '10px 10px 20px 10px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {instansi?.logo_url && (
+            <img
+              src={instansi.logo_url}
+              alt="Logo"
+              style={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0 }}
+            />
+          )}
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: 0.4, color: '#2563eb' }}>
+              SIMRS
+            </div>
+            <div style={{ fontSize: 13, color: '#6b7280' }}>E-Medical Record</div>
           </div>
-          <div style={{ fontSize: 13, color: '#6b7280' }}>Khanza → Go + React</div>
         </div>
 
         <nav style={{ marginTop: 16, flex: 1, overflowY: 'auto' }}>
@@ -1744,7 +1803,7 @@ export const App: React.FC = () => {
             color: '#6b7280'
           }}
         >
-          <div>Rumah Sakit: <strong style={{ color: '#111827' }}>Contoh RS</strong></div>
+          <div>© 2026 Firdaus | All Rights Reserved</div>
           <div>Versi: 0.0.1 (layout awal)</div>
         </div>
       </aside>
