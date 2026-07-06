@@ -39,7 +39,7 @@ type AppUser = {
   id: number;
   username: string;
   full_name: string;
-  role: 'pendaftaran' | 'dokter' | 'farmasi' | 'kasir' | 'admin';
+  role: string;
   is_active?: boolean;
   allowed_modules?: string;
 };
@@ -533,15 +533,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
   }, [rujukanInternal, searchText]);
 
   return (
-    <section
-      style={{
-        background: '#ffffff',
-        borderRadius: 16,
-        padding: 24,
-        boxShadow: '0 10px 30px hsla(0, 0.00%, 100.00%, 0.08)',
-        border: '1px solid #e5e7eb'
-      }}
-    >
+    <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {error && (
         <div
           style={{
@@ -550,7 +542,8 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
             borderRadius: 8,
             background: '#fef2f2',
             color: '#b91c1c',
-            fontSize: 13
+            fontSize: 13,
+            flexShrink: 0
           }}
         >
           {error}
@@ -563,46 +556,61 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
           display: 'flex',
           gap: 16,
           marginBottom: 16,
-          borderBottom: '2px solid #e5e7eb',
-          alignItems: 'flex-end',
-          flexWrap: 'wrap'
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          flexShrink: 0
         }}
       >
-        <button
-          onClick={() => setActiveTab('poli-today')}
-          style={{
-            padding: '10px 20px',
-            border: 'none',
-            background: 'transparent',
-            borderBottom: activeTab === 'poli-today' ? '3px solid #2563eb' : '3px solid transparent',
-            color: activeTab === 'poli-today' ? '#2563eb' : '#6b7280',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: activeTab === 'poli-today' ? 600 : 400,
-            transition: 'all 0.2s'
-          }}
-        >
-          Poli Hari Ini ({filteredPoliToday.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('rujukan-internal')}
-          style={{
-            padding: '10px 20px',
-            border: 'none',
-            background: 'transparent',
-            borderBottom: activeTab === 'rujukan-internal' ? '3px solid #2563eb' : '3px solid transparent',
-            color: activeTab === 'rujukan-internal' ? '#2563eb' : '#6b7280',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: activeTab === 'rujukan-internal' ? 600 : 400,
-            transition: 'all 0.2s'
-          }}
-        >
-          Rujukan Poli Internal ({filteredRujukanInternal.length})
-        </button>
+        {/* Tab Segmented Control */}
+        <div style={{
+          display: 'inline-flex',
+          background: '#f3f4f6',
+          borderRadius: 12,
+          padding: 4,
+          gap: 4
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('poli-today')}
+            style={{
+              padding: '6px 24px',
+              borderRadius: 8,
+              border: activeTab === 'poli-today' ? '1px solid #d1d5db' : 'none',
+              background: activeTab === 'poli-today' ? '#ffffff' : 'transparent',
+              color: activeTab === 'poli-today' ? '#111827' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: activeTab === 'poli-today' ? 500 : 400,
+              transition: 'all 0.2s ease',
+              boxShadow: activeTab === 'poli-today' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Poli Hari Ini ({filteredPoliToday.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('rujukan-internal')}
+            style={{
+              padding: '6px 24px',
+              borderRadius: 8,
+              border: activeTab === 'rujukan-internal' ? '1px solid #d1d5db' : 'none',
+              background: activeTab === 'rujukan-internal' ? '#ffffff' : 'transparent',
+              color: activeTab === 'rujukan-internal' ? '#111827' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: activeTab === 'rujukan-internal' ? 500 : 400,
+              transition: 'all 0.2s ease',
+              boxShadow: activeTab === 'rujukan-internal' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Rujukan Poli Internal ({filteredRujukanInternal.length})
+          </button>
+        </div>
 
         {/* Search box & Filter */}
-        <div style={{ marginLeft: 'auto', paddingBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
             type="text"
             value={searchText}
@@ -695,7 +703,8 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
             borderRadius: 12,
             border: '1px solid #e5e7eb',
             overflow: 'auto',
-            maxHeight: 600
+            flex: 1,
+            minHeight: 0
           }}
         >
           <table
@@ -1044,7 +1053,8 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
             borderRadius: 12,
             border: '1px solid #e5e7eb',
             overflow: 'auto',
-            maxHeight: 600
+            flex: 1,
+            minHeight: 0
           }}
         >
           <table

@@ -112,16 +112,10 @@ export const PegawaiView: React.FC = () => {
 
 
   return (<>
-    <div style={{ background: '#F3F4F6', borderRadius: 20, padding: '35px 6px 6px 6px', position: 'relative' }}>
-      {/* Header */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 20px', color: '#000000', fontSize: 13, fontWeight: 400 }}>
-        Daftar Pegawai
-      </div>
-
-      {/* White Card */}
-      <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: 12 }}>
-        {/* Toolbar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+    {/* Content Section — langsung di atas background, tanpa card */}
+    <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
           {/* Tab: status aktif */}
           <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
             {['AKTIF', 'CUTI', 'KELUAR', 'TENAGA LUAR', ''].map((s) => (
@@ -274,17 +268,12 @@ export const PegawaiView: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 3px' }}>
-            <thead>
+        <div style={{ borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
               <tr>
-                {['NIK', 'Nama', 'Jabatan', 'Departemen', 'Mulai Kerja', 'Pendidikan', 'Kota', 'Status'].map((h, i) => (
-                  <th key={h} style={{
-                    padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600,
-                    color: '#374151', background: '#f3f4f6', letterSpacing: '0.3px',
-                    ...(i === 0 ? { paddingLeft: 14, borderRadius: '8px 0 0 8px' } : {}),
-                    ...(i === 7 ? { borderRadius: '0 8px 8px 0' } : {}),
-                  }}>
+                {['NIK', 'Nama', 'Jabatan', 'Departemen', 'Mulai Kerja', 'Pendidikan', 'Kota', 'Status'].map((h) => (
+                  <th key={h} style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>
                     {h}
                   </th>
                 ))}
@@ -298,42 +287,21 @@ export const PegawaiView: React.FC = () => {
               ) : pegawaiList.length === 0 ? (
                 <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Tidak ada data pegawai</td></tr>
               ) : (
-                pegawaiList.map((p) => {
-                  const isSelected  = selectedPegawai?.nik === p.nik;
-                  const rowBg = isSelected ? '#dbeafe' : '#ffffff';
-                  const rowBorder = isSelected ? '1.5px solid #93c5fd' : '1.5px solid transparent';
+                pegawaiList.map((p, index) => {
+                  const isSelected = selectedPegawai?.nik === p.nik;
+                  const baseBg = index % 2 === 0 ? '#ffffff' : '#f9fafb';
                   return (
                     <tr
                       key={p.nik}
                       onClick={() => setSelectedPegawai(p)}
-                      style={{ cursor: 'pointer', transition: 'all 0.15s' }}
-                      onMouseEnter={e => {
-                        if (!isSelected) {
-                          Array.from(e.currentTarget.children).forEach((td: any) => {
-                            td.style.background = '#fffbeb';
-                            td.style.borderTop = '1.5px solid #fcd34d';
-                            td.style.borderBottom = '1.5px solid #fcd34d';
-                          });
-                          (e.currentTarget.children[0] as any).style.borderLeft = '1.5px solid #fcd34d';
-                          (e.currentTarget.children[e.currentTarget.children.length - 1] as any).style.borderRight = '1.5px solid #fcd34d';
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        if (!isSelected) {
-                          Array.from(e.currentTarget.children).forEach((td: any) => {
-                            td.style.background = '#ffffff';
-                            td.style.borderTop = '1.5px solid transparent';
-                            td.style.borderBottom = '1.5px solid transparent';
-                          });
-                          (e.currentTarget.children[0] as any).style.borderLeft = '1.5px solid transparent';
-                          (e.currentTarget.children[e.currentTarget.children.length - 1] as any).style.borderRight = '1.5px solid transparent';
-                        }
-                      }}
+                      style={{ background: isSelected ? '#dbeafe' : baseBg, cursor: 'pointer', transition: 'background 0.2s' }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#fef3c7'; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = baseBg; }}
                     >
-                      <td style={{ padding: '8px 12px 8px 14px', fontSize: 12, fontWeight: 600, color: '#2563eb', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: rowBorder, borderRight: 'none', borderRadius: '8px 0 0 8px' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, fontWeight: 600, color: '#2563eb' }}>
                         {p.nik}
                       </td>
-                      <td style={{ padding: '8px 12px', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: 'none' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
                         <div style={{ fontSize: 12, color: '#111827', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5 }}>
                           {p.nama}
                           <span style={{ fontSize: 10, fontWeight: 600, color: p.jk === 'Wanita' ? '#db2777' : '#2563eb', background: p.jk === 'Wanita' ? '#fce7f3' : '#dbeafe', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>
@@ -341,22 +309,22 @@ export const PegawaiView: React.FC = () => {
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: 'none' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {p.jbtn || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: 'none' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {p.departemen || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: 'none' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {p.mulai_kerja || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: 'none' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {p.pendidikan || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: 'none' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {p.kota || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', background: rowBg, borderTop: rowBorder, borderBottom: rowBorder, borderLeft: 'none', borderRight: rowBorder, borderRadius: '0 8px 8px 0' }} onClick={e => e.stopPropagation()}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }} onClick={e => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={e => {
@@ -441,14 +409,13 @@ export const PegawaiView: React.FC = () => {
           </table>
         </div>
 
-        {/* Total info */}
-        {!loading && pegawaiList.length > 0 && (
-          <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
-            {pegawaiList.length} pegawai ditemukan
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Total info */}
+      {!loading && pegawaiList.length > 0 && (
+        <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right', flexShrink: 0 }}>
+          {pegawaiList.length} pegawai ditemukan
+        </div>
+      )}
+    </section>
 
     {/* Fixed bottom drawer — detail pegawai */}
     {selectedPegawai && (

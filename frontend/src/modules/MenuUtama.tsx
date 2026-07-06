@@ -24,7 +24,7 @@ type AppUser = {
   id: number;
   username: string;
   full_name: string;
-  role: 'pendaftaran' | 'dokter' | 'farmasi' | 'kasir' | 'admin';
+  role: string;
   is_active?: boolean;
 };
 

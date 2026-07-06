@@ -236,17 +236,8 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
         </div>
       </div>
 
-      {/* Card Section */}
-      <section
-
-      style={{
-        background: '#ffffff',
-        borderRadius: 16,
-        padding: 24,
-        boxShadow: '0 10px 30px rgba(15,23,42,0.08)',
-        border: '1px solid #e5e7eb'
-      }}
-    >
+      {/* Content Section — langsung di atas background, tanpa card */}
+      <section>
 
       {/* Tab Navigation */}
       <div
@@ -254,41 +245,56 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
           display: 'flex',
           gap: 8,
           marginBottom: 16,
-          borderBottom: '2px solid #e5e7eb'
+          alignItems: 'center'
         }}
       >
-        <button
-          onClick={() => setActiveTab('poli-today')}
-          style={{
-            padding: '10px 20px',
-            border: 'none',
-            background: 'transparent',
-            borderBottom: activeTab === 'poli-today' ? '3px solid #1AB1E5' : '3px solid transparent',
-            color: activeTab === 'poli-today' ? '#1AB1E5' : '#6b7280',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: activeTab === 'poli-today' ? 600 : 400,
-            transition: 'all 0.2s'
-          }}
-        >
-          Poli Hari Ini
-        </button>
-        <button
-          onClick={() => setActiveTab('rujukan-internal')}
-          style={{
-            padding: '10px 20px',
-            border: 'none',
-            background: 'transparent',
-            borderBottom: activeTab === 'rujukan-internal' ? '3px solid #1AB1E5' : '3px solid transparent',
-            color: activeTab === 'rujukan-internal' ? '#1AB1E5' : '#6b7280',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: activeTab === 'rujukan-internal' ? 600 : 400,
-            transition: 'all 0.2s'
-          }}
-        >
-          Rujukan Poli Internal
-        </button>
+        {/* Tab Segmented Control */}
+        <div style={{
+          display: 'inline-flex',
+          background: '#f3f4f6',
+          borderRadius: 12,
+          padding: 4,
+          gap: 4
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('poli-today')}
+            style={{
+              padding: '6px 24px',
+              borderRadius: 8,
+              border: activeTab === 'poli-today' ? '1px solid #d1d5db' : 'none',
+              background: activeTab === 'poli-today' ? '#ffffff' : 'transparent',
+              color: activeTab === 'poli-today' ? '#111827' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: activeTab === 'poli-today' ? 500 : 400,
+              transition: 'all 0.2s ease',
+              boxShadow: activeTab === 'poli-today' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Poli Hari Ini
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('rujukan-internal')}
+            style={{
+              padding: '6px 24px',
+              borderRadius: 8,
+              border: activeTab === 'rujukan-internal' ? '1px solid #d1d5db' : 'none',
+              background: activeTab === 'rujukan-internal' ? '#ffffff' : 'transparent',
+              color: activeTab === 'rujukan-internal' ? '#111827' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: activeTab === 'rujukan-internal' ? 500 : 400,
+              transition: 'all 0.2s ease',
+              boxShadow: activeTab === 'rujukan-internal' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Rujukan Poli Internal
+          </button>
+        </div>
 
         {/* Search Box */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>

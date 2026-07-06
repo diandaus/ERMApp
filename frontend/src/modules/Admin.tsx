@@ -6,7 +6,7 @@ type AppUser = {
   id: number;
   username: string;
   full_name: string;
-  role: 'pendaftaran' | 'dokter' | 'farmasi' | 'kasir' | 'admin';
+  role: string;
   is_active?: boolean;
   allowed_modules?: string;
 };
@@ -584,10 +584,10 @@ export const AdminView: React.FC = () => {
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
                           padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                          background: u.role === 'admin' ? '#fee2e2' : u.role === 'dokter' ? '#dbeafe' : u.role === 'farmasi' ? '#dcfce7' : u.role === 'kasir' ? '#fef3c7' : '#f3f4f6',
-                          color: u.role === 'admin' ? '#dc2626' : u.role === 'dokter' ? '#2563eb' : u.role === 'farmasi' ? '#16a34a' : u.role === 'kasir' ? '#ca8a04' : '#6b7280'
+                          background: u.role === 'admin' ? '#fee2e2' : u.role === 'dokter' ? '#dbeafe' : u.role === 'farmasi' ? '#dcfce7' : u.role === 'kasir' ? '#fef3c7' : u.role === 'pendaftaran' ? '#f3f4f6' : '#ede9fe',
+                          color: u.role === 'admin' ? '#dc2626' : u.role === 'dokter' ? '#2563eb' : u.role === 'farmasi' ? '#16a34a' : u.role === 'kasir' ? '#ca8a04' : u.role === 'pendaftaran' ? '#6b7280' : '#6d28d9'
                         }}>
-                          {u.role === 'pendaftaran' ? 'Pendaftaran' : u.role === 'dokter' ? 'Dokter' : u.role === 'farmasi' ? 'Farmasi' : u.role === 'kasir' ? 'Kasir' : 'Admin'}
+                          {u.role === 'pendaftaran' ? 'Pendaftaran' : u.role === 'dokter' ? 'Dokter' : u.role === 'farmasi' ? 'Farmasi' : u.role === 'kasir' ? 'Kasir' : u.role === 'admin' ? 'Admin' : u.role}
                         </span>
                       </td>
                       <td style={{ padding: '12px 16px' }}>

@@ -303,7 +303,7 @@ export const RegistrasiView: React.FC = () => {
   }, [showFilterDropdown]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <>
       {/* Modal Component */}
       <ModalRegistrasi
         isOpen={showModal}
@@ -311,91 +311,26 @@ export const RegistrasiView: React.FC = () => {
         onSuccess={fetchPatients}
       />
 
-      {/* Container for Button and Card */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        height: '87vh',
-        overflow: 'hidden'
-      }}>
-        {/* Registrasi Button */}
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          style={{
-            padding: '6px 12px',
-            borderRadius: 6,
-            border: 'none',
-            background: '#2563eb',
-            color: '#ffffff',
-            cursor: 'pointer',
-            fontSize: 11,
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            width: 'fit-content',
-            alignSelf: 'flex-end'
-          }}
-        >
-          <span style={{ fontSize: 14 }}>+</span>
-          <span>Registrasi</span>
-        </button>
-
-        {/* List Data Card */}
-        <div style={{
-          background: '#F3F4F6',
-          borderRadius: 20,
-          padding: '35px 6px 6px 6px',
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          overflow: 'hidden'
-        }}>
-        {/* Header Title */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: '12px 20px',
-          color: '#000000',
-          fontSize: 13,
-          fontWeight: 400
-        }}>
-          Daftar Registrasi
-        </div>
-
-        {/* White Card Content */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 16,
-          border: '1px solid #d1d5db',
-          padding: '12px 12px 12px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          overflow: 'hidden'
-        }}>
-        {/* Search and Filter Section */}
+      {/* Content Section — langsung di atas background, tanpa card */}
+      <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Toolbar */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 16
+          marginBottom: 16,
+          flexShrink: 0,
+          flexWrap: 'wrap',
+          gap: 8
         }}>
-          {/* Left Section: Tab */}
-          <div>
-            {/* Tab Segmented Control */}
-            <div style={{
-              display: 'inline-flex',
-              background: '#f3f4f6',
-              borderRadius: 12,
-              padding: 4,
-              gap: 4
-            }}>
+          {/* Tab Segmented Control */}
+          <div style={{
+            display: 'inline-flex',
+            background: '#f3f4f6',
+            borderRadius: 12,
+            padding: 4,
+            gap: 4
+          }}>
             <button
               type="button"
               onClick={() => setActiveTab('registrasi-awal')}
@@ -409,7 +344,8 @@ export const RegistrasiView: React.FC = () => {
                 fontSize: 13,
                 fontWeight: activeTab === 'registrasi-awal' ? 500 : 400,
                 transition: 'all 0.2s ease',
-                boxShadow: activeTab === 'registrasi-awal' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'
+                boxShadow: activeTab === 'registrasi-awal' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                whiteSpace: 'nowrap'
               }}
             >
               Registrasi Awal
@@ -427,16 +363,129 @@ export const RegistrasiView: React.FC = () => {
                 fontSize: 13,
                 fontWeight: activeTab === 'rujukaninternal-poli' ? 500 : 400,
                 transition: 'all 0.2s ease',
-                boxShadow: activeTab === 'rujukaninternal-poli' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'
+                boxShadow: activeTab === 'rujukaninternal-poli' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                whiteSpace: 'nowrap'
               }}
             >
               Rujukan Internal Poli
             </button>
           </div>
-          </div>
 
-          {/* Right Section: Search Box and Filter */}
+          {/* Right Section: Actions + Search Box and Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Registrasi Button */}
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#2563eb',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Registrasi
+            </button>
+
+            {/* Edit Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedPatient) {
+                  Swal.fire({
+                    icon: 'warning',
+                    title: 'Peringatan',
+                    text: 'Silakan pilih pasien terlebih dahulu',
+                    confirmButtonColor: '#2563eb'
+                  });
+                  return;
+                }
+                console.log('Edit patient:', selectedPatient);
+                // TODO: Implement edit functionality
+              }}
+              style={{
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M21.2799 6.40005L11.7399 15.94C10.7899 16.89 7.96987 17.33 7.33987 16.7C6.70987 16.07 7.13987 13.25 8.08987 12.3L17.6399 2.75002C17.8754 2.49308 18.1605 2.28654 18.4781 2.14284C18.7956 1.99914 19.139 1.92124 19.4875 1.9139C19.8359 1.90657 20.1823 1.96991 20.5056 2.10012C20.8289 2.23033 21.1225 2.42473 21.3686 2.67153C21.6147 2.91833 21.8083 3.21243 21.9376 3.53609C22.0669 3.85976 22.1294 4.20626 22.1211 4.55471C22.1128 4.90316 22.0339 5.24635 21.8894 5.5635C21.7448 5.88065 21.5375 6.16524 21.2799 6.40005V6.40005Z" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M11 4H6C4.93913 4 3.92178 4.42142 3.17163 5.17157C2.42149 5.92172 2 6.93913 2 8V18C2 19.0609 2.42149 20.0783 3.17163 20.8284C3.92178 21.5786 4.93913 22 6 22H17C19.21 22 20 20.2 20 18V13" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+
+            {/* Hapus Button */}
+            <button
+              type="button"
+              onClick={async () => {
+                if (!selectedPatient) {
+                  Swal.fire({
+                    icon: 'warning',
+                    title: 'Peringatan',
+                    text: 'Silakan pilih pasien terlebih dahulu',
+                    confirmButtonColor: '#2563eb'
+                  });
+                  return;
+                }
+
+                const result = await Swal.fire({
+                  icon: 'warning',
+                  title: 'Konfirmasi Hapus',
+                  html: `Apakah Anda yakin ingin menghapus data registrasi:<br><strong>${selectedPatient.nm_pasien}</strong><br>(${selectedPatient.no_rawat})?`,
+                  showCancelButton: true,
+                  confirmButtonColor: '#dc2626',
+                  cancelButtonColor: '#6b7280',
+                  confirmButtonText: 'Ya, Hapus',
+                  cancelButtonText: 'Batal'
+                });
+
+                if (result.isConfirmed) {
+                  try {
+                    const res = await fetch(`/api/registrasi/${selectedPatient.no_rawat}`, { method: 'DELETE' });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      Swal.fire({ icon: 'error', title: 'Gagal', text: data.error || 'Gagal menghapus data', confirmButtonColor: '#2563eb' });
+                      return;
+                    }
+                    Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Data registrasi berhasil dihapus', confirmButtonColor: '#2563eb' });
+                    fetchPatients();
+                    setSelectedPatient(null);
+                  } catch {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Terjadi kesalahan saat menghapus', confirmButtonColor: '#2563eb' });
+                  }
+                }
+              }}
+              style={{
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="#dc2626" width="20" height="20" viewBox="0 0 24 24">
+                <path d="M1,20a1,1,0,0,0,1,1h8a1,1,0,0,0,0-2H3.071A7.011,7.011,0,0,1,10,13a5.044,5.044,0,1,0-3.377-1.337A9.01,9.01,0,0,0,1,20ZM10,5A3,3,0,1,1,7,8,3,3,0,0,1,10,5Zm12.707,9.707L20.414,17l2.293,2.293a1,1,0,1,1-1.414,1.414L19,18.414l-2.293,2.293a1,1,0,0,1-1.414-1.414L17.586,17l-2.293-2.293a1,1,0,0,1,1.414-1.414L19,15.586l2.293-2.293a1,1,0,0,1,1.414,1.414Z"/>
+              </svg>
+            </button>
+
             {/* Search Box */}
             <input
               type="text"
@@ -455,182 +504,111 @@ export const RegistrasiView: React.FC = () => {
 
             {/* Filter Button with Dropdown */}
             <div ref={filterDropdownRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              style={{
-                padding: '6px 16px',
-                borderRadius: 8,
-                border: '1px solid #d1d5db',
-                background: '#ffffff',
-                color: '#374151',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              <span>Filter</span>
-              <span style={{ fontSize: 10 }}>▼</span>
-            </button>
-
-            {/* Dropdown Filter */}
-            {showFilterDropdown && (
-              <div
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
                 style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  padding: 12,
-                  background: '#ffffff',
-                  border: '1px solid #e5e7eb',
+                  padding: '6px 16px',
                   borderRadius: 8,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  zIndex: 100,
-                  width: 120
+                  border: '1px solid #d1d5db',
+                  background: '#ffffff',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
                 }}
               >
-                <div style={{ marginBottom: 8 }}>
-                  <input
-                    type="date"
-                    value={tglDari}
-                    onChange={(e) => setTglDari(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #d1d5db',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
-                  />
+                <span>Filter</span>
+                <span style={{ fontSize: 10 }}>▼</span>
+              </button>
+
+              {/* Dropdown Filter */}
+              {showFilterDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: 4,
+                    padding: 12,
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 8,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    zIndex: 100,
+                    width: 120
+                  }}
+                >
+                  <div style={{ marginBottom: 8 }}>
+                    <input
+                      type="date"
+                      value={tglDari}
+                      onChange={(e) => setTglDari(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        fontSize: 12,
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="date"
+                      value={tglSampai}
+                      onChange={(e) => setTglSampai(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        fontSize: 12,
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <input
-                    type="date"
-                    value={tglSampai}
-                    onChange={(e) => setTglSampai(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #d1d5db',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Edit Button */}
-          <button
-            type="button"
-            onClick={() => {
-              if (!selectedPatient) {
-                Swal.fire({
-                  icon: 'warning',
-                  title: 'Peringatan',
-                  text: 'Silakan pilih pasien terlebih dahulu',
-                  confirmButtonColor: '#2563eb'
-                });
-                return;
-              }
-              console.log('Edit patient:', selectedPatient);
-              // TODO: Implement edit functionality
-            }}
-            style={{
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M21.2799 6.40005L11.7399 15.94C10.7899 16.89 7.96987 17.33 7.33987 16.7C6.70987 16.07 7.13987 13.25 8.08987 12.3L17.6399 2.75002C17.8754 2.49308 18.1605 2.28654 18.4781 2.14284C18.7956 1.99914 19.139 1.92124 19.4875 1.9139C19.8359 1.90657 20.1823 1.96991 20.5056 2.10012C20.8289 2.23033 21.1225 2.42473 21.3686 2.67153C21.6147 2.91833 21.8083 3.21243 21.9376 3.53609C22.0669 3.85976 22.1294 4.20626 22.1211 4.55471C22.1128 4.90316 22.0339 5.24635 21.8894 5.5635C21.7448 5.88065 21.5375 6.16524 21.2799 6.40005V6.40005Z" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M11 4H6C4.93913 4 3.92178 4.42142 3.17163 5.17157C2.42149 5.92172 2 6.93913 2 8V18C2 19.0609 2.42149 20.0783 3.17163 20.8284C3.92178 21.5786 4.93913 22 6 22H17C19.21 22 20 20.2 20 18V13" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-
-          {/* Hapus Button */}
-          <button
-            type="button"
-            onClick={async () => {
-              if (!selectedPatient) {
-                Swal.fire({
-                  icon: 'warning',
-                  title: 'Peringatan',
-                  text: 'Silakan pilih pasien terlebih dahulu',
-                  confirmButtonColor: '#2563eb'
-                });
-                return;
-              }
-
-              const result = await Swal.fire({
-                icon: 'warning',
-                title: 'Konfirmasi Hapus',
-                html: `Apakah Anda yakin ingin menghapus data registrasi:<br><strong>${selectedPatient.nm_pasien}</strong><br>(${selectedPatient.no_rawat})?`,
-                showCancelButton: true,
-                confirmButtonColor: '#dc2626',
-                cancelButtonColor: '#6b7280',
-                confirmButtonText: 'Ya, Hapus',
-                cancelButtonText: 'Batal'
-              });
-
-              if (result.isConfirmed) {
-                try {
-                  const res = await fetch(`/api/registrasi/${selectedPatient.no_rawat}`, { method: 'DELETE' });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    Swal.fire({ icon: 'error', title: 'Gagal', text: data.error || 'Gagal menghapus data', confirmButtonColor: '#2563eb' });
-                    return;
-                  }
-                  Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Data registrasi berhasil dihapus', confirmButtonColor: '#2563eb' });
-                  fetchPatients();
-                  setSelectedPatient(null);
-                } catch {
-                  Swal.fire({ icon: 'error', title: 'Error', text: 'Terjadi kesalahan saat menghapus', confirmButtonColor: '#2563eb' });
-                }
-              }
-            }}
-            style={{
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="#dc2626" width="20" height="20" viewBox="0 0 24 24">
-              <path d="M1,20a1,1,0,0,0,1,1h8a1,1,0,0,0,0-2H3.071A7.011,7.011,0,0,1,10,13a5.044,5.044,0,1,0-3.377-1.337A9.01,9.01,0,0,0,1,20ZM10,5A3,3,0,1,1,7,8,3,3,0,0,1,10,5Zm12.707,9.707L20.414,17l2.293,2.293a1,1,0,1,1-1.414,1.414L19,18.414l-2.293,2.293a1,1,0,0,1-1.414-1.414L17.586,17l-2.293-2.293a1,1,0,0,1,1.414-1.414L19,15.586l2.293-2.293a1,1,0,0,1,1.414,1.414Z"/>
-            </svg>
-          </button>
+              )}
+            </div>
           </div>
         </div>
 
+        {error && (
+          <div
+            style={{
+              padding: 12,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 8,
+              color: '#991b1b',
+              marginBottom: 16,
+              fontSize: 13,
+              flexShrink: 0
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         {/* Patient List Table */}
-        <div style={{ overflowX: 'auto', overflowY: 'auto', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-              <tr style={{ background: '#f3f4f6' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderTopLeftRadius: 10, borderBottomLeftRadius: 10, borderBottom: '1px solid #e5e7eb' }}>No Reg</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>No. Rawat</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>Tgl. Registrasi</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>Jam</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>No. RM</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>Nama Pasien</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>Poli</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>Dokter</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>Jenis Bayar</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', background: '#f3f4f6', borderTopRightRadius: 10, borderBottomRightRadius: 10, borderBottom: '1px solid #e5e7eb' }}>Status</th>
+        <div style={{ borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
+              <tr>
+                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>No Reg</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Rawat</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tgl. Registrasi</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Jam</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Nama Pasien</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Poli</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Dokter</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Jenis Bayar</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -654,8 +632,8 @@ export const RegistrasiView: React.FC = () => {
                 </tr>
               ) : (
                 patients.map((patient, index) => {
-                  const isLastRow = index === patients.length - 1;
                   const isSelected = selectedPatient?.no_rawat === patient.no_rawat;
+                  const baseBg = index % 2 === 0 ? '#ffffff' : '#f9fafb';
 
                   // Format tanggal DD-MM-YYYY
                   const formatDate = (dateStr: string) => {
@@ -674,8 +652,7 @@ export const RegistrasiView: React.FC = () => {
                         setSelectedPatient(patient);
                       }}
                       style={{
-                        borderBottom: '1px solid #f3f4f6',
-                        background: isSelected ? '#dbeafe' : '#ffffff',
+                        background: isSelected ? '#dbeafe' : baseBg,
                         cursor: 'pointer',
                         transition: 'background 0.2s'
                       }}
@@ -686,15 +663,11 @@ export const RegistrasiView: React.FC = () => {
                       }}
                       onMouseLeave={(e) => {
                         if (!isSelected) {
-                          e.currentTarget.style.background = '#ffffff';
+                          e.currentTarget.style.background = baseBg;
                         }
                       }}
                     >
-                      <td style={{
-                        padding: '8px 12px',
-                        textAlign: 'center',
-                        ...(isLastRow && { borderBottomLeftRadius: 10 })
-                      }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
                         <button
                           onClick={() => {
                             console.log('Panggil antrian:', patient.no_reg);
@@ -716,41 +689,33 @@ export const RegistrasiView: React.FC = () => {
                           {patient.no_reg}
                         </button>
                       </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: '#2563eb'
-                      }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, fontWeight: 600, color: '#2563eb' }}>
                         {patient.no_rawat}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {formatDate(patient.tgl_registrasi)}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.jam_reg}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: '#2563eb' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, fontWeight: 600, color: '#2563eb' }}>
                         {patient.no_rkm_medis}
                       </td>
-                      <td style={{ padding: '8px 12px' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
                         <div style={{ fontSize: 12, color: '#111827' }}>
                           {patient.nm_pasien} <span style={{ color: '#6b7280' }}>({patient.umur})</span>
                         </div>
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.nm_poli}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.nm_dokter}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.png_jawab || '-'}
                       </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        ...(isLastRow && { borderBottomRightRadius: 10 })
-                      }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
                         <span style={{ fontSize: 12, color: '#374151' }}>
                           {patient.stts}
                         </span>
@@ -762,9 +727,7 @@ export const RegistrasiView: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-      </div>
-    </div>
+      </section>
+    </>
   );
 };

@@ -1,6 +1,14 @@
 import React from 'react';
 
-type AppUserRole = 'pendaftaran' | 'dokter' | 'farmasi' | 'kasir' | 'admin';
+type AppUserRole = string;
+
+const BASE_ROLES: { value: AppUserRole; label: string }[] = [
+  { value: 'pendaftaran', label: 'Pendaftaran' },
+  { value: 'dokter', label: 'Dokter' },
+  { value: 'farmasi', label: 'Farmasi' },
+  { value: 'kasir', label: 'Kasir' },
+  { value: 'admin', label: 'Admin' },
+];
 
 type Dokter = {
   kd_dokter: string;
@@ -38,6 +46,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
   const [newFullName, setNewFullName] = React.useState<string>('');
   const [newPassword, setNewPassword] = React.useState<string>('');
   const [newRole, setNewRole] = React.useState<AppUserRole>('pendaftaran');
+  const [isCustomRole, setIsCustomRole] = React.useState<boolean>(false);
   const [creating, setCreating] = React.useState<boolean>(false);
   const [searchQuery, setSearchQuery] = React.useState<string>('');
   const [selectedModules, setSelectedModules] = React.useState<string[]>([]);
@@ -69,6 +78,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
       setNewUsername(editUser.username);
       setNewFullName(editUser.full_name);
       setNewRole(editUser.role);
+      setIsCustomRole(!BASE_ROLES.some((r) => r.value === editUser.role));
       setNewPassword(''); // Password optional in edit mode
       if (editUser.allowed_modules) {
         setSelectedModules(editUser.allowed_modules.split(',').filter(Boolean));
@@ -84,6 +94,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
       setNewFullName('');
       setNewPassword('');
       setNewRole('pendaftaran');
+      setIsCustomRole(false);
       setSearchQuery('');
       setSelectedModules([]);
     }
@@ -286,47 +297,70 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000
+        zIndex: 1000,
+        padding: 20
       }}
       onClick={onClose}
     >
+      {/* Modal Container */}
       <div
         style={{
-          background: '#fff',
-          borderRadius: 12,
-          padding: 24,
+          background: '#F3F4F6',
+          borderRadius: 20,
+          padding: '35px 8px 8px 8px',
+          position: 'relative',
           maxWidth: 600,
           width: '90%',
           maxHeight: '90vh',
-          overflow: 'auto',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+          display: 'flex',
+          flexDirection: 'column'
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#111827' }}>
-            {editUser ? 'Edit User' : 'Tambah User Baru'}
-          </h3>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: 24,
-              color: '#6b7280',
-              cursor: 'pointer',
-              padding: 0,
-              width: 28,
-              height: 28,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ×
-          </button>
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 16,
+            background: 'transparent',
+            border: 'none',
+            fontSize: 24,
+            cursor: 'pointer',
+            color: '#6b7280',
+            padding: 0,
+            lineHeight: 1
+          }}
+        >
+          ×
+        </button>
+
+        {/* Header Title */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: '12px 20px',
+          color: '#000000',
+          fontSize: 13,
+          fontWeight: 400
+        }}>
+          {editUser ? 'Edit User' : 'Tambah User Baru'}
         </div>
+
+        {/* White Card Content */}
+        <div style={{
+          background: '#ffffff',
+          borderRadius: 16,
+          border: '1px solid #d1d5db',
+          padding: 12,
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto'
+        }}>
 
         <form onSubmit={handleSubmit}>
           {/* Step 1: Pilih Tipe User */}
@@ -607,25 +641,73 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
                   <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>
                     Role
                   </label>
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as AppUserRole)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #d1d5db',
-                      fontSize: 13,
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      background: '#fff'
-                    }}
-                  >
-                    <option value="pendaftaran">Pendaftaran</option>
-                    <option value="farmasi">Farmasi</option>
-                    <option value="kasir">Kasir</option>
-                    <option value="admin">Admin</option>
-                  </select>
+                  {isCustomRole ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        value={newRole}
+                        onChange={(e) => setNewRole(e.target.value)}
+                        placeholder="Ketik nama role baru..."
+                        autoFocus
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1px solid #d1d5db',
+                          fontSize: 13,
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setIsCustomRole(false); setNewRole('pendaftaran'); }}
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: 8,
+                          border: '1px solid #d1d5db',
+                          background: '#fff',
+                          color: '#374151',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={newRole}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomRole(true);
+                          setNewRole('');
+                        } else {
+                          setNewRole(e.target.value);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        background: '#fff'
+                      }}
+                    >
+                      {BASE_ROLES.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                      <option value="__custom__">+ Tambah role baru...</option>
+                    </select>
+                  )}
+                  <p style={{ margin: '6px 0 0 0', fontSize: 11, color: '#6b7280' }}>
+                    Role custom hanya jadi label — hak akses tetap diatur lewat pilihan modul di bawah.
+                  </p>
                 </div>
               )}
 
@@ -739,6 +821,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
             </>
           )}
         </form>
+        </div>
       </div>
     </div>
   );

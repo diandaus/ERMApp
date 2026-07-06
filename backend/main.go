@@ -173,7 +173,7 @@ func ensureAppUsersTable(db *sql.DB) error {
 			username VARCHAR(50) NOT NULL UNIQUE,
 			password_hash VARCHAR(255) NOT NULL,
 			full_name VARCHAR(100) NOT NULL,
-			role ENUM('pendaftaran','dokter','farmasi','kasir','admin') NOT NULL DEFAULT 'pendaftaran',
+			role VARCHAR(50) NOT NULL DEFAULT 'pendaftaran',
 			is_active TINYINT(1) NOT NULL DEFAULT 1,
 			allowed_modules VARCHAR(500) NOT NULL DEFAULT ''
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -186,6 +186,13 @@ func ensureAppUsersTable(db *sql.DB) error {
 	// Migrasi untuk tabel app_users yang sudah ada sebelum kolom ini ditambahkan
 	if _, err := db.Exec(
 		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS allowed_modules VARCHAR(500) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi role dari ENUM lama ke VARCHAR agar bisa diisi role custom
+	if _, err := db.Exec(
+		`ALTER TABLE app_users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'pendaftaran'`,
 	); err != nil {
 		return err
 	}

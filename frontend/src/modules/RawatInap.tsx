@@ -98,40 +98,20 @@ export const RawatInapView: React.FC = () => {
   }
 
   return (
-    <div style={{
-      background: '#F3F4F6',
-      borderRadius: 20,
-      padding: '35px 6px 6px 6px',
-      position: 'relative'
-    }}>
-      {/* Header Title */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        padding: '12px 20px',
-        color: '#000000',
-        fontSize: 13,
-        fontWeight: 400
-      }}>
-        Daftar Pasien
-      </div>
-
-      {/* White Card Content */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: 16,
-        border: '1px solid #d1d5db',
-        padding: '12px 12px 12px 12px',
-      }}>
-        {/* Search and Filter Section */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16
-        }}>
+    <>
+      {/* Content Section — langsung di atas background, tanpa card */}
+      <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Tab Navigation */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginBottom: 16,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            flexShrink: 0
+          }}
+        >
           {/* Tab Segmented Control */}
           <div style={{
             display: 'inline-flex',
@@ -153,7 +133,8 @@ export const RawatInapView: React.FC = () => {
                 fontSize: 13,
                 fontWeight: activeTab === 'belum-pulang' ? 500 : 400,
                 transition: 'all 0.2s ease',
-                boxShadow: activeTab === 'belum-pulang' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'
+                boxShadow: activeTab === 'belum-pulang' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                whiteSpace: 'nowrap'
               }}
             >
               Belum Pulang
@@ -171,7 +152,8 @@ export const RawatInapView: React.FC = () => {
                 fontSize: 13,
                 fontWeight: activeTab === 'pulang' ? 500 : 400,
                 transition: 'all 0.2s ease',
-                boxShadow: activeTab === 'pulang' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none'
+                boxShadow: activeTab === 'pulang' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                whiteSpace: 'nowrap'
               }}
             >
               Pulang
@@ -291,9 +273,8 @@ export const RawatInapView: React.FC = () => {
             </button>
           </div>
 
-          {/* Right Section: Search Box and Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* Search Box */}
+          {/* Search Box + Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
             <input
               type="text"
               placeholder="Cari pasien..."
@@ -311,92 +292,109 @@ export const RawatInapView: React.FC = () => {
 
             {/* Filter Button with Dropdown */}
             <div ref={filterDropdownRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              style={{
-                padding: '6px 16px',
-                borderRadius: 8,
-                border: '1px solid #d1d5db',
-                background: '#ffffff',
-                color: '#374151',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              <span>Filter</span>
-              <span style={{ fontSize: 10 }}>▼</span>
-            </button>
-
-            {/* Dropdown Filter */}
-            {showFilterDropdown && (
-              <div
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
                 style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  padding: 12,
-                  background: '#ffffff',
-                  border: '1px solid #e5e7eb',
+                  padding: '6px 16px',
                   borderRadius: 8,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  zIndex: 100,
-                  width: 120
+                  border: '1px solid #d1d5db',
+                  background: '#ffffff',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
                 }}
               >
-                <div style={{ marginBottom: 8 }}>
-                  <input
-                    type="date"
-                    value={tglDari}
-                    onChange={(e) => setTglDari(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #d1d5db',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
-                  />
+                <span>Filter</span>
+                <span style={{ fontSize: 10 }}>▼</span>
+              </button>
+
+              {/* Dropdown Filter */}
+              {showFilterDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: 4,
+                    padding: 12,
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 8,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    zIndex: 100,
+                    width: 120
+                  }}
+                >
+                  <div style={{ marginBottom: 8 }}>
+                    <input
+                      type="date"
+                      value={tglDari}
+                      onChange={(e) => setTglDari(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        fontSize: 12,
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="date"
+                      value={tglSampai}
+                      onChange={(e) => setTglSampai(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        fontSize: 12,
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <input
-                    type="date"
-                    value={tglSampai}
-                    onChange={(e) => setTglSampai(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #d1d5db',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           </div>
         </div>
 
+        {error && (
+          <div
+            style={{
+              padding: 12,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 8,
+              color: '#991b1b',
+              marginBottom: 16,
+              fontSize: 13,
+              flexShrink: 0
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         {/* Patient List Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead>
-              <tr style={{ background: '#f3f4f6' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderTopLeftRadius: 10, borderBottomLeftRadius: 10, borderBottom: '1px solid #e5e7eb' }}>No. RM</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderBottom: '1px solid #e5e7eb' }}>Nama Pasien</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderBottom: '1px solid #e5e7eb' }}>Diagnosa</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderBottom: '1px solid #e5e7eb' }}>Kamar</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderBottom: '1px solid #e5e7eb' }}>Tanggal Masuk</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderBottom: '1px solid #e5e7eb' }}>Tanggal Keluar</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderBottom: '1px solid #e5e7eb' }}>Jenis Bayar</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#000000', borderTopRightRadius: 10, borderBottomRightRadius: 10, borderBottom: '1px solid #e5e7eb' }}>DPJP</th>
+        <div style={{ borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
+              <tr>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Nama Pasien</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Diagnosa</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Kamar</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tanggal Masuk</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tanggal Keluar</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Jenis Bayar</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>DPJP</th>
               </tr>
             </thead>
             <tbody>
@@ -420,8 +418,8 @@ export const RawatInapView: React.FC = () => {
                 </tr>
               ) : (
                 patients.map((patient, index) => {
-                  const isLastRow = index === patients.length - 1;
                   const isSelected = selectedPatient?.no_rawat === patient.no_rawat;
+                  const baseBg = (idx: number) => (idx % 2 === 0 ? '#ffffff' : '#f9fafb');
 
                   // Format tanggal DD-MM-YYYY
                   const formatDate = (dateStr: string) => {
@@ -440,8 +438,7 @@ export const RawatInapView: React.FC = () => {
                         setSelectedPatient(patient);
                       }}
                       style={{
-                        borderBottom: '1px solid #f3f4f6',
-                        background: isSelected ? '#dbeafe' : '#ffffff',
+                        background: isSelected ? '#dbeafe' : baseBg(index),
                         cursor: 'pointer',
                         transition: 'background 0.2s'
                       }}
@@ -452,12 +449,12 @@ export const RawatInapView: React.FC = () => {
                       }}
                       onMouseLeave={(e) => {
                         if (!isSelected) {
-                          e.currentTarget.style.background = '#ffffff';
+                          e.currentTarget.style.background = baseBg(index);
                         }
                       }}
                     >
                       <td
-                        style={{ padding: '8px 12px', ...(isLastRow && { borderBottomLeftRadius: 10 }) }}
+                        style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}
                         onClick={(e) => { e.stopPropagation(); setPeriksaPatient(patient); }}
                       >
                         <span style={{
@@ -474,26 +471,26 @@ export const RawatInapView: React.FC = () => {
                           {patient.no_rkm_medis}
                         </span>
                       </td>
-                      <td style={{ padding: '8px 12px' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
                         <div style={{ fontSize: 12, color: '#111827' }}>
                           {patient.nm_pasien} <span style={{ color: '#6b7280' }}>({patient.umur})</span>
                         </div>
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.diagnosa_awal || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>{patient.kamar}</td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>{patient.kamar}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {formatDate(patient.tgl_masuk)}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {formatDate(patient.tgl_keluar)}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.png_jawab || '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', ...(isLastRow && { borderBottomRightRadius: 10 }) }}>
-                        <span style={{ fontSize: 13, color: '#374151' }}>{patient.nm_dokter}</span>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
+                        <span style={{ fontSize: 12, color: '#374151' }}>{patient.nm_dokter}</span>
                       </td>
                     </tr>
                   );
@@ -502,7 +499,7 @@ export const RawatInapView: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </section>
+    </>
   );
 };

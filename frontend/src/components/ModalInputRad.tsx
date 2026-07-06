@@ -197,7 +197,8 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
           style={{
             background: '#F3F4F6', borderRadius: 20,
             padding: '35px 8px 8px 8px', position: 'relative',
-            maxWidth: 900, width: '90%', maxHeight: '90vh', overflowY: 'auto',
+            maxWidth: 900, width: '90%', height: '60vh', maxHeight: '92vh',
+            display: 'flex', flexDirection: 'column',
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -248,10 +249,13 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
           </div>
 
           {/* White Card Content */}
-          <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '16px' }}>
+          <div style={{
+            background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '16px',
+            flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
 
             {/* Diagnosa Klinis & Informasi Tambahan */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Indikasi/Diagnosis Klinis <span style={{ color: '#ef4444' }}>*</span>
@@ -309,7 +313,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
             </div>
 
             {/* Search + Selected Items */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginBottom: 16, flex: 1, minHeight: 0, overflowY: 'auto', alignItems: 'start' }}>
               {/* Kolom Kiri - Search Dropdown */}
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
@@ -330,7 +334,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                 {showDropdownRad && searchRad.length > 0 && (
                   <div style={{
                     position: 'absolute', top: '100%', left: 0, right: 0,
-                    marginTop: 4, maxHeight: 300, overflowY: 'auto',
+                    marginTop: 4, maxHeight: 460, overflowY: 'auto',
                     border: '1px solid #e5e7eb', borderRadius: 8, background: '#ffffff',
                     boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10,
                   }}>
@@ -408,23 +412,27 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
             </div>
 
             {/* Footer Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-              <button
-                type="button"
-                onClick={() => { setSelectedPemeriksaanRad([]); setRadForm({ diagnosa_klinis: '', informasi_tambahan: '' }); setSearchRad(''); }}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-              >Reset</button>
-              <button
-                type="button"
-                onClick={onClose}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-              >Tutup</button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loadingSubmit}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loadingSubmit ? '#9ca3af' : '#2563eb', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500 }}
-              >{loadingSubmit ? 'Menyimpan...' : 'Simpan Permintaan'}</button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', flexShrink: 0 }}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedPemeriksaanRad([]); setRadForm({ diagnosa_klinis: '', informasi_tambahan: '' }); setSearchRad(''); }}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                >Reset</button>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                >Tutup</button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={loadingSubmit}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loadingSubmit ? '#9ca3af' : '#2563eb', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500 }}
+                >{loadingSubmit ? 'Menyimpan...' : 'Simpan Permintaan'}</button>
+              </div>
             </div>
           </div>
         </div>

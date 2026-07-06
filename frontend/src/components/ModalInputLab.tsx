@@ -278,8 +278,8 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
     setSelected: (v: string[]) => void,
     onSubmit: () => void
   ) => (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 16 }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 16, flex: 1, minHeight: 0, overflowY: 'auto', alignItems: 'start' }}>
         {/* Kolom Kiri - Search + Dropdown */}
         <div>
           <div style={{ marginBottom: 12, position: 'relative' }}>
@@ -305,7 +305,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
             {showDropdown && search.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0,
-                marginTop: 4, maxHeight: 300, overflowY: 'auto',
+                marginTop: 4, maxHeight: 460, overflowY: 'auto',
                 border: '1px solid #e5e7eb', borderRadius: 8,
                 background: '#ffffff',
                 boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
@@ -398,42 +398,46 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
       </div>
 
       {/* Footer buttons */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-        <button
-          type="button"
-          onClick={() => { setSelected([]); setLabForm({ diagnosa_klinis: '', informasi_tambahan: '' }); }}
-          style={{
-            padding: '8px 16px', borderRadius: 8, border: 'none',
-            background: '#6b7280', color: '#fff', cursor: 'pointer',
-            fontSize: 12, fontWeight: 500,
-          }}
-        >
-          Reset
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            padding: '8px 16px', borderRadius: 8, border: 'none',
-            background: '#dc2626', color: '#fff', cursor: 'pointer',
-            fontSize: 12, fontWeight: 500,
-          }}
-        >
-          Tutup
-        </button>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={loadingSubmit}
-          style={{
-            padding: '8px 16px', borderRadius: 8, border: 'none',
-            background: loadingSubmit ? '#9ca3af' : '#2563eb',
-            color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer',
-            fontSize: 12, fontWeight: 500,
-          }}
-        >
-          {loadingSubmit ? 'Menyimpan...' : `Simpan Lab ${type.toUpperCase()}`}
-        </button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 16, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', flexShrink: 0 }}>
+        <div>
+          <button
+            type="button"
+            onClick={() => { setSelected([]); setLabForm({ diagnosa_klinis: '', informasi_tambahan: '' }); }}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: 'none',
+              background: '#6b7280', color: '#fff', cursor: 'pointer',
+              fontSize: 12, fontWeight: 500,
+            }}
+          >
+            Reset
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: 'none',
+              background: '#dc2626', color: '#fff', cursor: 'pointer',
+              fontSize: 12, fontWeight: 500,
+            }}
+          >
+            Tutup
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={loadingSubmit}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: 'none',
+              background: loadingSubmit ? '#9ca3af' : '#2563eb',
+              color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer',
+              fontSize: 12, fontWeight: 500,
+            }}
+          >
+            {loadingSubmit ? 'Menyimpan...' : `Simpan Lab ${type.toUpperCase()}`}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -459,8 +463,10 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
             position: 'relative',
             maxWidth: 900,
             width: '90%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
+            height: '60vh',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -496,9 +502,40 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
             borderRadius: 16,
             border: '1px solid #d1d5db',
             padding: '16px',
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}>
+            {/* Tab PK / PA */}
+            <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4, marginBottom: 20, flexShrink: 0 }}>
+              {(['pk', 'pa'] as const).map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveLabTab(tab)}
+                  style={{
+                    padding: '6px 24px',
+                    borderRadius: 8,
+                    border: activeLabTab === tab ? '1px solid #d1d5db' : 'none',
+                    background: activeLabTab === tab ? '#ffffff' : 'transparent',
+                    color: activeLabTab === tab ? '#111827' : '#6b7280',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: activeLabTab === tab ? 500 : 400,
+                    transition: 'all 0.2s ease',
+                    boxShadow: activeLabTab === tab ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tab === 'pk' ? 'Lab PK (Patologi Klinik)' : 'Lab PA (Patologi Anatomi)'}
+                </button>
+              ))}
+            </div>
+
             {/* Diagnosa Klinis & Informasi Tambahan */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Indikasi/Diagnosis Klinis <span style={{ color: '#ef4444' }}>*</span>
@@ -559,27 +596,6 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Tab PK / PA */}
-            <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid #e5e7eb', marginBottom: 16 }}>
-              {(['pk', 'pa'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveLabTab(tab)}
-                  style={{
-                    padding: '10px 20px', border: 'none',
-                    background: activeLabTab === tab ? '#e0f2fe' : 'transparent',
-                    borderBottom: activeLabTab === tab ? '3px solid #1AB1E5' : '3px solid transparent',
-                    color: activeLabTab === tab ? '#1AB1E5' : '#6b7280',
-                    cursor: 'pointer', fontSize: 13,
-                    fontWeight: activeLabTab === tab ? 600 : 400,
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  {tab === 'pk' ? '🔬 Lab PK (Patologi Klinik)' : '🧪 Lab PA (Patologi Anatomi)'}
-                </button>
-              ))}
             </div>
 
             {/* Konten Tab */}
