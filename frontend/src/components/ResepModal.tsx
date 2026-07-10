@@ -51,6 +51,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
 
   // Non Racikan State
+  const searchObatNonRacikanRef = React.useRef<HTMLInputElement>(null);
   const [searchObatNonRacikan, setSearchObatNonRacikan] = React.useState('');
   const [obatList, setObatList] = React.useState<ObatItem[]>([]);
   const [showObatDropdown, setShowObatDropdown] = React.useState(false);
@@ -59,6 +60,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [showModalInputObat, setShowModalInputObat] = React.useState(false);
 
   // Racikan State
+  const namaRacikanRefs = React.useRef<Array<HTMLInputElement | null>>([]);
   const [searchObatRacikan, setSearchObatRacikan] = React.useState('');
   const [obatListRacikan, setObatListRacikan] = React.useState<ObatItem[]>([]);
   const [showObatDropdownRacikan, setShowObatDropdownRacikan] = React.useState(false);
@@ -348,6 +350,13 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     }
   }, [searchObatRacikan]);
 
+  // Fokus otomatis ke kolom Nama Racikan saat tab Racikan dibuka
+  React.useEffect(() => {
+    if (activeResepTab === 'racikan') {
+      namaRacikanRefs.current[activeRacikanIdx]?.focus();
+    }
+  }, [activeResepTab]);
+
   // Format Rupiah
   const formatRupiah = (value: number): string => {
     return new Intl.NumberFormat('id-ID', {
@@ -466,6 +475,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     closeModalInputObat();
     setSearchObatNonRacikan('');
     setShowAturanPakaiDropdown(false);
+
+    // Kembalikan fokus ke kolom Cari Obat supaya user bisa langsung ketik obat berikutnya
+    setTimeout(() => searchObatNonRacikanRef.current?.focus(), 0);
   };
 
   // Hapus Obat Non Racikan
@@ -853,6 +865,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     closeModalRiwayatResep();
   };
 
+  // Total harga seluruh obat non-racikan yang sudah dipilih
+  const totalHargaNonRacikan = resepNonRacikan.reduce((sum, obat) => sum + (obat.harga || 0) * (obat.jml || 1), 0);
+
   return (
     <>
       {/* Main Modal Resep */}
@@ -902,64 +917,86 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
             {activeResepTab === 'non-racikan' && (
               <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto' }}>
                 <div className="mb-3" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingBottom: 4 }}>
-                  <label className="form-label fw-bold">Cari Obat</label>
-                  <div className="search-obat-wrapper">
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Ketik nama obat untuk mencari otomatis..."
-                      value={searchObatNonRacikan}
-                      onChange={(e) => setSearchObatNonRacikan(e.target.value)}
-                      autoComplete="off"
-                    />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12, alignItems: 'start' }}>
+                    <div>
+                      <label className="form-label fw-bold">Cari Obat</label>
+                      <div className="search-obat-wrapper">
+                        <span className="search-obat-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                          </svg>
+                        </span>
+                        <input
+                          ref={searchObatNonRacikanRef}
+                          type="text"
+                          className="form-control"
+                          placeholder="Ketik nama obat untuk mencari otomatis..."
+                          value={searchObatNonRacikan}
+                          onChange={(e) => setSearchObatNonRacikan(e.target.value)}
+                          autoComplete="off"
+                        />
 
-                    {/* Dropdown hasil pencarian */}
-                    {showObatDropdown && obatList && obatList.length > 0 && (
-                      <div className="obat-dropdown">
-                        <table className="table table-sm table-hover mb-0">
-                          <thead className="table-light">
-                            <tr>
-                              <th style={{ width: '15%' }}>Kode Barang</th>
-                              <th>Nama Barang</th>
-                              <th style={{ width: '10%' }}>Satuan</th>
-                              <th style={{ width: '10%' }}>Stok</th>
-                              <th style={{ width: '15%' }}>Harga (Rp)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {obatList.map((obat, index) => (
-                              <tr
-                                key={`${obat.kode_brng}-${index}`}
-                                className="obat-item-row"
-                                onClick={() => pilihObatNonRacikan(obat)}
-                              >
-                                <td><small>{obat.kode_brng}</small></td>
-                                <td>
-                                  <div className="obat-name-cell">{obat.nama_brng}</div>
-                                  <div className="obat-extra-info">
-                                    <small className="text-muted">{obat.jenis_obat} - {obat.nama_industri}</small>
-                                  </div>
-                                </td>
-                                <td className="text-center">{obat.kode_sat}</td>
-                                <td className="text-center">
-                                  <span className={obat.stok > 0 ? 'text-success' : 'text-danger'}>
-                                    {obat.stok}
-                                  </span>
-                                </td>
-                                <td className="text-end">{formatRupiah(obat.harga)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                        {/* Dropdown hasil pencarian */}
+                        {showObatDropdown && obatList && obatList.length > 0 && (
+                          <div className="obat-dropdown">
+                            <table className="table table-sm table-hover mb-0">
+                              <thead className="table-light">
+                                <tr>
+                                  <th style={{ width: '15%' }}>Kode Barang</th>
+                                  <th>Nama Barang</th>
+                                  <th style={{ width: '10%' }}>Satuan</th>
+                                  <th style={{ width: '10%' }}>Stok</th>
+                                  <th style={{ width: '15%' }}>Harga (Rp)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {obatList.map((obat, index) => (
+                                  <tr
+                                    key={`${obat.kode_brng}-${index}`}
+                                    className="obat-item-row"
+                                    onClick={() => pilihObatNonRacikan(obat)}
+                                  >
+                                    <td><small>{obat.kode_brng}</small></td>
+                                    <td>
+                                      <div className="obat-name-cell">{obat.nama_brng}</div>
+                                      <div className="obat-extra-info">
+                                        <small className="text-muted">{obat.jenis_obat} - {obat.nama_industri}</small>
+                                      </div>
+                                    </td>
+                                    <td className="text-center">{obat.kode_sat}</td>
+                                    <td className="text-center">
+                                      <span className={obat.stok > 0 ? 'text-success' : 'text-danger'}>
+                                        {obat.stok}
+                                      </span>
+                                    </td>
+                                    <td className="text-end">{formatRupiah(obat.harga)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
 
-                    {/* Pesan jika tidak ada hasil */}
-                    {showObatDropdown && obatList && obatList.length === 0 && (
-                      <div className="alert alert-info mt-2" style={{ fontSize: '13px' }}>
-                        Tidak ada obat ditemukan dengan kata kunci "{searchObatNonRacikan}"
+                        {/* Pesan jika tidak ada hasil */}
+                        {showObatDropdown && obatList && obatList.length === 0 && (
+                          <div className="alert alert-info mt-2" style={{ fontSize: '13px' }}>
+                            Tidak ada obat ditemukan dengan kata kunci "{searchObatNonRacikan}"
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+
+                    <div>
+                      <label className="form-label fw-bold">Total</label>
+                      <div style={{
+                        border: '1px solid #d1d5db', borderRadius: 6, padding: '9px 12px',
+                        fontSize: 13, fontWeight: 600, color: '#16a34a', background: '#f0fdf4',
+                        textAlign: 'right', boxSizing: 'border-box',
+                      }}>
+                        Rp {formatRupiah(totalHargaNonRacikan)}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1042,6 +1079,22 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
             {/* Tab Content: Racikan */}
             {activeResepTab === 'racikan' && (
               <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <button type="button" onClick={() => {
+                    setRacikanList(prev => [{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }, ...prev]);
+                    setActiveRacikanIdx(0);
+                  }} style={{
+                    padding: '7px 16px', borderRadius: 8, border: 'none',
+                    background: '#16a34a', color: '#fff', cursor: 'pointer',
+                    fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Racikan Baru
+                  </button>
+                </div>
+
                 {racikanList.map((rac, idx) => (
                   <div key={idx} onClick={() => setActiveRacikanIdx(idx)} style={{
                     display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start',
@@ -1058,6 +1111,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     <div style={{ flex: 3, minWidth: 0 }}>
                       <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Nama Racikan</label>
                       <input
+                        ref={(el) => { namaRacikanRefs.current[idx] = el; }}
                         type="text"
                         className="form-control"
                         value={rac.nama_racikan}
@@ -1135,27 +1189,17 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                   </div>
                 ))}
 
-                <div style={{ marginBottom: 12 }}>
-                  <button type="button" onClick={() => {
-                    setRacikanList(prev => [...prev, { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }]);
-                    setActiveRacikanIdx(racikanList.length);
-                  }} style={{
-                    padding: '7px 16px', borderRadius: 8, border: 'none',
-                    background: '#2563eb', color: '#fff', cursor: 'pointer',
-                    fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Racikan Baru
-                  </button>
-                </div>
-
                 <hr />
 
                 <div className="mb-3">
                   <label className="form-label fw-bold">Detail Obat Racikan</label>
                   <div className="search-obat-wrapper">
+                    <span className="search-obat-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                      </svg>
+                    </span>
                     <input
                       type="text"
                       className="form-control mb-2"
@@ -1276,14 +1320,14 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 Riwayat Resep
               </button>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                <button type="button" onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
                   Tutup
                 </button>
-                <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                     <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -1451,27 +1495,54 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
       {/* Modal Riwayat Resep */}
       {showModalRiwayatResep && (
-        <div className="modal-overlay" onClick={closeModalRiwayatResep}>
-          <div className="modal-riwayat-resep" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom">
-              <h5 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+          onClick={closeModalRiwayatResep}
+        >
+          <div
+            style={{
+              background: '#F3F4F6', borderRadius: 20,
+              padding: '35px 8px 8px 8px', position: 'relative',
+              maxWidth: 900, width: '90%', height: '65vh', maxHeight: '65vh',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0,
+              padding: '8px 16px 8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                   <polyline points="14 2 14 8 20 8"></polyline>
                   <line x1="16" y1="13" x2="8" y2="13"></line>
                   <line x1="16" y1="17" x2="8" y2="17"></line>
                   <polyline points="10 9 9 9 8 9"></polyline>
                 </svg>
-                Riwayat Resep - {patient.nm_pasien} ({patient.no_rkm_medis})
-              </h5>
-              <button onClick={closeModalRiwayatResep} className="btn-close-modal">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
+                Riwayat Resep — {patient.nm_pasien} ({patient.no_rkm_medis})
+              </span>
+              <button
+                type="button" onClick={closeModalRiwayatResep}
+                style={{
+                  background: 'transparent', border: 'none',
+                  fontSize: 20, cursor: 'pointer', color: '#6b7280',
+                  padding: 0, lineHeight: 1,
+                }}
+              >×</button>
             </div>
-            <div className="modal-body-custom">
+
+            {/* White Card Content */}
+            <div style={{
+              background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db',
+              padding: 16, overflowY: 'auto', flex: 1, minHeight: 0,
+            }}>
               {loadingRiwayatResep ? (
                 <div className="text-center p-5">
                   <div className="spinner-border text-primary" role="status">
@@ -1485,127 +1556,94 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               ) : (
                 <div className="resep-history-container">
                   {riwayatResep.map((resep, index) => (
-                    <div key={index} className="resep-card mb-3">
-                      {/* Resep Header */}
-                      <div className="resep-header">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 24px', flex: 1 }}>
-                            <div style={{ fontSize: 14 }}>
-                              <strong style={{ color: '#374151' }}>No. Resep:</strong> <span style={{ color: '#111827' }}>{resep.no_resep}</span>
-                            </div>
-                            <div style={{ fontSize: 14 }}>
-                              <strong style={{ color: '#374151' }}>No. Rawat:</strong> <span style={{ color: '#111827' }}>{resep.no_rawat}</span>
-                            </div>
-                            <div style={{ fontSize: 14 }}>
-                              <strong style={{ color: '#374151' }}>Tanggal:</strong> <span style={{ color: '#111827' }}>{formatTanggal(resep.tgl_peresepan)} {resep.jam_peresepan}</span>
-                            </div>
-                            <div style={{ fontSize: 14 }}>
-                              <strong style={{ color: '#374151' }}>Dokter:</strong> <span style={{ color: '#111827' }}>{resep.nm_dokter}</span>
-                            </div>
-                          </div>
-                          <div style={{ marginLeft: 24 }}>
-                            <button
-                              onClick={() => copyResepToForm(resep)}
-                              className="btn btn-sm btn-primary"
-                              title="Copy resep ini ke form input"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                              </svg>
-                              Copy Resep
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Non Racikan */}
-                      {resep.non_racikan && resep.non_racikan.length > 0 && (
-                        <div className="mt-3">
-                          <h5 className="text-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
-                            <svg width="18" height="18" viewBox="-0.003 0 99.979 99.979" xmlns="http://www.w3.org/2000/svg">
-                              <path fill="#EBECED" d="M92.869 7.105c9.478 9.476 9.478 24.832 0 34.308L41.411 92.869c-9.475 9.474-24.833 9.474-34.307 0-9.476-9.475-9.476-24.832 0-34.308L58.562 7.105c9.475-9.473 24.834-9.473 34.307 0z"/>
-                              <path fill="#3B97D3" d="M32.548 33.122L7.105 58.563c-9.476 9.476-9.476 24.833 0 34.308 9.474 9.475 24.832 9.475 34.307 0L66.85 67.43 32.548 33.122z"/>
-                              <path fill="#2086BF" d="M65.43 68.862L31.134 34.568l1.414-1.414 34.294 34.294z"/>
-                              <path fill="#55A6DC" d="M38.096 41.51L12.7 66.906a5.894 5.894 0 0 0 0 8.339 5.896 5.896 0 0 0 8.339 0l25.396-25.396-8.339-8.339z"/>
-                              <path fill="#EFF0F1" d="M75.244 12.7a5.897 5.897 0 0 0-8.343 0L39.51 40.096l8.339 8.339 27.396-27.396a5.899 5.899 0 0 0-.001-8.339z"/>
-                              <path fill="#4F9ED4" d="M47.862 48.444l-1.414 1.414-8.335-8.336 1.414-1.414z"/>
-                            </svg>
-                            Obat Non-Racikan
-                          </h5>
-                          <table className="table table-sm table-bordered">
-                            <thead className="table-light">
+                    // Daftar Obat & Racikan — tabel info resep terpisah dari tabel obat, kolom independen
+                    <div key={index}>
+                      <table className="table table-sm table-bordered mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th>No. Resep</th>
+                            <th>No. Rawat</th>
+                            <th>Tanggal</th>
+                            <th colSpan={2}>Dokter</th>
+                            <th>
+                              <button
+                                onClick={() => copyResepToForm(resep)}
+                                className="btn btn-sm btn-primary"
+                                title="Copy resep ini ke form input"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', fontWeight: 400 }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                                Copy
+                              </button>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>{resep.no_resep}</td>
+                            <td>{resep.no_rawat}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatTanggal(resep.tgl_peresepan)} {resep.jam_peresepan}</td>
+                            <td colSpan={3} style={{ whiteSpace: 'nowrap' }}>{resep.nm_dokter}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table className="table table-sm table-bordered" style={{ tableLayout: 'fixed' }}>
+                        <colgroup>
+                          <col style={{ width: '5%' }} />
+                          <col style={{ width: '15%' }} />
+                          <col />
+                          <col style={{ width: '10%' }} />
+                          <col style={{ width: '10%' }} />
+                          <col style={{ width: '20%' }} />
+                        </colgroup>
+                        <thead className="table-light">
+                          <tr>
+                            <th>No</th>
+                            <th>Kode</th>
+                            <th>Nama Obat / Racikan</th>
+                            <th>Jumlah</th>
+                            <th>Satuan</th>
+                            <th>Aturan Pakai</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resep.non_racikan?.map((obat: any, idx: number) => (
+                            <tr key={`nr-${idx}`}>
+                              <td className="text-center">{idx + 1}</td>
+                              <td>{obat.kode_brng}</td>
+                              <td>{obat.nama_brng}</td>
+                              <td className="text-center">{obat.jml}</td>
+                              <td className="text-center">{obat.kode_sat}</td>
+                              <td>{obat.aturan_pakai}</td>
+                            </tr>
+                          ))}
+                          {resep.racikan?.map((racikan: any, ridx: number) => (
+                            <React.Fragment key={`r-${ridx}`}>
                               <tr>
-                                <th style={{ width: '5%' }}>No</th>
-                                <th style={{ width: '15%' }}>Kode</th>
-                                <th>Nama Obat</th>
-                                <th style={{ width: '10%' }}>Jumlah</th>
-                                <th style={{ width: '10%' }}>Satuan</th>
-                                <th style={{ width: '25%' }}>Aturan Pakai</th>
+                                <td></td>
+                                <td>No.Racik {racikan.no_racik}</td>
+                                <td><strong>{racikan.nama_racik}</strong></td>
+                                <td className="text-center">{racikan.jml_dr}</td>
+                                <td className="text-center">{racikan.metode || '-'}</td>
+                                <td>{racikan.aturan_pakai}</td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {resep.non_racikan.map((obat: any, idx: number) => (
-                                <tr key={idx}>
-                                  <td className="text-center">{idx + 1}</td>
-                                  <td>{obat.kode_brng}</td>
-                                  <td>{obat.nama_brng}</td>
-                                  <td className="text-center">{obat.jml}</td>
-                                  <td className="text-center">{obat.kode_sat}</td>
-                                  <td>{obat.aturan_pakai}</td>
+                              {racikan.detail?.map((detail: any, didx: number) => (
+                                <tr key={`r-${ridx}-${didx}`}>
+                                  <td></td>
+                                  <td>{detail.kode_brng}</td>
+                                  <td style={{ paddingLeft: 24 }}>{detail.nama_brng}</td>
+                                  <td className="text-center">{detail.jml}</td>
+                                  <td className="text-center">{detail.kode_sat}</td>
+                                  <td></td>
                                 </tr>
                               ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {/* Racikan */}
-                      {resep.racikan && resep.racikan.length > 0 && (
-                        <div className="mt-3">
-                          <h5 className="text-success" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
-                            <svg fill="currentColor" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M13.51,19a4,4,0,0,0,4.61,1.9C19.87,20.37,21,18.68,21,16V7.15a4.39,4.39,0,0,0-2.79-4A4,4,0,0,0,13,7v3" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}></path>
-                              <line x1="14.32" y1="12" x2="21" y2="12" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}></line>
-                              <path d="M9,9a6,6,0,1,1-6,6A6,6,0,0,1,9,9ZM5,11l8,8" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}></path>
-                            </svg>
-                            Obat Racikan
-                          </h5>
-                          {resep.racikan.map((racikan: any, ridx: number) => (
-                            <div key={ridx} className="racikan-item mb-3">
-                              <div className="racikan-header-info">
-                                <strong>No. Racik {racikan.no_racik}:</strong> {racikan.nama_racik}
-                                <span className="ms-2 badge bg-secondary">{racikan.metode || 'N/A'}</span>
-                                <span className="ms-2">| Jumlah: {racikan.jml_dr}</span>
-                                <span className="ms-2">| Aturan: {racikan.aturan_pakai}</span>
-                              </div>
-                              <table className="table table-sm table-bordered mt-2">
-                                <thead className="table-light">
-                                  <tr>
-                                    <th style={{ width: '5%' }}>No</th>
-                                    <th style={{ width: '15%' }}>Kode</th>
-                                    <th>Nama Obat</th>
-                                    <th style={{ width: '12%' }}>Jumlah</th>
-                                    <th style={{ width: '12%' }}>Satuan</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {racikan.detail && racikan.detail.map((detail: any, didx: number) => (
-                                    <tr key={didx}>
-                                      <td className="text-center">{didx + 1}</td>
-                                      <td><small>{detail.kode_brng}</small></td>
-                                      <td><small>{detail.nama_brng}</small></td>
-                                      <td className="text-center"><small>{detail.jml}</small></td>
-                                      <td className="text-center"><small>{detail.kode_sat}</small></td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                            </React.Fragment>
                           ))}
-                        </div>
-                      )}
+                        </tbody>
+                      </table>
                     </div>
                   ))}
                 </div>

@@ -91,11 +91,13 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
     return jam && jam !== '00:00:00' ? `${date} ${jam}` : date;
   };
 
+  const hasRadiologiData = radiolojiData.pemeriksaan.length > 0 || radiolojiData.hasil.length > 0 || radiolojiData.gambar.length > 0;
+
   return (
-    <div style={{ background: '#ffffff', borderRadius: 12, padding: 24, border: '1px solid #e5e7eb' }}>
+    <div>
 
       {/* Tombol Buat Permintaan */}
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={() => setShowInputModal(true)}
           style={{
@@ -115,37 +117,25 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
         </button>
       </div>
 
-      {/* Riwayat Permintaan Radiologi */}
-      <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: 24 }}>
-        <h4 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-          Riwayat Permintaan Radiologi
-        </h4>
+      {/* Loading state */}
+      {(loadingRiwayat || loadingRadiologi) && (
+        <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
+          <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <p style={{ marginTop: 12 }}>Memuat data radiologi...</p>
+        </div>
+      )}
 
-        {loadingRiwayat ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
-            <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-            <p style={{ marginTop: 12 }}>Memuat riwayat...</p>
-          </div>
-        ) : riwayatRad.length === 0 ? (
-          <div style={{ padding: 20, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, color: '#92400e', textAlign: 'center' }}>
-            Belum ada riwayat permintaan radiologi
-          </div>
-        ) : (
+      {/* Riwayat Permintaan Radiologi */}
+      {!loadingRiwayat && riwayatRad.length > 0 && (
+        <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {riwayatRad.map((item, idx) => (
               <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>📄 No. Permintaan: {item.noorder}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>📅 {formatDateTime(item.tgl_permintaan, item.jam_permintaan)}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>👨‍⚕️ {item.nm_dokter || '-'}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>No. Permintaan: {item.noorder}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{formatDateTime(item.tgl_permintaan, item.jam_permintaan)}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{item.nm_dokter || '-'}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <div style={{
@@ -153,7 +143,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
                       background: item.status === 'ralan' ? '#10b981' : '#f59e0b',
                       color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600,
                     }}>
-                      {item.status === 'ralan' ? '✅ Ralan' : '⏳ Pending'}
+                      {item.status === 'ralan' ? 'Ralan' : 'Pending'}
                     </div>
                     <button
                       onClick={() => handleDeleteRadiologi(item.noorder)}
@@ -188,163 +178,151 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Data Pemeriksaan Radiologi */}
-      <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: 24, marginTop: 8 }}>
-        <h4 style={{ margin: '0 0 20px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>
-          </svg>
-          Data Pemeriksaan Radiologi
-          <button onClick={fetchRadiolojiData} style={{ marginLeft: 'auto', padding: '4px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#374151' }}>
-            ↻ Refresh
-          </button>
-        </h4>
+      {!loadingRadiologi && hasRadiologiData && (
+        <div style={{ marginTop: 24 }}>
+          <h4 style={{ margin: '0 0 20px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
+           Data Pemeriksaan Radiologi
+            <button onClick={fetchRadiolojiData} style={{ marginLeft: 'auto', padding: '4px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#374151' }}>
+              ↻ Refresh
+            </button>
+          </h4>
 
-        {loadingRadiologi ? (
-          <div style={{ textAlign: 'center', padding: 32, color: '#6b7280' }}>
-            <div style={{ display: 'inline-block', width: 28, height: 28, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-            <p style={{ marginTop: 10, fontSize: 13 }}>Memuat data pemeriksaan...</p>
-          </div>
-        ) : (
-          <>
-            {/* SEKSI 1 — Pemeriksaan Radiologi */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', background: '#dbeafe', borderRadius: '8px 8px 0 0', padding: '8px 14px', borderBottom: '1px solid #bfdbfe' }}>
-                Pemeriksaan Radiologi
-              </div>
-              {radiolojiData.pemeriksaan.length === 0 ? (
-                <div style={{ padding: '14px 16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 8px 8px', color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
-                  Belum ada data pemeriksaan
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: '#f3f4f6' }}>
-                        {['No.', 'Tanggal/Jam', 'Kode', 'Nama Pemeriksaan', 'Dokter PJ', 'Petugas', 'Biaya'].map((h, i) => (
-                          <th key={i} style={{ padding: '8px 10px', textAlign: i === 6 ? 'right' : 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {radiolojiData.pemeriksaan.map((p, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <td style={{ padding: '8px 10px', color: '#6b7280' }}>{idx + 1}</td>
-                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.tgl_periksa}{p.jam ? ' ' + p.jam : ''}</td>
-                          <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#1AB1E5' }}>{p.kd_jenis_prw}</td>
-                          <td style={{ padding: '8px 10px' }}>
-                            <div style={{ fontWeight: 500, color: '#111827' }}>{p.nm_perawatan}</div>
-                            {p.proyeksi && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.proyeksi}</div>}
-                          </td>
-                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.nm_dokter || '-'}</td>
-                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.nama_petugas || '-'}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                            {p.biaya > 0 ? 'Rp ' + Number(p.biaya).toLocaleString('id-ID') : '-'}
-                          </td>
-                        </tr>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <tbody>
+                {/* SEKSI 1 — Pemeriksaan Radiologi */}
+                <tr>
+                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', background: '#dbeafe', padding: '8px 14px', borderBottom: '1px solid #bfdbfe' }}>
+                    Pemeriksaan Radiologi
+                  </td>
+                </tr>
+                {radiolojiData.pemeriksaan.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '14px 16px', color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
+                      Belum ada data pemeriksaan
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr style={{ background: '#f3f4f6' }}>
+                      {['No.', 'Tanggal/Jam', 'Kode', 'Nama Pemeriksaan', 'Dokter PJ', 'Petugas', 'Biaya'].map((h, i) => (
+                        <th key={i} style={{ padding: '8px 10px', textAlign: i === 6 ? 'right' : 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* SEKSI 2 — Bacaan/Hasil Radiologi */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46', background: '#d1fae5', borderRadius: '8px 8px 0 0', padding: '8px 14px', borderBottom: '1px solid #a7f3d0' }}>
-                Bacaan / Hasil Radiologi
-              </div>
-              {radiolojiData.hasil.length === 0 ? (
-                <div style={{ padding: '14px 16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 8px 8px', color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
-                  Belum ada hasil bacaan
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: '#f3f4f6' }}>
-                        {['No.', 'Tanggal/Jam', 'Hasil'].map((h, i) => (
-                          <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
-                        ))}
+                    </tr>
+                    {radiolojiData.pemeriksaan.map((p, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '8px 10px', color: '#6b7280' }}>{idx + 1}</td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.tgl_periksa}{p.jam ? ' ' + p.jam : ''}</td>
+                        <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#1AB1E5' }}>{p.kd_jenis_prw}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <div style={{ fontWeight: 500, color: '#111827' }}>{p.nm_perawatan}</div>
+                          {p.proyeksi && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.proyeksi}</div>}
+                        </td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.nm_dokter || '-'}</td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.nama_petugas || '-'}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                          {p.biaya > 0 ? 'Rp ' + Number(p.biaya).toLocaleString('id-ID') : '-'}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {radiolojiData.hasil.map((h, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = '#f0fdf4')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <td style={{ padding: '8px 10px', color: '#6b7280', verticalAlign: 'top' }}>{idx + 1}</td>
-                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{h.tgl_periksa}{h.jam ? ' ' + h.jam : ''}</td>
-                          <td style={{ padding: '8px 10px', lineHeight: 1.6 }}>
-                            {h.hasil ? h.hasil.split('\n').map((line: string, li: number) => (
-                              <React.Fragment key={li}>{line}{li < h.hasil.split('\n').length - 1 && <br />}</React.Fragment>
-                            )) : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                    ))}
+                  </>
+                )}
 
-            {/* SEKSI 3 — Gambar Radiologi */}
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', borderRadius: '8px 8px 0 0', padding: '8px 14px', borderBottom: '1px solid #fed7aa' }}>
-                Gambar Radiologi
-              </div>
-              {radiolojiData.gambar.length === 0 ? (
-                <div style={{ padding: '14px 16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderTop: 'none', borderRadius: '0 0 8px 8px', color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
-                  Belum ada gambar
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: '#f3f4f6' }}>
-                        {['No.', 'Tanggal/Jam', 'Gambar'].map((h, i) => (
-                          <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
-                        ))}
+                {/* SEKSI 2 — Bacaan/Hasil Radiologi */}
+                <tr>
+                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 700, color: '#065f46', background: '#d1fae5', padding: '8px 14px', borderBottom: '1px solid #a7f3d0' }}>
+                    Bacaan / Hasil Radiologi
+                  </td>
+                </tr>
+                {radiolojiData.hasil.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '14px 16px', color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
+                      Belum ada hasil bacaan
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr style={{ background: '#f3f4f6' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>No.</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Tanggal/Jam</th>
+                      <th colSpan={5} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Hasil</th>
+                    </tr>
+                    {radiolojiData.hasil.map((h, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0fdf4')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '8px 10px', color: '#6b7280', verticalAlign: 'top' }}>{idx + 1}</td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{h.tgl_periksa}{h.jam ? ' ' + h.jam : ''}</td>
+                        <td colSpan={5} style={{ padding: '8px 10px', lineHeight: 1.6 }}>
+                          {h.hasil ? h.hasil.split('\n').map((line: string, li: number) => (
+                            <React.Fragment key={li}>{line}{li < h.hasil.split('\n').length - 1 && <br />}</React.Fragment>
+                          )) : '-'}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {radiolojiData.gambar.map((g, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = '#fff7ed')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <td style={{ padding: '8px 10px', color: '#6b7280', verticalAlign: 'top' }}>{idx + 1}</td>
-                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{g.tgl_periksa}{g.jam ? ' ' + g.jam : ''}</td>
-                          <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'top' }}>
-                            {g.lokasi_gambar ? (
+                    ))}
+                  </>
+                )}
+
+                {/* SEKSI 3 — Gambar Radiologi */}
+                <tr>
+                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '8px 14px', borderBottom: '1px solid #fed7aa' }}>
+                    Gambar Radiologi
+                  </td>
+                </tr>
+                {radiolojiData.gambar.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '14px 16px', color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
+                      Belum ada gambar
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr style={{ background: '#f3f4f6' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>No.</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Tanggal/Jam</th>
+                      <th colSpan={5} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Gambar</th>
+                    </tr>
+                    {radiolojiData.gambar.map((g, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#fff7ed')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '8px 10px', color: '#6b7280', verticalAlign: 'top' }}>{idx + 1}</td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{g.tgl_periksa}{g.jam ? ' ' + g.jam : ''}</td>
+                        <td colSpan={5} style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'top' }}>
+                          {g.lokasi_gambar ? (
+                            <a
+                              href={khanzaRadiologiUrl(g.lokasi_gambar)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => { e.preventDefault(); setGambarModal(khanzaRadiologiUrl(g.lokasi_gambar)); }}
+                            >
                               <img
                                 src={khanzaRadiologiUrl(g.lokasi_gambar)}
                                 alt="Gambar Radiologi"
-                                width={450}
-                                height={450}
-                                style={{ maxWidth: '100%', objectFit: 'contain', cursor: 'zoom-in', border: '1px solid #e5e7eb', borderRadius: 4 }}
-                                onClick={() => setGambarModal(khanzaRadiologiUrl(g.lokasi_gambar))}
+                                style={{ width: '100%', maxWidth: 450, height: 'auto', cursor: 'zoom-in', border: '1px solid #e5e7eb', borderRadius: 4 }}
                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
-                            ) : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+                            </a>
+                          ) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Modal Input Radiologi */}
       {showInputModal && (

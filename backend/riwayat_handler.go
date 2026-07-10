@@ -251,13 +251,51 @@ type BiayaData struct {
 }
 
 // PerawatanDetail represents a single treatment visit with all details
+// PasienBio represents the patient's biographical/demographic data
+type PasienBio struct {
+	NoRkmMedis string `json:"no_rkm_medis"`
+	NmPasien   string `json:"nm_pasien"`
+	Alamat     string `json:"alamat"`
+	Umur       string `json:"umur"`
+	JK         string `json:"jk"`
+	TglLahir   string `json:"tgl_lahir"`
+	NmIbu      string `json:"nm_ibu"`
+	GolDarah   string `json:"gol_darah"`
+	SttsNikah  string `json:"stts_nikah"`
+	Agama      string `json:"agama"`
+	Pnd        string `json:"pnd"`
+	TglDaftar  string `json:"tgl_daftar"`
+}
+
+// RiwayatPerawatanResponse wraps patient bio data with the list of registrations
+type RiwayatPerawatanResponse struct {
+	Pasien  PasienBio          `json:"pasien"`
+	Riwayat []PerawatanDetail  `json:"riwayat"`
+}
+
+type DiagnosaPasienData struct {
+	KdPenyakit string `json:"kd_penyakit"`
+	NmPenyakit string `json:"nm_penyakit"`
+	Prioritas  int    `json:"prioritas"`
+}
+
+type ProsedurPasienData struct {
+	Kode             string `json:"kode"`
+	DeskripsiPanjang string `json:"deskripsi_panjang"`
+	Prioritas        int    `json:"prioritas"`
+}
+
 type PerawatanDetail struct {
 	NoRawat           string                `json:"no_rawat"`
+	NoReg             string                `json:"no_reg"`
 	TglRegistrasi     string                `json:"tgl_registrasi"`
 	JamReg            string                `json:"jam_reg"`
 	NmPoli            string                `json:"nm_poli"`
 	NmDokter          string                `json:"nm_dokter"`
+	PngJawab          string                `json:"png_jawab"`
 	StatusLanjut      string                `json:"status_lanjut"`
+	DiagnosaPasien    []DiagnosaPasienData  `json:"diagnosa_pasien,omitempty"`
+	ProsedurPasien    []ProsedurPasienData  `json:"prosedur_pasien,omitempty"`
 	TriasePrimer      *TriasePrimerData     `json:"triase_primer,omitempty"`
 	TriaseSekunder    *TriaseSekunderData   `json:"triase_sekunder,omitempty"`
 	AsuhanMedis       *AsuhanMedisData      `json:"asuhan_medis,omitempty"`
@@ -283,18 +321,49 @@ func getRiwayatPerawatan(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRKMedis := c.Param("no_rkm_medis")
 
+		// Get patient biographical data
+		var bio PasienBio
+		err := db.QueryRow(`
+			SELECT
+				no_rkm_medis,
+				COALESCE(nm_pasien, '') as nm_pasien,
+				COALESCE(alamat, '') as alamat,
+				COALESCE(umur, '') as umur,
+				COALESCE(jk, '') as jk,
+				COALESCE(DATE_FORMAT(tgl_lahir, '%d-%m-%Y'), '') as tgl_lahir,
+				COALESCE(nm_ibu, '') as nm_ibu,
+				COALESCE(gol_darah, '') as gol_darah,
+				COALESCE(stts_nikah, '') as stts_nikah,
+				COALESCE(agama, '') as agama,
+				COALESCE(pnd, '') as pnd,
+				COALESCE(DATE_FORMAT(tgl_daftar, '%d-%m-%Y'), '') as tgl_daftar
+			FROM pasien
+			WHERE no_rkm_medis = ?
+		`, noRKMedis).Scan(
+			&bio.NoRkmMedis, &bio.NmPasien, &bio.Alamat, &bio.Umur, &bio.JK,
+			&bio.TglLahir, &bio.NmIbu, &bio.GolDarah, &bio.SttsNikah,
+			&bio.Agama, &bio.Pnd, &bio.TglDaftar,
+		)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Data pasien tidak ditemukan"})
+			return
+		}
+
 		// Get the 5 most recent no_rawat for this patient
 		rows, err := db.Query(`
-			SELECT 
+			SELECT
 				rp.no_rawat,
+				COALESCE(rp.no_reg, '') as no_reg,
 				DATE_FORMAT(rp.tgl_registrasi, '%d/%m/%Y') as tgl_registrasi,
 				TIME_FORMAT(rp.jam_reg, '%H:%i:%s') as jam_reg,
 				COALESCE(pol.nm_poli, '') as nm_poli,
 				COALESCE(dok.nm_dokter, '') as nm_dokter,
+				COALESCE(pj.png_jawab, '') as png_jawab,
 				COALESCE(rp.status_lanjut, '') as status_lanjut
 			FROM reg_periksa rp
 			LEFT JOIN poliklinik pol ON rp.kd_poli = pol.kd_poli
 			LEFT JOIN dokter dok ON rp.kd_dokter = dok.kd_dokter
+			LEFT JOIN penjab pj ON rp.kd_pj = pj.kd_pj
 			WHERE rp.no_rkm_medis = ?
 			ORDER BY rp.tgl_registrasi DESC, rp.jam_reg DESC
 			LIMIT 5
@@ -311,10 +380,12 @@ func getRiwayatPerawatan(db *sql.DB) gin.HandlerFunc {
 			var perawatan PerawatanDetail
 			err := rows.Scan(
 				&perawatan.NoRawat,
+				&perawatan.NoReg,
 				&perawatan.TglRegistrasi,
 				&perawatan.JamReg,
 				&perawatan.NmPoli,
 				&perawatan.NmDokter,
+				&perawatan.PngJawab,
 				&perawatan.StatusLanjut,
 			)
 			if err != nil {
@@ -323,6 +394,10 @@ func getRiwayatPerawatan(db *sql.DB) gin.HandlerFunc {
 			}
 
 			// Build detailed medical history for this no_rawat
+			// Get Diagnosa & Prosedur
+			perawatan.DiagnosaPasien = getDiagnosaPasienData(db, perawatan.NoRawat)
+			perawatan.ProsedurPasien = getProsedurPasienData(db, perawatan.NoRawat)
+
 			// Get Triase Primer
 			perawatan.TriasePrimer = getTriasePrimerData(db, perawatan.NoRawat)
 
@@ -350,13 +425,58 @@ func getRiwayatPerawatan(db *sql.DB) gin.HandlerFunc {
 			perawatanList = append(perawatanList, perawatan)
 		}
 
-		if len(perawatanList) == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "No medical records found for this patient"})
-			return
-		}
-
-		c.JSON(http.StatusOK, perawatanList)
+		c.JSON(http.StatusOK, RiwayatPerawatanResponse{Pasien: bio, Riwayat: perawatanList})
 	}
+}
+
+// getDiagnosaPasienData fetches ICD-10 diagnoses for a given no_rawat
+func getDiagnosaPasienData(db *sql.DB, noRawat string) []DiagnosaPasienData {
+	rows, err := db.Query(`
+		SELECT dp.kd_penyakit, COALESCE(p.nm_penyakit, ''), dp.prioritas
+		FROM diagnosa_pasien dp
+		LEFT JOIN penyakit p ON dp.kd_penyakit = p.kd_penyakit
+		WHERE dp.no_rawat = ?
+		ORDER BY dp.prioritas
+	`, noRawat)
+	if err != nil {
+		return []DiagnosaPasienData{}
+	}
+	defer rows.Close()
+
+	var list []DiagnosaPasienData
+	for rows.Next() {
+		var d DiagnosaPasienData
+		if err := rows.Scan(&d.KdPenyakit, &d.NmPenyakit, &d.Prioritas); err != nil {
+			continue
+		}
+		list = append(list, d)
+	}
+	return list
+}
+
+// getProsedurPasienData fetches ICD-9 procedures for a given no_rawat
+func getProsedurPasienData(db *sql.DB, noRawat string) []ProsedurPasienData {
+	rows, err := db.Query(`
+		SELECT pp.kode, COALESCE(i.deskripsi_panjang, ''), pp.prioritas
+		FROM prosedur_pasien pp
+		LEFT JOIN icd9 i ON pp.kode = i.kode
+		WHERE pp.no_rawat = ?
+		ORDER BY pp.prioritas
+	`, noRawat)
+	if err != nil {
+		return []ProsedurPasienData{}
+	}
+	defer rows.Close()
+
+	var list []ProsedurPasienData
+	for rows.Next() {
+		var p ProsedurPasienData
+		if err := rows.Scan(&p.Kode, &p.DeskripsiPanjang, &p.Prioritas); err != nil {
+			continue
+		}
+		list = append(list, p)
+	}
+	return list
 }
 
 // Helper function to get SOAP data

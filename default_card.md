@@ -63,40 +63,46 @@ Pola card standar yang digunakan di seluruh aplikasi. Gunakan sebagai acuan saat
     maxWidth: 1000,
     width: '85%',
     maxHeight: '90vh',
-    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   }} onClick={e => e.stopPropagation()}>
 
-    {/* Close Button */}
-    <button type="button" onClick={onClose} style={{
-      position: 'absolute',
-      top: 12, right: 16,
-      background: 'transparent',
-      border: 'none',
-      fontSize: 24,
-      cursor: 'pointer',
-      color: '#6b7280',
-      padding: 0,
-      lineHeight: 1,
-    }}>×</button>
-
-    {/* Header Title */}
+    {/* Header — title + close button dalam satu baris flex, sejajar vertikal.
+        Jangan pisah jadi dua elemen absolute yang saling menumpuk — elemen yang
+        dirender belakangan akan menutupi & memblokir klik elemen di bawahnya. */}
     <div style={{
       position: 'absolute',
       top: 0, left: 0, right: 0,
-      padding: '12px 20px',
-      color: '#000000',
-      fontSize: 13,
-      fontWeight: 400,
+      padding: '8px 16px 8px 20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
     }}>
-      Judul Modal
+      <span style={{ color: '#000000', fontSize: 13, fontWeight: 400 }}>
+        Judul Modal
+      </span>
+      <button type="button" onClick={onClose} style={{
+        background: 'transparent',
+        border: 'none',
+        fontSize: 20,
+        cursor: 'pointer',
+        color: '#6b7280',
+        padding: 0,
+        lineHeight: 1,
+      }}>×</button>
     </div>
 
-    {/* White Card Content */}
+    {/* White Card Content — scroll di sini saja, bukan di Modal Container,
+        supaya header tidak ikut ter-scroll (tetap terlihat/fixed di atas). */}
     <div style={{
       background: '#ffffff',
       borderRadius: 16,
       border: '1px solid #d1d5db',
       padding: '12px',
+      overflowY: 'auto',
+      flex: 1,
+      minHeight: 0,
     }}>
       {/* konten form */}
 

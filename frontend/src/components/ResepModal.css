@@ -59,28 +59,6 @@
   letter-spacing: 0.3px;
 }
 
-.btn-close-modal {
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
-  font-size: 24px;
-  cursor: pointer;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-close-modal:hover {
-  background: #ef4444;
-  color: #ffffff;
-  border-color: #ef4444;
-  transform: scale(1.05);
-}
-
 .modal-body-resep {
   padding: 20px 24px;
   overflow-y: auto;
@@ -213,15 +191,29 @@
   flex: 1;
 }
 
-/* Search Obat Input - Cyan Border */
+/* Search Obat Input */
 .search-obat-wrapper input.form-control {
-  border: 2px solid #1AB1E5;
-  box-shadow: 0 0 0 3px rgba(26, 177, 229, 0.1);
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 9px 12px 9px 38px;
+  box-shadow: none;
 }
 
 .search-obat-wrapper input.form-control:focus {
   border-color: #1AB1E5;
-  box-shadow: 0 0 0 4px rgba(26, 177, 229, 0.15);
+  box-shadow: 0 0 0 3px rgba(26, 177, 229, 0.12);
+}
+
+.search-obat-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  z-index: 1;
 }
 
 /* Buttons */
@@ -304,7 +296,7 @@
   left: 0;
   right: 0;
   background: #ffffff;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   max-height: 400px;
@@ -316,8 +308,20 @@
 .obat-dropdown thead th {
   position: sticky;
   top: 0;
-  background: #f8f9fa;
+  background: #f3f4f6;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
   z-index: 1;
+}
+
+.obat-dropdown tbody td {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.obat-dropdown tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .obat-item-row {
@@ -326,7 +330,7 @@
 }
 
 .obat-item-row:hover {
-  background-color: #f3f4f6;
+  background-color: #f0f9ff;
 }
 
 .obat-name-cell {
@@ -538,77 +542,10 @@
   margin-bottom: 0.25rem;
 }
 
-/* Modal Riwayat Resep */
-.modal-riwayat-resep {
-  background: #ffffff;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 1100px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  animation: modalSlideIn 0.3s ease-out;
-}
-
-.modal-header-custom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 24px;
-  border-bottom: 2px solid #e5e7eb;
-  background: #ffffff;
-  border-radius: 12px 12px 0 0;
-}
-
-.modal-header-custom h5 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  color: #0ea5e9;
-  letter-spacing: 0.3px;
-}
-
-.modal-body-custom {
-  padding: 24px;
-  overflow-y: auto;
-  flex: 1;
-}
-
 .resep-history-container {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.resep-card {
-  background: #ffffff;
-  border: 2px solid #1AB1E5;
-  border-radius: 10px;
-  padding: 18px;
-  box-shadow: 0 2px 4px rgba(26, 177, 229, 0.1);
-  transition: all 0.2s ease;
-}
-
-.resep-card:hover {
-  box-shadow: 0 4px 8px rgba(26, 177, 229, 0.2);
-  border-color: #0891B2;
-}
-
-.resep-header {
-  background: #f9fafb;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  border: 1px solid #e5e7eb;
-}
-
-.resep-header .row {
-  margin-bottom: 8px;
-}
-
-.resep-header .row:last-child {
-  margin-bottom: 0;
 }
 
 .badge {
@@ -636,22 +573,6 @@
 
 .bg-secondary {
   background-color: #6b7280;
-}
-
-.racikan-item {
-  background: #f9fafb;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
-.racikan-header-info {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
 }
 
 /* Footer Actions */
@@ -711,8 +632,7 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-  .modal-resep,
-  .modal-riwayat-resep {
+  .modal-resep {
     width: 95%;
     max-width: 95%;
     max-height: 95vh;
@@ -732,8 +652,7 @@
     max-width: 100%;
   }
 
-  .modal-header-resep h5,
-  .modal-header-custom h5 {
+  .modal-header-resep h5 {
     font-size: 15px;
   }
 

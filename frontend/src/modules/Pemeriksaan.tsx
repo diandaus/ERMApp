@@ -340,15 +340,32 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
       const data = await response.json();
 
       // Data struktur: [{no_reg, no_rawat, tgl_registrasi, soapie: [...]}, ...]
-      // Cari SOAPIE terakhir dari semua registrasi
+      // Cari SOAPIE terakhir dari kunjungan SEBELUM hari ini (SOAP hari ini
+      // ditampilkan terpisah di SOAP History, supaya bisa dibandingkan)
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      const toDateStr = (tgl: string) => {
+        if (!tgl) return '';
+        if (tgl.includes('T')) return tgl.split('T')[0];
+        if (tgl.match(/^\d{4}-\d{2}-\d{2}$/)) return tgl;
+        if (tgl.includes('/')) {
+          const [d, m, y] = tgl.split('/');
+          return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        return '';
+      };
+
       let latestSoapie = null;
 
       if (Array.isArray(data) && data.length > 0) {
-        // Iterasi semua registrasi dan ambil semua soapie
+        // Iterasi semua registrasi dan ambil semua soapie sebelum hari ini
         for (const reg of data) {
           if (reg.soapie && Array.isArray(reg.soapie) && reg.soapie.length > 0) {
-            // Ambil soapie terakhir dari registrasi ini
-            const lastFromReg = reg.soapie[reg.soapie.length - 1];
+            // Ambil soapie terakhir dari registrasi ini yang bukan hari ini
+            const soapieSebelumHariIni = reg.soapie.filter((s: any) => toDateStr(s.tgl_perawatan) !== todayStr);
+            if (soapieSebelumHariIni.length === 0) continue;
+            const lastFromReg = soapieSebelumHariIni[soapieSebelumHariIni.length - 1];
 
             // Jika ini soapie pertama atau lebih baru dari yang sudah ada
             if (!latestSoapie) {
@@ -1018,11 +1035,24 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
         text: isEditMode ? 'SOAP berhasil diupdate!' : 'SOAP berhasil disimpan!',
         showCancelButton: true,
         showConfirmButton: true,
-        confirmButtonText: 'Input Resep',
-        cancelButtonText: 'Tutup',
+        confirmButtonText: 'Lanjutkan Input Resep',
+        cancelButtonText: 'Tidak, tutup',
         confirmButtonColor: '#1AB1E5',
         cancelButtonColor: '#6b7280',
-        reverseButtons: true
+        reverseButtons: false,
+        didOpen: (popup) => {
+          const actions = popup.querySelector('.swal2-actions') as HTMLElement | null;
+          if (actions) {
+            actions.style.flexDirection = 'column';
+            actions.style.width = '100%';
+            actions.style.gap = '8px';
+          }
+          popup.querySelectorAll<HTMLElement>('.swal2-actions button').forEach((btn) => {
+            btn.style.width = '80%';
+            btn.style.margin = '0';
+            btn.style.borderRadius = '8px';
+          });
+        },
       });
 
       // Reset form and refresh history

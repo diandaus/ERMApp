@@ -122,129 +122,86 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
   return (
     <div
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        padding: 20
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 20,
       }}
+      onClick={onClose}
     >
       <div
         style={{
-          background: '#ffffff',
-          borderRadius: 12,
-          width: '95%',
-          maxWidth: 1400,
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+          background: '#F3F4F6', borderRadius: 20,
+          padding: '35px 8px 8px 8px', position: 'relative',
+          maxWidth: 1400, width: '95%', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div
-          style={{
-            padding: 20,
-            borderBottom: '2px solid #e5e7eb',
-            background: '#ffffff',
-            borderRadius: '12px 12px 0 0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
-        >
-          <div>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#111827' }}>
-              Riwayat SOAPIE
-            </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#6b7280' }}>
-              {patient.nm_pasien} - {patient.no_rkm_medis}
-            </p>
-          </div>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          padding: '8px 16px 8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ color: '#000000', fontSize: 13, fontWeight: 400 }}>
+            Riwayat SOAPIE — {patient.nm_pasien} ({patient.no_rkm_medis})
+          </span>
           <button
-            onClick={onClose}
+            type="button" onClick={onClose}
             style={{
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              color: '#374151',
-              borderRadius: 8,
-              width: 36,
-              height: 36,
-              cursor: 'pointer',
-              fontSize: 20,
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s'
+              background: 'transparent', border: 'none',
+              fontSize: 20, cursor: 'pointer', color: '#6b7280',
+              padding: 0, lineHeight: 1,
             }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = '#e5e7eb';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = '#f3f4f6';
-            }}
-          >
-            ×
-          </button>
+          >×</button>
         </div>
 
-        {/* Filter Options */}
-        <div style={{ padding: 20, borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="filterType"
-                value="last5"
-                checked={filterType === 'last5'}
-                onChange={(e) => setFilterType(e.target.value as FilterType)}
-                style={{ cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 14, fontWeight: 500 }}>5 Kunjungan Terakhir</span>
-            </label>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="filterType"
-                value="all"
-                checked={filterType === 'all'}
-                onChange={(e) => setFilterType(e.target.value as FilterType)}
-                style={{ cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 14, fontWeight: 500 }}>Semua Kunjungan</span>
-            </label>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="filterType"
-                value="dateRange"
-                checked={filterType === 'dateRange'}
-                onChange={(e) => setFilterType(e.target.value as FilterType)}
-                style={{ cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 14, fontWeight: 500 }}>Berdasarkan Tanggal</span>
-            </label>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="filterType"
-                value="specific"
-                checked={filterType === 'specific'}
-                onChange={(e) => setFilterType(e.target.value as FilterType)}
-                style={{ cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 14, fontWeight: 500 }}>No. Rawat Tertentu</span>
-            </label>
+        {/* White Card Content */}
+        <div style={{
+          background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db',
+          padding: 16, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden',
+        }}>
+        {/* Filter Options - fixed, tidak ikut scroll bersama data */}
+        <div style={{ flexShrink: 0, paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+            {/* Tab Segmented Control */}
+            <div style={{
+              display: 'inline-flex',
+              background: '#f3f4f6',
+              borderRadius: 12,
+              padding: 4,
+              gap: 4
+            }}>
+              {(
+                [
+                  { value: 'last5', label: '5 Kunjungan Terakhir' },
+                  { value: 'all', label: 'Semua Kunjungan' },
+                  { value: 'dateRange', label: 'Berdasarkan Tanggal' },
+                  { value: 'specific', label: 'No. Rawat Tertentu' },
+                ] as { value: FilterType; label: string }[]
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setFilterType(opt.value)}
+                  style={{
+                    padding: '6px 16px',
+                    borderRadius: 8,
+                    border: filterType === opt.value ? '1px solid #d1d5db' : 'none',
+                    background: filterType === opt.value ? '#ffffff' : 'transparent',
+                    color: filterType === opt.value ? '#111827' : '#6b7280',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: filterType === opt.value ? 500 : 400,
+                    transition: 'all 0.2s ease',
+                    boxShadow: filterType === opt.value ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Date Range Filter */}
@@ -332,8 +289,8 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
           )}
         </div>
 
-        {/* Content */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        {/* Content - scrollable, terpisah dari filter yang fixed */}
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {loading && (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <div
@@ -352,16 +309,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
           )}
 
           {!loading && data.length === 0 && (
-            <div
-              style={{
-                padding: 20,
-                background: '#fef3c7',
-                border: '1px solid #fbbf24',
-                borderRadius: 8,
-                color: '#92400e',
-                textAlign: 'center'
-              }}
-            >
+            <div style={{ padding: 20, color: '#6b7280', textAlign: 'center' }}>
               Tidak ada data riwayat SOAPIE ditemukan
             </div>
           )}
@@ -372,18 +320,16 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                 <div
                   key={`${registration.no_rawat}-${regIdx}`}
                   style={{
-                    border: '1px solid #1AB1E5',
-                    borderRadius: 8,
-                    overflow: 'hidden',
+                    border: '1px solid #ddd',
                     background: '#ffffff'
                   }}
                 >
                   {/* Registration Header */}
                   <div
                     style={{
-                      background: '#e0f2fe',
+                      background: '#eee',
                       padding: 12,
-                      borderBottom: '1px solid #1AB1E5'
+                      borderBottom: '1px solid #ddd'
                     }}
                   >
                     <div style={{ display: 'flex', gap: 16, fontSize: 13, fontWeight: 600 }}>
@@ -404,32 +350,32 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                         }}
                       >
                         <thead>
-                          <tr style={{ background: '#f9fafb' }}>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center', width: '80px' }}>
+                          <tr style={{ background: '#eee' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center', width: '80px' }}>
                               Tanggal
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center', width: '120px' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center', width: '120px' }}>
                               Dokter/Paramedis
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center' }}>
                               Subjek
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center' }}>
                               Objek
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center' }}>
                               Asesmen
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center' }}>
                               Plan
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center' }}>
                               Inst/Impl
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center' }}>
                               Evaluasi
                             </th>
-                            <th style={{ padding: 8, border: '1px solid #e5e7eb', textAlign: 'center', width: '80px' }}>
+                            <th style={{ padding: 8, border: '1px solid #ddd', textAlign: 'center', width: '80px' }}>
                               Aksi
                             </th>
                           </tr>
@@ -440,7 +386,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'center',
                                   verticalAlign: 'top'
                                 }}
@@ -452,7 +398,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'center',
                                   verticalAlign: 'top'
                                 }}
@@ -464,7 +410,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'left',
                                   verticalAlign: 'top'
                                 }}
@@ -481,7 +427,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'left',
                                   verticalAlign: 'top'
                                 }}
@@ -564,7 +510,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'left',
                                   verticalAlign: 'top'
                                 }}
@@ -578,7 +524,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'left',
                                   verticalAlign: 'top'
                                 }}
@@ -592,7 +538,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'left',
                                   verticalAlign: 'top'
                                 }}
@@ -606,7 +552,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'left',
                                   verticalAlign: 'top'
                                 }}
@@ -620,7 +566,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
                               <td
                                 style={{
                                   padding: 8,
-                                  border: '1px solid #e5e7eb',
+                                  border: '1px solid #ddd',
                                   textAlign: 'center',
                                   verticalAlign: 'top'
                                 }}
@@ -675,32 +621,20 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
           )}
         </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            padding: 16,
-            borderTop: '1px solid #e5e7eb',
-            background: '#f9fafb',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            borderRadius: '0 0 12px 12px'
-          }}
-        >
+        {/* Footer Buttons */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb' }}>
           <button
+            type="button"
             onClick={onClose}
             style={{
-              padding: '8px 20px',
-              background: '#6b7280',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: 'pointer'
+              padding: '8px 16px', borderRadius: 8, border: 'none',
+              background: '#dc2626', color: '#fff', cursor: 'pointer',
+              fontSize: 12, fontWeight: 500,
             }}
           >
             Tutup
           </button>
+        </div>
         </div>
       </div>
     </div>

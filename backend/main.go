@@ -613,7 +613,9 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				"bangsal.nm_bangsal LIKE '%" + searchText + "%' OR " +
 				"kamar_inap.diagnosa_awal LIKE '%" + searchText + "%' OR " +
 				"kamar_inap.diagnosa_akhir LIKE '%" + searchText + "%' OR " +
-				"dokter.nm_dokter LIKE '%" + searchText + "%' OR " +
+				"EXISTS (SELECT 1 FROM dpjp_ranap dr_search " +
+				"INNER JOIN dokter d_search ON dr_search.kd_dokter = d_search.kd_dokter " +
+				"WHERE dr_search.no_rawat = kamar_inap.no_rawat AND d_search.nm_dokter LIKE '%" + searchText + "%') OR " +
 				"penjab.png_jawab LIKE '%" + searchText + "%')"
 		}
 
@@ -638,8 +640,13 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				kamar_inap.ttl_biaya,
 				kamar_inap.stts_pulang,
 				kamar_inap.lama,
-				dokter.nm_dokter,
-				reg_periksa.kd_dokter,
+				COALESCE((SELECT GROUP_CONCAT(DISTINCT d_dpjp.nm_dokter SEPARATOR ', ')
+					FROM dpjp_ranap dr
+					INNER JOIN dokter d_dpjp ON dr.kd_dokter = d_dpjp.kd_dokter
+					WHERE dr.no_rawat = kamar_inap.no_rawat), '') AS nm_dokter,
+				COALESCE((SELECT GROUP_CONCAT(DISTINCT dr.kd_dokter SEPARATOR ', ')
+					FROM dpjp_ranap dr
+					WHERE dr.no_rawat = kamar_inap.no_rawat), '') AS kd_dokter,
 				kamar_inap.kd_kamar,
 				kamar.kd_bangsal,
 				reg_periksa.status_bayar,
@@ -653,7 +660,6 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN kelurahan ON pasien.kd_kel = kelurahan.kd_kel
 			INNER JOIN kecamatan ON pasien.kd_kec = kecamatan.kd_kec
 			INNER JOIN kabupaten ON pasien.kd_kab = kabupaten.kd_kab
-			INNER JOIN dokter ON reg_periksa.kd_dokter = dokter.kd_dokter
 			INNER JOIN penjab ON reg_periksa.kd_pj = penjab.kd_pj
 			` + whereClause + `
 			ORDER BY kamar_inap.tgl_masuk DESC, kamar_inap.jam_masuk DESC

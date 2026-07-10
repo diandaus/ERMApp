@@ -7,7 +7,6 @@ type LabTabProps = {
 };
 
 export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
-  const [activeRiwayatTab, setActiveRiwayatTab] = React.useState<'pk' | 'pa'>('pk');
   const [showInputModal, setShowInputModal] = React.useState(false);
 
   const [riwayatPK, setRiwayatPK] = React.useState<any[]>([]);
@@ -19,13 +18,39 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
   const [selectedOrder, setSelectedOrder] = React.useState<any>(null);
   const [hasilLabData, setHasilLabData] = React.useState<any>(null);
 
+  const [hasilPeriksa, setHasilPeriksa] = React.useState<any[]>([]);
+  const [loadingHasilPeriksa, setLoadingHasilPeriksa] = React.useState(false);
+
   React.useEffect(() => {
-    if (activeRiwayatTab === 'pk') {
-      fetchRiwayatPK();
-    } else {
-      fetchRiwayatPA();
+    fetchRiwayatPK();
+    fetchRiwayatPA();
+    fetchHasilPeriksa();
+  }, [patient.no_rawat]);
+
+  const fetchHasilPeriksa = async () => {
+    setLoadingHasilPeriksa(true);
+    try {
+      const noRawat = encodeURIComponent(patient.no_rawat);
+      const [resPK, resPA] = await Promise.all([
+        fetch(`/api/lab/hasil-detail?kategori=PK&no_rawat=${noRawat}`),
+        fetch(`/api/lab/hasil-detail?kategori=PA&no_rawat=${noRawat}`),
+      ]);
+      const [dataPK, dataPA] = await Promise.all([
+        resPK.ok ? resPK.json() : null,
+        resPA.ok ? resPA.json() : null,
+      ]);
+      const gabungan = [
+        ...(dataPK?.hasil || []).map((item: any) => ({ ...item, kategori: 'pk' })),
+        ...(dataPA?.hasil || []).map((item: any) => ({ ...item, kategori: 'pa' })),
+      ];
+      gabungan.sort((a, b) => `${b.tgl_periksa} ${b.jam}`.localeCompare(`${a.tgl_periksa} ${a.jam}`));
+      setHasilPeriksa(gabungan);
+    } catch {
+      setHasilPeriksa([]);
+    } finally {
+      setLoadingHasilPeriksa(false);
     }
-  }, [activeRiwayatTab, patient.no_rawat]);
+  };
 
   const filterToday = (data: any[]) => {
     const today = new Date();
@@ -117,13 +142,13 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
     }
   };
 
-  const handleLihatHasil = async (item: any) => {
+  const handleLihatHasil = async (item: any, kategori: 'pk' | 'pa') => {
     setSelectedOrder(item);
     setHasilLabData({ detail_pemeriksaan: item.detail_pemeriksaan || [] });
     setShowModalHasil(true);
     try {
       const res = await fetch(
-        `/api/lab/hasil-detail?noorder=${item.noorder}&kategori=${activeRiwayatTab.toUpperCase()}&no_rawat=${encodeURIComponent(patient.no_rawat)}`
+        `/api/lab/hasil-detail?noorder=${item.noorder}&kategori=${kategori.toUpperCase()}&no_rawat=${encodeURIComponent(patient.no_rawat)}`
       );
       if (res.ok) setHasilLabData(await res.json());
     } catch {}
@@ -156,10 +181,10 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
   };
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: 12, padding: 24, border: '1px solid #e5e7eb' }}>
+    <div>
 
       {/* Tombol Buat Permintaan */}
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={() => setShowInputModal(true)}
           style={{
@@ -187,98 +212,95 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
         </button>
       </div>
 
-      {/* Riwayat Permintaan Lab */}
-      <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: 24 }}>
-        <h4 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-          Riwayat Permintaan Laboratorium
-        </h4>
+      {/* Loading state */}
+      {(loadingRiwayatPK || loadingRiwayatPA || loadingHasilPeriksa) && (
+        <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
+          <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <p style={{ marginTop: 12 }}>Memuat data laboratorium...</p>
+        </div>
+      )}
 
-        {/* Tab Riwayat PK/PA */}
-        <div style={{ borderBottom: '2px solid #e5e7eb', marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {(['pk', 'pa'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveRiwayatTab(tab)}
-                style={{
-                  padding: '8px 16px', border: 'none',
-                  background: activeRiwayatTab === tab ? '#e0f2fe' : 'transparent',
-                  borderBottom: activeRiwayatTab === tab ? '3px solid #1AB1E5' : '3px solid transparent',
-                  color: activeRiwayatTab === tab ? '#1AB1E5' : '#6b7280',
-                  cursor: 'pointer', fontSize: 12,
-                  fontWeight: activeRiwayatTab === tab ? 600 : 400,
-                  transition: 'all 0.2s',
-                }}
-              >
-                {tab === 'pk' ? 'Lab PK' : 'Lab PA'}
-              </button>
+      {/* Riwayat Permintaan Lab */}
+      {!loadingRiwayatPK && !loadingRiwayatPA && (riwayatPK.length > 0 || riwayatPA.length > 0) && (
+        <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              ...riwayatPK.map((item) => ({ item, kategori: 'pk' as const })),
+              ...riwayatPA.map((item) => ({ item, kategori: 'pa' as const })),
+            ].map(({ item, kategori }, idx) => (
+              <RiwayatCard
+                key={idx}
+                item={item}
+                kategori={kategori}
+                onDelete={() => (kategori === 'pk' ? handleDeleteLabPK(item.noorder) : handleDeleteLabPA(item.noorder))}
+                onLihatHasil={() => handleLihatHasil(item, kategori)}
+                formatDateTime={formatDateTime}
+              />
             ))}
           </div>
         </div>
+      )}
 
-        {/* Riwayat PK */}
-        {activeRiwayatTab === 'pk' && (
-          <>
-            {loadingRiwayatPK ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
-                <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                <p style={{ marginTop: 12 }}>Memuat riwayat...</p>
-              </div>
-            ) : riwayatPK.length === 0 ? (
-              <div style={{ padding: 20, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, color: '#92400e', textAlign: 'center' }}>
-                Belum ada riwayat permintaan lab PK
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {riwayatPK.map((item, idx) => (
-                  <RiwayatCard
-                    key={idx}
-                    item={item}
-                    onDelete={() => handleDeleteLabPK(item.noorder)}
-                    onLihatHasil={() => handleLihatHasil(item)}
-                    formatDateTime={formatDateTime}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+      {/* Hasil Periksa Laboratorium */}
+      {!loadingHasilPeriksa && hasilPeriksa.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h4 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 2v6.5L3 20a1 1 0 0 0 .9 1.5h16.2a1 1 0 0 0 .9-1.5L15 8.5V2"></path>
+              <path d="M9 2h6"></path>
+              <path d="M7 15h10"></path>
+            </svg>
+            Hasil Periksa Laboratorium
+          </h4>
 
-        {/* Riwayat PA */}
-        {activeRiwayatTab === 'pa' && (
-          <>
-            {loadingRiwayatPA ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
-                <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                <p style={{ marginTop: 12 }}>Memuat riwayat...</p>
-              </div>
-            ) : riwayatPA.length === 0 ? (
-              <div style={{ padding: 20, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, color: '#92400e', textAlign: 'center' }}>
-                Belum ada riwayat permintaan lab PA
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {riwayatPA.map((item, idx) => (
-                  <RiwayatCard
-                    key={idx}
-                    item={item}
-                    onDelete={() => handleDeleteLabPA(item.noorder)}
-                    onLihatHasil={() => handleLihatHasil(item)}
-                    formatDateTime={formatDateTime}
-                  />
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#1AB1E5', color: 'white' }}>
+                  {['Tanggal', 'Nama Tindakan', 'Hasil', 'Nilai Rujukan', 'Keterangan'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Nama Tindakan' ? 'left' : 'center', fontSize: 12, fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {hasilPeriksa.map((item, idx) => (
+                  <React.Fragment key={idx}>
+                    <tr style={{ background: '#f0f9ff' }}>
+                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                        {formatDateTime(item.tgl_periksa, item.jam)}
+                      </td>
+                      <td colSpan={4} style={{ padding: '8px 12px', fontSize: 13, fontWeight: 600, color: '#1AB1E5' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700, marginRight: 8,
+                          background: item.kategori === 'pk' ? '#e0f2fe' : '#f3e8ff',
+                          color: item.kategori === 'pk' ? '#0891B2' : '#7c3aed',
+                        }}>
+                          {item.kategori === 'pk' ? 'LAB PK' : 'LAB PA'}
+                        </span>
+                        {item.nm_perawatan}
+                      </td>
+                    </tr>
+                    {item.detail?.length > 0 ? item.detail.map((d: any, di: number) => (
+                      <tr key={di} style={{ background: '#ffffff', borderBottom: '1px solid #f3f4f6' }}>
+                        <td></td>
+                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>{d.pemeriksaan}</td>
+                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', textAlign: 'center', fontWeight: 500 }}>{d.nilai || '-'} {d.satuan}</td>
+                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.nilai_rujukan || '-'} {d.satuan}</td>
+                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.keterangan || '-'}</td>
+                      </tr>
+                    )) : (
+                      <tr style={{ background: '#ffffff' }}>
+                        <td></td>
+                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>Belum ada hasil detail</td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Modal Input Lab */}
       {showInputModal && (
@@ -422,18 +444,28 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
 
 type RiwayatCardProps = {
   item: any;
+  kategori: 'pk' | 'pa';
   onDelete: () => void;
   onLihatHasil: () => void;
   formatDateTime: (tgl: string, jam: string) => string;
 };
 
-const RiwayatCard: React.FC<RiwayatCardProps> = ({ item, onDelete, onLihatHasil, formatDateTime }) => (
+const RiwayatCard: React.FC<RiwayatCardProps> = ({ item, kategori, onDelete, onLihatHasil, formatDateTime }) => (
   <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
       <div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>📄 No. Permintaan: {item.noorder}</div>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>📅 {formatDateTime(item.tgl_permintaan, item.jam_permintaan)}</div>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>👨‍⚕️ {item.nm_dokter || '-'}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700,
+            background: kategori === 'pk' ? '#e0f2fe' : '#f3e8ff',
+            color: kategori === 'pk' ? '#0891B2' : '#7c3aed',
+          }}>
+            {kategori === 'pk' ? 'LAB PK' : 'LAB PA'}
+          </span>
+          No. Permintaan: {item.noorder}
+        </div>
+        <div style={{ fontSize: 12, color: '#6b7280' }}>{formatDateTime(item.tgl_permintaan, item.jam_permintaan)}</div>
+        <div style={{ fontSize: 12, color: '#6b7280' }}>{item.nm_dokter || '-'}</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -442,7 +474,7 @@ const RiwayatCard: React.FC<RiwayatCardProps> = ({ item, onDelete, onLihatHasil,
             background: item.status === 'ralan' ? '#10b981' : '#f59e0b',
             color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600,
           }}>
-            {item.status === 'ralan' ? '✅ Ralan' : '⏳ Pending'}
+            {item.status === 'ralan' ? 'Ralan' : 'Pending'}
           </div>
           <button
             onClick={onDelete}

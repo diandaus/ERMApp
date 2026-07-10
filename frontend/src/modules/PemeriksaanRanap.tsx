@@ -450,11 +450,24 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
         text: isEditMode ? 'SOAP berhasil diupdate!' : 'SOAP berhasil disimpan!',
         showCancelButton: true,
         showConfirmButton: true,
-        confirmButtonText: 'Input Resep',
-        cancelButtonText: 'Tutup',
+        confirmButtonText: 'Lanjutkan Input Resep',
+        cancelButtonText: 'Tidak, tutup',
         confirmButtonColor: '#1AB1E5',
         cancelButtonColor: '#6b7280',
-        reverseButtons: true,
+        reverseButtons: false,
+        didOpen: (popup) => {
+          const actions = popup.querySelector('.swal2-actions') as HTMLElement | null;
+          if (actions) {
+            actions.style.flexDirection = 'column';
+            actions.style.width = '100%';
+            actions.style.gap = '8px';
+          }
+          popup.querySelectorAll<HTMLElement>('.swal2-actions button').forEach((btn) => {
+            btn.style.width = '80%';
+            btn.style.margin = '0';
+            btn.style.borderRadius = '8px';
+          });
+        },
       });
 
       clearForm();

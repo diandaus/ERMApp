@@ -125,7 +125,11 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
       onClick={onClose}
     >
       <div
-        style={{ background: '#f9fafb', borderRadius: 16, padding: '40px 8px 8px', position: 'relative', width: '95%', maxWidth: 900, maxHeight: '92vh', overflowY: 'auto' }}
+        style={{
+          background: '#f9fafb', borderRadius: 16, padding: '40px 8px 8px', position: 'relative',
+          width: '95%', maxWidth: 900, maxHeight: '92vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -136,7 +140,7 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
           <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>×</button>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 16 }}>
+        <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 16, overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {error && (
             <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fef2f2', color: '#b91c1c', fontSize: 12, marginBottom: 12 }}>{error}</div>
           )}

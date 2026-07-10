@@ -108,10 +108,10 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: 12, padding: 24, border: '1px solid #e5e7eb' }}>
+    <div>
 
       {/* Tombol Input Tindakan */}
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={() => setShowInputModal(true)}
           style={{
@@ -131,62 +131,48 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
         </button>
       </div>
 
-      {/* Riwayat Tindakan */}
-      <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: 24 }}>
-        <h4 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-          Riwayat Tindakan Hari Ini
-        </h4>
+      {/* Loading state */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
+          <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <p style={{ marginTop: 12 }}>Memuat riwayat...</p>
+        </div>
+      )}
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
-            <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-            <p style={{ marginTop: 12 }}>Memuat riwayat...</p>
-          </div>
-        ) : tindakanList.length === 0 ? (
-          <div style={{ padding: 20, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8, color: '#92400e', textAlign: 'center' }}>
-            Belum ada tindakan yang dilakukan hari ini
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {tindakanList.map((item, idx) => (
-              <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>{item.nm_perawatan}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>📅 {formatDateTime(item.tgl_perawatan, item.jam_rawat)}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>👨‍⚕️ {item.nm_dokter || '-'}</div>
+      {/* Riwayat Tindakan */}
+      {!loading && tindakanList.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {tindakanList.map((item, idx) => (
+            <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>{item.nm_perawatan}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>📅 {formatDateTime(item.tgl_perawatan, item.jam_rawat)}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>👨‍⚕️ {item.nm_dokter || '-'}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                  <div style={{ padding: '4px 12px', background: '#d1fae5', color: '#065f46', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
+                    {formatRupiah(item.biaya_rawat || 0)}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    <div style={{ padding: '4px 12px', background: '#d1fae5', color: '#065f46', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
-                      {formatRupiah(item.biaya_rawat || 0)}
-                    </div>
-                    <button
-                      onClick={() => handleDeleteTindakan(item)}
-                      style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-                      title="Hapus Tindakan"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                      </svg>
-                      Hapus
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleDeleteTindakan(item)}
+                    style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
+                    title="Hapus Tindakan"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Hapus
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal Input Tindakan */}
       {showInputModal && (

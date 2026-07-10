@@ -750,14 +750,13 @@ func getRiwayatLabPA(db *sql.DB) gin.HandlerFunc {
 // Get hasil lab detail lengkap berdasarkan noorder dan tanggal/jam
 func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		noorder := c.Query("noorder")
 		kategori := c.Query("kategori") // PK atau PA
 		noRawat := c.Query("no_rawat")
 		tglPeriksa := c.Query("tgl_periksa")
 		jamPeriksa := c.Query("jam")
 
-		if noorder == "" || kategori == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kategori wajib diisi"})
+		if kategori == "" || noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat dan kategori wajib diisi"})
 			return
 		}
 
@@ -933,6 +932,8 @@ func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 			hasilList = append(hasilList, map[string]interface{}{
 				"kd_jenis_prw": kdJenisPrw,
 				"nm_perawatan": nmPerawatan,
+				"tgl_periksa":  tglPeriksa,
+				"jam":          jam,
 				"biaya":        biaya,
 				"detail":       detailItems,
 			})
