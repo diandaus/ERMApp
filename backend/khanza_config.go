@@ -183,7 +183,10 @@ func registerWebappsSubRoute(r *gin.Engine, cfg KhanzaWebappsConfig, sub string)
 		proxy.Director = func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
-			req.URL.Path = "/" + sub + req.URL.Path
+			// req.URL.Path masih berisi prefix route (mis. "/radiologi/pages/upload/...")
+			// karena Gin tidak menghapus prefix pada wildcard route. Buang prefix itu
+			// lalu sambung ke path target (mis. "/webapps/radiologi") agar tidak dobel.
+			req.URL.Path = target.Path + strings.TrimPrefix(req.URL.Path, route)
 			req.Host = target.Host
 		}
 		r.GET(route+"/*path", func(c *gin.Context) {

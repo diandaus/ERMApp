@@ -307,7 +307,12 @@ func openDB() (*sql.DB, error) {
 	port := getEnv("DB_PORT", "3306")
 	name := getEnv("DB_NAME", "ibnusinadev")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&loc=Local&tls=false",
+	// clientFoundRows=true membuat RowsAffected() mengembalikan jumlah baris yang
+	// COCOK dengan WHERE, bukan hanya baris yang nilainya benar-benar berubah.
+	// Tanpa ini, UPDATE ke nilai yang sudah sama (mis. stts sudah 'Sudah') akan
+	// melaporkan 0 rows affected walau baris ditemukan, membuat pengecekan
+	// "data tidak ditemukan" di banyak handler jadi salah (false negative).
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&loc=Local&tls=false&clientFoundRows=true",
 		user, pass, host, port, name,
 	)
 

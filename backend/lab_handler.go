@@ -466,8 +466,8 @@ func simpanPermintaanLabPA(db *sql.DB) gin.HandlerFunc {
 				INSERT INTO permintaan_labpa
 				(noorder, no_rawat, tgl_permintaan, jam_permintaan, tgl_sampel, jam_sampel,
 				 tgl_hasil, jam_hasil, dokter_perujuk, status, informasi_tambahan, diagnosa_klinis,
-				 tgl_pengambilan_bahan, diperoleh_dari, lokasi_pengambilan, diawetkan,
-				 dilakukan_di, tgl_pa, nomor_pa, diagnosa_pa)
+				 pengambilan_bahan, diperoleh_dengan, lokasi_jaringan, diawetkan_dengan,
+				 pernah_dilakukan_di, tanggal_pa_sebelumnya, nomor_pa_sebelumnya, diagnosa_pa_sebelumnya)
 				VALUES (?, ?, ?, ?, '0000-00-00', '00:00:00', '0000-00-00', '00:00:00', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`
 
@@ -667,10 +667,10 @@ func getRiwayatLabPA(db *sql.DB) gin.HandlerFunc {
 				pl.status,
 				pl.informasi_tambahan,
 				pl.diagnosa_klinis,
-				pl.tgl_pengambilan_bahan,
-				pl.diperoleh_dari,
-				pl.lokasi_pengambilan,
-				pl.diawetkan
+				pl.pengambilan_bahan,
+				pl.diperoleh_dengan,
+				pl.lokasi_jaringan,
+				pl.diawetkan_dengan
 			FROM permintaan_labpa pl
 			LEFT JOIN dokter d ON pl.dokter_perujuk = d.kd_dokter
 			WHERE pl.no_rawat = ?
@@ -787,6 +787,10 @@ func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 				WHERE pl.no_rawat = ? AND pl.kategori = 'PK'
 			`
 		} else {
+			// Khanza tidak punya tabel header "periksa_labpa" terpisah seperti PK.
+			// Hasil PA langsung tersimpan di detail_periksa_labpa (laporan naratif),
+			// jadi tabel itu sendiri yang jadi sumber "sudah diperiksa". Info dokter/
+			// pasien diambil dari permintaan_labpa & reg_periksa.
 			queryPeriksa = `
 				SELECT DISTINCT
 					pl.no_rawat,
@@ -794,21 +798,21 @@ func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 					pl.jam,
 					pl.kd_jenis_prw,
 					jpl.nm_perawatan,
-					pl.biaya,
-					pl.dokter_perujuk,
+					0 as biaya,
+					req.dokter_perujuk,
 					d.nm_dokter,
 					rp.no_rkm_medis,
 					p.nm_pasien,
-					pet.nama as nm_petugas,
+					'' as nm_petugas,
 					pj.png_jawab
-				FROM periksa_labpa pl
+				FROM detail_periksa_labpa pl
 				LEFT JOIN jns_perawatan_lab jpl ON pl.kd_jenis_prw = jpl.kd_jenis_prw
-				LEFT JOIN dokter d ON pl.kd_dokter = d.kd_dokter
+				LEFT JOIN permintaan_labpa req ON pl.no_rawat = req.no_rawat
+				LEFT JOIN dokter d ON req.dokter_perujuk = d.kd_dokter
 				LEFT JOIN reg_periksa rp ON pl.no_rawat = rp.no_rawat
 				LEFT JOIN pasien p ON rp.no_rkm_medis = p.no_rkm_medis
-				LEFT JOIN petugas pet ON pl.nip = pet.nip
 				LEFT JOIN penjab pj ON rp.kd_pj = pj.kd_pj
-				WHERE pl.no_rawat = ? AND pl.kategori = 'PA'
+				WHERE pl.no_rawat = ?
 			`
 		}
 
@@ -869,10 +873,11 @@ func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 
 			totalBiaya += biaya
 
-			// Ambil detail pemeriksaan untuk jenis perawatan ini
-			var detailQuery string
+			var detailItems []map[string]interface{}
+
 			if kategori == "PK" {
-				detailQuery = `
+				// PK: hasil berupa nilai per-item mengacu template_laboratorium
+				detailQuery := `
 					SELECT
 						tl.Pemeriksaan,
 						dpl.nilai,
@@ -885,49 +890,58 @@ func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 					WHERE dpl.no_rawat = ? AND dpl.kd_jenis_prw = ? AND dpl.tgl_periksa = ? AND dpl.jam = ?
 					ORDER BY tl.urut
 				`
+				detailRows, err := db.Query(detailQuery, noRawatDB, kdJenisPrw, tglPeriksa, jam)
+				if err != nil {
+					continue
+				}
+				for detailRows.Next() {
+					var pemeriksaan, nilai, satuan, nilaiRujukan, keterangan string
+					var biayaItemDetail float64
+
+					detailRows.Scan(&pemeriksaan, &nilai, &satuan, &nilaiRujukan, &biayaItemDetail, &keterangan)
+					totalBiaya += biayaItemDetail
+
+					detailItems = append(detailItems, map[string]interface{}{
+						"pemeriksaan":   pemeriksaan,
+						"nilai":         nilai,
+						"satuan":        satuan,
+						"nilai_rujukan": nilaiRujukan,
+						"biaya_item":    biayaItemDetail,
+						"keterangan":    keterangan,
+					})
+				}
+				detailRows.Close()
 			} else {
-				detailQuery = `
-					SELECT
-						tl.Pemeriksaan,
-						dpl.nilai,
-						tl.satuan,
-						dpl.nilai_rujukan,
-						dpl.biaya_item,
-						dpl.keterangan
-					FROM detail_periksa_labpa dpl
-					INNER JOIN template_laboratorium tl ON dpl.id_template = tl.id_template
-					WHERE dpl.no_rawat = ? AND dpl.kd_jenis_prw = ? AND dpl.tgl_periksa = ? AND dpl.jam = ?
-					ORDER BY tl.urut
-				`
+				// PA: hasilnya laporan naratif (bukan nilai per-item), disimpan
+				// langsung sebagai kolom di detail_periksa_labpa (tanpa template).
+				var diagnosaKlinik, makroskopik, mikroskopik, kesimpulan, kesan sql.NullString
+				err := db.QueryRow(
+					`SELECT diagnosa_klinik, makroskopik, mikroskopik, kesimpulan, kesan
+					 FROM detail_periksa_labpa
+					 WHERE no_rawat = ? AND kd_jenis_prw = ? AND tgl_periksa = ? AND jam = ?`,
+					noRawatDB, kdJenisPrw, tglPeriksa, jam,
+				).Scan(&diagnosaKlinik, &makroskopik, &mikroskopik, &kesimpulan, &kesan)
+				if err == nil {
+					addNarrative := func(label, val string) {
+						if val == "" {
+							return
+						}
+						detailItems = append(detailItems, map[string]interface{}{
+							"pemeriksaan":   label,
+							"nilai":         val,
+							"satuan":        "",
+							"nilai_rujukan": "",
+							"biaya_item":    0.0,
+							"keterangan":    "",
+						})
+					}
+					addNarrative("Diagnosa Klinik", diagnosaKlinik.String)
+					addNarrative("Makroskopik", makroskopik.String)
+					addNarrative("Mikroskopik", mikroskopik.String)
+					addNarrative("Kesimpulan", kesimpulan.String)
+					addNarrative("Kesan", kesan.String)
+				}
 			}
-
-			detailRows, err := db.Query(detailQuery, noRawatDB, kdJenisPrw, tglPeriksa, jam)
-			if err != nil {
-				continue
-			}
-
-			var detailItems []map[string]interface{}
-			var biayaItem float64
-
-			for detailRows.Next() {
-				var pemeriksaan, nilai, satuan, nilaiRujukan, keterangan string
-				var biayaItemDetail float64
-
-				detailRows.Scan(&pemeriksaan, &nilai, &satuan, &nilaiRujukan, &biayaItemDetail, &keterangan)
-
-				biayaItem += biayaItemDetail
-				totalBiaya += biayaItemDetail
-
-				detailItems = append(detailItems, map[string]interface{}{
-					"pemeriksaan":   pemeriksaan,
-					"nilai":         nilai,
-					"satuan":        satuan,
-					"nilai_rujukan": nilaiRujukan,
-					"biaya_item":    biayaItemDetail,
-					"keterangan":    keterangan,
-				})
-			}
-			detailRows.Close()
 
 			hasilList = append(hasilList, map[string]interface{}{
 				"kd_jenis_prw": kdJenisPrw,
@@ -939,21 +953,17 @@ func getHasilLabDetail(db *sql.DB) gin.HandlerFunc {
 			})
 		}
 
-		// Ambil saran dan kesan jika ada
+		// Ambil saran dan kesan jika ada. Khanza cuma punya tabel saran_kesan_lab
+		// untuk PK — kesan PA sudah ikut tampil sebagai baris naratif di atas.
 		var saran, kesan string
-		var tableSaran string
 		if kategori == "PK" {
-			tableSaran = "saran_kesan_lab"
-		} else {
-			tableSaran = "saran_kesan_labpa"
-		}
-
-		saranQuery := fmt.Sprintf("SELECT saran, kesan FROM %s WHERE no_rawat = ?", tableSaran)
-		if tglPeriksa != "" && jamPeriksa != "" {
-			saranQuery += " AND tgl_periksa = ? AND jam = ?"
-			db.QueryRow(saranQuery, noRawat, tglPeriksa, jamPeriksa).Scan(&saran, &kesan)
-		} else {
-			db.QueryRow(saranQuery, noRawat).Scan(&saran, &kesan)
+			saranQuery := "SELECT saran, kesan FROM saran_kesan_lab WHERE no_rawat = ?"
+			if tglPeriksa != "" && jamPeriksa != "" {
+				saranQuery += " AND tgl_periksa = ? AND jam = ?"
+				db.QueryRow(saranQuery, noRawat, tglPeriksa, jamPeriksa).Scan(&saran, &kesan)
+			} else {
+				db.QueryRow(saranQuery, noRawat).Scan(&saran, &kesan)
+			}
 		}
 
 		response := map[string]interface{}{
