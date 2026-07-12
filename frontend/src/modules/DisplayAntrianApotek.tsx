@@ -1,4 +1,5 @@
 import React from 'react';
+import { localDateStr } from '../utils/date';
 
 type ApotekQueueItem = {
   no_antrian: string;
@@ -130,7 +131,7 @@ export const DisplayAntrianApotekView: React.FC = () => {
 
   // Reset prev refs saat tengah malam agar pasien hari baru terdeteksi dengan benar
   React.useEffect(() => {
-    const todayStr = () => new Date().toISOString().slice(0, 10);
+    const todayStr = () => localDateStr();
     let lastDate = todayStr();
 
     const midnightCheck = setInterval(() => {

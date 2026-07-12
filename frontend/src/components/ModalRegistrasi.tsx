@@ -3,6 +3,7 @@ import { ModalCariDokter } from './ModalCariDokter';
 import { ModalCariPoli } from './ModalCariPoli';
 import { ModalCariCaraBayar } from './ModalCariCaraBayar';
 import { ModalCariPasien } from './ModalCariPasien';
+import { localDateStr } from '../utils/date';
 
 type Poli = {
   kd_poli: string;
@@ -39,7 +40,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
   const [noReg, setNoReg] = React.useState<string>('');
   const [autoNoReg, setAutoNoReg] = React.useState<boolean>(true);
   const [noRawat, setNoRawat] = React.useState<string>('');
-  const [tglReg, setTglReg] = React.useState<string>(new Date().toISOString().split('T')[0]);
+  const [tglReg, setTglReg] = React.useState<string>(localDateStr());
   const [jamReg, setJamReg] = React.useState<string>('');
   const [useAutoTime, setUseAutoTime] = React.useState<boolean>(true);
   const [noRkmMedis, setNoRkmMedis] = React.useState<string>('');
@@ -270,7 +271,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
       // Reset all fields
       setNoReg('');
       setNoRawat('');
-      setTglReg(new Date().toISOString().split('T')[0]);
+      setTglReg(localDateStr());
       setJamReg('');
       setUseAutoTime(true);
       setNoRkmMedis('');

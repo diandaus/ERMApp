@@ -1,5 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
+import { localDateStr } from '../utils/date';
 
 type Pasien = {
   no_rkm_medis: string;
@@ -73,7 +74,7 @@ export const ModalCariPasien: React.FC<ModalCariPasienProps> = ({ isOpen, onClos
   const [noPeserta, setNoPeserta] = React.useState<string>('');
   const [email, setEmail] = React.useState<string>('');
   const [noTelp, setNoTelp] = React.useState<string>('');
-  const [pertamaDaftar, setPertamaDaftar] = React.useState<string>(new Date().toISOString().split('T')[0]);
+  const [pertamaDaftar, setPertamaDaftar] = React.useState<string>(localDateStr());
   const [pekerjaan, setPekerjaan] = React.useState<string>('');
   const [noKTP, setNoKTP] = React.useState<string>('');
   const [alamatPasien, setAlamatPasien] = React.useState<string>('');
@@ -1055,7 +1056,7 @@ export const ModalCariPasien: React.FC<ModalCariPasienProps> = ({ isOpen, onClos
                       setNoPeserta('');
                       setEmail('');
                       setNoTelp('');
-                      setPertamaDaftar(new Date().toISOString().split('T')[0]);
+                      setPertamaDaftar(localDateStr());
                       setPekerjaan('');
                       setNoKTP('');
                       setAlamatPasien('');
@@ -1161,7 +1162,7 @@ export const ModalCariPasien: React.FC<ModalCariPasienProps> = ({ isOpen, onClos
                       // Format tanggal lahir ke YYYY-MM-DD
                       if (selectedPasien.tgl_lahir && selectedPasien.tgl_lahir !== '0000-00-00') {
                         const tglLahirDate = new Date(selectedPasien.tgl_lahir);
-                        setTglLahir(tglLahirDate.toISOString().split('T')[0]);
+                        setTglLahir(localDateStr(tglLahirDate));
                       } else {
                         setTglLahir('');
                       }
@@ -1181,7 +1182,7 @@ export const ModalCariPasien: React.FC<ModalCariPasienProps> = ({ isOpen, onClos
                       // Format tanggal daftar
                       if (selectedPasien.tgl_daftar && selectedPasien.tgl_daftar !== '0000-00-00') {
                         const tglDaftarDate = new Date(selectedPasien.tgl_daftar);
-                        setPertamaDaftar(tglDaftarDate.toISOString().split('T')[0]);
+                        setPertamaDaftar(localDateStr(tglDaftarDate));
                       }
 
                       setPekerjaan(selectedPasien.pekerjaan || '');

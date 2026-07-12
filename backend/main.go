@@ -744,6 +744,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel satu sehat: %v", err)
 	}
 
+	if err := ensureKlaimInacbgTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel klaim_inacbg: %v", err)
+	}
+
 	r := gin.Default()
 
 	// CORS middleware untuk mengizinkan request dari frontend
@@ -2811,6 +2815,10 @@ func main() {
 	// Rawat Inap List endpoint (daftar pasien rawat inap)
 	r.GET("/api/rawat-inap/list", getRawatInapList(db))
 
+	// Klaim INACBG endpoints
+	r.GET("/api/klaim-inacbg/list", getKlaimInacbgList(db))
+	r.POST("/api/klaim-inacbg", saveKlaimInacbg(db))
+
 	// Registrasi List endpoint
 	r.GET("/api/registrasi/list", getRegistrasiList(db))
 	r.DELETE("/api/registrasi/*no_rawat", deleteRegistrasi(db))
@@ -2855,6 +2863,9 @@ func main() {
 
 	// Biaya endpoint
 	r.GET("/api/biaya/*no_rawat", getBiaya(db))
+
+	// Billing Preview endpoint
+	r.GET("/api/billing-preview/*no_rawat", getBillingPreview(db))
 
 	// Resume Perawatan endpoints
 	r.GET("/api/resume/*no_rawat", getResume(db))

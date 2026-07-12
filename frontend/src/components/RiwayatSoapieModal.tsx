@@ -1,4 +1,5 @@
 import React from 'react';
+import { localDateStr } from '../utils/date';
 
 type RiwayatSoapieModalProps = {
   patient: any;
@@ -51,8 +52,7 @@ export const RiwayatSoapieModal: React.FC<RiwayatSoapieModalProps> = ({ patient,
 
   React.useEffect(() => {
     // Set default dates to today
-    const today = new Date();
-    const formattedDate = today.toISOString().split('T')[0];
+    const formattedDate = localDateStr();
     setDateFrom(formattedDate);
     setDateTo(formattedDate);
   }, []);

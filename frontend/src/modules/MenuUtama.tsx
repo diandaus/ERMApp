@@ -10,6 +10,7 @@ type MenuKey =
   | 'laboratorium'
   | 'farmasi'
   | 'kasir'
+  | 'klaim-inacbg'
   | 'kepegawaian'
   | 'anjungan-antrian'
   | 'rekam-medis'
@@ -103,6 +104,13 @@ export const MenuUtamaView: React.FC<MenuUtamaViewProps> = ({ user, setActiveMen
       label: 'Kasir',
       description: 'Billing pasien & pembayaran',
       icon: '💳',
+      category: 'klinik',
+    },
+    {
+      key: 'klaim-inacbg',
+      label: 'Klaim INACBG',
+      description: 'Pengajuan & verifikasi klaim INA-CBG BPJS',
+      icon: '🧾',
       category: 'klinik',
     },
     {

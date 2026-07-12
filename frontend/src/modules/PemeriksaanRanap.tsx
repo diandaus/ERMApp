@@ -11,6 +11,7 @@ import { TindakanTab } from '../components/TindakanTab';
 import { ModalCariPetugas } from '../components/ModalCariPetugas';
 import { ModalCariPegawai } from '../components/ModalCariPegawai';
 import { ResumeTab } from '../components/ResumeTab';
+import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
 
 type RanapPatient = {
   no_rawat: string;
@@ -95,7 +96,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   const [showSoapInAdime, setShowSoapInAdime] = React.useState(false);
   const [soapHistory, setSoapHistory] = React.useState<any[]>([]);
   const [showResepModal, setShowResepModal] = React.useState(false);
-  const [editingResep, setEditingResep] = React.useState<{ no_resep: string; items: any[] } | null>(null);
+  const [editingResep, setEditingResep] = React.useState<{ no_resep: string; items: any[]; racikan?: any[] } | null>(null);
   const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
   const [showResepPulangModal, setShowResepPulangModal] = React.useState(false);
   const [editingResepPulang, setEditingResepPulang] = React.useState<{ no_permintaan: string; items: any[]; racikan?: any[] } | null>(null);
@@ -104,6 +105,14 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
   const [showRiwayatSoapieModal, setShowRiwayatSoapieModal] = React.useState(false);
+  const { isCompact } = useBreakpoint();
+  // Grid form (S/O/A/P, ADIME) boleh tetap 2 kolom sampai lebih sempit dari breakpoint
+  // shell/drawer di atas — sidebar sekarang selalu drawer jadi tidak makan lebar konten.
+  const isNarrow = useMediaQuery(640);
+  // Di layar 1366px ke atas (laptop/desktop umum), Panel Info Pasien tetap permanen
+  // seperti semula — drawer hanya dipakai di bawah itu (tablet, dsb).
+  const isPermanentSidebar = !useMediaQuery(1365);
+  const [showPatientInfo, setShowPatientInfo] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
 
   // History state
@@ -599,17 +608,38 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
     borderBottom: activeTab === tab ? '3px solid #1AB1E5' : '3px solid transparent',
     color: activeTab === tab ? '#1AB1E5' : '#6b7280',
     cursor: 'pointer', fontSize: 13,
-    fontWeight: activeTab === tab ? 600 : 400,
+    fontWeight: 400,
     transition: 'all 0.2s',
+    whiteSpace: 'nowrap', flexShrink: 0,
   });
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <section style={{ background: '#f3f4f6', borderRadius: 0, padding: 0, height: '100%', display: 'flex', overflow: 'hidden' }}>
+    <section style={{ background: '#f3f4f6', borderRadius: 0, padding: 0, height: '100%', display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
-      {/* Sidebar */}
-      <aside style={{ width: 280, background: '#ffffff', borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'auto', overscrollBehavior: 'none' }}>
+      {/* Overlay drawer info pasien — hanya di bawah 1366px; di layar lebar sidebar permanen jadi tidak perlu overlay */}
+      {!isPermanentSidebar && showPatientInfo && (
+        <div
+          onClick={() => setShowPatientInfo(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 90 }}
+        />
+      )}
+
+      {/* Sidebar — permanen di >=1366px, drawer (dipicu tombol nama pasien di header) di bawah itu */}
+      <aside style={{
+        width: 280, background: '#ffffff', borderRight: '1px solid #e5e7eb',
+        display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'auto', overscrollBehavior: 'none',
+        ...(isPermanentSidebar
+          ? { position: 'sticky' as const, top: 0, height: '100vh' }
+          : {
+              position: 'fixed' as const,
+              top: 0, left: 0, height: '100vh', zIndex: 95,
+              boxShadow: '2px 0 16px rgba(0,0,0,0.2)',
+              transform: showPatientInfo ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.25s ease'
+            })
+      }}>
         {/* Header */}
         <div style={{ padding: '20px 16px', background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -718,8 +748,21 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 52, boxSizing: 'border-box' }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Pemeriksaan Rawat Inap</h3>
+        <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 52, boxSizing: 'border-box', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {!isPermanentSidebar && (
+              <button
+                type="button"
+                onClick={() => setShowPatientInfo(true)}
+                title="Info Pasien"
+                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span style={{ fontSize: 12, fontWeight: 500, color: '#374151' }}>{patient.nm_pasien}</span>
+              </button>
+            )}
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Pemeriksaan Rawat Inap</h3>
+          </div>
           <button
             onClick={onBack}
             style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #1AB1E5', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
@@ -731,7 +774,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, padding: '0 24px', borderBottom: '2px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, padding: '0 24px', borderBottom: '2px solid #e5e7eb', background: '#fff', flexShrink: 0, overflowX: 'auto', overscrollBehaviorX: 'contain' }}>
           {(['soap', 'resep', 'lab', 'rad', 'tindakan', 'adime', 'resume', 'upload'] as const).map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={tabStyle(tab)}>
               {tab === 'soap' ? 'SOAP/CPPT' : tab === 'resep' ? 'RESEP' : tab === 'lab' ? 'LABORATORIUM' : tab === 'rad' ? 'RADIOLOGI' : tab === 'tindakan' ? 'TINDAKAN' : tab === 'upload' ? 'UPLOAD' : tab === 'adime' ? 'ADIME GIZI' : 'RESUME'}
@@ -756,9 +799,9 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                   )}
 
                   <form ref={formRef} onSubmit={handleSubmit}>
-                    {/* Row: Tanggal/Jam + Petugas */}
+                    {/* Tgl/Jam + Pegawai + Alergi — satu baris di >=1366px, wrap ke baris berikutnya di layar lebih sempit */}
                     {!isEditMode && (
-                      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16 }}>
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: isPermanentSidebar ? 'nowrap' : 'wrap' }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Tgl :</span>
                           <input type="date" value={soapTgl} onChange={(e) => { setSoapTgl(e.target.value); setSoapUseAutoTime(false); }}
@@ -769,7 +812,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                           <input type="checkbox" checked={soapUseAutoTime} onChange={(e) => setSoapUseAutoTime(e.target.checked)}
                             style={{ width: 16, height: 16, cursor: 'pointer' }} title="Gunakan waktu saat ini" />
                         </div>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 220 }}>
                           <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Pegawai :</span>
                           <div style={{ display: 'flex', gap: 2, flex: 1, position: 'relative' }}>
                             <input type="text" value={soapNip}
@@ -810,7 +853,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                       </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 20, marginBottom: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'minmax(0,1fr)' : 'minmax(0,1fr) minmax(0,1fr)', gap: 20, marginBottom: 20 }}>
 
                       {/* Left column */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1178,8 +1221,12 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                               <button
                                 onClick={() => {
-                                  // pre-fill non_racikan items untuk edit
-                                  setEditingResep({ no_resep: resep.no_resep, items: nonRacikan.map((it: any) => ({ ...it, aturan: it.aturan_pakai })) });
+                                  // pre-fill non_racikan + racikan untuk edit
+                                  setEditingResep({
+                                    no_resep: resep.no_resep,
+                                    items: nonRacikan.map((it: any) => ({ ...it, aturan: it.aturan_pakai })),
+                                    racikan,
+                                  });
                                   setShowResepModal(true);
                                 }}
                                 disabled={sudahValidasi}
@@ -1399,7 +1446,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                   onSelect={(nip, nama) => { setAdimeNip(nip); setAdimePetugasNama(nama); }}
                 />
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 12 }}>
 
                   {[
                     { key: 'asesmen',    label: 'Asesmen Gizi',   badge: 'A', color: '#2563eb', placeholder: 'Antropometri, biokimia, klinis, riwayat diet...' },
@@ -1482,7 +1529,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                   )}
                   <button
                     onClick={() => { setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' }); setAdimeNip(''); setAdimePetugasNama('');  }}
-                    style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                    style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
@@ -1549,7 +1596,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                               </button>
                             </div>
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 1fr', gap: 8 }}>
                             {[['A — Asesmen', item.asesmen, '#2563eb'], ['D — Diagnosis', item.diagnosis, '#dc2626'], ['I — Intervensi', item.intervensi, '#10b981'], ['M — Monitoring', item.monitoring, '#f59e0b'], ['E — Evaluasi', item.evaluasi, '#8b5cf6'], ['I — Instruksi', item.instruksi, '#ec4899']].filter(([, v]) => v).map(([label, val, color]) => (
                               <div key={label as string}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: color as string, marginBottom: 2 }}>{label as string}</div>
@@ -1576,8 +1623,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
       {/* SOAP/CPPT fixed right panel — visible on ADIME tab */}
       {activeTab === 'adime' && showSoapInAdime && (
         <div style={{
-          position: 'fixed', top: 120, right: 20,
-          width: 300, height: 'calc(100vh - 160px)',
+          position: 'fixed', top: 120,
+          right: isCompact ? 12 : 20,
+          left: isCompact ? 12 : undefined,
+          width: isCompact ? 'auto' : 300, height: 'calc(100vh - 160px)',
           background: '#ffffff', borderRadius: 12,
           border: '1px solid #e5e7eb', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           display: 'flex', flexDirection: 'column', zIndex: 100, overflow: 'hidden'

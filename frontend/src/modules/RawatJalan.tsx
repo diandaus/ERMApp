@@ -382,11 +382,11 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                     <span style={{
                       display: 'inline-block',
                       padding: '3px 10px',
-                      borderRadius: 6,
+                      borderRadius: 2,
                       border: '1px solid #1AB1E5',
                       color: '#1AB1E5',
                       cursor: 'pointer',
-                      fontWeight: 500,
+                      fontWeight: 400,
                       fontSize: 11,
                       background: '#f0faff'
                     }}>
@@ -490,11 +490,11 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                     <span style={{
                       display: 'inline-block',
                       padding: '3px 10px',
-                      borderRadius: 6,
+                      borderRadius: 2,
                       border: '1px solid #1AB1E5',
                       color: '#1AB1E5',
                       cursor: 'pointer',
-                      fontWeight: 500,
+                      fontWeight: 400,
                       fontSize: 11,
                       background: '#f0faff'
                     }}>

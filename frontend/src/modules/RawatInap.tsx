@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { PemeriksaanRanapView } from './PemeriksaanRanap';
+import { localDateStr } from '../utils/date';
 
 type Patient = {
   no_rawat: string;
@@ -31,8 +32,8 @@ type Patient = {
 export const RawatInapView: React.FC = () => {
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
-  const [tglDari, setTglDari] = React.useState<string>(new Date().toISOString().split('T')[0]);
-  const [tglSampai, setTglSampai] = React.useState<string>(new Date().toISOString().split('T')[0]);
+  const [tglDari, setTglDari] = React.useState<string>(localDateStr());
+  const [tglSampai, setTglSampai] = React.useState<string>(localDateStr());
   const [activeTab, setActiveTab] = React.useState<'belum-pulang' | 'pulang'>('belum-pulang');
   const [patients, setPatients] = React.useState<Patient[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
@@ -131,7 +132,7 @@ export const RawatInapView: React.FC = () => {
                 color: activeTab === 'belum-pulang' ? '#111827' : '#6b7280',
                 cursor: 'pointer',
                 fontSize: 13,
-                fontWeight: activeTab === 'belum-pulang' ? 500 : 400,
+                fontWeight: 400,
                 transition: 'all 0.2s ease',
                 boxShadow: activeTab === 'belum-pulang' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
                 whiteSpace: 'nowrap'
@@ -150,7 +151,7 @@ export const RawatInapView: React.FC = () => {
                 color: activeTab === 'pulang' ? '#111827' : '#6b7280',
                 cursor: 'pointer',
                 fontSize: 13,
-                fontWeight: activeTab === 'pulang' ? 500 : 400,
+                fontWeight: 400,
                 transition: 'all 0.2s ease',
                 boxShadow: activeTab === 'pulang' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
                 whiteSpace: 'nowrap'
@@ -389,12 +390,12 @@ export const RawatInapView: React.FC = () => {
               <tr>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Nama Pasien</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Diagnosa</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Rawat</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Kamar</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tanggal Masuk</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tanggal Keluar</th>
-                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Jenis Bayar</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>DPJP</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Jenis Bayar</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tgl. Masuk</th>
+                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Diagnosa</th>
               </tr>
             </thead>
             <tbody>
@@ -460,11 +461,11 @@ export const RawatInapView: React.FC = () => {
                         <span style={{
                           display: 'inline-block',
                           padding: '3px 10px',
-                          borderRadius: 6,
+                          borderRadius: 2,
                           border: '1px solid #2563eb',
                           color: '#ffffff',
                           cursor: 'pointer',
-                          fontWeight: 700,
+                          fontWeight: 400,
                           fontSize: 11,
                           background: '#2563eb'
                         }}>
@@ -477,20 +478,20 @@ export const RawatInapView: React.FC = () => {
                         </div>
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
-                        {patient.diagnosa_awal || '-'}
+                        {patient.no_rawat}
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>{patient.kamar}</td>
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
-                        {formatDate(patient.tgl_masuk)}
-                      </td>
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
-                        {formatDate(patient.tgl_keluar)}
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
+                        <span style={{ fontSize: 12, color: '#374151' }}>{patient.nm_dokter}</span>
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.png_jawab || '-'}
                       </td>
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
-                        <span style={{ fontSize: 12, color: '#374151' }}>{patient.nm_dokter}</span>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
+                        {formatDate(patient.tgl_masuk)}
+                      </td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
+                        {patient.diagnosa_awal || '-'}
                       </td>
                     </tr>
                   );

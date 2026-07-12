@@ -145,7 +145,7 @@
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
   box-sizing: border-box;
@@ -167,7 +167,7 @@
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
   box-sizing: border-box;
@@ -194,7 +194,7 @@
 /* Search Obat Input */
 .search-obat-wrapper input.form-control {
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   padding: 9px 12px 9px 38px;
   box-shadow: none;
@@ -219,7 +219,7 @@
 /* Buttons */
 .btn {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: none;
   font-size: 14px;
   font-weight: 500;

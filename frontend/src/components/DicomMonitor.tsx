@@ -1,4 +1,5 @@
 import React from 'react';
+import { localDateStr } from '../utils/date';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ type Props = {
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr();
 }
 
 function StatusBadge({ done, label }: { done: boolean; label: string }) {

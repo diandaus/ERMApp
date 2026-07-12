@@ -55,6 +55,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
   const [lastSoapie, setLastSoapie] = React.useState<any>(null); // Riwayat SOAPIE terakhir
   const [loadingLastSoapie, setLoadingLastSoapie] = React.useState(false);
   const [showResepModal, setShowResepModal] = React.useState(false);
+  const [editingResep, setEditingResep] = React.useState<{ no_resep: string; items: any[]; racikan?: any[] } | null>(null);
   const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
@@ -1061,6 +1062,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
 
       // Jika user klik "Input Resep", tampilkan modal resep
       if (result.isConfirmed) {
+        setEditingResep(null);
         setShowResepModal(true);
       }
     } catch (err: any) {
@@ -3261,325 +3263,125 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
 
             {activeTab === 'resep' && (
               <>
-                {/* Header dengan tombol aksi - di luar card */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 16,
-                  position: 'sticky',
-                  top: 0,
-                  background: '#f9fafb',
-                  padding: '12px 0',
-                  zIndex: 10,
-                  marginTop: -12
-                }}>
-                  <h4 style={{ margin: 0, color: '#1f2937', fontWeight: 600 }}></h4>
-                  <div style={{ display: 'flex', gap: 10 }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Riwayat Resep</h4>
+                  <div style={{ display: 'flex', gap: 8 }}>
                     <button
-                      onClick={() => setShowResepModal(true)}
-                      style={{
-                        padding: '8px 16px',
-                        background: '#1AB1E5',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        transition: 'transform 0.2s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      onClick={() => { setEditingResep(null); setShowResepModal(true); }}
+                      style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
                     >
-                      ➕ Input Resep
+                      + Input Resep
                     </button>
                     <button
                       onClick={fetchRiwayatResep}
                       disabled={loadingRiwayatResep}
-                      style={{
-                        padding: '8px 16px',
-                        background: '#ffffff',
-                        color: '#1AB1E5',
-                        border: '2px solid #1AB1E5',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        cursor: loadingRiwayatResep ? 'not-allowed' : 'pointer',
-                        opacity: loadingRiwayatResep ? 0.6 : 1,
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8
-                      }}
-                      onMouseEnter={(e) => !loadingRiwayatResep && (e.currentTarget.style.transform = 'translateY(-2px)')}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: loadingRiwayatResep ? 'not-allowed' : 'pointer', opacity: loadingRiwayatResep ? 0.6 : 1, fontSize: 13, fontWeight: 500 }}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="1 4 1 10 7 10"></polyline>
-                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                      </svg>
                       Refresh
                     </button>
                   </div>
                 </div>
 
-                <div style={{ background: '#ffffff', borderRadius: 12, padding: 24, border: '1px solid #e5e7eb' }}>
-
                 {/* Loading state */}
                 {loadingRiwayatResep && (
-                  <div style={{ textAlign: 'center', padding: 40 }}>
-                    <div style={{
-                      display: 'inline-block',
-                      width: 40,
-                      height: 40,
-                      border: '4px solid #f3f4f6',
-                      borderTop: '4px solid #1AB1E5',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite'
-                    }}></div>
-                    <p style={{ marginTop: 16, color: '#6b7280' }}>Memuat data resep...</p>
-                  </div>
+                  <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Memuat data resep...</div>
                 )}
 
                 {/* Empty state */}
                 {!loadingRiwayatResep && riwayatResep.length === 0 && (
-                  <div style={{
-                    padding: 20,
-                    background: '#fef3c7',
-                    border: '1px solid #fbbf24',
-                    borderRadius: 8,
-                    color: '#92400e'
-                  }}>
-                    <strong>ℹ️ Info:</strong> Belum ada permintaan resep hari ini untuk pasien ini.
+                  <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                    Belum ada permintaan resep hari ini untuk pasien ini
                   </div>
                 )}
 
                 {/* Daftar Resep */}
                 {!loadingRiwayatResep && riwayatResep.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    {riwayatResep.map((resep, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          border: '1px solid #e5e7eb',
-                          borderRadius: 12,
-                          overflow: 'hidden',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                        }}
-                      >
-                        {/* Header Resep */}
-                        <div style={{
-                          background: '#ffffff',
-                          padding: 16,
-                          borderBottom: '2px solid #e5e7eb'
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
-                              <span style={{ fontWeight: 600, fontSize: 15, color: '#1AB1E5' }}>
-                                📄 No. Resep: {resep.no_resep || '-'}
-                              </span>
-                              <span style={{ fontSize: 13, color: '#6b7280' }}>
-                                📅 {formatDateTime(resep.tgl_peresepan, resep.jam_peresepan || '')}
-                              </span>
-                              <span style={{ fontSize: 13, color: '#6b7280' }}>
-                                👨‍⚕️ {resep.nm_dokter || '-'}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {riwayatResep.map((resep, index) => {
+                      const belum = resep.status?.toString().trim().toLowerCase() === 'belum';
+                      const nonRacikan = resep.non_racikan || [];
+                      const racikan = resep.racikan || [];
+                      return (
+                        <div key={index} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${belum ? '#e5e7eb' : '#d1fae5'}`, overflow: 'hidden' }}>
+                          {/* Header card */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: belum ? '#f9fafb' : '#f0fdf4', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{resep.no_resep || '-'}</span>
+                              <span style={{ fontSize: 12, color: '#6b7280' }}>{formatDateTime(resep.tgl_peresepan, resep.jam_peresepan || '')}</span>
+                              {resep.nm_dokter && <span style={{ fontSize: 12, color: '#7c3aed' }}>{resep.nm_dokter}</span>}
                               {resep.status === 'retur' && (
-                                <span style={{
-                                  padding: '4px 12px',
-                                  background: '#ef4444',
-                                  color: 'white',
-                                  borderRadius: 6,
-                                  fontSize: 12,
-                                  fontWeight: 600
-                                }}>
-                                  ↩️ RETUR
-                                </span>
+                                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: '#fee2e2', color: '#991b1b' }}>Retur</span>
                               )}
                               <span style={{
-                                padding: '4px 12px',
-                                background: resep.status === 'belum' ? '#f59e0b' : '#10b981',
-                                color: 'white',
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600
+                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
+                                background: belum ? '#fef3c7' : '#d1fae5',
+                                color: belum ? '#92400e' : '#065f46'
                               }}>
-                                {resep.status === 'belum' ? '⏳ Belum Terlayani' : '✅ Sudah Terlayani'}
+                                {belum ? 'Belum Terlayani' : 'Sudah Terlayani'}
                               </span>
-
-                              {/* Tombol Delete - hanya muncul jika status belum diambil */}
-                              {resep.status?.toString().trim().toLowerCase() === 'belum' && (
+                            </div>
+                            {belum && (
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button
+                                  onClick={() => {
+                                    setEditingResep({
+                                      no_resep: resep.no_resep,
+                                      items: nonRacikan.map((it: any) => ({ ...it, aturan: it.aturan_pakai })),
+                                      racikan,
+                                    });
+                                    setShowResepModal(true);
+                                  }}
+                                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #1AB1E5', background: '#e0f2fe', color: '#1AB1E5', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                                >
+                                  Edit
+                                </button>
                                 <button
                                   onClick={() => handleDeleteResep(resep.no_resep)}
-                                  style={{
-                                    padding: '6px 12px',
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    fontSize: 12,
-                                    fontWeight: 500,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    transition: 'all 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
-                                  onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-                                  title="Hapus Resep"
+                                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
                                 >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="3 6 5 6 21 6"></polyline>
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                                  </svg>
                                   Hapus
                                 </button>
-                              )}
-                            </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Items */}
+                          <div style={{ padding: '10px 16px' }}>
+                            {nonRacikan.length > 0 && (
+                              <div style={{ marginBottom: racikan.length > 0 ? 10 : 0 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
+                                {nonRacikan.map((item: any, j: number) => (
+                                  <div key={j} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: j < nonRacikan.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4 }}>
+                                    <span style={{ flex: 1, fontWeight: 500 }}>{item.nama_brng || '-'}</span>
+                                    <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{item.jml || '-'}</span>
+                                    {item.aturan_pakai && <span style={{ color: '#7c3aed', whiteSpace: 'nowrap' }}>{item.aturan_pakai}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {racikan.length > 0 && racikan.map((rack: any, ri: number) => (
+                              <div key={ri} style={{ marginTop: ri > 0 ? 8 : 0 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Racikan — {rack.nama_racik || `R${ri + 1}`}
+                                  {rack.metode_racik && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.metode_racik}</span>}
+                                  {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
+                                  {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
+                                </div>
+                                {(rack.detail || []).map((det: any, di: number) => (
+                                  <div key={di} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: di < rack.detail.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4, paddingLeft: 8 }}>
+                                    <span style={{ flex: 1, fontWeight: 500 }}>{det.nama_brng || '-'}</span>
+                                    <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{det.jml || '-'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
                           </div>
                         </div>
-
-                        {/* Content Resep */}
-                        <div style={{ padding: 16 }}>
-                          {/* Non-Racikan */}
-                          {resep.non_racikan && resep.non_racikan.length > 0 && (
-                            <div style={{ marginBottom: 20 }}>
-                              <div style={{ marginBottom: 12 }}>
-                                <span style={{
-                                  background: 'rgba(26, 177, 229, 0.1)',
-                                  color: '#1AB1E5',
-                                  border: '1px solid #1AB1E5',
-                                  padding: '6px 12px',
-                                  borderRadius: 6,
-                                  fontWeight: 600,
-                                  fontSize: 14,
-                                  display: 'inline-block'
-                                }}>
-                                  💊 Non-Racikan
-                                </span>
-                              </div>
-                              <div style={{ overflowX: 'auto' }}>
-                                <table style={{
-                                  width: '100%',
-                                  borderCollapse: 'collapse',
-                                  fontSize: 14
-                                }}>
-                                  <thead>
-                                    <tr style={{ background: '#f3f4f6' }}>
-                                      <th style={{ padding: '10px 12px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>No</th>
-                                      <th style={{ padding: '10px 12px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Kode Obat</th>
-                                      <th style={{ padding: '10px 12px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Nama Obat</th>
-                                      <th style={{ padding: '10px 12px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Jumlah</th>
-                                      <th style={{ padding: '10px 12px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Aturan Pakai</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {resep.non_racikan.map((obat: any, idx: number) => (
-                                      <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                        <td style={{ padding: '10px 12px', border: '1px solid #e5e7eb' }}>{idx + 1}</td>
-                                        <td style={{ padding: '10px 12px', border: '1px solid #e5e7eb' }}>{obat.kode_brng || '-'}</td>
-                                        <td style={{ padding: '10px 12px', border: '1px solid #e5e7eb' }}>{obat.nama_brng || '-'}</td>
-                                        <td style={{ padding: '10px 12px', border: '1px solid #e5e7eb' }}>{obat.jml || '-'}</td>
-                                        <td style={{ padding: '10px 12px', border: '1px solid #e5e7eb' }}>{obat.aturan_pakai || '-'}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Racikan */}
-                          {resep.racikan && resep.racikan.length > 0 && (
-                            <div>
-                              <div style={{ marginBottom: 12 }}>
-                                <span style={{
-                                  background: 'rgba(26, 177, 229, 0.1)',
-                                  color: '#1AB1E5',
-                                  border: '1px solid #1AB1E5',
-                                  padding: '6px 12px',
-                                  borderRadius: 6,
-                                  fontWeight: 600,
-                                  fontSize: 14,
-                                  display: 'inline-block'
-                                }}>
-                                  🧪 Racikan
-                                </span>
-                              </div>
-                              {resep.racikan.map((racikan: any, rIdx: number) => (
-                                <div
-                                  key={rIdx}
-                                  style={{
-                                    marginBottom: 16,
-                                    border: '1px solid #e5e7eb',
-                                    borderRadius: 8,
-                                    overflow: 'hidden'
-                                  }}
-                                >
-                                  {/* Header Racikan */}
-                                  <div style={{
-                                    background: '#ffffff',
-                                    padding: 12,
-                                    borderBottom: '2px solid #e5e7eb'
-                                  }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
-                                      <span style={{ fontWeight: 600, fontSize: 14, color: '#0ea5e9' }}>
-                                        🧪 {racikan.nama_racik || `Racikan ${rIdx + 1}`}
-                                      </span>
-                                      <span style={{ color: '#6b7280' }}>📦 {racikan.metode_racik || '-'}</span>
-                                      <span style={{ color: '#6b7280' }}>💊 {racikan.jml_dr || '-'}</span>
-                                      <span style={{ color: '#6b7280' }}>📝 {racikan.aturan_pakai || '-'}</span>
-                                      {racikan.keterangan && (
-                                        <span style={{ color: '#6b7280' }}>📌 {racikan.keterangan}</span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Detail Obat Racikan */}
-                                  <div style={{ padding: 12 }}>
-                                    <div style={{ overflowX: 'auto' }}>
-                                      <table style={{
-                                        width: '100%',
-                                        borderCollapse: 'collapse',
-                                        fontSize: 13
-                                      }}>
-                                        <thead>
-                                          <tr style={{ background: '#f3f4f6' }}>
-                                            <th style={{ padding: '8px 10px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>No</th>
-                                            <th style={{ padding: '8px 10px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Kode Obat</th>
-                                            <th style={{ padding: '8px 10px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Nama Obat</th>
-                                            <th style={{ padding: '8px 10px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Kandungan</th>
-                                            <th style={{ padding: '8px 10px', textAlign: 'left', border: '1px solid #e5e7eb', fontWeight: 600 }}>Jumlah</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {racikan.detail && racikan.detail.map((detail: any, dIdx: number) => (
-                                            <tr key={dIdx} style={{ background: dIdx % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                                              <td style={{ padding: '8px 10px', border: '1px solid #e5e7eb' }}>{dIdx + 1}</td>
-                                              <td style={{ padding: '8px 10px', border: '1px solid #e5e7eb' }}>{detail.kode_brng || '-'}</td>
-                                              <td style={{ padding: '8px 10px', border: '1px solid #e5e7eb' }}>{detail.nama_brng || '-'}</td>
-                                              <td style={{ padding: '8px 10px', border: '1px solid #e5e7eb' }}>{detail.kandungan || '-'}</td>
-                                              <td style={{ padding: '8px 10px', border: '1px solid #e5e7eb' }}>{detail.jml || '-'}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
-              </div>
               </>
             )}
 
@@ -3598,17 +3400,19 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
       {showResepModal && (
         <ResepModal
           patient={patient}
-          onClose={() => setShowResepModal(false)}
+          editResep={editingResep || undefined}
+          onClose={() => { setShowResepModal(false); setEditingResep(null); }}
           onResepSaved={async () => {
             // Tutup modal resep
             setShowResepModal(false);
-            
+            setEditingResep(null);
+
             // Refresh data: riwayat resep dan SOAP history (karena RTL sudah terupdate di backend)
             await Promise.all([
               fetchRiwayatResep(),
               fetchSoapHistory()
             ]);
-            
+
             // Tampilkan notifikasi sukses
             await Swal.fire({
               icon: 'success',

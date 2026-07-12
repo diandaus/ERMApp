@@ -1,4 +1,5 @@
 import React from 'react';
+import { localDateStr } from '../utils/date';
 
 type RanapPatientMin = {
   no_rawat: string;
@@ -127,7 +128,7 @@ export const ResepRanapTab: React.FC<{ patient: RanapPatientMin }> = ({ patient 
   const [isAdding, setIsAdding] = React.useState(false);
 
   // Form state
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   const nowTime = new Date().toTimeString().slice(0, 5);
   const [tgl, setTgl] = React.useState(today);
   const [jam, setJam] = React.useState(nowTime);

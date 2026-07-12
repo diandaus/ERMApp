@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import { MenuUtamaView } from './MenuUtama';
 import { PemeriksaanView } from './Pemeriksaan';
 import { RawatInapView } from './RawatInap';
+import { KlaimInacbgView } from './KlaimInacbg';
 import { RegistrasiView } from './Registrasi';
 import { DisplayAntrianView } from './DisplayAntrian';
 import { DisplayAntrianPoliView } from './DisplayAntrianPoli';
@@ -14,6 +15,7 @@ import { SatuSehatView } from './SatuSehat';
 import { MappingSatuSehatView } from './MappingSatuSehat';
 import { PegawaiView } from './Pegawai';
 import { AdminView } from './Admin';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 type MenuKey =
   | 'menu-utama'
@@ -25,6 +27,7 @@ type MenuKey =
   | 'laboratorium'
   | 'farmasi'
   | 'kasir'
+  | 'klaim-inacbg'
   | 'kepegawaian'
   | 'anjungan-antrian'
   | 'rekam-medis'
@@ -117,7 +120,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         background: wallpaper?.login_wallpaper_url
           ? `linear-gradient(rgba(15,23,42,0.35), rgba(15,23,42,0.45)), center/cover no-repeat url(${wallpaper.login_wallpaper_url})`
           : 'radial-gradient(circle at top left, #eff6ff 0, #e0f2fe 40%, #eef2ff 100%)',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        fontFamily: 'Tahoma, Geneva, sans-serif',
+        fontSize: 14
       }}
     >
       <div
@@ -743,11 +747,11 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                       style={{
                         display: 'inline-block',
                         padding: '3px 10px',
-                        borderRadius: 6,
+                        borderRadius: 2,
                         border: '1px solid #2563eb',
                         color: '#ffffff',
                         cursor: 'pointer',
-                        fontWeight: 700,
+                        fontWeight: 400,
                         fontSize: 11,
                         background: '#2563eb'
                       }}
@@ -761,7 +765,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                       onClick={() => handleCallPatient(p)}
                       style={{
                         padding: '4px 8px',
-                        borderRadius: 6,
+                        borderRadius: 2,
                         border: '1px solid #2563eb',
                         background: '#ffffff',
                         color: '#2563eb',
@@ -812,7 +816,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                         }}
                         style={{
                           padding: '4px 8px',
-                          borderRadius: 6,
+                          borderRadius: 2,
                           border: '1px solid #2563eb',
                           background: '#ffffff',
                           color: '#2563eb',
@@ -854,7 +858,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                             transform: suratDropdownPos.alignBottom ? 'translateY(-100%)' : 'none',
                             background: '#ffffff',
                             border: '1px solid #e5e7eb',
-                            borderRadius: 8,
+                            borderRadius: 2,
                             boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                             zIndex: 9999,
                             minWidth: 220
@@ -1092,11 +1096,11 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                       style={{
                         display: 'inline-block',
                         padding: '3px 10px',
-                        borderRadius: 6,
+                        borderRadius: 2,
                         border: '1px solid #2563eb',
                         color: '#ffffff',
                         cursor: 'pointer',
-                        fontWeight: 700,
+                        fontWeight: 400,
                         fontSize: 11,
                         background: '#2563eb'
                       }}
@@ -1135,7 +1139,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                         }}
                         style={{
                           padding: '4px 8px',
-                          borderRadius: 6,
+                          borderRadius: 2,
                           border: '1px solid #2563eb',
                           background: '#ffffff',
                           color: '#2563eb',
@@ -1177,7 +1181,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                             transform: suratDropdownPos.alignBottom ? 'translateY(-100%)' : 'none',
                             background: '#ffffff',
                             border: '1px solid #e5e7eb',
-                            borderRadius: 8,
+                            borderRadius: 2,
                             boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                             zIndex: 9999,
                             minWidth: 220
@@ -1378,6 +1382,8 @@ export const App: React.FC = () => {
   const [health, setHealth] = React.useState<string>('Belum cek');
   const [loadingHealth, setLoadingHealth] = React.useState<boolean>(false);
   const [selectedPatientForExam, setSelectedPatientForExam] = React.useState<any | null>(null);
+  const { isCompact } = useBreakpoint();
+  const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(false);
   const [showUserMenu, setShowUserMenu] = React.useState<boolean>(false);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
   const [displayType, setDisplayType] = React.useState<string | null>(null);
@@ -1484,6 +1490,7 @@ export const App: React.FC = () => {
       )
     },
     { key: 'kasir', label: 'Kasir', icon: '💳' },
+    { key: 'klaim-inacbg', label: 'Klaim INACBG', icon: '🧾' },
     { key: 'kepegawaian', label: 'Kepegawaian', icon: '👥' },
     { key: 'anjungan-antrian', label: 'Anjungan & Antrian', icon: '🎫' },
     { key: 'rekam-medis', label: 'Rekam Medis', icon: '📁' },
@@ -1592,7 +1599,7 @@ export const App: React.FC = () => {
       case 'farmasi':
         return menu === 'menu-utama' || menu === 'farmasi' || menu === 'laporan';
       case 'kasir':
-        return menu === 'menu-utama' || menu === 'kasir' || menu === 'laporan';
+        return menu === 'menu-utama' || menu === 'kasir' || menu === 'klaim-inacbg' || menu === 'laporan';
       case 'admin':
       default:
         return true;
@@ -1661,6 +1668,8 @@ export const App: React.FC = () => {
             <p style={{ color: '#6b7280' }}>Billing pasien, pembayaran, dan rekapitulasi kas harian.</p>
           </section>
         );
+      case 'klaim-inacbg':
+        return <KlaimInacbgView />;
       case 'radiologi':
         return (
           <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
@@ -1723,12 +1732,21 @@ export const App: React.FC = () => {
   return (
     <div
       style={{
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontFamily: 'Tahoma, Geneva, sans-serif',
+        fontSize: 14,
         background: '#F9FAFB',
         minHeight: '100vh',
         display: 'flex'
       }}
     >
+      {/* Overlay drawer sidebar, hanya muncul di layar compact (tablet portrait) saat dibuka */}
+      {isCompact && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 40 }}
+        />
+      )}
+
       {/* Sidebar 2901,2996*/}
       <aside
         style={{
@@ -1738,9 +1756,21 @@ export const App: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           padding: '16px 14px',
-          position: 'sticky',
-          top: 0,
-          height: '100vh'
+          height: '100vh',
+          ...(isCompact
+            ? {
+                position: 'fixed' as const,
+                top: 0,
+                left: 0,
+                zIndex: 50,
+                boxShadow: '2px 0 16px rgba(0,0,0,0.2)',
+                transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+                transition: 'transform 0.25s ease'
+              }
+            : {
+                position: 'sticky' as const,
+                top: 0
+              })
         }}
       >
         <div style={{ padding: '10px 10px 20px 10px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1765,7 +1795,10 @@ export const App: React.FC = () => {
             return (
               <button
                 key={item.key}
-                onClick={() => setActiveMenu(item.key)}
+                onClick={() => {
+                  setActiveMenu(item.key);
+                  if (isCompact) setSidebarOpen(false);
+                }}
                 style={{
                   width: '100%',
                   textAlign: 'left',
@@ -1777,7 +1810,7 @@ export const App: React.FC = () => {
                   color: active ? '#ffffff' : '#000000',
                   cursor: 'pointer',
                   fontSize: 13,
-                  fontWeight: active ? 600 : 400,
+                  fontWeight: 400,
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -1831,9 +1864,32 @@ export const App: React.FC = () => {
             background: '#F9FAFB',
             position: 'sticky',
             top: 0,
-            zIndex: 10
+            zIndex: 10,
+            gap: 12
           }}
         >
+          {isCompact && (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Buka menu"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="7" x2="20" y2="7"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="4" y1="17" x2="20" y2="17"></line>
+              </svg>
+            </button>
+          )}
           <div style={{ position: 'relative', width: 250 }}>
             <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

@@ -1,5 +1,6 @@
 import React from 'react';
 import DicomMonitor from '../components/DicomMonitor';
+import { localDateStr } from '../utils/date';
 
 type TabKey = 'dashboard' | 'konfigurasi' | 'pasien' | 'imaging-study' | 'log';
 
@@ -157,8 +158,8 @@ export const SatuSehatView: React.FC = () => {
 
   // ImagingStudy state
   const [isSubTab, setIsSubTab] = React.useState<'daftar' | 'mapping' | 'monitor'>('daftar');
-  const [isTglDari, setIsTglDari] = React.useState(new Date().toISOString().split('T')[0]);
-  const [isTglSampai, setIsTglSampai] = React.useState(new Date().toISOString().split('T')[0]);
+  const [isTglDari, setIsTglDari] = React.useState(localDateStr());
+  const [isTglSampai, setIsTglSampai] = React.useState(localDateStr());
   const [isStatusFilter, setIsStatusFilter] = React.useState('');
   const [imagingList, setImagingList] = React.useState<ImagingStudyItem[]>([]);
   const [imagingLoading, setImagingLoading] = React.useState(false);

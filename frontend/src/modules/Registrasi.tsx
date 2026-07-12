@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { ModalRegistrasi } from '../components/ModalRegistrasi';
+import { localDateStr } from '../utils/date';
 
 type Patient = {
   no_reg: string;
@@ -56,8 +57,8 @@ type PatientBrief = {
 export const RegistrasiView: React.FC = () => {
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
-  const [tglDari, setTglDari] = React.useState<string>(new Date().toISOString().split('T')[0]);
-  const [tglSampai, setTglSampai] = React.useState<string>(new Date().toISOString().split('T')[0]);
+  const [tglDari, setTglDari] = React.useState<string>(localDateStr());
+  const [tglSampai, setTglSampai] = React.useState<string>(localDateStr());
   const [activeTab, setActiveTab] = React.useState<'registrasi-awal' | 'rujukaninternal-poli'>('registrasi-awal');
   const [patients, setPatients] = React.useState<Patient[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);

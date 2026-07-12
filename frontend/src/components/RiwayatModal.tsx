@@ -23,23 +23,29 @@ const cellStyle: React.CSSProperties = {
   padding: '6px 8px',
   verticalAlign: 'top',
   fontSize: 13,
+  wordBreak: 'break-word',
 };
 
-const labelCellStyle: React.CSSProperties = { ...cellStyle, width: '20%' };
+const labelCellStyle: React.CSSProperties = { ...cellStyle, width: '14%' };
 const colonCellStyle: React.CSSProperties = { ...cellStyle, width: '1%', textAlign: 'center' };
-const valueCellStyle: React.CSSProperties = { ...cellStyle, width: '79%' };
+const valueCellStyle: React.CSSProperties = { ...cellStyle, width: '85%' };
 const headerCellStyle: React.CSSProperties = { ...cellStyle, background: '#eee', fontWeight: 600, textAlign: 'center' };
-const noBorderCellStyle: React.CSSProperties = { padding: '4px 6px', fontSize: 13, verticalAlign: 'top' };
+const noBorderCellStyle: React.CSSProperties = { padding: '4px 6px', fontSize: 13, verticalAlign: 'top', wordBreak: 'break-word' };
 
+// table-layout: fixed — kolom mengikuti lebar % yang diberikan alih-alih melebar
+// mengikuti konten (mis. teks panjang tanpa spasi), yang tadinya bikin tabel
+// bertingkat (Awal Medis IGD, dll) meluber ke luar layar di layar sempit.
 const tableStyle: React.CSSProperties = {
   width: '100%',
   borderCollapse: 'collapse',
   marginBottom: 20,
+  tableLayout: 'fixed',
 };
 
 const nestedTableStyle: React.CSSProperties = {
   width: '100%',
   borderCollapse: 'collapse',
+  tableLayout: 'fixed',
 };
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -203,7 +209,7 @@ const renderAwalMedisIGD = (list: any[]) => {
             <tr>
               <td style={cellStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>YANG MELAKUKAN PENGKAJIAN</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                   <tbody>
                     <tr>
                       <td style={noBorderCellStyle}>Tanggal : {d.tanggal}</td>
@@ -217,7 +223,7 @@ const renderAwalMedisIGD = (list: any[]) => {
             <tr>
               <td style={cellStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>I. RIWAYAT KESEHATAN</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                   <tbody>
                     <tr><td colSpan={2} style={noBorderCellStyle}>Keluhan Utama : {d.keluhan_utama}</td></tr>
                     <tr><td colSpan={2} style={noBorderCellStyle}>Riwayat Penyakit Sekarang : {d.rps}</td></tr>
@@ -236,7 +242,7 @@ const renderAwalMedisIGD = (list: any[]) => {
             <tr>
               <td style={cellStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>II. PEMERIKSAAN FISIK</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                   <tbody>
                     <tr>
                       <td style={noBorderCellStyle}>Keadaan Umum : {d.keadaan}</td>
@@ -283,7 +289,7 @@ const renderAwalMedisIGD = (list: any[]) => {
             <tr>
               <td style={cellStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>IV. PEMERIKSAAN PENUNJANG</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                   <tbody>
                     <tr>
                       <td style={noBorderCellStyle}>EKG : {d.ekg}</td>
@@ -320,8 +326,8 @@ const renderPemeriksaanTable = (list: any[]) => {
     <table style={nestedTableStyle}>
       <tbody>
         <tr>
-          <td style={{ ...headerCellStyle, width: '4%' }}>No.</td>
-          <td style={{ ...headerCellStyle, width: '15%' }}>Tanggal</td>
+          <td style={{ ...headerCellStyle, width: '2%' }}>No.</td>
+          <td style={{ ...headerCellStyle, width: '12%' }}>Tanggal</td>
           <td colSpan={7} style={headerCellStyle}>Dokter/Paramedis</td>
           <td colSpan={3} style={headerCellStyle}>Profesi/Jabatan/Departemen</td>
         </tr>
@@ -352,8 +358,8 @@ const renderPemeriksaanTable = (list: any[]) => {
             <tr>
               <td style={cellStyle}></td>
               <td style={cellStyle}></td>
-              {['Suhu(C)', 'Tensi', 'Nadi(/menit)', 'Respirasi(/menit)', 'Tinggi(Cm)', 'Berat(Kg)', 'SpO2(%)', 'GCS(E,V,M)', 'Kesadaran', 'L.P.(Cm)'].map((h) => (
-                <td key={h} style={headerCellStyle}>{h}</td>
+              {['Suhu(C)', 'Tensi', 'Nadi(/menit)', 'RR(/menit)', 'Tinggi(Cm)', 'Berat(Kg)', 'SpO2(%)', 'GCS(E,V,M)', 'Kesadaran', 'L.P.(Cm)'].map((h) => (
+                <td key={h} style={{ ...headerCellStyle, fontWeight: 400 }}>{h}</td>
               ))}
             </tr>
             <tr>
@@ -722,20 +728,15 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
-      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000 }}
     >
-      <div
-        style={{ background: '#fff', borderRadius: 8, width: '95%', maxWidth: 1400, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#374151' }}>Riwayat Perawatan</h3>
           <button
             type="button"
             onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 14, display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}
+            style={{ background: '#6b7280', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#ffffff', fontSize: 14, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px' }}
           >
             <span style={{ fontSize: 18, lineHeight: 1 }}>×</span> Tutup
           </button>
@@ -832,7 +833,6 @@ export const RiwayatModal: React.FC<RiwayatModalProps> = ({ patient, onClose }) 
             </>
           )}
         </div>
-      </div>
     </div>
   );
 };
