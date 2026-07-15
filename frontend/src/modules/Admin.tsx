@@ -47,8 +47,7 @@ const BRIDGING_DEFS: ServiceDef[] = [
       { key: 'URL', label: 'URL / Base URL', type: 'url', placeholder: 'https://apijkn.bpjs-kesehatan.go.id/mobilejkn/' },
       { key: 'CONSID', label: 'Consumer ID', type: 'text' },
       { key: 'SECRETKEY', label: 'Secret Key', type: 'secret' },
-      { key: 'USERNAME', label: 'Username', type: 'text' },
-      { key: 'PASSWORD', label: 'Password', type: 'secret' },
+      { key: 'USERKEY', label: 'User Key', type: 'secret' },
     ],
   },
   {
