@@ -98,9 +98,9 @@ func hfisRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map[s
 	if err != nil {
 		return nil, fmt.Errorf("gagal dekripsi respon HFIS: %w", err)
 	}
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(decrypted), &result); err != nil {
-		return nil, fmt.Errorf("hasil dekripsi bukan JSON valid: %w", err)
+	result, err := parseDecryptedJSON(decrypted)
+	if err != nil {
+		return nil, err
 	}
 	return result, nil
 }

@@ -515,11 +515,25 @@ func vclaimRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map
 	if err != nil {
 		return nil, fmt.Errorf("gagal dekripsi respon BPJS: %w", err)
 	}
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(decrypted), &result); err != nil {
-		return nil, fmt.Errorf("hasil dekripsi bukan JSON valid: %w", err)
+	return parseDecryptedJSON(decrypted)
+}
+
+// parseDecryptedJSON mem-parse hasil dekripsi (yang sudah didekompresi
+// LZString) sebagai JSON. Sebagian endpoint VClaim/HFIS mengembalikan objek
+// ({"list":[...], ...}) tapi sebagian lain (mis. antrean/pendaftaran/aktif)
+// mengembalikan ARRAY polos di root — dibungkus jadi {"list": [...]} supaya
+// pemanggil (yang selalu mengharapkan map[string]interface{}, dan frontend
+// yang selalu membaca field "list") tetap konsisten untuk kedua bentuk.
+func parseDecryptedJSON(decrypted string) (map[string]interface{}, error) {
+	var asMap map[string]interface{}
+	if err := json.Unmarshal([]byte(decrypted), &asMap); err == nil {
+		return asMap, nil
 	}
-	return result, nil
+	var asArray []interface{}
+	if err := json.Unmarshal([]byte(decrypted), &asArray); err == nil {
+		return map[string]interface{}{"list": asArray}, nil
+	}
+	return nil, fmt.Errorf("hasil dekripsi bukan JSON valid: %s", decrypted)
 }
 
 // sendSepToBpjs mengirim data SEP lokal ke BPJS VClaim (Insert SEP).
