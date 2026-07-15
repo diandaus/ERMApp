@@ -5,11 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
-	"crypto/md5"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -420,18 +418,19 @@ func vclaimSignature(consID, secretKey, timestamp string) string {
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// vclaimDecryptKey menurunkan key AES dari MD5(consID+secretKey+timestamp) —
-// hasil MD5 dipakai sebagai STRING HEX 32 karakter (bukan raw bytes), sesuai
-// skema yang didokumentasikan BPJS di seluruh SDK resminya.
-func vclaimDecryptKey(consID, secretKey, timestamp string) []byte {
-	sum := md5.Sum([]byte(consID + secretKey + timestamp))
-	return []byte(hex.EncodeToString(sum[:]))
-}
-
-// vclaimDecrypt mendekripsi field "response" (base64 AES-256-CBC, IV nol,
-// padding PKCS7) yang dikembalikan API VClaim.
+// vclaimDecrypt mendekripsi field "response" (base64 AES-256-CBC, padding
+// PKCS7) yang dikembalikan API VClaim/HFIS, lalu mendekompresi hasilnya
+// (format LZString — BPJS mengompres JSON sebelum dienkripsi, jadi plaintext
+// AES bukan JSON siap pakai). Key = 32 byte mentah dari
+// SHA-256(consID+secretKey+timestamp); IV = 16 byte pertama dari digest
+// SHA-256 yang sama — dikonfirmasi dari implementasi PHP (mlite) yang
+// terbukti berhasil di production, BUKAN dari skema MD5+IV-nol yang
+// sebelumnya dipakai di sini (salah, menyebabkan hasil dekripsi acak).
 func vclaimDecrypt(cipherB64, consID, secretKey, timestamp string) (string, error) {
-	key := vclaimDecryptKey(consID, secretKey, timestamp)
+	sum := sha256.Sum256([]byte(consID + secretKey + timestamp))
+	key := sum[:]
+	iv := sum[:aes.BlockSize]
+
 	ciphertext, err := base64.StdEncoding.DecodeString(cipherB64)
 	if err != nil {
 		return "", fmt.Errorf("gagal decode base64: %w", err)
@@ -443,7 +442,6 @@ func vclaimDecrypt(cipherB64, consID, secretKey, timestamp string) (string, erro
 	if len(ciphertext)%aes.BlockSize != 0 {
 		return "", errors.New("panjang ciphertext tidak valid")
 	}
-	iv := make([]byte, aes.BlockSize) // IV nol, sesuai skema resmi BPJS
 	mode := cipher.NewCBCDecrypter(block, iv)
 	plain := make([]byte, len(ciphertext))
 	mode.CryptBlocks(plain, ciphertext)
@@ -456,14 +454,19 @@ func vclaimDecrypt(cipherB64, consID, secretKey, timestamp string) (string, erro
 	if padLen > 0 && padLen <= aes.BlockSize && padLen <= len(plain) {
 		plain = plain[:len(plain)-padLen]
 	}
-	return string(plain), nil
+
+	decompressed, err := lzDecompressFromEncodedURIComponent(string(plain))
+	if err != nil {
+		return "", fmt.Errorf("gagal dekompresi LZString: %w", err)
+	}
+	return decompressed, nil
 }
 
 // vclaimRequest melakukan request ke endpoint VClaim dan mendekripsi field
 // "response" pada body hasil. method: "GET" atau "POST". path relatif
 // terhadap base URL (mis. "/SEP/2.0.0" untuk Insert SEP, tanpa slash awal).
 func vclaimRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map[string]interface{}, error) {
-	timestamp := strconv.FormatInt(time.Now().Unix()-1420070400, 10) // epoch offset ala VClaim (detik sejak 1 Jan 2015)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10) // Unix timestamp polos (detik sejak 1 Jan 1970), sesuai skema resmi VClaim
 	signature := vclaimSignature(cfg.ConsID, cfg.SecretKey, timestamp)
 
 	url := cfg.URL + "/" + strings.TrimLeft(path, "/")

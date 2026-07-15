@@ -39,7 +39,7 @@ func getHfisConfig(db *sql.DB) (*vclaimConfig, error) {
 // skema kriptonya identik dengan VClaim, hanya bentuk amplop metadata-nya
 // yang berbeda.
 func hfisRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map[string]interface{}, error) {
-	timestamp := strconv.FormatInt(time.Now().Unix()-1420070400, 10)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10) // Unix timestamp polos, sesuai skema resmi VClaim/HFIS
 	signature := vclaimSignature(cfg.ConsID, cfg.SecretKey, timestamp)
 
 	url := cfg.URL + "/" + strings.TrimLeft(path, "/")
