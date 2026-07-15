@@ -366,15 +366,21 @@ export const AdminView: React.FC = () => {
     });
 
   const handleSaveBridging = async (kode: string) => {
-    const b = bridgingList.find(x => x.kode === kode);
-    if (!b) return;
+    // Kalau belum pernah tersimpan (belum ada baris di setting_bridging),
+    // bridgingList tidak akan punya entri untuk kode ini — pakai metadata
+    // statis dari BRIDGING_DEFS supaya penyimpanan pertama kali tetap jalan.
+    const existing = bridgingList.find(x => x.kode === kode);
+    const def = BRIDGING_DEFS.find(d => d.kode === kode);
+    if (!existing && !def) return;
+    const nama = existing?.nama ?? def!.nama;
+    const grp = existing?.grp ?? def!.grp;
     setSavingBridging(kode);
     try {
       const payload: BridgingConfig = {
-        kode: b.kode,
-        nama: b.nama,
-        grp: b.grp,
-        enabled: bridgingEnabled[kode] ?? b.enabled,
+        kode,
+        nama,
+        grp,
+        enabled: bridgingEnabled[kode] ?? existing?.enabled ?? true,
         config: bridgingDraft[kode] ?? {},
       };
       const res = await fetch('/api/admin/bridging', {
@@ -384,7 +390,7 @@ export const AdminView: React.FC = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
-      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: `Konfigurasi ${b.nama} berhasil disimpan`, confirmButtonColor: '#2563eb', timer: 1500, showConfirmButton: false });
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: `Konfigurasi ${nama} berhasil disimpan`, confirmButtonColor: '#2563eb', timer: 1500, showConfirmButton: false });
       await loadBridging();
     } catch (e) {
       Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });

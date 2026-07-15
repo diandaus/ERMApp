@@ -16,6 +16,26 @@ type BridgingConfig struct {
 	Config  map[string]string `json:"config"`
 }
 
+// ensureSettingBridgingTable membuat tabel setting_bridging kalau belum ada
+// (mis. instalasi Khanza yang belum punya migrasi ini) — dipakai Pengaturan
+// Bridging di Admin.tsx untuk menyimpan kredensial semua layanan bridging
+// (BPJS VClaim, HFIS/Mobile JKN, Satu Sehat, dll).
+func ensureSettingBridgingTable(db *sql.DB) error {
+	const createTable = `
+		CREATE TABLE IF NOT EXISTS setting_bridging (
+			kode VARCHAR(50) NOT NULL,
+			nama VARCHAR(100) NOT NULL,
+			grp VARCHAR(50) NOT NULL DEFAULT '',
+			enabled TINYINT(1) NOT NULL DEFAULT 1,
+			config TEXT NOT NULL DEFAULT '{}',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (kode)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+	`
+	_, err := db.Exec(createTable)
+	return err
+}
+
 func getBridgingConfigs(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rows, err := db.Query(`SELECT kode, nama, grp, enabled, COALESCE(config,'{}') FROM setting_bridging ORDER BY grp, kode`)

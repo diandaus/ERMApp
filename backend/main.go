@@ -753,6 +753,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel satu sehat: %v", err)
 	}
 
+	if err := ensureSettingBridgingTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel setting_bridging: %v", err)
+	}
+
 	if err := ensureBridgingPengajuanTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel bridging_pengajuan_penjaminan: %v", err)
 	}
