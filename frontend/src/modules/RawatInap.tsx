@@ -29,7 +29,21 @@ type Patient = {
   agama: string;
 };
 
-export const RawatInapView: React.FC = () => {
+type AppUser = {
+  username: string;
+  full_name: string;
+  role: string;
+};
+
+type RawatInapViewProps = {
+  user?: AppUser;
+};
+
+export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
+  // Untuk user role dokter, username = kd_dokter (konvensi AddUserModal saat
+  // membuat akun dari data dokter) — dipakai untuk membatasi hanya pasien
+  // yang dokter ini jadi DPJP-nya. Role lain (petugas dll) tetap lihat semua.
+  const isDokter = user?.role === 'dokter' && !!user?.username;
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
   const [tglDari, setTglDari] = React.useState<string>(localDateStr());
@@ -54,6 +68,9 @@ export const RawatInapView: React.FC = () => {
       if (searchText) {
         url += `&search=${encodeURIComponent(searchText)}`;
       }
+      if (isDokter) {
+        url += `&kd_dokter=${encodeURIComponent(user!.username)}`;
+      }
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -67,7 +84,7 @@ export const RawatInapView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, tglDari, tglSampai, searchText]);
+  }, [activeTab, tglDari, tglSampai, searchText, isDokter, user]);
 
   // Load data on mount and when filters change
   React.useEffect(() => {
@@ -93,7 +110,7 @@ export const RawatInapView: React.FC = () => {
   if (periksaPatient) {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
-        <PemeriksaanRanapView patient={periksaPatient} onBack={() => setPeriksaPatient(null)} />
+        <PemeriksaanRanapView patient={periksaPatient} onBack={() => setPeriksaPatient(null)} user={user} />
       </div>
     );
   }

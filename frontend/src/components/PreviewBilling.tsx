@@ -68,7 +68,7 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
           borderRadius: 20,
           padding: '35px 8px 8px 8px',
           position: 'relative',
-          maxWidth: 760,
+          maxWidth: 800,
           width: '85%',
           maxHeight: '90vh',
           display: 'flex',

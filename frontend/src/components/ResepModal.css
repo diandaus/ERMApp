@@ -483,6 +483,16 @@
   padding-right: 8px;
 }
 
+.g-1 {
+  margin-left: -4px;
+  margin-right: -4px;
+}
+
+.g-1 > * {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 .align-items-end {
   align-items: flex-end;
 }

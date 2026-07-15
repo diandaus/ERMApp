@@ -10,7 +10,8 @@ type MenuKey =
   | 'laboratorium'
   | 'farmasi'
   | 'kasir'
-  | 'klaim-inacbg'
+  | 'casemix'
+  | 'bridging'
   | 'kepegawaian'
   | 'anjungan-antrian'
   | 'rekam-medis'
@@ -107,11 +108,18 @@ export const MenuUtamaView: React.FC<MenuUtamaViewProps> = ({ user, setActiveMen
       category: 'klinik',
     },
     {
-      key: 'klaim-inacbg',
-      label: 'Klaim INACBG',
-      description: 'Pengajuan & verifikasi klaim INA-CBG BPJS',
-      icon: '🧾',
+      key: 'casemix',
+      label: 'Casemix',
+      description: 'Grouping, analisis casemix & klaim INA-CBG',
+      icon: '📦',
       category: 'klinik',
+    },
+    {
+      key: 'bridging',
+      label: 'Bridging',
+      description: 'Integrasi & bridging sistem eksternal (BPJS, SATUSEHAT, dll)',
+      icon: '🔗',
+      category: 'integrasi',
     },
     {
       key: 'kepegawaian',

@@ -289,43 +289,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
       if (!response.ok) throw new Error('Failed to fetch SOAP history');
       const data = await response.json();
 
-      // Filter hanya data hari ini
-      const today = new Date();
-      const todayYear = today.getFullYear();
-      const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
-      const todayDay = String(today.getDate()).padStart(2, '0');
-      const todayStr = `${todayYear}-${todayMonth}-${todayDay}`; // Format: YYYY-MM-DD
-
-      const filteredData = Array.isArray(data)
-        ? data.filter(item => {
-            if (!item.tgl_perawatan) return false;
-
-            // Handle berbagai format tanggal
-            let itemDate = '';
-            const tglPerawatan = item.tgl_perawatan;
-
-            if (tglPerawatan.includes('T')) {
-              // Format ISO: 2025-12-13T00:00:00+07:00
-              itemDate = tglPerawatan.split('T')[0];
-            } else if (tglPerawatan.match(/^\d{4}-\d{2}-\d{2}$/)) {
-              // Format YYYY-MM-DD
-              itemDate = tglPerawatan;
-            } else if (tglPerawatan.includes('/')) {
-              // Format DD/MM/YYYY
-              const parts = tglPerawatan.split('/');
-              if (parts.length === 3) {
-                const day = parts[0].padStart(2, '0');
-                const month = parts[1].padStart(2, '0');
-                const year = parts[2];
-                itemDate = `${year}-${month}-${day}`;
-              }
-            }
-
-            return itemDate === todayStr;
-          })
-        : [];
-
-      setSoapHistory(filteredData);
+      setSoapHistory(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching SOAP history:', err);
       setSoapHistory([]);
@@ -393,16 +357,16 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
     }
   };
 
-  // Fetch Riwayat Resep untuk tab Resep
+  // Fetch Riwayat Resep untuk tab Resep — dibatasi hanya untuk no_rawat kunjungan ini
   const fetchRiwayatResep = async () => {
     setLoadingRiwayatResep(true);
     try {
-      // Backend sudah filter hari ini secara default
-      const response = await fetch(`/api/resep/history/${encodeURIComponent(patient.no_rkm_medis)}?today=true`);
+      const response = await fetch(`/api/resep/history/${encodeURIComponent(patient.no_rkm_medis)}`);
       if (!response.ok) throw new Error('Failed to fetch riwayat resep');
       const data = await response.json();
 
-      setRiwayatResep(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setRiwayatResep(list.filter((r: any) => r.no_rawat === patient.no_rawat));
     } catch (err) {
       console.error('Error fetching riwayat resep:', err);
       setRiwayatResep([]);
@@ -1314,6 +1278,54 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
     return `${formattedDate} ${formattedTime}`;
   };
 
+  const handleKeluar = async () => {
+    // Jika ada data di Rincian Riwayat (SOAP history), update status menjadi "Sudah"
+    if (soapHistory && soapHistory.length > 0) {
+      try {
+        // Gunakan wildcard route, tidak perlu encode karena backend menggunakan *no_rawat
+        const response = await fetch(`/api/pendaftaran/update-status/${patient.no_rawat}`, {
+          method: 'PUT'
+        });
+
+        if (!response.ok) {
+          // Cek content type sebelum parse JSON
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              const errorData = await response.json();
+              console.error('Error updating status:', errorData);
+            } catch (jsonErr) {
+              const textResponse = await response.text();
+              console.error('Error updating status (text):', textResponse);
+            }
+          } else {
+            const textResponse = await response.text();
+            console.error('Error updating status (text):', textResponse);
+          }
+          // Tetap lanjutkan keluar meskipun update gagal
+        } else {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              const result = await response.json();
+              console.log('Status updated:', result);
+            } catch (jsonErr) {
+              console.log('Status updated (non-JSON response)');
+            }
+          } else {
+            console.log('Status updated (non-JSON response)');
+          }
+        }
+      } catch (err) {
+        console.error('Error updating status:', err);
+        // Tetap lanjutkan keluar meskipun update gagal
+      }
+    }
+
+    // Keluar dari halaman pemeriksaan
+    onBack();
+  };
+
   return (
     <section
       style={{
@@ -1608,53 +1620,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
         }}>
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151', lineHeight: '20px' }}>Pemeriksaan Rawat Jalan</h3>
           <button
-            onClick={async () => {
-              // Jika ada data di Rincian Riwayat (SOAP history), update status menjadi "Sudah"
-              if (soapHistory && soapHistory.length > 0) {
-                try {
-                  // Gunakan wildcard route, tidak perlu encode karena backend menggunakan *no_rawat
-                  const response = await fetch(`/api/pendaftaran/update-status/${patient.no_rawat}`, {
-                    method: 'PUT'
-                  });
-
-                  if (!response.ok) {
-                    // Cek content type sebelum parse JSON
-                    const contentType = response.headers.get('content-type');
-                    if (contentType && contentType.includes('application/json')) {
-                      try {
-                        const errorData = await response.json();
-                        console.error('Error updating status:', errorData);
-                      } catch (jsonErr) {
-                        const textResponse = await response.text();
-                        console.error('Error updating status (text):', textResponse);
-                      }
-                    } else {
-                      const textResponse = await response.text();
-                      console.error('Error updating status (text):', textResponse);
-                    }
-                    // Tetap lanjutkan keluar meskipun update gagal
-                  } else {
-                    const contentType = response.headers.get('content-type');
-                    if (contentType && contentType.includes('application/json')) {
-                      try {
-                        const result = await response.json();
-                        console.log('Status updated:', result);
-                      } catch (jsonErr) {
-                        console.log('Status updated (non-JSON response)');
-                      }
-                    } else {
-                      console.log('Status updated (non-JSON response)');
-                    }
-                  }
-                } catch (err) {
-                  console.error('Error updating status:', err);
-                  // Tetap lanjutkan keluar meskipun update gagal
-                }
-              }
-              
-              // Keluar dari halaman pemeriksaan
-              onBack();
-            }}
+            onClick={handleKeluar}
             style={{
               padding: '8px 16px',
               borderRadius: 8,
@@ -1676,7 +1642,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               e.currentTarget.style.background = '#1AB1E5';
             }}
           >
-            ← Keluar
+            Tutup
           </button>
         </div>
 
@@ -2699,7 +2665,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         padding: '10px 20px',
                         borderRadius: 8,
                         border: 'none',
-                        background: loading ? '#9ca3af' : '#10b981',
+                        background: loading ? '#9ca3af' : '#1AB1E5',
                         color: '#ffffff',
                         cursor: loading ? 'not-allowed' : 'pointer',
                         fontSize: 13,
@@ -2729,7 +2695,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         padding: '10px 20px',
                         borderRadius: 8,
                         border: 'none',
-                        background: '#f59e0b',
+                        background: '#6b7280',
                         color: '#ffffff',
                         cursor: 'pointer',
                         fontSize: 13,
@@ -2752,7 +2718,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         padding: '10px 20px',
                         borderRadius: 8,
                         border: 'none',
-                        background: '#1AB1E5',
+                        background: '#6b7280',
                         color: '#ffffff',
                         cursor: 'pointer',
                         fontSize: 13,
@@ -2778,7 +2744,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         padding: '10px 20px',
                         borderRadius: 8,
                         border: 'none',
-                        background: '#10b981',
+                        background: '#6b7280',
                         color: '#ffffff',
                         cursor: 'pointer',
                         fontSize: 13,
@@ -2804,7 +2770,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         padding: '10px 20px',
                         borderRadius: 8,
                         border: 'none',
-                        background: '#8b5cf6',
+                        background: '#6b7280',
                         color: '#ffffff',
                         cursor: 'pointer',
                         fontSize: 13,
@@ -2818,7 +2784,26 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
                       </svg>
-                      Rujuk Internal
+                      Rujuk
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleKeluar}
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: '#10b981',
+                        color: '#ffffff',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      Selesai
                     </button>
                   </div>
 
@@ -3062,7 +3047,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               display: 'inline-block',
                               background: '#1AB1E5',
                               color: 'white',
-                              padding: '2px 6px',
+                              padding: '4px 8px',
                               borderRadius: 3,
                               fontSize: 9,
                               fontWeight: 600
@@ -3087,7 +3072,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               display: 'inline-block',
                               background: '#f59e0b',
                               color: 'white',
-                              padding: '2px 6px',
+                              padding: '4px 8px',
                               borderRadius: 3,
                               fontSize: 9,
                               fontWeight: 600
@@ -3112,7 +3097,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               display: 'inline-block',
                               background: '#ef4444',
                               color: 'white',
-                              padding: '2px 6px',
+                              padding: '4px 8px',
                               borderRadius: 3,
                               fontSize: 9,
                               fontWeight: 600
@@ -3137,7 +3122,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               display: 'inline-block',
                               background: '#10b981',
                               color: 'white',
-                              padding: '2px 6px',
+                              padding: '4px 8px',
                               borderRadius: 3,
                               fontSize: 9,
                               fontWeight: 600
@@ -3163,7 +3148,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                 display: 'inline-block',
                                 background: '#6b7280',
                                 color: 'white',
-                                padding: '2px 6px',
+                                padding: '4px 8px',
                                 borderRadius: 3,
                                 fontSize: 9,
                                 fontWeight: 600
@@ -3190,7 +3175,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                 display: 'inline-block',
                                 background: '#14b8a6',
                                 color: 'white',
-                                padding: '2px 6px',
+                                padding: '4px 8px',
                                 borderRadius: 3,
                                 fontSize: 9,
                                 fontWeight: 600
@@ -3351,13 +3336,24 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                             {nonRacikan.length > 0 && (
                               <div style={{ marginBottom: racikan.length > 0 ? 10 : 0 }}>
                                 <div style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
-                                {nonRacikan.map((item: any, j: number) => (
-                                  <div key={j} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: j < nonRacikan.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4 }}>
-                                    <span style={{ flex: 1, fontWeight: 500 }}>{item.nama_brng || '-'}</span>
-                                    <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{item.jml || '-'}</span>
-                                    {item.aturan_pakai && <span style={{ color: '#7c3aed', whiteSpace: 'nowrap' }}>{item.aturan_pakai}</span>}
-                                  </div>
-                                ))}
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr style={{ background: '#f9fafb' }}>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Jml</th>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb', width: 160 }}>Aturan Pakai</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {nonRacikan.map((item: any, j: number) => (
+                                      <tr key={j}>
+                                        <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', fontWeight: 500, color: '#374151' }}>{item.nama_brng || '-'}</td>
+                                        <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{item.jml || '-'}</td>
+                                        <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#7c3aed' }}>{item.aturan_pakai || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
                               </div>
                             )}
                             {racikan.length > 0 && racikan.map((rack: any, ri: number) => (
@@ -3368,12 +3364,22 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
                                   {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
                                 </div>
-                                {(rack.detail || []).map((det: any, di: number) => (
-                                  <div key={di} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: di < rack.detail.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4, paddingLeft: 8 }}>
-                                    <span style={{ flex: 1, fontWeight: 500 }}>{det.nama_brng || '-'}</span>
-                                    <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{det.jml || '-'}</span>
-                                  </div>
-                                ))}
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr style={{ background: '#f9fafb' }}>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Jml</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(rack.detail || []).map((det: any, di: number) => (
+                                      <tr key={di}>
+                                        <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', fontWeight: 500, color: '#374151' }}>{det.nama_brng || '-'}</td>
+                                        <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{det.jml || '-'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
                               </div>
                             ))}
                           </div>

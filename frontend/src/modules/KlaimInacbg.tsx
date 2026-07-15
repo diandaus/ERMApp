@@ -18,7 +18,20 @@ type KlaimItem = {
 
 const formatRupiah = (n: number) => `Rp ${(n || 0).toLocaleString('id-ID')}`;
 
-export const KlaimInacbgView: React.FC = () => {
+type AppUser = {
+  username: string;
+  role: string;
+};
+
+type KlaimInacbgViewProps = {
+  user?: AppUser;
+};
+
+export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
+  // Untuk user role dokter, username = kd_dokter (konvensi AddUserModal saat
+  // membuat akun dari data dokter) — dipakai untuk membatasi hanya pasien
+  // yang dokter ini jadi DPJP-nya, tidak bisa melihat pasien dokter lain.
+  const isDokter = user?.role === 'dokter' && !!user?.username;
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
   const [showDpjpDropdown, setShowDpjpDropdown] = React.useState<boolean>(false);
@@ -32,6 +45,9 @@ export const KlaimInacbgView: React.FC = () => {
   const [editValue, setEditValue] = React.useState<string>('');
   const [saving, setSaving] = React.useState<boolean>(false);
   const [previewNoRawat, setPreviewNoRawat] = React.useState<string | null>(null);
+  // Default: tampilkan pasien yang belum pulang (tidak dibatasi tanggal masuk).
+  // Begitu user pilih rentang tanggal lewat Filter, mode ini otomatis nonaktif.
+  const [belumPulangOnly, setBelumPulangOnly] = React.useState<boolean>(true);
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
   const dpjpDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -39,9 +55,14 @@ export const KlaimInacbgView: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/klaim-inacbg/list?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
+      let url = belumPulangOnly
+        ? `/api/klaim-inacbg/list?status_pulang=belum`
+        : `/api/klaim-inacbg/list?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
       if (searchText) {
         url += `&search=${encodeURIComponent(searchText)}`;
+      }
+      if (isDokter) {
+        url += `&kd_dokter=${encodeURIComponent(user!.username)}`;
       }
       const response = await fetch(url);
       if (!response.ok) {
@@ -55,7 +76,7 @@ export const KlaimInacbgView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [tglDari, tglSampai, searchText]);
+  }, [belumPulangOnly, tglDari, tglSampai, searchText, isDokter, user]);
 
   React.useEffect(() => {
     fetchItems();
@@ -105,6 +126,7 @@ export const KlaimInacbgView: React.FC = () => {
     const akhir = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     setTglDari(localDateStr(awal));
     setTglSampai(localDateStr(akhir));
+    setBelumPulangOnly(false);
   };
 
   const setBulanLalu = () => {
@@ -113,6 +135,7 @@ export const KlaimInacbgView: React.FC = () => {
     const akhir = new Date(now.getFullYear(), now.getMonth(), 0);
     setTglDari(localDateStr(awal));
     setTglSampai(localDateStr(akhir));
+    setBelumPulangOnly(false);
   };
 
   const dpjpOptions = React.useMemo(() => {
@@ -171,6 +194,7 @@ export const KlaimInacbgView: React.FC = () => {
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Monitoring Biaya Klaim BPJS</h3>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!isDokter && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <label style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>Tampilkan DPJP:</label>
             <div ref={dpjpDropdownRef} style={{ position: 'relative' }}>
@@ -245,6 +269,7 @@ export const KlaimInacbgView: React.FC = () => {
               )}
             </div>
           </div>
+          )}
 
           <input
             type="text"
@@ -305,7 +330,7 @@ export const KlaimInacbgView: React.FC = () => {
                   <input
                     type="date"
                     value={tglDari}
-                    onChange={(e) => setTglDari(e.target.value)}
+                    onChange={(e) => { setTglDari(e.target.value); setBelumPulangOnly(false); }}
                     style={{
                       width: '100%',
                       padding: '6px 8px',
@@ -321,7 +346,7 @@ export const KlaimInacbgView: React.FC = () => {
                   <input
                     type="date"
                     value={tglSampai}
-                    onChange={(e) => setTglSampai(e.target.value)}
+                    onChange={(e) => { setTglSampai(e.target.value); setBelumPulangOnly(false); }}
                     style={{
                       width: '100%',
                       padding: '6px 8px',
@@ -360,10 +385,27 @@ export const KlaimInacbgView: React.FC = () => {
                     background: '#f3f4f6',
                     color: '#4b5563',
                     fontSize: 12,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    marginBottom: 6
                   }}
                 >
                   Bulan lalu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBelumPulangOnly(true)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #d1d5db',
+                    background: belumPulangOnly ? '#eff6ff' : '#f3f4f6',
+                    color: belumPulangOnly ? '#2563eb' : '#4b5563',
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Belum Pulang
                 </button>
               </div>
             )}

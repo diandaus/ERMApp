@@ -3,7 +3,6 @@ import Swal from 'sweetalert2';
 import { ResepModal } from '../components/ResepModal';
 import { ResepPulangModal } from '../components/ResepPulangModal';
 import { RiwayatModal } from '../components/RiwayatModal';
-import { RiwayatSoapieModal } from '../components/RiwayatSoapieModal';
 import { LabTab } from '../components/LabTab';
 import { RadTab } from '../components/RadTab';
 import { UploadTab } from '../components/UploadTab';
@@ -47,9 +46,16 @@ type RanapPatient = {
   kd_bangsal?: string;
 };
 
+type AppUser = {
+  username: string;
+  full_name: string;
+  role: string;
+};
+
 type PemeriksaanRanapProps = {
   patient: RanapPatient;
   onBack: () => void;
+  user?: AppUser;
 };
 
 const InfoItem: React.FC<{
@@ -76,7 +82,7 @@ const InfoItem: React.FC<{
   </div>
 );
 
-export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient, onBack }) => {
+export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient, onBack, user }) => {
   const localDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'adime' | 'resume' | 'upload'>('soap');
   const [adime, setAdime] = React.useState({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' });
@@ -104,7 +110,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   const [loadingResepPulang, setLoadingResepPulang] = React.useState(false);
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
-  const [showRiwayatSoapieModal, setShowRiwayatSoapieModal] = React.useState(false);
   const { isCompact } = useBreakpoint();
   // Grid form (S/O/A/P, ADIME) boleh tetap 2 kolom sampai lebih sempit dari breakpoint
   // shell/drawer di atas — sidebar sekarang selalu drawer jadi tidak makan lebar konten.
@@ -180,6 +185,16 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   const [soapNip, setSoapNip] = React.useState(() => '');
   const [soapPetugasNama, setSoapPetugasNama] = React.useState('');
   const [soapPetugasOpen, setSoapPetugasOpen] = React.useState(false);
+
+  // Isi kolom Pegawai otomatis dari user yang login — baik dokter maupun
+  // petugas, karena username akun = nip/kd_dokter (konvensi AddUserModal).
+  // Tetap bisa diganti manual lewat input/cari pegawai kalau diperlukan.
+  React.useEffect(() => {
+    if (user?.username) {
+      setSoapNip(user.username);
+      setSoapPetugasNama(user.full_name || '');
+    }
+  }, [user]);
 
   // Load history from localStorage
   React.useEffect(() => {
@@ -512,24 +527,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
     setEditingItem(item);
     setActiveTab('soap');
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-  };
-
-  const copySoapieToForm = (soapieData: any) => {
-    setForm({
-      subjective: soapieData.keluhan || '', objective: soapieData.pemeriksaan || '',
-      assessment: soapieData.penilaian || '', planning: soapieData.rtl || '',
-      evaluasi: soapieData.evaluasi || '', instruksi: soapieData.instruksi || '',
-      tensi: soapieData.tensi || '', suhu: soapieData.suhu_tubuh || '',
-      nadi: soapieData.nadi || '', respirasi: soapieData.respirasi || '',
-      tinggi: soapieData.tinggi || '', berat: soapieData.berat || '',
-      gcs: soapieData.gcs || '', kesadaran: soapieData.kesadaran || 'Compos Mentis',
-      alergi: soapieData.alergi || '',
-    });
-    setIsEditMode(false);
-    setEditingItem(null);
-    setActiveTab('soap');
-    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Data SOAPIE berhasil di-copy ke form', timer: 2000, showConfirmButton: false });
   };
 
   const deleteSOAP = async (item: any) => {
@@ -1055,15 +1052,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                           <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                         </svg>
                         Clear
-                      </button>
-                      <button type="button" onClick={() => setShowRiwayatSoapieModal(true)}
-                        style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-                        </svg>
-                        Riwayat SOAPIE
                       </button>
                       <button type="button" onClick={() => setShowRiwayatModal(true)}
                         style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
@@ -1751,13 +1739,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
         <RiwayatModal
           patient={patient}
           onClose={() => setShowRiwayatModal(false)}
-        />
-      )}
-      {showRiwayatSoapieModal && (
-        <RiwayatSoapieModal
-          patient={patient}
-          onClose={() => setShowRiwayatSoapieModal(false)}
-          onCopySoapie={copySoapieToForm}
         />
       )}
       <ModalCariPegawai

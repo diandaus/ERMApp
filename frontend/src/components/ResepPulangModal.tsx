@@ -1,6 +1,32 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import './ResepModal.css';
+
+type DropdownPos = { top: number; left: number; width: number };
+
+// Posisi dropdown dihitung dari wrapper input lalu di-render via portal ke
+// document.body (position: fixed), agar tidak terpotong overflow modal —
+// pola sama seperti ResepModal.tsx.
+function useDropdownPos(show: boolean): [React.RefObject<HTMLDivElement>, DropdownPos | null] {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState<DropdownPos | null>(null);
+  React.useEffect(() => {
+    if (!show) { setPos(null); return; }
+    const update = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      if (rect) setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [show]);
+  return [ref, pos];
+}
 
 type Props = {
   patient: any;
@@ -115,6 +141,10 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
   const [filteredNamaRac, setFilteredNamaRac] = React.useState<string[]>([]);
   const [showKetDD, setShowKetDD] = React.useState(false);
   const [filteredKet, setFilteredKet] = React.useState<string[]>([]);
+
+  // ── Posisi dropdown Cari Obat (portal) ──────────────────────────
+  const [obatWrapRef, obatDropdownPos] = useDropdownPos(showObatDropdown);
+  const [obatRacWrapRef, obatRacDropdownPos] = useDropdownPos(showObatDropdownRacikan);
 
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -334,71 +364,111 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
   return (
     <>
       {/* ── Main Modal ─────────────────────────────────────────── */}
-      <div className="modal-overlay">
-        <div className="modal-resep">
-          <div className="modal-header-resep">
-            <h5 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-              </svg>
+      <div
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1000, padding: 20,
+        }}
+        onClick={onClose}
+      >
+        <div
+          style={{
+            background: '#F3F4F6', borderRadius: 20, padding: '35px 8px 8px 8px',
+            position: 'relative', maxWidth: 850, width: '85%', maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div
+            style={{
+              position: 'absolute', top: 0, left: 0, right: 0,
+              padding: '8px 16px 8px 20px', display: 'flex',
+              alignItems: 'center', justifyContent: 'space-between',
+            }}
+          >
+            <span style={{ color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
               Resep Pulang
               <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>RANAP</span>
               — {patient.nm_pasien} ({patient.no_rkm_medis})
-            </h5>
-            <button onClick={onClose} className="btn-close-modal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}
+            >
+              &times;
             </button>
           </div>
 
-          <div className="modal-body-resep">
+          <div
+            style={{
+              background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db',
+              padding: 12, overflowY: 'auto', flex: 1, minHeight: 0,
+            }}
+          >
             {/* Tab Navigation */}
-            <ul className="nav nav-tabs mb-3">
-              <li className="nav-item">
-                <button type="button"
-                  className={`nav-link ${activeResepTab === 'non-racikan' ? 'active' : ''}`}
-                  onClick={() => setActiveResepTab('non-racikan')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="16" height="16" viewBox="-0.003 0 99.979 99.979" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="#EBECED" d="M92.869 7.105c9.478 9.476 9.478 24.832 0 34.308L41.411 92.869c-9.475 9.474-24.833 9.474-34.307 0-9.476-9.475-9.476-24.832 0-34.308L58.562 7.105c9.475-9.473 24.834-9.473 34.307 0z"/>
-                    <path fill="#3B97D3" d="M32.548 33.122L7.105 58.563c-9.476 9.476-9.476 24.833 0 34.308 9.474 9.475 24.832 9.475 34.307 0L66.85 67.43 32.548 33.122z"/>
-                    <path fill="#2086BF" d="M65.43 68.862L31.134 34.568l1.414-1.414 34.294 34.294z"/>
-                    <path fill="#55A6DC" d="M38.096 41.51L12.7 66.906a5.894 5.894 0 0 0 0 8.339 5.896 5.896 0 0 0 8.339 0l25.396-25.396-8.339-8.339z"/>
-                    <path fill="#EFF0F1" d="M75.244 12.7a5.897 5.897 0 0 0-8.343 0L39.51 40.096l8.339 8.339 27.396-27.396a5.899 5.899 0 0 0-.001-8.339z"/>
-                    <path fill="#4F9ED4" d="M47.862 48.444l-1.414 1.414-8.335-8.336 1.414-1.414z"/>
-                  </svg>
-                  Non Racikan {resepNonRacikan.length > 0 && <span className="badge bg-primary ms-1">{resepNonRacikan.length}</span>}
-                </button>
-              </li>
-              <li className="nav-item">
-                <button type="button"
-                  className={`nav-link ${activeResepTab === 'racikan' ? 'active' : ''}`}
-                  onClick={() => setActiveResepTab('racikan')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg fill="currentColor" width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13.51,19a4,4,0,0,0,4.61,1.9C19.87,20.37,21,18.68,21,16V7.15a4.39,4.39,0,0,0-2.79-4A4,4,0,0,0,13,7v3" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}/>
-                    <line x1="14.32" y1="12" x2="21" y2="12" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}/>
-                    <path d="M9,9a6,6,0,1,1-6,6A6,6,0,0,1,9,9ZM5,11l8,8" style={{ fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2 }}/>
-                  </svg>
-                  Racikan {racikanList.length > 0 && <span className="badge bg-success ms-1">{racikanList.length}</span>}
-                </button>
-              </li>
-            </ul>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
+              <button
+                type="button"
+                onClick={() => setActiveResepTab('non-racikan')}
+                style={{
+                  padding: '6px 24px',
+                  borderRadius: 8,
+                  border: activeResepTab === 'non-racikan' ? '1px solid #2563eb' : '1px solid transparent',
+                  background: activeResepTab === 'non-racikan' ? '#ffffff' : 'transparent',
+                  color: activeResepTab === 'non-racikan' ? '#2563eb' : '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: activeResepTab === 'non-racikan' ? 600 : 400,
+                  transition: 'all 0.2s ease',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                Non Racikan {resepNonRacikan.length > 0 && (
+                  <span style={{ fontSize: 11, background: '#2563eb', color: '#fff', borderRadius: 999, padding: '1px 7px', fontWeight: 600 }}>{resepNonRacikan.length}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveResepTab('racikan')}
+                style={{
+                  padding: '6px 24px',
+                  borderRadius: 8,
+                  border: activeResepTab === 'racikan' ? '1px solid #2563eb' : '1px solid transparent',
+                  background: activeResepTab === 'racikan' ? '#ffffff' : 'transparent',
+                  color: activeResepTab === 'racikan' ? '#2563eb' : '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: activeResepTab === 'racikan' ? 600 : 400,
+                  transition: 'all 0.2s ease',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                Racikan {racikanList.length > 0 && (
+                  <span style={{ fontSize: 11, background: '#16a34a', color: '#fff', borderRadius: 999, padding: '1px 7px', fontWeight: 600 }}>{racikanList.length}</span>
+                )}
+              </button>
+            </div>
+            </div>
 
             {/* ── Tab: Non-Racikan ─────────────────────────────── */}
             {activeResepTab === 'non-racikan' && (
               <div className="tab-content-resep">
                 <div className="mb-3">
                   <label className="form-label fw-bold">Cari Obat</label>
-                  <div className="search-obat-wrapper">
+                  <div className="search-obat-wrapper" ref={obatWrapRef}>
                     <input type="text" className="form-control"
                       placeholder="Ketik nama obat untuk mencari otomatis..."
                       value={searchNonRacikan}
                       onChange={e => setSearchNonRacikan(e.target.value)}
                       autoComplete="off" />
-                    {showObatDropdown && obatList.length > 0 && (
-                      <div className="obat-dropdown">
+                    {showObatDropdown && obatList.length > 0 && obatDropdownPos && createPortal(
+                      <div
+                        className="obat-dropdown"
+                        style={{ position: 'fixed', top: obatDropdownPos.top, left: obatDropdownPos.left, width: obatDropdownPos.width, right: 'auto', marginTop: 0, zIndex: 999999 }}
+                      >
                         <table className="table table-sm table-hover mb-0">
                           <thead className="table-light">
                             <tr>
@@ -421,7 +491,8 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </div>,
+                      document.body
                     )}
                     {showObatDropdown && obatList.length === 0 && (
                       <div className="alert alert-info mt-2" style={{ fontSize: 13 }}>
@@ -487,8 +558,8 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
             {/* ── Tab: Racikan ─────────────────────────────────── */}
             {activeResepTab === 'racikan' && (
               <div className="tab-content-resep">
-                <div className="row mb-3">
-                  <div className="col-md-6" style={{ position: 'relative' }}>
+                <div className="row g-1 mb-3">
+                  <div className="col" style={{ position: 'relative' }}>
                     <label className="form-label fw-bold">Nama Racikan</label>
                     <input type="text" className="form-control"
                       value={racikanDraft.nama_racik} placeholder="Contoh: Pulvis Batuk"
@@ -500,7 +571,37 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                       <HistoryDropdown items={filteredNamaRac} onSelect={v => { setRacikanDraft(p => ({ ...p, nama_racik: v })); setShowNamaRacDD(false); }} />
                     )}
                   </div>
-                  <div className="col-md-6" style={{ position: 'relative' }}>
+                  <div className="col">
+                    <label className="form-label fw-bold">Metode Racik</label>
+                    <select className="form-select" value={racikanDraft.kd_racik}
+                      onChange={e => setRacikanDraft(p => ({ ...p, kd_racik: e.target.value }))}>
+                      <option value="Puyer">Puyer</option>
+                      <option value="Kapsul">Kapsul</option>
+                      <option value="Sirup">Sirup</option>
+                      <option value="Salep">Salep</option>
+                      <option value="Krim">Krim</option>
+                    </select>
+                  </div>
+                  <div className="col">
+                    <label className="form-label fw-bold">Jumlah /Bungkus</label>
+                    <input type="number" className="form-control" min="1"
+                      value={racikanDraft.jml_dr} placeholder="Jumlah"
+                      onChange={e => setRacikanDraft(p => ({ ...p, jml_dr: parseInt(e.target.value) || 1 }))}
+                      onFocus={e => e.target.select()} />
+                  </div>
+                  <div className="col" style={{ position: 'relative' }}>
+                    <label className="form-label fw-bold">Aturan Pakai</label>
+                    <input type="text" className="form-control"
+                      value={racikanDraft.aturan_pakai} placeholder="3x1 sehari"
+                      autoComplete="off"
+                      onChange={e => { setRacikanDraft(p => ({ ...p, aturan_pakai: e.target.value })); setFilteredAturanRac(aturanH.filter(e.target.value)); }}
+                      onFocus={() => { setFilteredAturanRac(aturanH.filter(racikanDraft.aturan_pakai)); setShowAturanRacDD(true); }}
+                      onBlur={() => setTimeout(() => setShowAturanRacDD(false), 200)} />
+                    {showAturanRacDD && filteredAturanRac.length > 0 && (
+                      <HistoryDropdown items={filteredAturanRac} onSelect={v => { setRacikanDraft(p => ({ ...p, aturan_pakai: v })); setShowAturanRacDD(false); }} />
+                    )}
+                  </div>
+                  <div className="col" style={{ position: 'relative' }}>
                     <label className="form-label fw-bold">Keterangan</label>
                     <input type="text" className="form-control"
                       value={racikanDraft.keterangan} placeholder="Keterangan tambahan"
@@ -514,51 +615,21 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                   </div>
                 </div>
 
-                <div className="row mb-3">
-                  <div className="col-md-4">
-                    <label className="form-label fw-bold">Metode Racik</label>
-                    <select className="form-select" value={racikanDraft.kd_racik}
-                      onChange={e => setRacikanDraft(p => ({ ...p, kd_racik: e.target.value }))}>
-                      <option value="Puyer">Puyer</option>
-                      <option value="Kapsul">Kapsul</option>
-                      <option value="Sirup">Sirup</option>
-                      <option value="Salep">Salep</option>
-                      <option value="Krim">Krim</option>
-                    </select>
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label fw-bold">Jumlah Racikan / Bungkus</label>
-                    <input type="number" className="form-control" min="1"
-                      value={racikanDraft.jml_dr} placeholder="Jumlah"
-                      onChange={e => setRacikanDraft(p => ({ ...p, jml_dr: parseInt(e.target.value) || 1 }))}
-                      onFocus={e => e.target.select()} />
-                  </div>
-                  <div className="col-md-4" style={{ position: 'relative' }}>
-                    <label className="form-label fw-bold">Aturan Pakai</label>
-                    <input type="text" className="form-control"
-                      value={racikanDraft.aturan_pakai} placeholder="3x1 sehari"
-                      autoComplete="off"
-                      onChange={e => { setRacikanDraft(p => ({ ...p, aturan_pakai: e.target.value })); setFilteredAturanRac(aturanH.filter(e.target.value)); }}
-                      onFocus={() => { setFilteredAturanRac(aturanH.filter(racikanDraft.aturan_pakai)); setShowAturanRacDD(true); }}
-                      onBlur={() => setTimeout(() => setShowAturanRacDD(false), 200)} />
-                    {showAturanRacDD && filteredAturanRac.length > 0 && (
-                      <HistoryDropdown items={filteredAturanRac} onSelect={v => { setRacikanDraft(p => ({ ...p, aturan_pakai: v })); setShowAturanRacDD(false); }} />
-                    )}
-                  </div>
-                </div>
-
                 <hr />
 
                 <div className="mb-3">
                   <label className="form-label fw-bold">Detail Obat Racikan</label>
-                  <div className="search-obat-wrapper">
+                  <div className="search-obat-wrapper" ref={obatRacWrapRef}>
                     <input type="text" className="form-control mb-2"
                       placeholder="Ketik nama obat/bahan untuk mencari..."
                       value={searchRacikan}
                       onChange={e => setSearchRacikan(e.target.value)}
                       autoComplete="off" />
-                    {showObatDropdownRacikan && obatListRacikan.length > 0 && (
-                      <div className="obat-dropdown">
+                    {showObatDropdownRacikan && obatListRacikan.length > 0 && obatRacDropdownPos && createPortal(
+                      <div
+                        className="obat-dropdown"
+                        style={{ position: 'fixed', top: obatRacDropdownPos.top, left: obatRacDropdownPos.left, width: obatRacDropdownPos.width, right: 'auto', marginTop: 0, zIndex: 999999 }}
+                      >
                         <table className="table table-sm table-hover mb-0">
                           <thead className="table-light">
                             <tr>
@@ -583,7 +654,8 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </div>,
+                      document.body
                     )}
                     {showObatDropdownRacikan && obatListRacikan.length === 0 && (
                       <div className="alert alert-info mt-2" style={{ fontSize: 13 }}>
@@ -698,25 +770,23 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                 )}
               </div>
             )}
-          </div>
 
-          {/* Footer */}
-          <div className="modal-footer-actions">
-            <div className="d-flex justify-content-end gap-2">
-              <button type="button" onClick={handleSubmit} disabled={submitting} className="btn btn-success"
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                </svg>
-                {submitting ? 'Menyimpan...' : editData ? 'Update Resep Pulang' : 'Simpan Resep Pulang'}
-              </button>
-              <button type="button" onClick={onClose} className="btn btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+              >
                 Tutup
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: submitting ? '#9ca3af' : '#2563eb', color: '#fff', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500 }}
+              >
+                {submitting ? 'Menyimpan...' : editData ? 'Update Resep Pulang' : 'Simpan Resep Pulang'}
               </button>
             </div>
           </div>

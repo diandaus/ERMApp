@@ -30,6 +30,7 @@ const BRIDGING_DEFS: ServiceDef[] = [
       { key: 'URL', label: 'URL / Base URL', type: 'url', placeholder: 'https://apijkn.bpjs-kesehatan.go.id/vclaim-rest/' },
       { key: 'CONSID', label: 'Consumer ID', type: 'text' },
       { key: 'SECRETKEY', label: 'Secret Key', type: 'secret' },
+      { key: 'USERKEY', label: 'User Key', type: 'secret' },
     ],
   },
   {

@@ -51,12 +51,21 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 		tglDari := c.Query("tgl_dari")
 		tglSampai := c.Query("tgl_sampai")
 		searchText := c.Query("search")
+		statusPulang := c.Query("status_pulang")
+		kdDokter := c.Query("kd_dokter")
 
-		if tglDari == "" {
-			tglDari = time.Now().Format("2006-01-02")
-		}
-		if tglSampai == "" {
-			tglSampai = time.Now().Format("2006-01-02")
+		// Mode default: tampilkan pasien yang belum pulang (stts_pulang='-'),
+		// tidak dibatasi tanggal masuk — karena pasien lama rawat bisa masuk
+		// jauh sebelum hari ini dan belum tentu keluar hari ini juga.
+		belumPulangOnly := statusPulang == "belum"
+
+		if !belumPulangOnly {
+			if tglDari == "" {
+				tglDari = time.Now().Format("2006-01-02")
+			}
+			if tglSampai == "" {
+				tglSampai = time.Now().Format("2006-01-02")
+			}
 		}
 
 		query := `
@@ -102,9 +111,14 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN reg_periksa ON kamar_inap.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN klaim_inacbg ON klaim_inacbg.no_rawat = kamar_inap.no_rawat
-			WHERE kamar_inap.tgl_masuk BETWEEN ? AND ?
-		`
-		args := []interface{}{tglDari, tglSampai}
+			WHERE `
+		var args []interface{}
+		if belumPulangOnly {
+			query += `kamar_inap.stts_pulang = '-'`
+		} else {
+			query += `kamar_inap.tgl_masuk BETWEEN ? AND ?`
+			args = append(args, tglDari, tglSampai)
+		}
 
 		if searchText != "" {
 			query += ` AND (
@@ -121,6 +135,15 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 			)`
 			pattern := "%" + searchText + "%"
 			args = append(args, pattern, pattern, pattern, pattern, pattern, pattern)
+		}
+
+		// Dokter hanya boleh melihat pasien yang dia sendiri jadi DPJP-nya.
+		if kdDokter != "" {
+			query += ` AND EXISTS (
+				SELECT 1 FROM dpjp_ranap dr3
+				WHERE dr3.no_rawat = kamar_inap.no_rawat AND dr3.kd_dokter = ?
+			)`
+			args = append(args, kdDokter)
 		}
 
 		query += " ORDER BY kamar_inap.tgl_masuk DESC, kamar_inap.jam_masuk DESC LIMIT 1000"

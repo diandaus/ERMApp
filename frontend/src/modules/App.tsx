@@ -3,7 +3,8 @@ import Swal from 'sweetalert2';
 import { MenuUtamaView } from './MenuUtama';
 import { PemeriksaanView } from './Pemeriksaan';
 import { RawatInapView } from './RawatInap';
-import { KlaimInacbgView } from './KlaimInacbg';
+import { CasemixView } from './Casemix';
+import { BridgingView } from './Bridging';
 import { RegistrasiView } from './Registrasi';
 import { DisplayAntrianView } from './DisplayAntrian';
 import { DisplayAntrianPoliView } from './DisplayAntrianPoli';
@@ -27,7 +28,8 @@ type MenuKey =
   | 'laboratorium'
   | 'farmasi'
   | 'kasir'
-  | 'klaim-inacbg'
+  | 'casemix'
+  | 'bridging'
   | 'kepegawaian'
   | 'anjungan-antrian'
   | 'rekam-medis'
@@ -373,8 +375,8 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
         body: JSON.stringify({
           no_rkm_medis: patient.no_rkm_medis,
           kd_poli: patient.kd_poli,
-          petugas_nip: user.nip || 'UNKNOWN',
-          petugas_nama: user.nama || 'UNKNOWN'
+          petugas_nip: user.username || 'UNKNOWN',
+          petugas_nama: user.full_name || 'UNKNOWN'
         })
       });
 
@@ -1407,6 +1409,12 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  // Berubah setiap kali sidebar "Casemix" diklik, dipakai sebagai key agar
+  // CasemixView remount dan reset kembali ke grid sub-menu-nya.
+  const [casemixResetKey, setCasemixResetKey] = React.useState(0);
+  // Sama seperti casemixResetKey, untuk sub-menu grid Bridging.
+  const [bridgingResetKey, setBridgingResetKey] = React.useState(0);
+
   // Sidebar menu keys (modul yang ditampilkan di sidebar)
   const sidebarMenuKeys: MenuKey[] = [
     'menu-utama',
@@ -1415,7 +1423,9 @@ export const App: React.FC = () => {
     'farmasi',
     'radiologi',
     'laboratorium',
-    'jadwal-operasi'
+    'jadwal-operasi',
+    'casemix',
+    'bridging'
   ];
 
   const menuItems: { key: MenuKey; label: string; icon: string | React.ReactNode }[] = [
@@ -1490,7 +1500,6 @@ export const App: React.FC = () => {
       )
     },
     { key: 'kasir', label: 'Kasir', icon: '💳' },
-    { key: 'klaim-inacbg', label: 'Klaim INACBG', icon: '🧾' },
     { key: 'kepegawaian', label: 'Kepegawaian', icon: '👥' },
     { key: 'anjungan-antrian', label: 'Anjungan & Antrian', icon: '🎫' },
     { key: 'rekam-medis', label: 'Rekam Medis', icon: '📁' },
@@ -1504,6 +1513,28 @@ export const App: React.FC = () => {
           <line x1="16" y1="2" x2="16" y2="6"></line>
           <line x1="8" y1="2" x2="8" y2="6"></line>
           <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      )
+    },
+    {
+      key: 'casemix',
+      label: 'Casemix',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
+      )
+    },
+    {
+      key: 'bridging',
+      label: 'Bridging',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
         </svg>
       )
     },
@@ -1599,7 +1630,7 @@ export const App: React.FC = () => {
       case 'farmasi':
         return menu === 'menu-utama' || menu === 'farmasi' || menu === 'laporan';
       case 'kasir':
-        return menu === 'menu-utama' || menu === 'kasir' || menu === 'klaim-inacbg' || menu === 'laporan';
+        return menu === 'menu-utama' || menu === 'kasir' || menu === 'casemix' || menu === 'laporan';
       case 'admin':
       default:
         return true;
@@ -1653,7 +1684,7 @@ export const App: React.FC = () => {
       case 'rawat-jalan':
         return <RawatJalanView onSelectPatient={setSelectedPatientForExam} user={user} />;
       case 'rawat-inap':
-        return <RawatInapView />;
+        return <RawatInapView user={user} />;
       case 'farmasi':
         return (
           <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
@@ -1668,8 +1699,10 @@ export const App: React.FC = () => {
             <p style={{ color: '#6b7280' }}>Billing pasien, pembayaran, dan rekapitulasi kas harian.</p>
           </section>
         );
-      case 'klaim-inacbg':
-        return <KlaimInacbgView />;
+      case 'casemix':
+        return <CasemixView key={casemixResetKey} user={user} />;
+      case 'bridging':
+        return <BridgingView key={bridgingResetKey} />;
       case 'radiologi':
         return (
           <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
@@ -1796,6 +1829,14 @@ export const App: React.FC = () => {
               <button
                 key={item.key}
                 onClick={() => {
+                  // Klik ulang menu Casemix/Bridging (walau sudah aktif) reset kembali
+                  // ke grid sub-menu-nya, karena tidak ada tombol "kembali" di dalamnya.
+                  if (item.key === 'casemix') {
+                    setCasemixResetKey((k) => k + 1);
+                  }
+                  if (item.key === 'bridging') {
+                    setBridgingResetKey((k) => k + 1);
+                  }
                   setActiveMenu(item.key);
                   if (isCompact) setSidebarOpen(false);
                 }}

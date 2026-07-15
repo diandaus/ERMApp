@@ -62,6 +62,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
     { key: 'laboratorium', label: 'Laboratorium' },
     { key: 'farmasi', label: 'Farmasi' },
     { key: 'kasir', label: 'Kasir' },
+    { key: 'casemix', label: 'Casemix' },
+    { key: 'bridging', label: 'Bridging' },
     { key: 'kepegawaian', label: 'Kepegawaian' },
     { key: 'anjungan-antrian', label: 'Anjungan & Antrian' },
     { key: 'rekam-medis', label: 'Rekam Medis' },

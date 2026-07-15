@@ -590,9 +590,11 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 		searchText := c.Query("search")
 		statusBayar := c.DefaultQuery("status_bayar", "")
 		bangsal := c.Query("bangsal")
+		kdDokter := c.Query("kd_dokter")
 
 		// Build WHERE clause
 		whereClause := "WHERE 1=1"
+		var args []interface{}
 
 		if status == "belum-pulang" {
 			whereClause += " AND kamar_inap.stts_pulang='-'"
@@ -622,6 +624,13 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				"INNER JOIN dokter d_search ON dr_search.kd_dokter = d_search.kd_dokter " +
 				"WHERE dr_search.no_rawat = kamar_inap.no_rawat AND d_search.nm_dokter LIKE '%" + searchText + "%') OR " +
 				"penjab.png_jawab LIKE '%" + searchText + "%')"
+		}
+
+		// Dokter hanya boleh melihat pasien yang dia sendiri jadi DPJP-nya.
+		// Petugas/role lain tetap melihat semua pasien (tidak difilter).
+		if kdDokter != "" {
+			whereClause += " AND EXISTS (SELECT 1 FROM dpjp_ranap dr_filter WHERE dr_filter.no_rawat = kamar_inap.no_rawat AND dr_filter.kd_dokter = ?)"
+			args = append(args, kdDokter)
 		}
 
 		// Main query
@@ -671,7 +680,7 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 			LIMIT 1000
 		`
 
-		rows, err := db.Query(query)
+		rows, err := db.Query(query, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database query failed: " + err.Error()})
 			return
@@ -742,6 +751,14 @@ func main() {
 
 	if err := ensureSatuSehatTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel satu sehat: %v", err)
+	}
+
+	if err := ensureBridgingPengajuanTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel bridging_pengajuan_penjaminan: %v", err)
+	}
+
+	if err := ensureAntreanFarmasiTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel bridging_antrean_farmasi: %v", err)
 	}
 
 	if err := ensureKlaimInacbgTable(db); err != nil {
@@ -2818,6 +2835,87 @@ func main() {
 	// Klaim INACBG endpoints
 	r.GET("/api/klaim-inacbg/list", getKlaimInacbgList(db))
 	r.POST("/api/klaim-inacbg", saveKlaimInacbg(db))
+
+	// Bridging SEP (BPJS VClaim) endpoints
+	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
+	r.POST("/api/bridging/sep", saveBridgingSepLocal(db))
+	r.POST("/api/bridging/sep/kirim/*no_sep", sendSepToBpjs(db))
+	r.PUT("/api/bridging/sep/update", updateSepToBpjs(db))
+	r.DELETE("/api/bridging/sep/*no_sep", deleteSepFromBpjs(db))
+	r.DELETE("/api/bridging/sep-internal/*no_sep", deleteSepInternalFromBpjs(db))
+	r.GET("/api/bridging/sep/suplesi/*no_sep", getSepSuplesi(db))
+	r.PUT("/api/bridging/sep/update-tgl-pulang", updateTglPulangSep(db))
+	r.GET("/api/bridging/sep/cari/*no_sep", searchSepBpjs(db))
+	r.GET("/api/bridging/sep-internal/cari/*no_sep", searchSepInternalBpjs(db))
+	r.GET("/api/bridging/sep/monitoring", getMonitoringSep(db))
+
+	// Bridging Peserta (BPJS VClaim) endpoints
+	r.GET("/api/bridging/peserta/nokartu/*no_kartu", searchPesertaByNoKartu(db))
+	r.GET("/api/bridging/peserta/nik/*nik", searchPesertaByNik(db))
+
+	// Bridging Referensi (BPJS VClaim) — proxy generik referensi/*
+	r.GET("/api/bridging/referensi/*path", getReferensiBpjs(db))
+
+	// Bridging Rujukan Online (BPJS VClaim)
+	r.GET("/api/bridging/rujukan/*id", searchRujukan(db))
+
+	// Bridging Pengajuan & Aproval Penjaminan (BPJS VClaim)
+	r.GET("/api/bridging/pengajuan-penjaminan/list", getPengajuanPenjaminanList(db))
+	r.POST("/api/bridging/pengajuan-penjaminan", submitPengajuanPenjaminan(db))
+	r.POST("/api/bridging/pengajuan-penjaminan/approval", approvalPengajuanPenjaminan(db))
+
+	// Bridging Rujukan Keluar — Pembuatan/Edit Rujukan (BPJS VClaim)
+	r.GET("/api/bridging/rujukan-keluar/list", getRujukanKeluarList(db))
+	r.POST("/api/bridging/rujukan-keluar", createRujukanKeluar(db))
+	r.PUT("/api/bridging/rujukan-keluar", updateRujukanKeluar(db))
+	r.GET("/api/bridging/rujukan-keluar/bpjs/*no_rujukan", getRujukanKeluarDetailBpjs(db))
+	r.GET("/api/bridging/rujukan-spesialistik/*ppk", getListSpesialistikRujukan(db))
+	r.GET("/api/bridging/rujukan-sarana/*ppk", getListSaranaRujukan(db))
+
+	// Bridging Surat Kontrol / SPRI (BPJS VClaim)
+	r.GET("/api/bridging/surat-kontrol/list", getSuratKontrolList(db))
+	r.POST("/api/bridging/surat-kontrol", createRencanaKontrol(db))
+	r.PUT("/api/bridging/surat-kontrol", updateRencanaKontrol(db))
+	r.DELETE("/api/bridging/surat-kontrol/*no_surat", deleteRencanaKontrol(db))
+	r.GET("/api/bridging/surat-kontrol/jadwal-spesialistik", getJadwalSpesialistikKontrol(db))
+	r.GET("/api/bridging/surat-kontrol/jadwal-dokter", getJadwalDokterKontrol(db))
+	r.GET("/api/bridging/surat-kontrol/bpjs-list", getBpjsListRencanaKontrol(db))
+	r.GET("/api/bridging/surat-kontrol/detail/*no_surat", getDetailSuratKontrolBpjs(db))
+
+	// Bridging SPRI Rawat Inap (BPJS VClaim)
+	r.GET("/api/bridging/spri-ranap/list", getSpriRanapList(db))
+	r.POST("/api/bridging/spri-ranap", createSpriRanap(db))
+	r.PUT("/api/bridging/spri-ranap", updateSpriRanap(db))
+
+	// Bridging Perpanjangan Rujukan Khusus (BPJS VClaim)
+	r.GET("/api/bridging/rujukan-khusus/list", getRujukanKhususList(db))
+	r.POST("/api/bridging/rujukan-khusus", createRujukanKhusus(db))
+	r.DELETE("/api/bridging/rujukan-khusus/*no_rujukan", deleteRujukanKhusus(db))
+	r.GET("/api/bridging/rujukan-khusus/bpjs-list", getBpjsListRujukanKhusus(db))
+
+	// Bridging HFIS (BPJS)
+	r.GET("/api/bridging/hfis/referensi/poli", getReferensiPoliHfis(db))
+	r.GET("/api/bridging/hfis/referensi/dokter", getReferensiDokterHfis(db))
+	r.GET("/api/bridging/hfis/referensi/jadwal-dokter/:kode_poli", getJadwalDokterHfis(db))
+	r.POST("/api/bridging/hfis/jadwal-dokter/update", updateJadwalDokterHfis(db))
+	r.GET("/api/bridging/hfis/referensi/poli-fp", getReferensiPoliFpHfis(db))
+	r.GET("/api/bridging/hfis/referensi/pasien-fp", getReferensiPasienFpHfis(db))
+
+	// Bridging Antrean RS / Mobile JKN (BPJS)
+	r.GET("/api/bridging/antrean/list", getAntreanRsList(db))
+	r.POST("/api/bridging/antrean", addAntreanRs(db))
+	r.GET("/api/bridging/antrean-farmasi/list", getAntreanFarmasiList(db))
+	r.POST("/api/bridging/antrean-farmasi", addAntreanFarmasi(db))
+	r.POST("/api/bridging/antrean/update-waktu", updateWaktuAntrean(db))
+	r.POST("/api/bridging/antrean/batal", batalAntrean(db))
+	r.POST("/api/bridging/antrean/list-task", getListTaskAntrean(db))
+	r.GET("/api/bridging/antrean/dashboard", getDashboardWaktuTunggu(db))
+	r.GET("/api/bridging/antrean/dashboard-bulan", getDashboardWaktuTungguBulan(db))
+	r.GET("/api/bridging/antrean/pendaftaran-tanggal", getAntreanPendaftaranTanggal(db))
+	r.GET("/api/bridging/antrean/pendaftaran-booking/*kodebooking", getAntreanPendaftaranKodeBooking(db))
+	r.GET("/api/bridging/antrean/pendaftaran-aktif", getAntreanPendaftaranAktif(db))
+	r.GET("/api/bridging/antrean/pendaftaran-filter", getAntreanPendaftaranFilter(db))
+	r.GET("/api/bridging/antrean/taskid-list", getAntreanTaskIdList(db))
 
 	// Registrasi List endpoint
 	r.GET("/api/registrasi/list", getRegistrasiList(db))
