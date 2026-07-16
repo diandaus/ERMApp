@@ -137,6 +137,12 @@ export const BpjsReferensiView: React.FC = () => {
     }
   };
 
+  const handleCloseResult = () => {
+    setResult(null);
+    setError(null);
+    setActiveRef(null);
+  };
+
   const rawResultList: any[] | null = Array.isArray(result)
     ? result
     : Array.isArray(result?.[Object.keys(result || {})[0]])
@@ -150,10 +156,12 @@ export const BpjsReferensiView: React.FC = () => {
     ? rawResultList.filter((row) => Object.values(row).some((val) => String(val ?? '').toLowerCase().includes(filterKw)))
     : rawResultList;
 
+  const showResultPanel = Boolean(error || result);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100%', gap: 16, overflow: 'hidden' }}>
       {/* Daftar seluruh jenis referensi — masing-masing baris punya input & tombol Cari sendiri */}
-      <div style={{ overflowY: 'auto', flex: activeRef ? '0 0 auto' : 1, maxHeight: activeRef ? '40%' : undefined, border: '1px solid #e5e7eb', borderRadius: 12, background: '#ffffff' }}>
+      <div style={{ overflowY: 'auto', flex: showResultPanel ? '0 0 420px' : 1, border: '1px solid #e5e7eb', borderRadius: 12, background: '#ffffff' }}>
         {REF_TYPES.map((ref, i) => (
           <div
             key={ref.key}
@@ -208,11 +216,20 @@ export const BpjsReferensiView: React.FC = () => {
       </div>
 
       {/* Hasil pencarian terakhir */}
-      {(error || result) && (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
-          {activeRef && (
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Hasil — {activeRef.label}</div>
-          )}
+      {showResultPanel && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {activeRef ? (
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Hasil — {activeRef.label}</div>
+            ) : <div />}
+            <button
+              type="button"
+              onClick={handleCloseResult}
+              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+            >
+              Tutup
+            </button>
+          </div>
           {error && (
             <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>
               {error}

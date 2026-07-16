@@ -206,9 +206,11 @@ func updateSpriRanap(db *sql.DB) gin.HandlerFunc {
 		// 18.2.5 — SPRI sudah dipakai untuk menerbitkan SEP Rawat Inap tidak
 		// bisa diupdate lagi (dicek lewat bridging_sep.noskdp yang menyimpan
 		// no. SPRI/SKDP saat SEP RITL dibuat, lihat BpjsSep.tsx field "SKDP/SPRI").
+		// jnspelayanan="1" = Rawat Inap (dikonfirmasi dari spec resmi Insert
+		// SEP 2.0, kebalikan dari asumsi awal).
 		var sepCount int
 		if err := db.QueryRow(
-			`SELECT COUNT(*) FROM bridging_sep WHERE noskdp = ? AND jnspelayanan = '2'`, r.NoSuratSpri,
+			`SELECT COUNT(*) FROM bridging_sep WHERE noskdp = ? AND jnspelayanan = '1'`, r.NoSuratSpri,
 		).Scan(&sepCount); err == nil && sepCount > 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "SPRI sudah digunakan"})
 			return

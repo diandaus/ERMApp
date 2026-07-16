@@ -146,8 +146,10 @@ func createRujukanKeluar(db *sql.DB) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Tanggal rujukan tidak sesuai"})
 				return
 			}
-			// 13.1.5 — untuk SEP RJTL (jnspelayanan="1"), tgl rujukan tidak boleh lebih dari tgl SEP
-			if jnspelayananSep == "1" && tglRujukan.After(tglSep) {
+			// 13.1.5 — untuk SEP RJTL/Rawat Jalan (jnspelayanan="2" — dikonfirmasi
+			// dari spec resmi Insert SEP 2.0: "1"=Rawat Inap, "2"=Rawat Jalan,
+			// kebalikan dari asumsi awal), tgl rujukan tidak boleh lebih dari tgl SEP
+			if jnspelayananSep == "2" && tglRujukan.After(tglSep) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Tanggal rujukan tidak sesuai"})
 				return
 			}

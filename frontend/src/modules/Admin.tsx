@@ -31,6 +31,7 @@ const BRIDGING_DEFS: ServiceDef[] = [
       { key: 'CONSID', label: 'Consumer ID', type: 'text' },
       { key: 'SECRETKEY', label: 'Secret Key', type: 'secret' },
       { key: 'USERKEY', label: 'User Key', type: 'secret' },
+      { key: 'USERCODE', label: 'Kode User (dikirim sebagai "user" ke Insert/Update SEP)', type: 'text', placeholder: 'Maks. 9 karakter, tanpa spasi' },
     ],
   },
   {

@@ -761,6 +761,15 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel bridging_pengajuan_penjaminan: %v", err)
 	}
 
+	if err := ensureBridgingSepExtraColumns(db); err != nil {
+		log.Fatalf("gagal inisialisasi kolom tambahan bridging_sep: %v", err)
+	}
+
+	if err := ensureBridgingAntreanQueueTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel bridging_antrean_queue: %v", err)
+	}
+	startAntreanQueueWorker(db)
+
 	if err := ensureAntreanFarmasiTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel bridging_antrean_farmasi: %v", err)
 	}
@@ -2843,11 +2852,14 @@ func main() {
 	// Bridging SEP (BPJS VClaim) endpoints
 	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
 	r.POST("/api/bridging/sep", saveBridgingSepLocal(db))
+	r.POST("/api/bridging/sep/insert", insertSepToBpjs(db))
 	r.POST("/api/bridging/sep/kirim/*no_sep", sendSepToBpjs(db))
 	r.PUT("/api/bridging/sep/update", updateSepToBpjs(db))
 	r.DELETE("/api/bridging/sep/*no_sep", deleteSepFromBpjs(db))
+	r.GET("/api/bridging/sep-internal/list", getBridgingSepInternalList(db))
 	r.DELETE("/api/bridging/sep-internal/*no_sep", deleteSepInternalFromBpjs(db))
-	r.GET("/api/bridging/sep/suplesi/*no_sep", getSepSuplesi(db))
+	r.GET("/api/bridging/sep/suplesi/*no_kartu", getSepSuplesi(db))
+	r.GET("/api/bridging/sep/kll-induk/*no_kartu", getSepKllIndukList(db))
 	r.PUT("/api/bridging/sep/update-tgl-pulang", updateTglPulangSep(db))
 	r.GET("/api/bridging/sep/cari/*no_sep", searchSepBpjs(db))
 	r.GET("/api/bridging/sep-internal/cari/*no_sep", searchSepInternalBpjs(db))
@@ -2920,6 +2932,13 @@ func main() {
 	r.GET("/api/bridging/antrean/pendaftaran-aktif", getAntreanPendaftaranAktif(db))
 	r.GET("/api/bridging/antrean/pendaftaran-filter", getAntreanPendaftaranFilter(db))
 	r.GET("/api/bridging/antrean/taskid-list", getAntreanTaskIdList(db))
+
+	// Antrean BPJS Otomatis — saklar & log tab "Antrean Otomatis"
+	r.GET("/api/bridging/antrean-queue/status", getAntreanOtomatisStatus(db))
+	r.PUT("/api/bridging/antrean-queue/status", setAntreanOtomatisStatus(db))
+	r.GET("/api/bridging/antrean-queue", getAntreanQueueList(db))
+	r.POST("/api/bridging/antrean-queue/:id/skip", skipAntreanQueueItem(db))
+	r.POST("/api/bridging/antrean-queue/:id/retry", retryAntreanQueueItem(db))
 
 	// Registrasi List endpoint
 	r.GET("/api/registrasi/list", getRegistrasiList(db))

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -186,72 +187,92 @@ func addAntreanRs(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		payload := map[string]interface{}{
-			"kodebooking":      req.KodeBooking,
-			"jenispasien":      req.JenisPasien,
-			"nomorkartu":       req.NomorKartu,
-			"nik":              req.Nik,
-			"nohp":             req.NoHp,
-			"kodepoli":         req.KodePoli,
-			"namapoli":         req.NamaPoli,
-			"pasienbaru":       req.PasienBaru,
-			"norm":             req.Norm,
-			"tanggalperiksa":   req.TanggalPeriksa,
-			"kodedokter":       kodeDokterInt,
-			"namadokter":       req.NamaDokter,
-			"jampraktek":       req.JamPraktek,
-			"jeniskunjungan":   req.JenisKunjungan,
-			"nomorreferensi":   req.NomorReferensi,
-			"nomorantrean":     req.NomorAntrean,
-			"angkaantrean":     req.AngkaAntrean,
-			"estimasidilayani": req.EstimasiDilayani,
-			"sisakuotajkn":     req.SisaKuotaJkn,
-			"kuotajkn":         req.KuotaJkn,
-			"sisakuotanonjkn":  req.SisaKuotaNonJkn,
-			"kuotanonjkn":      req.KuotaNonJkn,
-			"keterangan":       req.Keterangan,
-		}
-		bodyJSON, err := json.Marshal(payload)
+		result, err := createAntreanRsBpjs(db, cfg, req, kodeDokterInt)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		result, err := hfisRequest(cfg, http.MethodPost, "antrean/add", bodyJSON)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-			return
-		}
-
-		_, dbErr := db.Exec(`
-			INSERT INTO referensi_mobilejkn_bpjs (
-				nobooking, no_rawat, nomorkartu, nik, nohp, kodepoli, pasienbaru, norm,
-				tanggalperiksa, kodedokter, jampraktek, jeniskunjungan, nomorreferensi,
-				nomorantrean, angkaantrean, estimasidilayani, sisakuotajkn, kuotajkn,
-				sisakuotanonjkn, kuotanonjkn, status, validasi, statuskirim
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Belum', NOW(), 'Sudah')
-			ON DUPLICATE KEY UPDATE
-				no_rawat=VALUES(no_rawat), nomorkartu=VALUES(nomorkartu), nik=VALUES(nik), nohp=VALUES(nohp),
-				kodepoli=VALUES(kodepoli), pasienbaru=VALUES(pasienbaru), norm=VALUES(norm),
-				tanggalperiksa=VALUES(tanggalperiksa), kodedokter=VALUES(kodedokter), jampraktek=VALUES(jampraktek),
-				jeniskunjungan=VALUES(jeniskunjungan), nomorreferensi=VALUES(nomorreferensi),
-				nomorantrean=VALUES(nomorantrean), angkaantrean=VALUES(angkaantrean),
-				estimasidilayani=VALUES(estimasidilayani), sisakuotajkn=VALUES(sisakuotajkn), kuotajkn=VALUES(kuotajkn),
-				sisakuotanonjkn=VALUES(sisakuotanonjkn), kuotanonjkn=VALUES(kuotanonjkn), statuskirim='Sudah'
-		`,
-			req.KodeBooking, nullIfEmptyStr(req.NoRawat), req.NomorKartu, req.Nik, req.NoHp, req.KodePoli,
-			strconv.Itoa(req.PasienBaru), req.Norm, req.TanggalPeriksa, req.KodeDokter, req.JamPraktek,
-			jenisKunjunganEnumText(req.JenisKunjungan), req.NomorReferensi, req.NomorAntrean,
-			strconv.Itoa(req.AngkaAntrean), strconv.FormatInt(req.EstimasiDilayani, 10),
-			req.SisaKuotaJkn, req.KuotaJkn, req.SisaKuotaNonJkn, req.KuotaNonJkn,
-		)
-		if dbErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": dbErr.Error()})
+			status := http.StatusInternalServerError
+			if errors.Is(err, errAntreanBpjsGateway) {
+				status = http.StatusBadGateway
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Antrean berhasil ditambahkan", "response": result})
 	}
+}
+
+// errAntreanBpjsGateway menandai error yang berasal dari panggilan ke BPJS
+// (bukan dari DB lokal) — dipakai createAntreanRsBpjs supaya pemanggil bisa
+// membedakan status HTTP yang tepat (502 vs 500) tanpa mengecek isi pesan.
+var errAntreanBpjsGateway = errors.New("bpjs gateway error")
+
+// createAntreanRsBpjs memanggil "Tambah Antrean" (POST antrean/add) ke BPJS
+// lalu menyimpan hasilnya ke referensi_mobilejkn_bpjs. Dipakai bersama oleh
+// handler manual (addAntreanRs, lewat form staf) dan worker antrean queue
+// otomatis (bridging_antrean_worker.go) supaya logikanya tidak dobel.
+func createAntreanRsBpjs(db *sql.DB, cfg *vclaimConfig, req AntreanRs, kodeDokterInt int) (map[string]interface{}, error) {
+	payload := map[string]interface{}{
+		"kodebooking":      req.KodeBooking,
+		"jenispasien":      req.JenisPasien,
+		"nomorkartu":       req.NomorKartu,
+		"nik":              req.Nik,
+		"nohp":             req.NoHp,
+		"kodepoli":         req.KodePoli,
+		"namapoli":         req.NamaPoli,
+		"pasienbaru":       req.PasienBaru,
+		"norm":             req.Norm,
+		"tanggalperiksa":   req.TanggalPeriksa,
+		"kodedokter":       kodeDokterInt,
+		"namadokter":       req.NamaDokter,
+		"jampraktek":       req.JamPraktek,
+		"jeniskunjungan":   req.JenisKunjungan,
+		"nomorreferensi":   req.NomorReferensi,
+		"nomorantrean":     req.NomorAntrean,
+		"angkaantrean":     req.AngkaAntrean,
+		"estimasidilayani": req.EstimasiDilayani,
+		"sisakuotajkn":     req.SisaKuotaJkn,
+		"kuotajkn":         req.KuotaJkn,
+		"sisakuotanonjkn":  req.SisaKuotaNonJkn,
+		"kuotanonjkn":      req.KuotaNonJkn,
+		"keterangan":       req.Keterangan,
+	}
+	bodyJSON, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := hfisRequest(cfg, http.MethodPost, "antrean/add", bodyJSON)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errAntreanBpjsGateway, err.Error())
+	}
+
+	_, dbErr := db.Exec(`
+		INSERT INTO referensi_mobilejkn_bpjs (
+			nobooking, no_rawat, nomorkartu, nik, nohp, kodepoli, pasienbaru, norm,
+			tanggalperiksa, kodedokter, jampraktek, jeniskunjungan, nomorreferensi,
+			nomorantrean, angkaantrean, estimasidilayani, sisakuotajkn, kuotajkn,
+			sisakuotanonjkn, kuotanonjkn, status, validasi, statuskirim
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Belum', NOW(), 'Sudah')
+		ON DUPLICATE KEY UPDATE
+			no_rawat=VALUES(no_rawat), nomorkartu=VALUES(nomorkartu), nik=VALUES(nik), nohp=VALUES(nohp),
+			kodepoli=VALUES(kodepoli), pasienbaru=VALUES(pasienbaru), norm=VALUES(norm),
+			tanggalperiksa=VALUES(tanggalperiksa), kodedokter=VALUES(kodedokter), jampraktek=VALUES(jampraktek),
+			jeniskunjungan=VALUES(jeniskunjungan), nomorreferensi=VALUES(nomorreferensi),
+			nomorantrean=VALUES(nomorantrean), angkaantrean=VALUES(angkaantrean),
+			estimasidilayani=VALUES(estimasidilayani), sisakuotajkn=VALUES(sisakuotajkn), kuotajkn=VALUES(kuotajkn),
+			sisakuotanonjkn=VALUES(sisakuotanonjkn), kuotanonjkn=VALUES(kuotanonjkn), statuskirim='Sudah'
+	`,
+		req.KodeBooking, nullIfEmptyStr(req.NoRawat), req.NomorKartu, req.Nik, req.NoHp, req.KodePoli,
+		strconv.Itoa(req.PasienBaru), req.Norm, req.TanggalPeriksa, req.KodeDokter, req.JamPraktek,
+		jenisKunjunganEnumText(req.JenisKunjungan), req.NomorReferensi, req.NomorAntrean,
+		strconv.Itoa(req.AngkaAntrean), strconv.FormatInt(req.EstimasiDilayani, 10),
+		req.SisaKuotaJkn, req.KuotaJkn, req.SisaKuotaNonJkn, req.KuotaNonJkn,
+	)
+	if dbErr != nil {
+		return nil, dbErr
+	}
+
+	return result, nil
 }
 
 // ============================================================================

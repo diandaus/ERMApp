@@ -78,8 +78,11 @@ func hfisRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map[s
 
 	// Kode sukses HFIS tidak konsisten antar endpoint pada dokumen resminya —
 	// referensi poli/dokter memakai 1, referensi jadwal dokter memakai 200 —
-	// jadi keduanya diterima sebagai sukses di sini.
-	if envelope.MetaData.Code != 1 && envelope.MetaData.Code != 200 {
+	// jadi keduanya diterima sebagai sukses di sini. Kode 201 ("No Content")
+	// juga bukan penolakan — artinya cuma tidak ada data untuk parameter yang
+	// diminta (mis. dashboard waktu tunggu tanpa antrean di tanggal itu),
+	// jadi diteruskan sebagai hasil kosong, bukan error.
+	if envelope.MetaData.Code != 1 && envelope.MetaData.Code != 200 && envelope.MetaData.Code != 201 {
 		return nil, fmt.Errorf("HFIS menolak: %s (kode %d)", envelope.MetaData.Message, envelope.MetaData.Code)
 	}
 

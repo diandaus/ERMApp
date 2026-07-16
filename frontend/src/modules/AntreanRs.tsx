@@ -2,30 +2,6 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { localDateStr } from '../utils/date';
 
-type AntreanItem = {
-  kodebooking: string;
-  no_rawat: string;
-  nomorkartu: string;
-  nik: string;
-  nohp: string;
-  kodepoli: string;
-  pasienbaru: string;
-  norm: string;
-  tanggalperiksa: string;
-  kodedokter: string;
-  jampraktek: string;
-  jeniskunjungan: string;
-  nomorreferensi: string;
-  nomorantrean: string;
-  angkaantrean: string;
-  estimasidilayani: string;
-  sisakuotajkn: number;
-  kuotajkn: number;
-  sisakuotanonjkn: number;
-  kuotanonjkn: number;
-  status: string;
-};
-
 type FormState = {
   kodebooking: string;
   jenispasien: 'JKN' | 'NON JKN';
@@ -146,11 +122,15 @@ const TASK_ID_OPTIONS: { value: string; label: string }[] = [
   { value: '99', label: '99 - Tidak hadir / batal' },
 ];
 
-const statusColor: Record<string, { bg: string; color: string; border: string }> = {
-  Belum: { bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
-  Checkin: { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
-  Batal: { bg: '#fef2f2', color: '#991b1b', border: '#fecaca' },
-  Gagal: { bg: '#fef2f2', color: '#991b1b', border: '#fecaca' },
+// Status antrean dari BPJS berupa teks bebas (mis. "Belum dilayani",
+// "Selesai dilayani") — bukan enum tetap seperti tabel lokal, jadi
+// pewarnaan badge dicocokkan lewat substring, bukan exact match.
+const getStatusColor = (status: string): { bg: string; color: string; border: string } => {
+  const s = (status || '').toLowerCase();
+  if (s.includes('batal') || s.includes('gagal')) return { bg: '#fef2f2', color: '#991b1b', border: '#fecaca' };
+  if (s.includes('selesai')) return { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' };
+  if (s.includes('belum')) return { bg: '#fefce8', color: '#854d0e', border: '#fde68a' };
+  return { bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' };
 };
 
 const formatTgl = (tgl: string) => {
@@ -186,12 +166,11 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 );
 
 export const AntreanRsView: React.FC = () => {
-  const [items, setItems] = React.useState<AntreanItem[]>([]);
+  const [items, setItems] = React.useState<PendaftaranRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [searchText, setSearchText] = React.useState('');
   const [tglDari, setTglDari] = React.useState(localDateStr());
-  const [tglSampai, setTglSampai] = React.useState(localDateStr());
   const [showModal, setShowModal] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(emptyForm());
   const [saving, setSaving] = React.useState(false);
@@ -228,27 +207,62 @@ export const AntreanRsView: React.FC = () => {
   const [pendaftaranError, setPendaftaranError] = React.useState<string | null>(null);
   const [pendaftaranRows, setPendaftaranRows] = React.useState<PendaftaranRow[]>([]);
 
+  // Ringkasan jumlah belum/selesai, dipecah per sumber data: "Total" untuk
+  // antrean yang dibuat lewat bridging RS ini (sumberdata selain Mobile JKN),
+  // "MJKN" untuk antrean yang didaftarkan pasien lewat aplikasi Mobile JKN.
+  const pendaftaranSummary = React.useMemo(() => {
+    let totalBelum = 0;
+    let totalSelesai = 0;
+    let mjknBelum = 0;
+    let mjknSelesai = 0;
+    for (const row of pendaftaranRows) {
+      const isMjkn = (row.sumberdata || '').toLowerCase().includes('mobile jkn');
+      const isBelum = (row.status || '').toLowerCase().includes('belum');
+      const isSelesai = (row.status || '').toLowerCase().includes('selesai');
+      if (isMjkn) {
+        if (isBelum) mjknBelum++;
+        if (isSelesai) mjknSelesai++;
+      } else {
+        if (isBelum) totalBelum++;
+        if (isSelesai) totalSelesai++;
+      }
+    }
+    return { totalBelum, totalSelesai, mjknBelum, mjknSelesai };
+  }, [pendaftaranRows]);
+
+  // Diambil langsung dari BPJS (bukan tabel lokal) supaya kode booking dari
+  // Mobile JKN maupun yang dibuat lewat RS (bridging) sama-sama tampil,
+  // persis seperti "Cek Pendaftaran BPJS (Antrean Per Tanggal)". Pencarian
+  // dilakukan di sisi client karena endpoint BPJS-nya tidak punya parameter
+  // keyword, cuma tanggal.
   const fetchItems = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/bridging/antrean/list?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
-      if (searchText) url += `&search=${encodeURIComponent(searchText)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Gagal mengambil data antrean');
+      const res = await fetch(`/api/bridging/antrean/pendaftaran-tanggal?tanggal=${tglDari}`);
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+      if (!res.ok) throw new Error(data.error || 'Gagal mengambil data antrean');
+      const rows: PendaftaranRow[] = data.pendaftaran?.list ?? [];
+      setItems(Array.isArray(rows) ? rows : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [tglDari, tglSampai, searchText]);
+  }, [tglDari]);
 
   React.useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  const filteredItems = React.useMemo(() => {
+    const kw = searchText.trim().toLowerCase();
+    if (!kw) return items;
+    return items.filter((it) =>
+      [it.kodebooking, it.norekammedis, it.nokapst, it.nik].some((v) => (v || '').toLowerCase().includes(kw))
+    );
+  }, [items, searchText]);
 
   const openModal = () => {
     setForm(emptyForm());
@@ -530,8 +544,6 @@ export const AntreanRsView: React.FC = () => {
             style={{ ...inputStyle, width: 280 }}
           />
           <input type="date" value={tglDari} onChange={(e) => setTglDari(e.target.value)} style={{ ...inputStyle, width: 150 }} />
-          <span style={{ fontSize: 12, color: '#6b7280' }}>s.d.</span>
-          <input type="date" value={tglSampai} onChange={(e) => setTglSampai(e.target.value)} style={{ ...inputStyle, width: 150 }} />
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
@@ -588,25 +600,27 @@ export const AntreanRsView: React.FC = () => {
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Poli</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tgl Periksa</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Antrean</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Sumber Data</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Status</th>
               <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
-            ) : items.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Belum ada data antrean</td></tr>
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
+            ) : filteredItems.length === 0 ? (
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Belum ada data antrean</td></tr>
             ) : (
-              items.map((item, index) => {
-                const sc = statusColor[item.status] || statusColor.Belum;
+              filteredItems.map((item, index) => {
+                const sc = getStatusColor(item.status);
                 return (
                   <tr key={item.kodebooking} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.kodebooking}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.norm}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.norekammedis}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827' }}>{item.kodepoli}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{formatTgl(item.tanggalperiksa)}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.nomorantrean}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{formatTgl(item.tanggal)}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.noantrean}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.sumberdata}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
                       <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
                         {item.status}
@@ -642,7 +656,7 @@ export const AntreanRsView: React.FC = () => {
                         >
                           Cek BPJS
                         </button>
-                        {item.status !== 'Batal' && (
+                        {!(item.status || '').toLowerCase().includes('batal') && (
                           <button
                             type="button"
                             onClick={() => handleBatal(item.kodebooking)}
@@ -1173,6 +1187,22 @@ export const AntreanRsView: React.FC = () => {
                 >
                   {pendaftaranLoading ? 'Memuat...' : 'Cari'}
                 </button>
+                {pendaftaranMode === 'tanggal' && pendaftaranRows.length > 0 && (
+                  <>
+                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a' }}>
+                      Total Belum: {pendaftaranSummary.totalBelum}
+                    </span>
+                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+                      Total Selesai: {pendaftaranSummary.totalSelesai}
+                    </span>
+                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                      MJKN Belum: {pendaftaranSummary.mjknBelum}
+                    </span>
+                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe' }}>
+                      MJKN Selesai: {pendaftaranSummary.mjknSelesai}
+                    </span>
+                  </>
+                )}
                 {pendaftaranError && <span style={{ fontSize: 12, color: '#991b1b' }}>{pendaftaranError}</span>}
               </div>
 

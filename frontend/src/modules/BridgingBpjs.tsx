@@ -12,6 +12,7 @@ import { BpjsRujukanKhususView } from './BpjsRujukanKhusus';
 import { HfisView } from './Hfis';
 import { AntreanRsView } from './AntreanRs';
 import { AntreanTaskIdView } from './AntreanTaskId';
+import { AntreanOtomatisView } from './AntreanOtomatis';
 
 type BpjsTab =
   | 'overview'
@@ -25,11 +26,11 @@ type BpjsTab =
   | 'surat-kontrol'
   | 'spri-ranap'
   | 'rujukan-khusus'
-  | 'klaim'
   | 'hfis'
   | 'task-id-mobile-jkn'
   | 'antrian-mobile-jkn'
   | 'referensi-pendaftaran-mobile-jkn'
+  | 'antrean-otomatis'
   | 'log'
   | 'pengaturan';
 
@@ -121,7 +122,7 @@ const MENU: { key: BpjsTab; label: string; icon: React.ReactNode }[] = [
   },
   {
     key: 'surat-kontrol',
-    label: 'Surat Kontrol / SPRI',
+    label: 'Surat Kontrol',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 4h16v16H4z"></path>
@@ -152,16 +153,6 @@ const MENU: { key: BpjsTab; label: string; icon: React.ReactNode }[] = [
         <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
         <path d="M3 22v-6h6"></path>
         <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
-      </svg>
-    ),
-  },
-  {
-    key: 'klaim',
-    label: 'Klaim',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="7" width="20" height="14" rx="2"></rect>
-        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
       </svg>
     ),
   },
@@ -208,6 +199,17 @@ const MENU: { key: BpjsTab; label: string; icon: React.ReactNode }[] = [
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'antrean-otomatis',
+    label: 'Antrean Otomatis',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12a9 9 0 1 1-9-9"></path>
+        <path d="M12 7v5l3 3"></path>
+        <path d="M21 3v5h-5"></path>
       </svg>
     ),
   },
@@ -465,11 +467,11 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
           {activeTab === 'surat-kontrol' && <BpjsSuratKontrolView />}
           {activeTab === 'spri-ranap' && <BpjsSpriRanapView />}
           {activeTab === 'rujukan-khusus' && <BpjsRujukanKhususView />}
-          {activeTab === 'klaim' && <Placeholder title="Klaim" />}
           {activeTab === 'hfis' && <HfisView />}
           {activeTab === 'task-id-mobile-jkn' && <AntreanTaskIdView />}
           {activeTab === 'antrian-mobile-jkn' && <AntreanRsView />}
           {activeTab === 'referensi-pendaftaran-mobile-jkn' && <Placeholder title="Referensi Pendaftaran Mobile JKN" />}
+          {activeTab === 'antrean-otomatis' && <AntreanOtomatisView />}
           {activeTab === 'log' && <Placeholder title="Log Bridging" />}
           {activeTab === 'pengaturan' && <Placeholder title="Pengaturan BPJS" />}
         </div>

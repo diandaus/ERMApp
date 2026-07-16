@@ -297,8 +297,8 @@ export const BpjsRujukanKeluarView: React.FC = () => {
                 </Field>
                 <Field label="Jenis Pelayanan">
                   <select style={inputStyle} value={form.jns_pelayanan} onChange={(e) => setForm((p) => ({ ...p, jns_pelayanan: e.target.value }))}>
-                    <option value="1">Rawat Jalan</option>
-                    <option value="2">Rawat Inap</option>
+                    <option value="1">Rawat Inap</option>
+                    <option value="2">Rawat Jalan</option>
                   </select>
                 </Field>
                 <Field label="Tipe Rujukan">

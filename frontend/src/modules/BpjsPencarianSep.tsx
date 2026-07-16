@@ -54,6 +54,75 @@ const ResultTable: React.FC<{ data: any }> = ({ data }) => (
   </div>
 );
 
+// Kolom hasil "Data SEP Internal" (GET SEP/Internal/{noSep}, bagian 14.2) —
+// bentuk respons SUDAH terverifikasi dari dokumen resmi (bukan tebakan lagi
+// seperti sebelumnya), jadi ditampilkan sebagai tabel kolom sungguhan alih-
+// alih flatten path:value generik seperti SEP Induk/Monitoring yang bentuk
+// responsnya masih belum diverifikasi.
+const SEP_INTERNAL_COLUMNS: { key: string; label: string }[] = [
+  { key: 'nosep', label: 'No. SEP Induk' },
+  { key: 'nosepref', label: 'No. SEP Rujukan' },
+  { key: 'tujuanrujuk', label: 'Kode Poli Tujuan' },
+  { key: 'nmtujuanrujuk', label: 'Nama Poli Tujuan' },
+  { key: 'kdpoliasal', label: 'Kode Poli Asal' },
+  { key: 'nmpoliasal', label: 'Nama Poli Asal' },
+  { key: 'tglrujukinternal', label: 'Tgl. Rujuk Internal' },
+  { key: 'ppkpelsep', label: 'PPK Pelayanan' },
+  { key: 'nokapst', label: 'No. Kartu' },
+  { key: 'tglsep', label: 'Tgl. SEP' },
+  { key: 'nosurat', label: 'No. Surat' },
+  { key: 'flaginternal', label: 'Flag Internal' },
+  { key: 'kdpenunjang', label: 'Kode Penunjang' },
+  { key: 'nmpenunjang', label: 'Nama Penunjang' },
+  { key: 'diagppk', label: 'Kode Diagnosa' },
+  { key: 'nmdiag', label: 'Nama Diagnosa' },
+  { key: 'kddokter', label: 'Kode Dokter' },
+  { key: 'nmdokter', label: 'Nama Dokter' },
+  { key: 'flagprosedur', label: 'Flag Prosedur' },
+  { key: 'opsikonsul', label: 'Opsi Konsul' },
+  { key: 'flagsep', label: 'Flag SEP' },
+  { key: 'fuser', label: 'User Input' },
+  { key: 'fdate', label: 'Tgl. Input' },
+];
+
+const SepInternalTable: React.FC<{ data: any }> = ({ data }) => {
+  const list: any[] = Array.isArray(data?.list) ? data.list : [];
+  if (list.length === 0) {
+    return <ResultTable data={data} />;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {typeof data?.count !== 'undefined' && (
+        <div style={{ fontSize: 12, color: '#6b7280' }}>Jumlah: {data.count}</div>
+      )}
+      <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead style={{ background: '#f3f4f6' }}>
+            <tr>
+              {SEP_INTERNAL_COLUMNS.map((col) => (
+                <th key={col.key} style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap', fontWeight: 400 }}>
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((row, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                {SEP_INTERNAL_COLUMNS.map((col) => (
+                  <td key={col.key} style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>
+                    {row[col.key] ?? '-'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
     <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{title}</div>
@@ -163,7 +232,7 @@ export const BpjsPencarianSepView: React.FC = () => {
           <button type="submit" disabled={loadingInternal} style={cariButtonStyle}>{loadingInternal ? 'Mencari...' : 'Cari'}</button>
           {errorInternal && <span style={{ fontSize: 12, color: '#991b1b', whiteSpace: 'nowrap' }}>{errorInternal}</span>}
         </form>
-        {resultInternal && <ResultTable data={resultInternal} />}
+        {resultInternal && <SepInternalTable data={resultInternal} />}
       </Section>
 
       <Section title="Monitoring SEP / Kunjungan">
@@ -175,8 +244,8 @@ export const BpjsPencarianSepView: React.FC = () => {
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Jenis Pelayanan</label>
             <select style={{ ...inputStyle, width: 160 }} value={jnsMonitoring} onChange={(e) => setJnsMonitoring(e.target.value)}>
-              <option value="1">Rawat Jalan</option>
-              <option value="2">Rawat Inap</option>
+              <option value="1">Rawat Inap</option>
+              <option value="2">Rawat Jalan</option>
             </select>
           </div>
           <button type="submit" disabled={loadingMonitoring} style={cariButtonStyle}>{loadingMonitoring ? 'Mencari...' : 'Cari'}</button>
