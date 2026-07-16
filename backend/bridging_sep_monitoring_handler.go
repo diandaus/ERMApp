@@ -14,6 +14,7 @@ import (
 //   14.1 SEP Induk       GET SEP/{noSep}
 //   14.2 SEP Internal    GET SEP/Internal/{noSep}
 //   15   Monitoring SEP  GET Monitoring/Kunjungan/Tanggal/{tgl}/JnsPelayanan/{jns}
+//   16   Data Klaim      GET Monitoring/Klaim/Tanggal/{tglPulang}/JnsPelayanan/{jns}/Status/{status}
 // Pesan "SEP tidak ditemukan" (14.1.2/14.2.2) dan "data tidak ditemukan"
 // (15.2) diteruskan apa adanya dari respons vclaimRequest.
 // ============================================================================
@@ -88,5 +89,67 @@ func getMonitoringSep(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"monitoring": result})
+	}
+}
+
+// getMonitoringKlaim menangani bagian 16 Data Klaim (GET
+// Monitoring/Klaim/Tanggal/{tglPulang}/JnsPelayanan/{jnsPelayanan}/Status/{status}).
+// jnsPelayanan: "1" = Rawat Inap, "2" = Rawat Jalan (sama seperti Insert/
+// Update SEP). status: "1" Proses Verifikasi, "2" Pending Verifikasi,
+// "3" Klaim.
+func getMonitoringKlaim(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tglPulang := strings.TrimSpace(c.Query("tgl_pulang"))
+		if tglPulang == "" {
+			tglPulang = time.Now().Format("2006-01-02")
+		}
+		jnsPelayanan := c.DefaultQuery("jns_pelayanan", "2")
+		status := c.DefaultQuery("status", "1")
+
+		cfg, err := getVclaimConfig(db)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		path := "Monitoring/Klaim/Tanggal/" + tglPulang + "/JnsPelayanan/" + jnsPelayanan + "/Status/" + status
+		result, err := vclaimRequest(cfg, http.MethodGet, path, nil)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"klaim": result})
+	}
+}
+
+// getKlaimCountToday menghitung jumlah klaim berstatus "Klaim" (3 — sudah
+// difinalisasi) dengan tglPulang hari ini, gabungan Rawat Inap + Rawat
+// Jalan — dipakai kartu "Klaim Terkirim" di Overview Bridging BPJS. Beda
+// dari "SEP Terbit Hari Ini" (query tabel lokal), ini panggilan LIVE ke
+// BPJS (2x, satu per jenis pelayanan) karena tidak ada tabel lokal yang
+// menyimpan status klaim. Kalau BPJS menolak salah satu (mis. memang tidak
+// ada data utk kombinasi tanggal/jenis/status itu — BPJS balas error, bukan
+// list kosong), dilewati saja, bukan dianggap gagal total.
+func getKlaimCountToday(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg, err := getVclaimConfig(db)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		tgl := time.Now().Format("2006-01-02")
+		total := 0
+		for _, jns := range []string{"1", "2"} {
+			path := "Monitoring/Klaim/Tanggal/" + tgl + "/JnsPelayanan/" + jns + "/Status/3"
+			result, err := vclaimRequest(cfg, http.MethodGet, path, nil)
+			if err != nil {
+				continue
+			}
+			if list, ok := result["klaim"].([]interface{}); ok {
+				total += len(list)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"count": total})
 	}
 }

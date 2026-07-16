@@ -88,10 +88,6 @@ type BridgingSep struct {
 	AsesmenPelayanan string `json:"asesmenpelayanan"` // "" / "1".."5"
 	KdDpjpLayanan    string `json:"kddpjplayanan"`
 	NmDpjpLayanan    string `json:"nmdpjplayanan"`
-	// No. Laporan Polisi (KLL/Jasa Raharja) — kolomnya TIDAK ada di skema
-	// bridging_sep native Khanza, sengaja ditambahkan lewat
-	// ensureBridgingSepExtraColumns karena dibutuhkan form Input SEP ini.
-	NoLaporanPolisi string `json:"no_laporan_polisi"`
 	// TglPulang — diisi lewat modal Update Tanggal Pulang (updateTglPulangSep),
 	// ditambahkan di sini supaya ikut tampil di tabel daftar SEP (kolom
 	// "Tanggal Pulang" di BPJSDataSEP.java).
@@ -115,7 +111,7 @@ const bridgingSepSelectCols = `
 	COALESCE(suplesi,''), COALESCE(no_sep_suplesi,''), COALESCE(notelep,''), COALESCE(` + "`user`" + `,''),
 	COALESCE(asal_rujukan,''), COALESCE(eksekutif,''), COALESCE(cob,''), COALESCE(katarak,''),
 	COALESCE(tujuankunjungan,''), COALESCE(flagprosedur,''), COALESCE(penunjang,''), COALESCE(asesmenpelayanan,''),
-	COALESCE(kddpjplayanan,''), COALESCE(nmdpjplayanan,''), COALESCE(no_laporan_polisi,''),
+	COALESCE(kddpjplayanan,''), COALESCE(nmdpjplayanan,''),
 	COALESCE(tglpulang,'0000-00-00 00:00:00')
 `
 
@@ -138,7 +134,7 @@ func scanBridgingSepRow(row sepRowScanner, s *BridgingSep) error {
 		&s.Suplesi, &s.NoSepSuplesi, &s.Notelep, &s.UserEntry,
 		&s.AsalRujukan, &s.Eksekutif, &s.Cob, &s.Katarak,
 		&s.TujuanKunjungan, &s.FlagProsedur, &s.Penunjang, &s.AsesmenPelayanan,
-		&s.KdDpjpLayanan, &s.NmDpjpLayanan, &s.NoLaporanPolisi, &s.TglPulang,
+		&s.KdDpjpLayanan, &s.NmDpjpLayanan, &s.TglPulang,
 	)
 }
 
@@ -194,6 +190,21 @@ func getBridgingSepList(db *sql.DB) gin.HandlerFunc {
 	return getBridgingSepListFromTable(db, "bridging_sep")
 }
 
+// getBridgingSepCountToday menghitung jumlah SEP yang tglsep-nya hari ini —
+// dipakai kartu "SEP Terbit Hari Ini" di Overview Bridging BPJS. Query
+// ringan (COUNT saja), sengaja terpisah dari getBridgingSepList supaya
+// tidak perlu narik 52 kolom cuma buat angka.
+func getBridgingSepCountToday(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM bridging_sep WHERE tglsep = CURDATE()`).Scan(&count); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"count": count})
+	}
+}
+
 // getBridgingSepInternalList menampilkan daftar SEP Internal (tab "Data SEP
 // Internal") — kolomnya sama persis dengan tab "Data SEP" (tabModeInternal
 // di BPJSDataSEP.java identik dengan tabMode).
@@ -226,46 +237,6 @@ func asalRujukanEnumText(v string) string {
 	return "1. Faskes 1"
 }
 
-// ensureBridgingSepExtraColumns menambahkan kolom yang belum ada di skema
-// bridging_sep native Khanza tapi dibutuhkan form Input SEP ini (no.
-// laporan polisi untuk kasus KLL/Jasa Raharja — tidak ada kolomnya di
-// skema asli). Dicek dulu lewat information_schema supaya aman dijalankan
-// berkali-kali (idempotent), beda dari tabel ensureXTable lain yang memang
-// kita yang buat dari nol.
-func ensureBridgingSepExtraColumns(db *sql.DB) error {
-	// bridging_sep_internal (fallback lokal saat Insert SEP ke BPJS gagal,
-	// lihat BPJSDataSEP.java insertSEP()) berskema identik dengan
-	// bridging_sep, jadi kolom tambahan ini perlu ditambahkan ke keduanya —
-	// tapi tabelnya dicek dulu, karena tidak semua instalasi Khanza
-	// tentu punya tabel ini.
-	for _, table := range []string{"bridging_sep", "bridging_sep_internal"} {
-		var tableExists int
-		if err := db.QueryRow(`
-			SELECT COUNT(*) FROM information_schema.TABLES
-			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-		`, table).Scan(&tableExists); err != nil {
-			return fmt.Errorf("gagal cek tabel %s: %v", table, err)
-		}
-		if tableExists == 0 {
-			continue
-		}
-
-		var cnt int
-		if err := db.QueryRow(`
-			SELECT COUNT(*) FROM information_schema.COLUMNS
-			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'no_laporan_polisi'
-		`, table).Scan(&cnt); err != nil {
-			return fmt.Errorf("gagal cek kolom no_laporan_polisi di %s: %v", table, err)
-		}
-		if cnt == 0 {
-			if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN no_laporan_polisi VARCHAR(40) NULL DEFAULT NULL AFTER keterangankkl`); err != nil {
-				return fmt.Errorf("gagal menambah kolom no_laporan_polisi di %s: %v", table, err)
-			}
-		}
-	}
-	return nil
-}
-
 func upsertBridgingSepLocal(db *sql.DB, s BridgingSep) error {
 	suplesiVal := tidakYaEnumText(s.Suplesi)
 	eksekutifVal := tidakYaEnumText(s.Eksekutif)
@@ -288,7 +259,7 @@ func upsertBridgingSepLocal(db *sql.DB, s BridgingSep) error {
 			tglkkl, keterangankkl, suplesi, no_sep_suplesi, notelep, `+"`user`"+`,
 			asal_rujukan, eksekutif, cob, katarak,
 			tujuankunjungan, flagprosedur, penunjang, asesmenpelayanan,
-			kddpjplayanan, nmdpjplayanan, no_laporan_polisi
+			kddpjplayanan, nmdpjplayanan
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			no_rawat=VALUES(no_rawat), tglsep=VALUES(tglsep), tglrujukan=VALUES(tglrujukan), no_rujukan=VALUES(no_rujukan),
@@ -306,8 +277,7 @@ func upsertBridgingSepLocal(db *sql.DB, s BridgingSep) error {
 			no_sep_suplesi=VALUES(no_sep_suplesi), notelep=VALUES(notelep), `+"`user`"+`=VALUES(`+"`user`"+`),
 			asal_rujukan=VALUES(asal_rujukan), eksekutif=VALUES(eksekutif), cob=VALUES(cob), katarak=VALUES(katarak),
 			tujuankunjungan=VALUES(tujuankunjungan), flagprosedur=VALUES(flagprosedur), penunjang=VALUES(penunjang),
-			asesmenpelayanan=VALUES(asesmenpelayanan), kddpjplayanan=VALUES(kddpjplayanan), nmdpjplayanan=VALUES(nmdpjplayanan),
-			no_laporan_polisi=VALUES(no_laporan_polisi)
+			asesmenpelayanan=VALUES(asesmenpelayanan), kddpjplayanan=VALUES(kddpjplayanan), nmdpjplayanan=VALUES(nmdpjplayanan)
 	`,
 		s.NoSep, s.NoRawat, nullIfEmptyDate(s.Tglsep), nullIfEmptyDate(s.Tglrujukan), s.NoRujukan,
 		s.Kdppkrujukan, s.Nmppkrujukan, s.Kdppkpelayanan, s.Nmppkpelayanan,
@@ -319,7 +289,7 @@ func upsertBridgingSepLocal(db *sql.DB, s BridgingSep) error {
 		s.Tglkkl, s.Keterangankkl, suplesiVal, s.NoSepSuplesi, s.Notelep, s.UserEntry,
 		asalRujukanVal, eksekutifVal, cobVal, katarakVal,
 		tujuanKunjunganVal, s.FlagProsedur, s.Penunjang, s.AsesmenPelayanan,
-		s.KdDpjpLayanan, s.NmDpjpLayanan, nullIfEmptyStr(s.NoLaporanPolisi),
+		s.KdDpjpLayanan, s.NmDpjpLayanan,
 	)
 	return err
 }
@@ -744,7 +714,11 @@ func buildJaminanPayload(s BridgingSep, includeNoLP bool) map[string]interface{}
 		},
 	}
 	if includeNoLP {
-		jaminan["noLP"] = s.NoLaporanPolisi
+		// No. Laporan Polisi tidak lagi disimpan lokal (kolomnya sempat
+		// ditambahkan lalu dibatalkan karena bikin SIMRS Khanza Desktop
+		// gagal simpan SEP — insert-nya berbasis posisi kolom, jadi kolom
+		// baru di tengah tabel menggeser semuanya). Dikirim kosong dulu.
+		jaminan["noLP"] = ""
 	}
 	return jaminan
 }

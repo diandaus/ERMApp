@@ -262,6 +262,25 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
   const [activeTab, setActiveTab] = React.useState<BpjsTab>('overview');
   const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
 
+  // "SEP Terbit Hari Ini" — query tabel lokal (cepat). "Klaim Terkirim" —
+  // panggilan live ke BPJS (Monitoring/Klaim, status "Klaim"/finalisasi
+  // hari ini), jadi wajar kalau lebih lambat muncul. "Status Koneksi" dan
+  // "Rujukan Diproses" masih dummy (maknanya belum disepakati).
+  const [sepHariIni, setSepHariIni] = React.useState<string>('-');
+  const [klaimTerkirim, setKlaimTerkirim] = React.useState<string>('-');
+
+  React.useEffect(() => {
+    fetch('/api/bridging/sep/count-today')
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => setSepHariIni(String(data.count)))
+      .catch(() => setSepHariIni('-'));
+
+    fetch('/api/bridging/sep/klaim-count-today')
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => setKlaimTerkirim(String(data.count)))
+      .catch(() => setKlaimTerkirim('-'));
+  }, []);
+
   return (
     <section
       style={{
@@ -440,7 +459,7 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
                 />
                 <StatCard
                   label="SEP Terbit Hari Ini"
-                  value="0"
+                  value={sepHariIni}
                   icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>}
                 />
                 <StatCard
@@ -450,7 +469,7 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
                 />
                 <StatCard
                   label="Klaim Terkirim"
-                  value="0"
+                  value={klaimTerkirim}
                   icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect></svg>}
                 />
               </div>

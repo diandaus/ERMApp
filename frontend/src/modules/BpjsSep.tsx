@@ -41,7 +41,6 @@ type SepItem = {
   nmkec: string;
   tglkkl: string;
   keterangankkl: string;
-  no_laporan_polisi: string;
   tglpulang: string;
   suplesi: string;
   no_sep_suplesi: string;
@@ -99,7 +98,6 @@ const emptyForm = (): SepItem => ({
   nmkec: '',
   tglkkl: '',
   keterangankkl: '',
-  no_laporan_polisi: '',
   tglpulang: '',
   suplesi: '',
   no_sep_suplesi: '',
@@ -1380,12 +1378,10 @@ export const BpjsSepView: React.FC = () => {
                   <Row label="Keterangan">
                     <textarea
                       rows={1}
-                      style={{ ...pillInput, flex: '0 0 55%', resize: 'none' }}
+                      style={{ ...pillInput, resize: 'none' }}
                       value={form.keterangankkl}
                       onChange={(e) => setForm((p) => ({ ...p, keterangankkl: e.target.value }))}
                     />
-                    <div style={{ width: 50, flexShrink: 0, textAlign: 'right', fontSize: 12.5, color: '#111827' }}>No.LP :</div>
-                    <input style={pillInput} value={form.no_laporan_polisi} onChange={(e) => setForm((p) => ({ ...p, no_laporan_polisi: e.target.value }))} />
                   </Row>
                   <Row label="Suplesi">
                     <PillSelect

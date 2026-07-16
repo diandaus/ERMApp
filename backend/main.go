@@ -761,10 +761,6 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel bridging_pengajuan_penjaminan: %v", err)
 	}
 
-	if err := ensureBridgingSepExtraColumns(db); err != nil {
-		log.Fatalf("gagal inisialisasi kolom tambahan bridging_sep: %v", err)
-	}
-
 	if err := ensureBridgingAntreanQueueTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel bridging_antrean_queue: %v", err)
 	}
@@ -2851,6 +2847,7 @@ func main() {
 
 	// Bridging SEP (BPJS VClaim) endpoints
 	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
+	r.GET("/api/bridging/sep/count-today", getBridgingSepCountToday(db))
 	r.POST("/api/bridging/sep", saveBridgingSepLocal(db))
 	r.POST("/api/bridging/sep/insert", insertSepToBpjs(db))
 	r.POST("/api/bridging/sep/kirim/*no_sep", sendSepToBpjs(db))
@@ -2864,6 +2861,8 @@ func main() {
 	r.GET("/api/bridging/sep/cari/*no_sep", searchSepBpjs(db))
 	r.GET("/api/bridging/sep-internal/cari/*no_sep", searchSepInternalBpjs(db))
 	r.GET("/api/bridging/sep/monitoring", getMonitoringSep(db))
+	r.GET("/api/bridging/sep/monitoring-klaim", getMonitoringKlaim(db))
+	r.GET("/api/bridging/sep/klaim-count-today", getKlaimCountToday(db))
 
 	// Bridging Peserta (BPJS VClaim) endpoints
 	r.GET("/api/bridging/peserta/nokartu/*no_kartu", searchPesertaByNoKartu(db))

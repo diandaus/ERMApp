@@ -123,6 +123,60 @@ const SepInternalTable: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
+const formatRupiah = (v: string | number | undefined) => {
+  const n = Number(v ?? 0);
+  return isNaN(n) ? String(v ?? '-') : n.toLocaleString('id-ID');
+};
+
+// Tabel hasil "Data Klaim" (bagian 16, GET Monitoring/Klaim/Tanggal/{tglPulang}/
+// JnsPelayanan/{jns}/Status/{status}) — bentuk respons sudah terverifikasi
+// dari dokumen resmi (array `klaim`, tiap baris punya objek bersarang
+// Inacbg/biaya/peserta), jadi ditampilkan sebagai tabel kolom sungguhan.
+const KlaimTable: React.FC<{ data: any }> = ({ data }) => {
+  const list: any[] = Array.isArray(data?.klaim) ? data.klaim : [];
+  if (list.length === 0) {
+    return <ResultTable data={data} />;
+  }
+  return (
+    <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead style={{ background: '#f3f4f6' }}>
+          <tr>
+            {['No. SEP', 'Nama Peserta', 'No. Kartu', 'No. MR', 'Poli', 'Kelas Rawat', 'Tgl. SEP', 'Tgl. Pulang', 'Kode INACBG', 'Nama INACBG', 'Biaya Pengajuan', 'Biaya Disetujui', 'Biaya Tarif Gruper', 'Biaya Tarif RS', 'Biaya Top Up', 'No. FPK', 'Status'].map((h) => (
+              <th key={h} style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap', fontWeight: 400 }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((row, i) => (
+            <tr key={i} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.noSEP || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.peserta?.nama || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.peserta?.noKartu || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.peserta?.noMR || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.poli || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.kelasRawat || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.tglSep || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.tglPulang || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.Inacbg?.kode || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.Inacbg?.nama || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatRupiah(row.biaya?.byPengajuan)}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatRupiah(row.biaya?.bySetujui)}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatRupiah(row.biaya?.byTarifGruper)}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatRupiah(row.biaya?.byTarifRS)}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatRupiah(row.biaya?.byTopup)}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.noFPK || '-'}</td>
+              <td style={{ padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{row.status || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
     <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{title}</div>
@@ -149,6 +203,14 @@ export const BpjsPencarianSepView: React.FC = () => {
   const [loadingMonitoring, setLoadingMonitoring] = React.useState(false);
   const [errorMonitoring, setErrorMonitoring] = React.useState<string | null>(null);
   const [resultMonitoring, setResultMonitoring] = React.useState<any>(null);
+
+  // 16 Data Klaim
+  const [tglKlaim, setTglKlaim] = React.useState(localDateStr());
+  const [jnsKlaim, setJnsKlaim] = React.useState('2');
+  const [statusKlaim, setStatusKlaim] = React.useState('1');
+  const [loadingKlaim, setLoadingKlaim] = React.useState(false);
+  const [errorKlaim, setErrorKlaim] = React.useState<string | null>(null);
+  const [resultKlaim, setResultKlaim] = React.useState<any>(null);
 
   const cariSepInduk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +271,23 @@ export const BpjsPencarianSepView: React.FC = () => {
     }
   };
 
+  const cariKlaim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorKlaim(null);
+    setResultKlaim(null);
+    setLoadingKlaim(true);
+    try {
+      const res = await fetch(`/api/bridging/sep/monitoring-klaim?tgl_pulang=${tglKlaim}&jns_pelayanan=${jnsKlaim}&status=${statusKlaim}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Data tidak ditemukan');
+      setResultKlaim(data.klaim ?? data);
+    } catch (err: any) {
+      setErrorKlaim(err.message || 'Terjadi kesalahan');
+    } finally {
+      setLoadingKlaim(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
       <Section title="Pencarian SEP Induk">
@@ -252,6 +331,33 @@ export const BpjsPencarianSepView: React.FC = () => {
           {errorMonitoring && <span style={{ fontSize: 12, color: '#991b1b', whiteSpace: 'nowrap' }}>{errorMonitoring}</span>}
         </form>
         {resultMonitoring && <ResultTable data={resultMonitoring} />}
+      </Section>
+
+      <Section title="Data Klaim">
+        <form onSubmit={cariKlaim} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Tanggal Pulang</label>
+            <input type="date" style={{ ...inputStyle, width: 160 }} value={tglKlaim} onChange={(e) => setTglKlaim(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Jenis Pelayanan</label>
+            <select style={{ ...inputStyle, width: 160 }} value={jnsKlaim} onChange={(e) => setJnsKlaim(e.target.value)}>
+              <option value="1">Rawat Inap</option>
+              <option value="2">Rawat Jalan</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Status Klaim</label>
+            <select style={{ ...inputStyle, width: 180 }} value={statusKlaim} onChange={(e) => setStatusKlaim(e.target.value)}>
+              <option value="1">Proses Verifikasi</option>
+              <option value="2">Pending Verifikasi</option>
+              <option value="3">Klaim</option>
+            </select>
+          </div>
+          <button type="submit" disabled={loadingKlaim} style={cariButtonStyle}>{loadingKlaim ? 'Mencari...' : 'Cari'}</button>
+          {errorKlaim && <span style={{ fontSize: 12, color: '#991b1b', whiteSpace: 'nowrap' }}>{errorKlaim}</span>}
+        </form>
+        {resultKlaim && <KlaimTable data={resultKlaim} />}
       </Section>
     </div>
   );
