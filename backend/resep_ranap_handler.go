@@ -94,8 +94,14 @@ type SaveResepRanapPayload struct {
 	Racikan    []RacikanPayload    `json:"racikan"`
 }
 
-// kdApotek mengembalikan bangsal apotek utama — tempat stok obat ranap diambil.
-func kdApotek(db *sql.DB) string {
+// kdApotek mengembalikan depo obat tempat stok ranap diambil. Diresolve
+// dulu lewat Pengaturan Depo Ranap (set_depo_ranap, berdasarkan bangsal
+// aktif pasien) kalau noRawat dikirim dan sudah diatur — baru fallback ke
+// logika lama (pilih AP/GD dengan stok terbanyak) kalau belum diatur.
+func kdApotek(db *sql.DB, noRawat string) string {
+	if kd := resolveDepoRanap(db, noRawat); kd != "" {
+		return kd
+	}
 	var kd string
 	row := db.QueryRow(`
 		SELECT kd_bangsal FROM gudangbarang
@@ -117,7 +123,7 @@ func searchObatRanap(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		apotek := kdApotek(db)
+		apotek := kdApotek(db, c.Query("no_rawat"))
 		like := "%" + search + "%"
 
 		rows, err := db.Query(`

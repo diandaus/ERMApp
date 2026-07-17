@@ -13,6 +13,7 @@ import { HfisView } from './Hfis';
 import { AntreanRsView } from './AntreanRs';
 import { AntreanTaskIdView } from './AntreanTaskId';
 import { AntreanOtomatisView } from './AntreanOtomatis';
+import { ReferensiPendaftaranMobileJknView } from './ReferensiPendaftaranMobileJkn';
 
 type BpjsTab =
   | 'overview'
@@ -489,7 +490,7 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
           {activeTab === 'hfis' && <HfisView />}
           {activeTab === 'task-id-mobile-jkn' && <AntreanTaskIdView />}
           {activeTab === 'antrian-mobile-jkn' && <AntreanRsView />}
-          {activeTab === 'referensi-pendaftaran-mobile-jkn' && <Placeholder title="Referensi Pendaftaran Mobile JKN" />}
+          {activeTab === 'referensi-pendaftaran-mobile-jkn' && <ReferensiPendaftaranMobileJknView />}
           {activeTab === 'antrean-otomatis' && <AntreanOtomatisView />}
           {activeTab === 'log' && <Placeholder title="Log Bridging" />}
           {activeTab === 'pengaturan' && <Placeholder title="Pengaturan BPJS" />}

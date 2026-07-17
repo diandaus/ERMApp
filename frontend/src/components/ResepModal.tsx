@@ -8,7 +8,6 @@ type ResepModalProps = {
   onClose: () => void;
   onResepSaved?: (planningText: string) => void; // Callback untuk update planning setelah simpan resep
   isRanap?: boolean;   // true = pasien rawat inap, simpan ke resep_obat+detail_pemberian_obat
-  kdBangsal?: string;  // bangsal pasien ranap, untuk filter stok obat
   editResep?: { no_resep: string; items: any[]; racikan?: any[] }; // pre-fill untuk edit resep yang sudah ada
 };
 
@@ -48,7 +47,7 @@ type Racikan = {
   detail: RacikanDetail[];
 };
 
-export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onResepSaved, isRanap = false, kdBangsal = '', editResep }) => {
+export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onResepSaved, isRanap = false, editResep }) => {
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
 
   // Non Racikan State
@@ -455,7 +454,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     try {
       let data: ObatItem[];
       if (isRanap) {
-        const url = `/api/resep-ranap/obat?search=${encodeURIComponent(searchObatNonRacikan)}`;
+        const url = `/api/resep-ranap/obat?search=${encodeURIComponent(searchObatNonRacikan)}&no_rawat=${encodeURIComponent(patient.no_rawat || '')}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to search obat');
         const raw = await res.json();
@@ -472,7 +471,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
           kapasitas: String(o.kapasitas ?? ''),
         }));
       } else {
-        const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatNonRacikan)}`);
+        const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatNonRacikan)}&no_rawat=${encodeURIComponent(patient.no_rawat || '')}`);
         if (!response.ok) throw new Error('Failed to search obat');
         data = await response.json() || [];
       }
@@ -553,7 +552,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     try {
       let data: ObatItem[];
       if (isRanap) {
-        const url = `/api/resep-ranap/obat?search=${encodeURIComponent(searchObatRacikan)}`;
+        const url = `/api/resep-ranap/obat?search=${encodeURIComponent(searchObatRacikan)}&no_rawat=${encodeURIComponent(patient.no_rawat || '')}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to search obat');
         const raw = await res.json();
@@ -569,7 +568,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
           kapasitas: String(o.kapasitas ?? ''),
         }));
       } else {
-        const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatRacikan)}`);
+        const response = await fetch(`/api/obat/search?query=${encodeURIComponent(searchObatRacikan)}&no_rawat=${encodeURIComponent(patient.no_rawat || '')}`);
         if (!response.ok) throw new Error('Failed to search obat');
         data = await response.json() || [];
       }

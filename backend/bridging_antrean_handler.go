@@ -74,30 +74,55 @@ func getAntreanRsList(db *sql.DB) gin.HandlerFunc {
 		tglDari := c.Query("tgl_dari")
 		tglSampai := c.Query("tgl_sampai")
 		search := c.Query("search")
+		kodeBooking := strings.TrimSpace(c.Query("kodebooking"))
 
-		if tglDari == "" {
-			tglDari = time.Now().Format("2006-01-02")
-		}
-		if tglSampai == "" {
-			tglSampai = tglDari
-		}
+		var query string
+		var args []interface{}
 
-		query := `
-			SELECT nobooking, COALESCE(no_rawat,''), COALESCE(nomorkartu,''), COALESCE(nik,''), COALESCE(nohp,''),
-				COALESCE(kodepoli,''), pasienbaru, COALESCE(norm,''), COALESCE(tanggalperiksa,'0000-00-00'),
-				COALESCE(kodedokter,''), COALESCE(jampraktek,''), COALESCE(jeniskunjungan,''),
-				COALESCE(nomorreferensi,''), COALESCE(nomorantrean,''), COALESCE(angkaantrean,''),
-				COALESCE(estimasidilayani,''), sisakuotajkn, kuotajkn, sisakuotanonjkn, kuotanonjkn, status
-			FROM referensi_mobilejkn_bpjs
-			WHERE tanggalperiksa BETWEEN ? AND ?
-		`
-		args := []interface{}{tglDari, tglSampai}
-		if search != "" {
-			query += ` AND (nobooking LIKE ? OR norm LIKE ? OR nomorkartu LIKE ? OR nik LIKE ?)`
-			pattern := "%" + search + "%"
-			args = append(args, pattern, pattern, pattern, pattern)
+		// namapoli/namadokter di-resolve lewat LEFT JOIN ke
+		// maping_poli_bpjs/maping_dokter_dpjpvclaim — tabel
+		// referensi_mobilejkn_bpjs sendiri cuma menyimpan kode mentahnya
+		// (kodepoli/kodedokter), pola sama yang sudah dipakai
+		// getReferensiMobileJkn. Ditambahkan supaya prefill modal "Tambah
+		// Antrean" (dipanggil dari AntreanRs.tsx & ReferensiPendaftaranMobileJkn.tsx
+		// lewat parameter kodebooking di bawah) bisa otomatis mengisi Nama
+		// Poli/Nama Dokter, bukan cuma kodenya — sebelumnya field ini
+		// sengaja dikosongkan dengan pesan "isi manual" karena endpoint ini
+		// belum melakukan resolusi nama sama sekali.
+		const selectCols = `nobooking, COALESCE(no_rawat,''), COALESCE(nomorkartu,''), COALESCE(nik,''), COALESCE(nohp,''),
+					COALESCE(kodepoli,''), pasienbaru, COALESCE(norm,''), COALESCE(tanggalperiksa,'0000-00-00'),
+					COALESCE(kodedokter,''), COALESCE(jampraktek,''), COALESCE(jeniskunjungan,''),
+					COALESCE(nomorreferensi,''), COALESCE(nomorantrean,''), COALESCE(angkaantrean,''),
+					COALESCE(estimasidilayani,''), sisakuotajkn, kuotajkn, sisakuotanonjkn, kuotanonjkn, status,
+					COALESCE(mp.nm_poli_bpjs,''), COALESCE(md.nm_dokter_bpjs,'')`
+		const joinCols = `FROM referensi_mobilejkn_bpjs
+				LEFT JOIN maping_poli_bpjs mp ON mp.kd_poli_bpjs = referensi_mobilejkn_bpjs.kodepoli
+				LEFT JOIN maping_dokter_dpjpvclaim md ON md.kd_dokter_bpjs = referensi_mobilejkn_bpjs.kodedokter`
+
+		if kodeBooking != "" {
+			// Lookup exact satu baris by kodebooking, LINTAS TANGGAL (dipakai
+			// untuk prefill modal "Tambah Antrean" ulang saat BPJS menolak
+			// update dengan "Kode Booking tidak ditemukan" — booking-nya bisa
+			// jadi dari tanggal berapa pun, jadi filter tanggal harus dilewati).
+			query = `SELECT ` + selectCols + ` ` + joinCols + ` WHERE referensi_mobilejkn_bpjs.nobooking = ?`
+			args = []interface{}{kodeBooking}
+		} else {
+			if tglDari == "" {
+				tglDari = time.Now().Format("2006-01-02")
+			}
+			if tglSampai == "" {
+				tglSampai = tglDari
+			}
+
+			query = `SELECT ` + selectCols + ` ` + joinCols + ` WHERE referensi_mobilejkn_bpjs.tanggalperiksa BETWEEN ? AND ?`
+			args = []interface{}{tglDari, tglSampai}
+			if search != "" {
+				query += ` AND (referensi_mobilejkn_bpjs.nobooking LIKE ? OR referensi_mobilejkn_bpjs.norm LIKE ? OR referensi_mobilejkn_bpjs.nomorkartu LIKE ? OR referensi_mobilejkn_bpjs.nik LIKE ?)`
+				pattern := "%" + search + "%"
+				args = append(args, pattern, pattern, pattern, pattern)
+			}
 		}
-		query += ` ORDER BY tanggalperiksa DESC, nobooking DESC LIMIT 500`
+		query += ` ORDER BY referensi_mobilejkn_bpjs.tanggalperiksa DESC, referensi_mobilejkn_bpjs.nobooking DESC LIMIT 500`
 
 		rows, err := db.Query(query, args...)
 		if err != nil {
@@ -128,6 +153,8 @@ func getAntreanRsList(db *sql.DB) gin.HandlerFunc {
 			SisaKuotaNonJkn  int    `json:"sisakuotanonjkn"`
 			KuotaNonJkn      int    `json:"kuotanonjkn"`
 			Status           string `json:"status"`
+			NamaPoli         string `json:"namapoli"`
+			NamaDokter       string `json:"namadokter"`
 		}
 		items := []row{}
 		for rows.Next() {
@@ -138,6 +165,7 @@ func getAntreanRsList(db *sql.DB) gin.HandlerFunc {
 				&r.KodeDokter, &r.JamPraktek, &r.JenisKunjungan,
 				&r.NomorReferensi, &r.NomorAntrean, &r.AngkaAntrean,
 				&r.EstimasiDilayani, &r.SisaKuotaJkn, &r.KuotaJkn, &r.SisaKuotaNonJkn, &r.KuotaNonJkn, &r.Status,
+				&r.NamaPoli, &r.NamaDokter,
 			); err != nil {
 				continue
 			}
@@ -254,7 +282,7 @@ func createAntreanRsBpjs(db *sql.DB, cfg *vclaimConfig, req AntreanRs, kodeDokte
 			sisakuotanonjkn, kuotanonjkn, status, validasi, statuskirim
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Belum', NOW(), 'Sudah')
 		ON DUPLICATE KEY UPDATE
-			no_rawat=VALUES(no_rawat), nomorkartu=VALUES(nomorkartu), nik=VALUES(nik), nohp=VALUES(nohp),
+			no_rawat=COALESCE(VALUES(no_rawat), no_rawat), nomorkartu=VALUES(nomorkartu), nik=VALUES(nik), nohp=VALUES(nohp),
 			kodepoli=VALUES(kodepoli), pasienbaru=VALUES(pasienbaru), norm=VALUES(norm),
 			tanggalperiksa=VALUES(tanggalperiksa), kodedokter=VALUES(kodedokter), jampraktek=VALUES(jampraktek),
 			jeniskunjungan=VALUES(jeniskunjungan), nomorreferensi=VALUES(nomorreferensi),
@@ -817,6 +845,89 @@ func getAntreanPendaftaranFilter(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"pendaftaran": result})
+	}
+}
+
+// getReferensiMobileJkn menangani tab "Referensi Pendaftaran Mobile JKN"
+// — padanan tampil() di dialog Java asli (nama file tidak diketahui,
+// tapi query-nya diberikan langsung oleh user, dikutip verbatim di
+// bawah). BEDA PENTING dari percobaan pertama fitur ini (yang salah
+// menyamakannya dengan bridging/BPJSAntreanPerTanggal.java): dialog ini
+// TIDAK memanggil BPJS sama sekali — murni baca tabel LOKAL
+// `referensi_mobilejkn_bpjs` (JOIN `pasien` by norm=no_rkm_medis untuk
+// nama pasien), dengan kodepoli/kodedokter di-resolve ke nama BPJS-nya
+// lewat lookup terpisah per baris ke `maping_poli_bpjs`/
+// `maping_dokter_dpjpvclaim` (bukan JOIN langsung — direplikasi sebagai
+// LEFT JOIN di sini, hasilnya sama tapi satu query alih-alih N+1).
+// Tidak ada panel statistik SEP Terbit/capaian sama sekali di dialog
+// ini — itu murni bagian dari fitur lain (BPJSAntreanPerTanggal.java)
+// yang salah dikira jadi tab yang sama.
+func getReferensiMobileJkn(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tgl1 := strings.TrimSpace(c.Query("tgl1"))
+		tgl2 := strings.TrimSpace(c.Query("tgl2"))
+		if tgl1 == "" || tgl2 == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tgl1 dan tgl2 wajib diisi"})
+			return
+		}
+		search := strings.TrimSpace(c.Query("search"))
+
+		query := `
+			SELECT r.no_rawat, r.norm, COALESCE(p.nm_pasien,''), r.nohp, r.nomorkartu, r.nik, r.tanggalperiksa,
+				COALESCE(mp.nm_poli_bpjs, r.kodepoli), COALESCE(md.nm_dokter_bpjs, r.kodedokter), r.jampraktek,
+				r.jeniskunjungan, r.nomorreferensi, r.status,
+				IF(r.validasi IS NULL OR r.validasi = '0000-00-00 00:00:00', '', r.validasi), r.nobooking
+			FROM referensi_mobilejkn_bpjs r
+			INNER JOIN pasien p ON r.norm = p.no_rkm_medis
+			LEFT JOIN maping_poli_bpjs mp ON mp.kd_poli_bpjs = r.kodepoli
+			LEFT JOIN maping_dokter_dpjpvclaim md ON md.kd_dokter_bpjs = r.kodedokter
+			WHERE r.tanggalperiksa BETWEEN ? AND ?
+		`
+		args := []interface{}{tgl1, tgl2}
+		if search != "" {
+			query += ` AND (r.no_rawat LIKE ? OR r.norm LIKE ? OR p.nm_pasien LIKE ? OR r.nohp LIKE ? OR r.nomorkartu LIKE ?
+				OR r.nik LIKE ? OR r.jeniskunjungan LIKE ? OR r.nomorreferensi LIKE ? OR r.status LIKE ?)`
+			pattern := "%" + search + "%"
+			for i := 0; i < 9; i++ {
+				args = append(args, pattern)
+			}
+		}
+		query += " ORDER BY r.tanggalperiksa"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type referensiMobileJknRow struct {
+			NoRawat        string `json:"no_rawat"`
+			Norm           string `json:"norm"`
+			NmPasien       string `json:"nm_pasien"`
+			Nohp           string `json:"nohp"`
+			Nomorkartu     string `json:"nomorkartu"`
+			Nik            string `json:"nik"`
+			Tanggalperiksa string `json:"tanggalperiksa"`
+			NamaPoli       string `json:"nama_poli"`
+			NamaDokter     string `json:"nama_dokter"`
+			Jampraktek     string `json:"jampraktek"`
+			Jeniskunjungan string `json:"jeniskunjungan"`
+			Nomorreferensi string `json:"nomorreferensi"`
+			Status         string `json:"status"`
+			Validasi       string `json:"validasi"`
+			Nobooking      string `json:"nobooking"`
+		}
+		list := []referensiMobileJknRow{}
+		for rows.Next() {
+			var r referensiMobileJknRow
+			if rows.Scan(&r.NoRawat, &r.Norm, &r.NmPasien, &r.Nohp, &r.Nomorkartu, &r.Nik, &r.Tanggalperiksa,
+				&r.NamaPoli, &r.NamaDokter, &r.Jampraktek, &r.Jeniskunjungan, &r.Nomorreferensi,
+				&r.Status, &r.Validasi, &r.Nobooking) == nil {
+				list = append(list, r)
+			}
+		}
+		c.JSON(http.StatusOK, list)
 	}
 }
 

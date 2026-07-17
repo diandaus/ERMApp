@@ -5,6 +5,7 @@ import { PemeriksaanView } from './Pemeriksaan';
 import { RawatInapView } from './RawatInap';
 import { CasemixView } from './Casemix';
 import { BridgingView } from './Bridging';
+import { ApotekView } from './Apotek';
 import { RegistrasiView } from './Registrasi';
 import { DisplayAntrianView } from './DisplayAntrian';
 import { DisplayAntrianPoliView } from './DisplayAntrianPoli';
@@ -47,6 +48,7 @@ type AppUser = {
   role: string;
   is_active?: boolean;
   allowed_modules?: string;
+  nip?: string;
 };
 
 type LoginViewProps = {
@@ -1686,11 +1688,12 @@ export const App: React.FC = () => {
       case 'rawat-inap':
         return <RawatInapView user={user} />;
       case 'farmasi':
+        // Layout sendiri (sidebar + full layar), lepas dari shell aplikasi
+        // sepenuhnya — persis pola BridgingBpjsView dipakai dari Bridging.tsx.
         return (
-          <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
-            <h2 style={{ marginTop: 0 }}>Farmasi</h2>
-            <p style={{ color: '#6b7280' }}>Pengelolaan stok obat, resep, dan distribusi ke unit.</p>
-          </section>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+            <ApotekView onBack={() => setActiveMenu('menu-utama')} />
+          </div>
         );
       case 'kasir':
         return (

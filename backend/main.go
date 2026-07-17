@@ -123,6 +123,7 @@ type AppUser struct {
 	Role           string `json:"role"`
 	IsActive       bool   `json:"is_active"`
 	AllowedModules string `json:"allowed_modules"`
+	Nip            string `json:"nip"`
 }
 
 type LoginRequest struct {
@@ -136,6 +137,7 @@ type CreateUserRequest struct {
 	FullName       string `json:"full_name" binding:"required"`
 	Role           string `json:"role" binding:"required"`
 	AllowedModules string `json:"allowed_modules"`
+	Nip            string `json:"nip"` // Optional — link ke petugas.nip, dipakai auto-fill kolom Petugas di form klinis (mis. Adime Gizi)
 }
 
 type UpdateUserRequest struct {
@@ -144,6 +146,7 @@ type UpdateUserRequest struct {
 	IsActive       bool   `json:"is_active" binding:"required"`
 	Password       string `json:"password"`         // Optional
 	AllowedModules string `json:"allowed_modules"` // Optional
+	Nip            string `json:"nip"`              // Optional — link ke petugas.nip
 }
 
 type ResetPasswordRequest struct {
@@ -175,7 +178,8 @@ func ensureAppUsersTable(db *sql.DB) error {
 			full_name VARCHAR(100) NOT NULL,
 			role VARCHAR(50) NOT NULL DEFAULT 'pendaftaran',
 			is_active TINYINT(1) NOT NULL DEFAULT 1,
-			allowed_modules VARCHAR(500) NOT NULL DEFAULT ''
+			allowed_modules VARCHAR(500) NOT NULL DEFAULT '',
+			nip VARCHAR(20) NOT NULL DEFAULT ''
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 	`
 
@@ -186,6 +190,16 @@ func ensureAppUsersTable(db *sql.DB) error {
 	// Migrasi untuk tabel app_users yang sudah ada sebelum kolom ini ditambahkan
 	if _, err := db.Exec(
 		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS allowed_modules VARCHAR(500) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi kolom nip — link ke petugas.nip (Khanza), dipakai untuk
+	// auto-fill kolom Petugas di form klinis (mis. Adime Gizi di
+	// PemeriksaanRanap.tsx) berdasarkan user yang sedang login, bukan
+	// diketik manual tiap kali.
+	if _, err := db.Exec(
+		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS nip VARCHAR(20) NOT NULL DEFAULT ''`,
 	); err != nil {
 		return err
 	}
@@ -841,7 +855,7 @@ func main() {
 		var isActiveInt int
 		var allowedModules sql.NullString
 		err := db.QueryRow(
-			`SELECT id, username, full_name, role, is_active, allowed_modules
+			`SELECT id, username, full_name, role, is_active, allowed_modules, nip
 			 FROM app_users
 			 WHERE username = ? AND password_hash = ?
 			 LIMIT 1`,
@@ -854,6 +868,7 @@ func main() {
 			&user.Role,
 			&isActiveInt,
 			&allowedModules,
+			&user.Nip,
 		)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -880,7 +895,7 @@ func main() {
 
 	// === Admin: manajemen user aplikasi (sementara tanpa middleware, harap hanya dipakai oleh role admin) ===
 	r.GET("/api/admin/users", func(c *gin.Context) {
-		rows, err := db.Query(`SELECT id, username, full_name, role, is_active, allowed_modules FROM app_users ORDER BY id`)
+		rows, err := db.Query(`SELECT id, username, full_name, role, is_active, allowed_modules, nip FROM app_users ORDER BY id`)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -892,7 +907,7 @@ func main() {
 			var u AppUser
 			var isActiveInt int
 			var allowedModules sql.NullString
-			if err := rows.Scan(&u.ID, &u.Username, &u.FullName, &u.Role, &isActiveInt, &allowedModules); err != nil {
+			if err := rows.Scan(&u.ID, &u.Username, &u.FullName, &u.Role, &isActiveInt, &allowedModules, &u.Nip); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
@@ -915,13 +930,14 @@ func main() {
 
 		hash := hashPassword(req.Password)
 		_, err := db.Exec(
-			`INSERT INTO app_users (username, password_hash, full_name, role, is_active, allowed_modules)
-			 VALUES (?, ?, ?, ?, 1, ?)`,
+			`INSERT INTO app_users (username, password_hash, full_name, role, is_active, allowed_modules, nip)
+			 VALUES (?, ?, ?, ?, 1, ?, ?)`,
 			req.Username,
 			hash,
 			req.FullName,
 			req.Role,
 			req.AllowedModules,
+			req.Nip,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -949,12 +965,13 @@ func main() {
 			// Update with password
 			hash := hashPassword(req.Password)
 			if _, err := db.Exec(
-				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, password_hash = ?, allowed_modules = ? WHERE id = ?`,
+				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, password_hash = ?, allowed_modules = ?, nip = ? WHERE id = ?`,
 				req.FullName,
 				req.Role,
 				isActiveInt,
 				hash,
 				req.AllowedModules,
+				req.Nip,
 				id,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -963,11 +980,12 @@ func main() {
 		} else {
 			// Update without password
 			if _, err := db.Exec(
-				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, allowed_modules = ? WHERE id = ?`,
+				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, allowed_modules = ?, nip = ? WHERE id = ?`,
 				req.FullName,
 				req.Role,
 				isActiveInt,
 				req.AllowedModules,
+				req.Nip,
 				id,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -2930,6 +2948,7 @@ func main() {
 	r.GET("/api/bridging/antrean/pendaftaran-booking/*kodebooking", getAntreanPendaftaranKodeBooking(db))
 	r.GET("/api/bridging/antrean/pendaftaran-aktif", getAntreanPendaftaranAktif(db))
 	r.GET("/api/bridging/antrean/pendaftaran-filter", getAntreanPendaftaranFilter(db))
+	r.GET("/api/bridging/referensi-mobilejkn", getReferensiMobileJkn(db))
 	r.GET("/api/bridging/antrean/taskid-list", getAntreanTaskIdList(db))
 
 	// Antrean BPJS Otomatis — saklar & log tab "Antrean Otomatis"
@@ -2938,6 +2957,138 @@ func main() {
 	r.GET("/api/bridging/antrean-queue", getAntreanQueueList(db))
 	r.POST("/api/bridging/antrean-queue/:id/skip", skipAntreanQueueItem(db))
 	r.POST("/api/bridging/antrean-queue/:id/retry", retryAntreanQueueItem(db))
+
+	// Apotek — Data Barang
+	r.GET("/api/apotek/barang/list", getDataBarangList(db))
+	r.GET("/api/apotek/referensi", getApotekReferensi(db))
+	r.POST("/api/apotek/barang", createDataBarang(db))
+	r.PUT("/api/apotek/barang/:kode", updateDataBarang(db))
+	r.DELETE("/api/apotek/barang/:kode", deleteDataBarang(db))
+
+	// Apotek — Pengaturan Depo (Set Oto Lokasi: Lokasi, Depo Ralan, Depo Ranap)
+	r.GET("/api/apotek/pengaturan/depo/opsi", getApotekPengaturanDepoOpsi(db))
+	r.GET("/api/apotek/pengaturan/lokasi", getApotekLokasi(db))
+	r.PUT("/api/apotek/pengaturan/lokasi", saveApotekLokasi(db))
+	r.DELETE("/api/apotek/pengaturan/lokasi", deleteApotekLokasi(db))
+	r.GET("/api/apotek/pengaturan/depo-ralan", getApotekDepoRalan(db))
+	r.POST("/api/apotek/pengaturan/depo-ralan", createApotekDepoRalan(db))
+	r.PUT("/api/apotek/pengaturan/depo-ralan", updateApotekDepoRalan(db))
+	r.DELETE("/api/apotek/pengaturan/depo-ralan", deleteApotekDepoRalan(db))
+	r.GET("/api/apotek/pengaturan/depo-ranap", getApotekDepoRanap(db))
+	r.POST("/api/apotek/pengaturan/depo-ranap", createApotekDepoRanap(db))
+	r.PUT("/api/apotek/pengaturan/depo-ranap", updateApotekDepoRanap(db))
+	r.DELETE("/api/apotek/pengaturan/depo-ranap", deleteApotekDepoRanap(db))
+
+	// Apotek — Set Harga Obat (Pengaturan Harga, Harga Umum/Per Jenis/Per Barang)
+	r.GET("/api/apotek/harga-obat/pengaturan", getSetHargaObat(db))
+	r.PUT("/api/apotek/harga-obat/pengaturan", saveSetHargaObat(db))
+	r.DELETE("/api/apotek/harga-obat/pengaturan", deleteSetHargaObat(db))
+	r.GET("/api/apotek/harga-obat/umum", getHargaUmum(db))
+	r.PUT("/api/apotek/harga-obat/umum", saveHargaUmum(db))
+	r.DELETE("/api/apotek/harga-obat/umum", deleteHargaUmum(db))
+	r.POST("/api/apotek/harga-obat/umum/terapkan", terapkanHargaUmum(db))
+	r.GET("/api/apotek/harga-obat/per-jenis", getHargaPerJenis(db))
+	r.POST("/api/apotek/harga-obat/per-jenis", upsertHargaPerJenis(db))
+	r.DELETE("/api/apotek/harga-obat/per-jenis/:kdjns", deleteHargaPerJenis(db))
+	r.POST("/api/apotek/harga-obat/per-jenis/:kdjns/terapkan", terapkanHargaPerJenis(db))
+	r.GET("/api/apotek/harga-obat/per-barang", getHargaPerBarang(db))
+	r.POST("/api/apotek/harga-obat/per-barang", upsertHargaPerBarang(db))
+	r.DELETE("/api/apotek/harga-obat/per-barang/:kode", deleteHargaPerBarang(db))
+	r.POST("/api/apotek/harga-obat/per-barang/:kode/terapkan", terapkanHargaPerBarang(db))
+
+	// Apotek — Set Harga Obat Ralan (persentase markup per cara bayar, rawat jalan)
+	r.GET("/api/apotek/harga-obat-ralan/penjab-opsi", getHargaObatRalanPenjabOpsi(db))
+	r.GET("/api/apotek/harga-obat-ralan", getHargaObatRalan(db))
+	r.POST("/api/apotek/harga-obat-ralan", upsertHargaObatRalan(db))
+	r.DELETE("/api/apotek/harga-obat-ralan/:kdpj", deleteHargaObatRalan(db))
+
+	// Apotek — Set Harga Obat Ranap (persentase markup per cara bayar x kelas kamar, rawat inap)
+	r.GET("/api/apotek/harga-obat-ranap/kelas-opsi", getHargaObatRanapKelasOpsi)
+	r.GET("/api/apotek/harga-obat-ranap", getHargaObatRanap(db))
+	r.POST("/api/apotek/harga-obat-ranap", upsertHargaObatRanap(db))
+	r.DELETE("/api/apotek/harga-obat-ranap", deleteHargaObatRanap(db))
+
+	// Apotek — Set Embalase dan Tuslah
+	r.GET("/api/apotek/embalase-tuslah", getSetEmbalase(db))
+	r.PUT("/api/apotek/embalase-tuslah", saveSetEmbalase(db))
+	r.DELETE("/api/apotek/embalase-tuslah", deleteSetEmbalase(db))
+
+	// Apotek — Industri Farmasi (master data pabrik/distributor obat)
+	r.GET("/api/apotek/industri-farmasi", getIndustriFarmasiList(db))
+	r.POST("/api/apotek/industri-farmasi", createIndustriFarmasi(db))
+	r.PUT("/api/apotek/industri-farmasi/:kode", updateIndustriFarmasi(db))
+	r.DELETE("/api/apotek/industri-farmasi/:kode", deleteIndustriFarmasi(db))
+
+	// Apotek — Suplier Obat/Alkes/BHP
+	r.GET("/api/apotek/suplier", getSuplierList(db))
+	r.POST("/api/apotek/suplier", createSuplier(db))
+	r.PUT("/api/apotek/suplier/:kode", updateSuplier(db))
+	r.DELETE("/api/apotek/suplier/:kode", deleteSuplier(db))
+
+	// Apotek — Satuan Barang
+	r.GET("/api/apotek/satuan-barang", getSatuanBarangList(db))
+	r.POST("/api/apotek/satuan-barang", createSatuanBarang(db))
+	r.PUT("/api/apotek/satuan-barang/:kode", updateSatuanBarang(db))
+	r.DELETE("/api/apotek/satuan-barang/:kode", deleteSatuanBarang(db))
+
+	// Apotek — Metode Racik
+	r.GET("/api/apotek/metode-racik", getMetodeRacikList(db))
+	r.POST("/api/apotek/metode-racik", createMetodeRacik(db))
+	r.PUT("/api/apotek/metode-racik/:kode", updateMetodeRacik(db))
+	r.DELETE("/api/apotek/metode-racik/:kode", deleteMetodeRacik(db))
+
+	// Apotek — Konversi Satuan
+	r.GET("/api/apotek/konversi-satuan", getKonversiSatuanList(db))
+	r.POST("/api/apotek/konversi-satuan", upsertKonversiSatuan(db))
+	r.DELETE("/api/apotek/konversi-satuan", deleteKonversiSatuan(db))
+
+	// Apotek — Jenis Obat/Alkes/BHP
+	r.GET("/api/apotek/jenis", getJenisList(db))
+	r.POST("/api/apotek/jenis", createJenis(db))
+	r.PUT("/api/apotek/jenis/:kode", updateJenis(db))
+	r.DELETE("/api/apotek/jenis/:kode", deleteJenis(db))
+
+	// Apotek — Kategori Obat/Alkes/BHP
+	r.GET("/api/apotek/kategori", getKategoriList(db))
+	r.POST("/api/apotek/kategori", createKategori(db))
+	r.PUT("/api/apotek/kategori/:kode", updateKategori(db))
+	r.DELETE("/api/apotek/kategori/:kode", deleteKategori(db))
+
+	// Apotek — Golongan Obat/Alkes/BHP
+	r.GET("/api/apotek/golongan", getGolonganList(db))
+	r.POST("/api/apotek/golongan", createGolongan(db))
+	r.PUT("/api/apotek/golongan/:kode", updateGolongan(db))
+	r.DELETE("/api/apotek/golongan/:kode", deleteGolongan(db))
+
+	// Apotek — Stok Opname
+	r.GET("/api/apotek/stok-opname/items", getStokOpnameItems(db))
+	r.POST("/api/apotek/stok-opname", submitStokOpname(db))
+	r.GET("/api/apotek/stok-opname/riwayat", getStokOpnameRiwayat(db))
+	r.DELETE("/api/apotek/stok-opname", deleteStokOpnameRiwayat(db))
+
+	// Apotek — Mutasi Obat & BHP
+	r.GET("/api/apotek/mutasi/items", getMutasiItems(db))
+	r.POST("/api/apotek/mutasi", submitMutasi(db))
+	r.GET("/api/apotek/mutasi/riwayat", getMutasiRiwayat(db))
+	r.DELETE("/api/apotek/mutasi", deleteMutasiRiwayat(db))
+
+	// Apotek — Permintaan Obat & BHP
+	r.GET("/api/apotek/permintaan/barang-opsi", getPermintaanBarangOpsi(db))
+	r.GET("/api/apotek/permintaan/pegawai-opsi", getPermintaanPegawaiOpsi(db))
+	r.POST("/api/apotek/permintaan", submitPermintaan(db))
+	r.GET("/api/apotek/permintaan/riwayat", getPermintaanRiwayat(db))
+	r.PUT("/api/apotek/permintaan/:no_permintaan/status", updatePermintaanStatus(db))
+	r.POST("/api/apotek/permintaan/:no_permintaan/setujui", setujuiPermintaan(db))
+	r.DELETE("/api/apotek/permintaan/:no_permintaan", deletePermintaan(db))
+
+	// Apotek — Penerimaan Obat & BHP
+	r.GET("/api/apotek/penerimaan/barang-opsi", getPenerimaanBarangOpsi(db))
+	r.POST("/api/apotek/penerimaan", submitPenerimaan(db))
+	r.GET("/api/apotek/penerimaan/riwayat", getPenerimaanRiwayat(db))
+	r.DELETE("/api/apotek/penerimaan/:no_faktur", deletePenerimaan(db))
+
+	// Apotek — Riwayat Obat, Alkes & BHP
+	r.GET("/api/apotek/riwayat-barang-medis", getRiwayatBarangMedis(db))
 
 	// Registrasi List endpoint
 	r.GET("/api/registrasi/list", getRegistrasiList(db))

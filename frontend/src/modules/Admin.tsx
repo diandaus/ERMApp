@@ -9,6 +9,7 @@ type AppUser = {
   role: string;
   is_active?: boolean;
   allowed_modules?: string;
+  nip?: string;
 };
 
 type BridgingConfig = {
@@ -577,6 +578,7 @@ export const AdminView: React.FC = () => {
                   <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Username</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Nama Lengkap</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>NIP Petugas Klinis</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Role</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Hak Akses Modul</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Status</th>
@@ -588,6 +590,7 @@ export const AdminView: React.FC = () => {
                     <tr key={u.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                       <td style={{ padding: '12px 16px', color: '#111827' }}>{u.username}</td>
                       <td style={{ padding: '12px 16px', color: '#111827' }}>{u.full_name}</td>
+                      <td style={{ padding: '12px 16px', color: u.nip ? '#111827' : '#9ca3af', fontStyle: u.nip ? 'normal' : 'italic' }}>{u.nip || 'Belum di-link'}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{
                           padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500,
@@ -636,7 +639,7 @@ export const AdminView: React.FC = () => {
                   ))}
                   {users.length === 0 && !loading && (
                     <tr>
-                      <td colSpan={6} style={{ padding: '24px 8px', textAlign: 'center', color: '#9ca3af', borderTop: '1px solid #e5e7eb' }}>
+                      <td colSpan={7} style={{ padding: '24px 8px', textAlign: 'center', color: '#9ca3af', borderTop: '1px solid #e5e7eb' }}>
                         Belum ada user lain selain admin default.
                       </td>
                     </tr>

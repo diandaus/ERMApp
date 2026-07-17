@@ -32,7 +32,16 @@ type ObatSearchResult struct {
 func searchObat(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query := c.DefaultQuery("query", c.DefaultQuery("q", ""))
-		kdBangsal := c.DefaultQuery("kd_bangsal", "AP") // Default: AP (Apotek)
+		// kd_bangsal (depo obat) diresolve lewat Pengaturan Depo Ralan
+		// (set_depo_ralan, berdasarkan poliklinik kunjungan) kalau tidak
+		// dikirim eksplisit — baru fallback ke "AP" kalau belum diatur.
+		kdBangsal := c.Query("kd_bangsal")
+		if kdBangsal == "" {
+			kdBangsal = resolveDepoRalan(db, c.Query("no_rawat"))
+		}
+		if kdBangsal == "" {
+			kdBangsal = "AP"
+		}
 		markupStr := c.DefaultQuery("markup", "0")
 		stokKosong := c.DefaultQuery("stok_kosong", "no")
 		jenisKelas := c.DefaultQuery("jenis_kelas", "Rawat Jalan") // Default: Rawat Jalan

@@ -224,3 +224,45 @@ atau kode untuk bagian ini.**
 - Tabel `maping_dokter_dpjpvclaim` **tidak jadi dipakai** worker — ternyata
   tidak perlu, karena `bridging_sep.kddpjp` sudah berisi kode dokter versi
   BPJS langsung.
+
+## Tab "Referensi Pendaftaran Mobile JKN" — SELESAI
+
+**Koreksi penting**: percobaan pertama fitur ini salah menyamakan tab ini
+dengan `bridging/BPJSAntreanPerTanggal.java` ("Antrean Per Tanggal Mobile
+JKN" — dialog yang memanggil LIVE BPJS API dan punya panel statistik
+capaian SEP). Itu SALAH DIALOG. User mengoreksi dengan mengutip langsung
+method `tampil()` dari dialog Java yang sebenarnya dipakai untuk tab ini
+— dialog itu **TIDAK memanggil BPJS sama sekali**, murni laporan
+read-only dari tabel LOKAL `referensi_mobilejkn_bpjs`:
+```sql
+SELECT referensi_mobilejkn_bpjs.no_rawat, ..., pasien.nm_pasien, ...
+FROM referensi_mobilejkn_bpjs
+INNER JOIN pasien ON referensi_mobilejkn_bpjs.norm = pasien.no_rkm_medis
+WHERE referensi_mobilejkn_bpjs.tanggalperiksa BETWEEN ? AND ? [+ search bebas]
+ORDER BY referensi_mobilejkn_bpjs.tanggalperiksa
+```
+`kodepoli`/`kodedokter` di-resolve ke nama versi BPJS lewat lookup
+terpisah per baris ke `maping_poli_bpjs.nm_poli_bpjs`/
+`maping_dokter_dpjpvclaim.nm_dokter_bpjs` (Java melakukannya N+1 per
+baris via `Sequel.cariIsi`; di backend web ini direplikasi sebagai LEFT
+JOIN dalam satu query — hasil sama, cuma lebih efisien).
+
+Backend: `getReferensiMobileJkn` di `bridging_antrean_handler.go`
+(menggantikan `getSepTerbitCount` yang salah arah dari percobaan
+pertama) — `GET /api/bridging/referensi-mobilejkn?tgl1=&tgl2=&search=`.
+Tidak butuh kredensial BPJS/HFIS sama sekali karena murni query DB
+lokal — jauh lebih sederhana & cepat dari dugaan awal.
+
+Frontend: `frontend/src/modules/ReferensiPendaftaranMobileJkn.tsx` —
+tabel read-only murni (No.Rawat, No.RM, Nama Pasien, No.HP, No.Kartu,
+NIK, Tgl Periksa, Poli, Dokter, Jam Praktek, Jenis Kunjungan,
+No.Referensi, Status [badge warna], Validasi, No.Booking) + filter
+rentang tanggal (default 7 hari terakhir) + cari bebas (debounced). Tidak
+ada panel statistik/capaian sama sekali — itu murni bagian dari dialog
+Java yang salah dikira sama tadi (`BPJSAntreanPerTanggal.java`), tidak
+ada di dialog yang benar.
+
+Diverifikasi lewat `curl` di database dev: 12267 baris total di
+`referensi_mobilejkn_bpjs`, nama poli/dokter ter-resolve dengan benar
+(mis. "THT-KL" / "dr.R.EGA.SUHARNO,Sp.T.H.T.K.L"), search bebas bekerja
+(cari "KHAIDIR" → 2 baris cocok berdasarkan nama pasien).

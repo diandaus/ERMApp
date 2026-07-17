@@ -4,6 +4,7 @@ import { localDateStr } from '../utils/date';
 
 type FormState = {
   kodebooking: string;
+  no_rawat: string;
   jenispasien: 'JKN' | 'NON JKN';
   nomorkartu: string;
   nik: string;
@@ -30,6 +31,7 @@ type FormState = {
 
 const emptyForm = (): FormState => ({
   kodebooking: '',
+  no_rawat: '',
   jenispasien: 'JKN',
   nomorkartu: '',
   nik: '',
@@ -269,6 +271,85 @@ export const AntreanRsView: React.FC = () => {
     setShowModal(true);
   };
 
+  // Dipakai saat BPJS menolak update (Waktu/Farmasi/List Task) dengan
+  // "Kode Booking tidak ditemukan" — narik data lokal (referensi_mobilejkn_bpjs,
+  // yang sudah pernah tersimpan saat antrean ini pertama dibuat, baik lewat
+  // klik manual maupun worker otomatis) dan mengisi modal "Tambah Antrean"
+  // supaya staf tinggal cek ulang lalu kirim lagi, tanpa mengetik dari nol.
+  const openModalFromLocal = async (kodeBooking: string) => {
+    try {
+      const res = await fetch(`/api/bridging/antrean/list?kodebooking=${encodeURIComponent(kodeBooking)}`);
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data) || data.length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Data lokal tidak ditemukan', text: `Tidak ada catatan lokal untuk kode booking ${kodeBooking}, silahkan isi manual.` });
+        setForm({ ...emptyForm(), kodebooking: kodeBooking });
+        setShowModal(true);
+        return;
+      }
+      const row = data[0];
+      const jkMatch = /^(\d+)/.exec(row.jeniskunjungan || '');
+      setForm({
+        ...emptyForm(),
+        kodebooking: row.kodebooking || kodeBooking,
+        no_rawat: row.no_rawat || '',
+        jenispasien: row.nomorkartu ? 'JKN' : 'NON JKN',
+        nomorkartu: row.nomorkartu || '',
+        nik: row.nik || '',
+        nohp: row.nohp || '',
+        kodepoli: row.kodepoli || '',
+        namapoli: row.namapoli || '',
+        pasienbaru: row.pasienbaru === '1',
+        norm: row.norm || '',
+        tanggalperiksa: (row.tanggalperiksa || '').slice(0, 10) || localDateStr(),
+        kodedokter: row.kodedokter || '',
+        namadokter: row.namadokter || '',
+        jampraktek: row.jampraktek || '',
+        jeniskunjungan: jkMatch ? Number(jkMatch[1]) : 1,
+        nomorreferensi: row.nomorreferensi || '',
+        nomorantrean: row.nomorantrean || '',
+        angkaantrean: row.angkaantrean || '',
+        estimasidilayani: row.estimasidilayani ? epochMsToDatetimeLocal(Number(row.estimasidilayani)) : '',
+        sisakuotajkn: row.sisakuotajkn ? String(row.sisakuotajkn) : '',
+        kuotajkn: row.kuotajkn ? String(row.kuotajkn) : '',
+        sisakuotanonjkn: row.sisakuotanonjkn ? String(row.sisakuotanonjkn) : '',
+        kuotanonjkn: row.kuotanonjkn ? String(row.kuotanonjkn) : '',
+      });
+      setShowModal(true);
+      Swal.fire({
+        icon: 'info',
+        title: 'Terisi dari data lokal',
+        text: 'Mohon cek ulang semua field sebelum dikirim ke BPJS.',
+        timer: 3000,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Gagal mengambil data lokal', text: err.message });
+    }
+  };
+
+  // "Kode Booking tidak ditemukan" dari BPJS berarti antrean itu tidak
+  // (lagi) dikenali di sisi BPJS — desync antara tabel lokal & BPJS
+  // (mis. dibuat worker tapi gagal di BPJS, atau kadaluarsa). Satu-satunya
+  // jalan keluar staf adalah kirim ulang "Tambah Antrean" untuk kode
+  // booking yang sama, jadi begitu error ini terdeteksi, langsung
+  // tawarkan itu alih-alih cuma menampilkan pesan gagal buntu.
+  const offerTambahUlang = (kodeBooking: string, message: string) => {
+    const notFound = /tidak ditemukan/i.test(message);
+    Swal.fire({
+      icon: notFound ? 'warning' : 'error',
+      title: 'Gagal!',
+      text: message,
+      showCancelButton: notFound,
+      confirmButtonText: notFound ? 'Tambah Antrean Ulang' : 'OK',
+      cancelButtonText: 'Tutup',
+      confirmButtonColor: notFound ? '#2563eb' : undefined,
+    }).then((result) => {
+      if (notFound && result.isConfirmed) {
+        openModalFromLocal(kodeBooking);
+      }
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -276,6 +357,7 @@ export const AntreanRsView: React.FC = () => {
       const estimasiMs = form.estimasidilayani ? new Date(form.estimasidilayani).getTime() : 0;
       const body = {
         kodebooking: form.kodebooking.trim(),
+        no_rawat: form.no_rawat.trim(),
         jenispasien: form.jenispasien,
         nomorkartu: form.jenispasien === 'JKN' ? form.nomorkartu.trim() : '',
         nik: form.nik.trim(),
@@ -341,7 +423,9 @@ export const AntreanRsView: React.FC = () => {
       setFarmasiKodeBooking(null);
       Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message || 'Antrean farmasi berhasil ditambahkan', timer: 2500, showConfirmButton: false });
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
+      const kodeGagal = farmasiKodeBooking;
+      setFarmasiKodeBooking(null);
+      if (kodeGagal) offerTambahUlang(kodeGagal, err.message);
     } finally {
       setSavingFarmasi(false);
     }
@@ -349,6 +433,15 @@ export const AntreanRsView: React.FC = () => {
 
   const nowDatetimeLocal = () => {
     const d = new Date();
+    d.setSeconds(0, 0);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
+
+  const epochMsToDatetimeLocal = (ms: number) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return '';
     d.setSeconds(0, 0);
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
@@ -381,40 +474,11 @@ export const AntreanRsView: React.FC = () => {
       setWaktuKodeBooking(null);
       Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message || 'Waktu antrean berhasil dikirim', timer: 2500, showConfirmButton: false });
     } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
+      const kodeGagal = waktuKodeBooking;
+      setWaktuKodeBooking(null);
+      if (kodeGagal) offerTambahUlang(kodeGagal, err.message);
     } finally {
       setSavingWaktu(false);
-    }
-  };
-
-  const handleBatal = async (kodeBooking: string) => {
-    const { value: keterangan, isConfirmed } = await Swal.fire({
-      title: 'Batalkan Antrean?',
-      html: `Kode Booking: <strong>${kodeBooking}</strong>`,
-      input: 'textarea',
-      inputLabel: 'Alasan pembatalan',
-      inputPlaceholder: 'Contoh: Terjadi perubahan jadwal dokter, silahkan daftar kembali',
-      inputValidator: (value) => (!value ? 'Alasan pembatalan wajib diisi' : undefined),
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Batalkan',
-      cancelButtonText: 'Tutup',
-      confirmButtonColor: '#dc2626',
-    });
-    if (!isConfirmed || !keterangan) return;
-
-    try {
-      const res = await fetch('/api/bridging/antrean/batal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kodebooking: kodeBooking, keterangan }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal membatalkan antrean');
-      await fetchItems();
-      Swal.fire({ icon: 'success', title: 'Dibatalkan!', text: data.message || 'Antrean berhasil dibatalkan' });
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
     }
   };
 
@@ -503,15 +567,6 @@ export const AntreanRsView: React.FC = () => {
     setShowPendaftaran(true);
     setPendaftaranRows([]);
     setPendaftaranError(null);
-  };
-
-  const openPendaftaranByBooking = (kodeBooking: string) => {
-    setPendaftaranMode('kodebooking');
-    setPendaftaranKodeBooking(kodeBooking);
-    setShowPendaftaran(true);
-    setPendaftaranRows([]);
-    setPendaftaranError(null);
-    fetchPendaftaran('kodebooking', kodeBooking);
   };
 
   const openPendaftaranAktif = () => {
@@ -649,22 +704,6 @@ export const AntreanRsView: React.FC = () => {
                         >
                           List Task
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openPendaftaranByBooking(item.kodebooking)}
-                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #6b7280', background: '#ffffff', color: '#6b7280', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
-                        >
-                          Cek BPJS
-                        </button>
-                        {!(item.status || '').toLowerCase().includes('batal') && (
-                          <button
-                            type="button"
-                            onClick={() => handleBatal(item.kodebooking)}
-                            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
-                          >
-                            Batal
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>

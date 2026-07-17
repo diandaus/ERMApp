@@ -1,4 +1,5 @@
 import React from 'react';
+import { ModalCariPetugas } from './ModalCariPetugas';
 
 type AppUserRole = string;
 
@@ -26,6 +27,7 @@ type EditUser = {
   full_name: string;
   role: AppUserRole;
   allowed_modules?: string;
+  nip?: string;
 };
 
 type AddUserModalProps = {
@@ -50,6 +52,13 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
   const [creating, setCreating] = React.useState<boolean>(false);
   const [searchQuery, setSearchQuery] = React.useState<string>('');
   const [selectedModules, setSelectedModules] = React.useState<string[]>([]);
+  // NIP petugas Khanza yang di-link ke akun ini — dipakai auto-fill kolom
+  // Petugas di form klinis (mis. Adime Gizi) berdasarkan user login,
+  // terpisah dari username/role di atas (akun dokter pun bisa di-link
+  // ke NIP kalau memang relevan).
+  const [newNip, setNewNip] = React.useState<string>('');
+  const [newNipNama, setNewNipNama] = React.useState<string>('');
+  const [nipPickerOpen, setNipPickerOpen] = React.useState<boolean>(false);
 
   // Define available modules
   const availableModules = [
@@ -87,6 +96,17 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
       } else {
         setSelectedModules([]);
       }
+      setNewNip(editUser.nip || '');
+      setNewNipNama('');
+      if (editUser.nip) {
+        fetch(`/api/petugas?search=${encodeURIComponent(editUser.nip)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            const found = (Array.isArray(data) ? data : []).find((p: Petugas) => p.nip === editUser.nip);
+            if (found) setNewNipNama(found.nama);
+          })
+          .catch(() => { /* ignore */ });
+      }
     } else if (!show) {
       // Reset form when modal closes
       setUserType(null);
@@ -99,6 +119,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
       setIsCustomRole(false);
       setSearchQuery('');
       setSelectedModules([]);
+      setNewNip('');
+      setNewNipNama('');
     }
   }, [show, editUser]);
 
@@ -190,6 +212,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
     if (petugas) {
       setNewUsername(petugas.nip);
       setNewFullName(petugas.nama);
+      // Akun petugas ini kemungkinan besar mewakili orang yang sama —
+      // saran otomatis, admin tetap bisa ganti/kosongkan lewat picker NIP.
+      setNewNip(petugas.nip);
+      setNewNipNama(petugas.nama);
     }
   };
 
@@ -241,7 +267,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
           full_name: newFullName,
           role: newRole,
           is_active: true,
-          allowed_modules: selectedModules.join(',')
+          allowed_modules: selectedModules.join(','),
+          nip: newNip.trim()
         };
         // Include password only if it's filled
         if (newPassword) {
@@ -267,7 +294,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
             password: newPassword,
             full_name: newFullName,
             role: newRole,
-            allowed_modules: selectedModules.join(',')
+            allowed_modules: selectedModules.join(','),
+            nip: newNip.trim()
           })
         });
         const data = await res.json().catch(() => ({}));
@@ -637,6 +665,39 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
                 />
               </div>
 
+              {/* NIP Petugas (link ke form klinis) */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                  NIP Petugas Klinis <span style={{ color: '#6b7280', fontWeight: 400 }}>(opsional — untuk auto-isi kolom Petugas di form seperti Adime Gizi)</span>
+                </label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    value={newNip}
+                    onChange={(e) => { setNewNip(e.target.value); setNewNipNama(''); }}
+                    placeholder="NIP"
+                    style={{ width: '30%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                  />
+                  <input
+                    type="text"
+                    value={newNipNama}
+                    readOnly
+                    placeholder="Nama petugas"
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: '#f9fafb', color: '#374151' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNipPickerOpen(true)}
+                    style={{ padding: '0 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Cari petugas"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
               {/* Role */}
               {(editUser || userType === 'petugas') && (
                 <div style={{ marginBottom: 16 }}>
@@ -825,6 +886,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
         </form>
         </div>
       </div>
+      <ModalCariPetugas
+        isOpen={nipPickerOpen}
+        onClose={() => setNipPickerOpen(false)}
+        onSelect={(nip, nama) => { setNewNip(nip); setNewNipNama(nama); }}
+      />
     </div>
   );
 };

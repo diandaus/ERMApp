@@ -11,6 +11,7 @@ import { ModalCariPetugas } from '../components/ModalCariPetugas';
 import { ModalCariPegawai } from '../components/ModalCariPegawai';
 import { ResumeTab } from '../components/ResumeTab';
 import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
+import { getCurrentUserNip } from '../utils/currentUser';
 
 type RanapPatient = {
   no_rawat: string;
@@ -247,6 +248,27 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
     }, 1000);
     return () => clearInterval(tick);
   }, [adimeUseAutoTime]);
+
+  // Auto-fill kolom Petugas ADIME dari user yang sedang login (app_users.nip,
+  // di-link admin lewat Pengaturan > User) — staf gizi tidak perlu cari/ketik
+  // NIP-nya sendiri tiap buka tab ini. Cuma isi kalau field masih kosong dan
+  // akun ini memang sudah di-link ke NIP petugas (kalau belum, tetap kosong —
+  // field manual/tombol cari tetap tersedia sebagai fallback).
+  React.useEffect(() => {
+    if (adimeNip) return;
+    const nip = getCurrentUserNip();
+    if (!nip) return;
+    setAdimeNip(nip);
+    (async () => {
+      try {
+        const res = await fetch(`/api/petugas?search=${encodeURIComponent(nip)}`);
+        const data = await res.json();
+        const found = (Array.isArray(data) ? data : []).find((p: any) => p.nip === nip);
+        if (found) setAdimePetugasNama(found.nama);
+      } catch { /* ignore */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchAdimeHistory = async () => {
     try {
@@ -1723,7 +1745,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
           onClose={() => { setShowResepModal(false); setEditingResep(null); }}
           onResepSaved={() => { fetchRiwayatResep(); }}
           isRanap={true}
-          kdBangsal={patient.kd_bangsal || ''}
           editResep={editingResep || undefined}
         />
       )}
