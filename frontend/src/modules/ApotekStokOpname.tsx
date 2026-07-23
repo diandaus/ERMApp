@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { getCurrentPetugas } from '../utils/currentUser';
+import { localDateStr } from '../utils/date';
 
 // ============================================================================
 // APOTEK — Stok Opname (tab utama modul Apotek). Cocok dengan dialog
@@ -82,7 +83,7 @@ const PillSelect: React.FC<{
 );
 
 const formatRupiah = (v: number) => (v || 0).toLocaleString('id-ID');
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => localDateStr();
 
 type KvOpsi = { kode: string; nama: string };
 
@@ -622,7 +623,7 @@ type OpnameRiwayat = {
 const daysAgoStr = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 };
 
 const TabRiwayatOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {

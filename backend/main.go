@@ -763,10 +763,6 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel display_settings: %v", err)
 	}
 
-	if err := ensureSatuSehatTables(db); err != nil {
-		log.Fatalf("gagal inisialisasi tabel satu sehat: %v", err)
-	}
-
 	if err := ensureSettingBridgingTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel setting_bridging: %v", err)
 	}

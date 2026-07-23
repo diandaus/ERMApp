@@ -1,4 +1,5 @@
 import React from 'react';
+import { localDateStr } from '../utils/date';
 
 // ============================================================================
 // APOTEK — Riwayat Obat, Alkes & BHP (tab utama modul Apotek). Cocok
@@ -77,11 +78,11 @@ const PillSelect: React.FC<{
   </div>
 );
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => localDateStr();
 const daysAgoStr = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 };
 
 type KvOpsi = { kode: string; nama: string };

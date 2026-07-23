@@ -40,9 +40,19 @@ const statusBadge = (hariTersisa: number): { label: string; bg: string; fg: stri
   return { label: `${hariTersisa} hari lagi`, bg: '#fffbeb', fg: '#d97706' };
 };
 
+// Preset rentang waktu dalam bulan — default 3 Bulan Kedepan (90 hari),
+// dikonversi ke param `hari` yang dipakai backend (DATEDIFF(expire, CURDATE()) <= hari).
+const RENTANG_OPTIONS = [
+  { bulan: 1, hari: 30, label: '1 Bulan Kedepan' },
+  { bulan: 3, hari: 90, label: '3 Bulan Kedepan' },
+  { bulan: 6, hari: 180, label: '6 Bulan Kedepan' },
+  { bulan: 12, hari: 365, label: '12 Bulan Kedepan' },
+];
+
 export const ApotekObatKadaluarsaView: React.FC = () => {
   const [searchText, setSearchText] = React.useState('');
   const [hari, setHari] = React.useState('90');
+  const [customMode, setCustomMode] = React.useState(false);
   const [items, setItems] = React.useState<ObatKadaluarsaRow[]>([]);
   const [loading, setLoading] = React.useState(false);
 
@@ -83,10 +93,32 @@ export const ApotekObatKadaluarsaView: React.FC = () => {
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <input style={inputStyle} placeholder="Kode / Nama Barang / Jenis..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
         </div>
-        <div style={{ width: 140 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Ambang (hari)</label>
-          <input type="number" step="1" min="1" style={inputStyle} value={hari} onChange={(e) => setHari(e.target.value)} />
+        <div style={{ width: 180 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Rentang Waktu</label>
+          <select
+            style={inputStyle}
+            value={customMode ? 'custom' : hari}
+            onChange={(e) => {
+              if (e.target.value === 'custom') {
+                setCustomMode(true);
+              } else {
+                setCustomMode(false);
+                setHari(e.target.value);
+              }
+            }}
+          >
+            {RENTANG_OPTIONS.map((o) => (
+              <option key={o.hari} value={String(o.hari)}>{o.label}</option>
+            ))}
+            <option value="custom">Custom (hari)...</option>
+          </select>
         </div>
+        {customMode && (
+          <div style={{ width: 120 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Ambang (hari)</label>
+            <input type="number" step="1" min="1" style={inputStyle} value={hari} onChange={(e) => setHari(e.target.value)} />
+          </div>
+        )}
         <span style={{ fontSize: 12, color: '#6b7280', paddingBottom: 8, whiteSpace: 'nowrap' }}>
           {loading ? 'Memuat...' : `${items.length} barang — `}
           {!loading && sudahKadaluarsa > 0 && <span style={{ color: '#dc2626', fontWeight: 600 }}>{sudahKadaluarsa} sudah kadaluarsa</span>}

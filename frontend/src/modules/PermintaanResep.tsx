@@ -4,6 +4,7 @@ import { ModalValidasiObat, ResepItems } from '../components/ModalValidasiObat';
 import { RiwayatModal } from '../components/RiwayatModal';
 import { ModalPenyerahanResep } from '../components/ModalPenyerahanResep';
 import { ModalTelaahResep } from '../components/ModalTelaahResep';
+import { localDateStr } from '../utils/date';
 
 // ============================================================================
 // PERMINTAAN RESEP — dipicu dari tab 'permintaan-resep' di sidebar Apotek
@@ -75,7 +76,7 @@ const StepperIcon: React.FC = () => (
   </div>
 );
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => localDateStr();
 
 type PermintaanResepTab =
   | 'dashboard'
