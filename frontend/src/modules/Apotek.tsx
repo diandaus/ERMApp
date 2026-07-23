@@ -202,7 +202,9 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = React.useState<ApotekTab>('overview');
   const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
   const [stokMenipisCount, setStokMenipisCount] = React.useState<number | null>(null);
-  const [resepBelumTerlayaniCount, setResepBelumTerlayaniCount] = React.useState(0);
+  const [resepRalanBelumCount, setResepRalanBelumCount] = React.useState(0);
+  const [resepRanapBelumCount, setResepRanapBelumCount] = React.useState(0);
+  const resepBelumTerlayaniCount = resepRalanBelumCount + resepRanapBelumCount;
 
   React.useEffect(() => {
     fetch('/api/apotek/darurat-stok')
@@ -213,18 +215,16 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
 
   // Running text "Permintaan Resep Baru" — dihitung dari resep_obat yang
   // belum divalidasi/dilayani apotek (status "Belum Terlayani", padanan
-  // status yang sama dipakai PermintaanResep.tsx), Ralan + Ranap
-  // digabung. Auto-refresh tiap 30 detik, pola sama dgn RawatJalan.tsx.
+  // status yang sama dipakai PermintaanResep.tsx), Ralan & Ranap dihitung
+  // terpisah supaya bisa ditampilkan rinciannya. Auto-refresh tiap 30
+  // detik, pola sama dgn RawatJalan.tsx.
   React.useEffect(() => {
     const fetchCount = () => {
       const statusQS = `status=${encodeURIComponent('Belum Terlayani')}`;
-      Promise.all([
-        fetch(`/api/permintaan-resep/ralan?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => []),
-        fetch(`/api/permintaan-resep/ranap?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => []),
-      ]).then(([ralan, ranap]) => {
-        const total = (Array.isArray(ralan) ? ralan.length : 0) + (Array.isArray(ranap) ? ranap.length : 0);
-        setResepBelumTerlayaniCount(total);
-      });
+      fetch(`/api/permintaan-resep/ralan?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => [])
+        .then((data) => setResepRalanBelumCount(Array.isArray(data) ? data.length : 0));
+      fetch(`/api/permintaan-resep/ranap?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => [])
+        .then((data) => setResepRanapBelumCount(Array.isArray(data) ? data.length : 0));
     };
     fetchCount();
     const interval = setInterval(fetchCount, 30000);
@@ -364,43 +364,50 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
             <span style={{ color: '#059669', fontWeight: 600 }}>Apotek</span> / {activeLabel}
           </div>
 
-          {resepBelumTerlayaniCount > 0 && (
-            <div
-              onClick={() => setActiveTab('permintaan-resep')}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                margin: '0 16px',
-                overflow: 'hidden',
-                position: 'relative',
-                background: '#fef3c7',
-                border: '1px solid #fde68a',
-                borderRadius: 999,
-                padding: '6px 0',
-                cursor: 'pointer',
-              }}
-              title="Klik untuk buka Permintaan Resep"
-            >
-              <style>{`
-                @keyframes apotekRunningText {
-                  0% { transform: translateX(100%); }
-                  100% { transform: translateX(-100%); }
-                }
-              `}</style>
+          {resepBelumTerlayaniCount > 0 && (() => {
+            const runningText = `⚠ ${resepBelumTerlayaniCount} Permintaan Resep baru belum dilayani/divalidasi (Rawat Jalan: ${resepRalanBelumCount}, Rawat Inap: ${resepRanapBelumCount}) — klik untuk membuka Permintaan Resep`;
+            return (
               <div
+                onClick={() => setActiveTab('permintaan-resep')}
                 style={{
-                  display: 'inline-block',
-                  whiteSpace: 'nowrap',
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  color: '#92400e',
-                  animation: 'apotekRunningText 14s linear infinite',
+                  flex: 1,
+                  minWidth: 0,
+                  margin: '0 16px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  padding: '6px 0',
+                  cursor: 'pointer',
                 }}
+                title="Klik untuk buka Permintaan Resep"
               >
-                ⚠ {resepBelumTerlayaniCount} Permintaan Resep baru belum dilayani/divalidasi — klik untuk membuka Permintaan Resep
+                <style>{`
+                  @keyframes apotekRunningText {
+                    0% { transform: translateX(0%); }
+                    100% { transform: translateX(-50%); }
+                  }
+                `}</style>
+                {/* Dua salinan teks berdampingan, digeser tepat -50% dari
+                    lebar total (= lebar satu salinan) — begitu salinan
+                    pertama hilang di kiri, salinan kedua sudah pas
+                    menempati posisi awal, jadi looping mulus tanpa jeda/
+                    lompatan, teks langsung "muncul" dari kanan real-time. */}
+                <div
+                  style={{
+                    display: 'flex',
+                    width: 'max-content',
+                    whiteSpace: 'nowrap',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: '#92400e',
+                    animation: 'apotekRunningText 14s linear infinite',
+                  }}
+                >
+                  <span style={{ paddingRight: 64 }}>{runningText}</span>
+                  <span style={{ paddingRight: 64 }} aria-hidden="true">{runningText}</span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {onBack && (
             <button
