@@ -500,15 +500,57 @@ type ResepNonRacikan struct {
 	Jml         float64 `json:"jml"`
 	KodeSat     string  `json:"kode_sat"`
 	AturanPakai string  `json:"aturan_pakai"`
+	// Field di bawah cuma diisi getPermintaanResepRalanItems (padanan
+	// kolom tbObat DlgCariObat.java untuk modal validasi/ModalValidasiObat.tsx
+	// — TIDAK dipakai/diisi getRiwayatResep), jadi tetap nilai default
+	// (0/'') di endpoint lain yang reuse struct ini.
+	HJual        float64 `json:"h_jual"`
+	Subtotal     float64 `json:"subtotal"`
+	JenisObat    string  `json:"jenis_obat"`
+	Embalase     float64 `json:"embalase"`
+	Tuslah       float64 `json:"tuslah"`
+	Stok         float64 `json:"stok"`
+	NamaIndustri string  `json:"nama_industri"`
+	HBeli        float64 `json:"h_beli"`
+	Kategori     string  `json:"kategori"`
+	Golongan     string  `json:"golongan"`
+	// No.Batch/No.Faktur SELALU '-' — proyek ini tidak melacak batch
+	// (stok selalu digabung di baris no_batch=''/no_faktur='', sama pola
+	// dengan semua modul lain, lihat PERMINTAAN_RESEP_MODUL.md). Bukan
+	// field yang benar-benar dari Java, cuma placeholder tampilan supaya
+	// kolomnya tetap ada tapi jujur "tidak dilacak", bukan data palsu.
+	NoBatch    string `json:"no_batch"`
+	NoFaktur   string `json:"no_faktur"`
+	Kadaluarsa string `json:"kadaluarsa"`
+	// Kapasitas — "isi per kemasan", dipakai kolom K (konversi satuan
+	// besar/kecil) di ModalValidasiObat.tsx: padanan persis IFNULL(
+	// databarang.kapasitas,1) yang dibaca DlgCariObat.java sebelum
+	// membagi jumlah yang diinput dengan kapasitas ini (K dicentang =
+	// jumlah diinput dalam satuan kemasan, bukan satuan dasar).
+	Kapasitas float64 `json:"kapasitas"`
 }
 
 // ResepRacikanDetail represents detail of compound medication
 type ResepRacikanDetail struct {
-	KodeBrng  string  `json:"kode_brng"`
-	NamaBrng  string  `json:"nama_brng"`
-	Kandungan string  `json:"kandungan"`
-	Jml       float64 `json:"jml"`
-	KodeSat   string  `json:"kode_sat"`
+	KodeBrng     string  `json:"kode_brng"`
+	NamaBrng     string  `json:"nama_brng"`
+	Kandungan    string  `json:"kandungan"`
+	Jml          float64 `json:"jml"`
+	KodeSat      string  `json:"kode_sat"`
+	HJual        float64 `json:"h_jual"`
+	Subtotal     float64 `json:"subtotal"`
+	JenisObat    string  `json:"jenis_obat"`
+	Embalase     float64 `json:"embalase"`
+	Tuslah       float64 `json:"tuslah"`
+	Stok         float64 `json:"stok"`
+	NamaIndustri string  `json:"nama_industri"`
+	HBeli        float64 `json:"h_beli"`
+	Kategori     string  `json:"kategori"`
+	Golongan     string  `json:"golongan"`
+	NoBatch      string  `json:"no_batch"`
+	NoFaktur     string  `json:"no_faktur"`
+	Kapasitas    float64 `json:"kapasitas"`
+	Kadaluarsa   string  `json:"kadaluarsa"`
 }
 
 // ResepRacikan represents compound medication

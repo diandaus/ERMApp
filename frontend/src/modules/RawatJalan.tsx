@@ -26,7 +26,27 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
 
+  // Filter Poliklinik & Dokter — opsi diambil dari endpoint master yang
+  // sudah ada (/api/pendaftaran/poli, /api/dokter), difilter di sisi
+  // klien berdasarkan kd_poli/kd_dokter yang sudah ada di respons
+  // poli-today & rujukan-internal.
+  const [filterPoli, setFilterPoli] = React.useState<string>('');
+  const [filterDokter, setFilterDokter] = React.useState<string>('');
+  const [poliOptions, setPoliOptions] = React.useState<{ kd_poli: string; nm_poli: string }[]>([]);
+  const [dokterOptions, setDokterOptions] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
+
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    fetch('/api/pendaftaran/poli')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setPoliOptions(Array.isArray(data) ? data : []))
+      .catch(() => setPoliOptions([]));
+    fetch('/api/dokter')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDokterOptions(Array.isArray(data) ? data : []))
+      .catch(() => setDokterOptions([]));
+  }, []);
 
   const loadPoliToday = async () => {
     setLoading(true);
@@ -115,22 +135,25 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
 
   const filteredPoliToday = React.useMemo(() => {
     const search = searchText.trim().toLowerCase();
-    let filtered = search 
+    let filtered = search
       ? poliToday.filter((p) => {
           const haystack = `${p.no_rkm_medis} ${p.nm_pasien} ${p.nm_dokter} ${p.nm_poli}`.toLowerCase();
           return haystack.includes(search);
         })
       : [...poliToday];
-    
+
+    if (filterPoli) filtered = filtered.filter((p) => p.kd_poli === filterPoli);
+    if (filterDokter) filtered = filtered.filter((p) => p.kd_dokter === filterDokter);
+
     // Urutkan: status "Sudah" di bawah, yang lain di atas
     filtered.sort((a, b) => {
       if (a.stts === 'Sudah' && b.stts !== 'Sudah') return 1;
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
       return 0;
     });
-    
+
     return filtered;
-  }, [poliToday, searchText]);
+  }, [poliToday, searchText, filterPoli, filterDokter]);
 
   const filteredRujukanInternal = React.useMemo(() => {
     const search = searchText.trim().toLowerCase();
@@ -140,16 +163,19 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
           return haystack.includes(search);
         })
       : [...rujukanInternal];
-    
+
+    if (filterPoli) filtered = filtered.filter((r) => r.kd_poli === filterPoli);
+    if (filterDokter) filtered = filtered.filter((r) => r.kd_dokter === filterDokter);
+
     // Urutkan: status "Sudah" di bawah, yang lain di atas
     filtered.sort((a, b) => {
       if (a.stts === 'Sudah' && b.stts !== 'Sudah') return 1;
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
       return 0;
     });
-    
+
     return filtered;
-  }, [rujukanInternal, searchText]);
+  }, [rujukanInternal, searchText, filterPoli, filterDokter]);
 
   return (
     <>
@@ -198,7 +224,7 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                 borderRadius: 8,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 zIndex: 100,
-                width: 120
+                width: 200
               }}
             >
               <div style={{ marginBottom: 8 }}>
@@ -216,7 +242,7 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                   }}
                 />
               </div>
-              <div>
+              <div style={{ marginBottom: 8 }}>
                 <input
                   type="date"
                   value={tglSampai}
@@ -230,6 +256,46 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onOpenSoap }) =>
                     boxSizing: 'border-box'
                   }}
                 />
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <select
+                  value={filterPoli}
+                  onChange={(e) => setFilterPoli(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #d1d5db',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                    color: filterPoli ? '#111827' : '#6b7280'
+                  }}
+                >
+                  <option value="">Semua Poliklinik</option>
+                  {poliOptions.map((p) => (
+                    <option key={p.kd_poli} value={p.kd_poli}>{p.nm_poli}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <select
+                  value={filterDokter}
+                  onChange={(e) => setFilterDokter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #d1d5db',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                    color: filterDokter ? '#111827' : '#6b7280'
+                  }}
+                >
+                  <option value="">Semua Dokter</option>
+                  {dokterOptions.map((d) => (
+                    <option key={d.kd_dokter} value={d.kd_dokter}>{d.nm_dokter}</option>
+                  ))}
+                </select>
               </div>
             </div>
           )}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { MenuUtamaView } from './MenuUtama';
 import { PemeriksaanView } from './Pemeriksaan';
@@ -52,7 +53,7 @@ type AppUser = {
 };
 
 type LoginViewProps = {
-  onLogin: (user: AppUser) => void;
+  onLogin: (user: AppUser, remember: boolean) => void;
 };
 
 type InstansiSettings = {
@@ -67,6 +68,8 @@ type LoginWallpaperSettings = {
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [username, setUsername] = React.useState<string>('');
   const [password, setPassword] = React.useState<string>('');
+  const [showPassword, setShowPassword] = React.useState<boolean>(false);
+  const [rememberMe, setRememberMe] = React.useState<boolean>(true);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [instansi, setInstansi] = React.useState<InstansiSettings | null>(null);
@@ -106,7 +109,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         throw new Error((data as any).error || 'Login gagal');
       }
       const user: AppUser = (data as any).user;
-      onLogin(user);
+      onLogin(user, rememberMe);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login gagal');
     } finally {
@@ -130,27 +133,40 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     >
       <div
         style={{
-          width: 380,
+          width: 350,
           maxWidth: '90%',
-          background: 'rgba(255,255,255,0.97)',
-          backdropFilter: 'blur(6px)',
-          borderRadius: 16,
-          padding: 28,
-          boxShadow: '0 20px 45px rgba(15,23,42,0.25)',
-          border: '1px solid rgba(148,163,184,0.25)'
+          background: 'rgba(255,255,255,0.98)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: 8,
+          padding: '36px 32px 28px',
+          boxShadow: '0 25px 60px rgba(15,23,42,0.3)',
+          border: '1px solid rgba(148,163,184,0.2)'
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20 }}>
-          {instansi?.logo_url && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
+          {instansi?.logo_url ? (
             <img
               src={instansi.logo_url}
               alt="Logo"
-              style={{ height: 112, maxWidth: '100%', objectFit: 'contain', marginBottom: 12 }}
+              style={{ height: 96, maxWidth: '100%', objectFit: 'contain', marginBottom: 14 }}
             />
+          ) : (
+            <div
+              style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #1AB1E5, #2563eb)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 14, boxShadow: '0 8px 20px rgba(37,99,235,0.3)'
+              }}
+            >
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+              </svg>
+            </div>
           )}
           <div
             style={{
-              fontSize: 16,
+              fontSize: 17,
               fontWeight: 700,
               color: '#111827',
               textAlign: 'center',
@@ -159,81 +175,164 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           >
             {namaInstansi}
           </div>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+            Masuk untuk melanjutkan
+          </div>
         </div>
 
         {error && (
           <div
             style={{
-              marginBottom: 10,
-              padding: 8,
-              borderRadius: 8,
+              marginBottom: 26,
+              padding: '10px 12px',
+              borderRadius: 10,
               background: '#fef2f2',
+              border: '1px solid #fecaca',
               color: '#b91c1c',
-              fontSize: 12
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
             }}
           >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Username</label>
-            <input
-              type="text"
-              autoFocus
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 10px',
-                borderRadius: 8,
-                border: '1px solid #d1d5db',
-                fontSize: 13,
-                boxSizing: 'border-box'
-              }}
-            />
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}></label>
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </div>
+              <input
+                type="text"
+                autoFocus
+                autoComplete="username"
+                placeholder="Nama Pengguna"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px 9px 36px',
+                  borderRadius: 4,
+                  border: '1px solid #d1d5db',
+                  fontSize: 13,
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#1AB1E5'}
+                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+              />
+            </div>
           </div>
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Password</label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 10px',
-                borderRadius: 8,
-                border: '1px solid #d1d5db',
-                fontSize: 13,
-                boxSizing: 'border-box'
-              }}
-            />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}></label>
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 36px 9px 36px',
+                  borderRadius: 4,
+                  border: '1px solid #d1d5db',
+                  fontSize: 13,
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#1AB1E5'}
+                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 4,
+                  display: 'flex', alignItems: 'center', color: '#9ca3af'
+                }}
+              >
+                {showPassword ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, cursor: 'pointer', fontSize: 12, color: '#374151', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#2563eb' }}
+            />
+            Ingat saya
+          </label>
           <button
             type="submit"
             disabled={loading}
             style={{
               width: '100%',
-              padding: '8px 12px',
-              borderRadius: 999,
+              padding: '10px 12px',
+              borderRadius: 4,
               border: 'none',
               background: loading ? '#9ca3af' : '#2563eb',
               color: '#fff',
               cursor: loading ? 'default' : 'pointer',
               fontSize: 14,
-              fontWeight: 600
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: loading ? 'none' : '0 8px 20px rgba(37,99,235,0.3)',
+              transition: 'background 0.15s ease'
             }}
+            onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = '#1d4ed8'; }}
+            onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = '#2563eb'; }}
           >
-            {loading ? 'Masuk...' : 'Masuk'}
+            {loading && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
+                <path d="M12 2a10 10 0 0 1 10 10"></path>
+              </svg>
+            )}
+            {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
-        <div style={{ marginTop: 16, textAlign: 'center', fontSize: 11, color: '#9ca3af' }}>
+        <div style={{ marginTop: 20, textAlign: 'center', fontSize: 11, color: '#9ca3af' }}>
           © 2026 Firdaus | All Rights Reserved
         </div>
       </div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };
@@ -262,10 +361,43 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
   const [tglSampai, setTglSampai] = React.useState<string>(getLocalDateString());
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
+
+  // Filter Poliklinik & Dokter — opsi diambil dari endpoint master yang
+  // sudah ada (/api/pendaftaran/poli, /api/dokter), difilter di sisi
+  // klien berdasarkan kd_poli/kd_dokter yang sudah ada di respons
+  // poli-today & rujukan-internal.
+  const [filterPoli, setFilterPoli] = React.useState<string>('');
+  const [filterDokter, setFilterDokter] = React.useState<string>('');
+  const [poliOptions, setPoliOptions] = React.useState<{ kd_poli: string; nm_poli: string }[]>([]);
+  const [dokterOptions, setDokterOptions] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
+
+  // Card Daftar Poliklinik — flyout terpisah dari card Filter, dibuka di
+  // sebelah kiri card Filter (bukan native <select>), sama pola posisi
+  // rect-based dgn card Filter itu sendiri.
+  const [showPoliCard, setShowPoliCard] = React.useState<boolean>(false);
+  const [poliCardPos, setPoliCardPos] = React.useState<{ top: number; left: number } | null>(null);
+  const poliCardRef = React.useRef<HTMLDivElement>(null);
+
+  // Card Daftar Dokter — pola identik dgn card Poliklinik di atas.
+  const [showDokterCard, setShowDokterCard] = React.useState<boolean>(false);
+  const [dokterCardPos, setDokterCardPos] = React.useState<{ top: number; left: number } | null>(null);
+  const dokterCardRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    fetch('/api/pendaftaran/poli')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setPoliOptions(Array.isArray(data) ? data : []))
+      .catch(() => setPoliOptions([]));
+    fetch('/api/dokter')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDokterOptions(Array.isArray(data) ? data : []))
+      .catch(() => setDokterOptions([]));
+  }, []);
   const [showStatusDropdown, setShowStatusDropdown] = React.useState<string | null>(null);
   const [showSuratDropdown, setShowSuratDropdown] = React.useState<string | null>(null);
   const [suratDropdownPos, setSuratDropdownPos] = React.useState<{ top: number; left: number; alignBottom?: boolean } | null>(null);
   const [statusDropdownPos, setStatusDropdownPos] = React.useState<{ top: number; left: number; alignBottom?: boolean } | null>(null);
+  const [filterDropdownPos, setFilterDropdownPos] = React.useState<{ top: number; left: number } | null>(null);
 
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
   const statusDropdownRef = React.useRef<HTMLDivElement>(null);
@@ -455,10 +587,18 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
     }
   }, [activeTab, tglDari, tglSampai]);
 
-  // Close filter dropdown when clicking outside
+  // Close filter dropdown when clicking outside — card poliklinik
+  // di-portal ke document.body (supaya tidak ketimpa transform milik
+  // panel ini, lihat poliCardRef), jadi juga dianggap "di dalam" di sini.
+  // Kalau tidak, mousedown di card poliklinik dianggap "di luar", panel
+  // ini keburu unmount sebelum event click sampai ke tombol poli.
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideFilter = filterDropdownRef.current && filterDropdownRef.current.contains(target);
+      const insidePoliCard = poliCardRef.current && poliCardRef.current.contains(target);
+      const insideDokterCard = dokterCardRef.current && dokterCardRef.current.contains(target);
+      if (!insideFilter && !insidePoliCard && !insideDokterCard) {
         setShowFilterDropdown(false);
       }
     };
@@ -471,6 +611,40 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showFilterDropdown]);
+
+  // Close poli card when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (poliCardRef.current && !poliCardRef.current.contains(event.target as Node)) {
+        setShowPoliCard(false);
+      }
+    };
+
+    if (showPoliCard) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPoliCard]);
+
+  // Close dokter card when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dokterCardRef.current && !dokterCardRef.current.contains(event.target as Node)) {
+        setShowDokterCard(false);
+      }
+    };
+
+    if (showDokterCard) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDokterCard]);
 
   // Close status dropdown when clicking outside
   React.useEffect(() => {
@@ -515,13 +689,16 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
         })
       : poliToday;
 
+    if (filterPoli) filtered = filtered.filter((p) => p.kd_poli === filterPoli);
+    if (filterDokter) filtered = filtered.filter((p) => p.kd_dokter === filterDokter);
+
     // Sort: status "Belum" di atas, "Sudah" di bawah
     return filtered.sort((a, b) => {
       if (a.stts === 'Sudah' && b.stts !== 'Sudah') return 1;
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
       return 0;
     });
-  }, [poliToday, searchText]);
+  }, [poliToday, searchText, filterPoli, filterDokter]);
 
   const filteredRujukanInternal = React.useMemo(() => {
     const search = searchText.trim().toLowerCase();
@@ -532,13 +709,16 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
         })
       : rujukanInternal;
 
+    if (filterPoli) filtered = filtered.filter((r) => r.kd_poli === filterPoli);
+    if (filterDokter) filtered = filtered.filter((r) => r.kd_dokter === filterDokter);
+
     // Sort: status "Belum" di atas, "Sudah" di bawah
     return filtered.sort((a, b) => {
       if (a.stts === 'Sudah' && b.stts !== 'Sudah') return 1;
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
       return 0;
     });
-  }, [rujukanInternal, searchText]);
+  }, [rujukanInternal, searchText, filterPoli, filterDokter]);
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -619,24 +799,45 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
 
         {/* Search box & Filter */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            type="text"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="Cari No. RM / Nama / Dokter"
-            style={{
-              width: 250,
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              fontSize: 12
-            }}
-          />
+          <div style={{ position: 'relative' }}>
+            <div style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              pointerEvents: 'none', display: 'flex', alignItems: 'center'
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Cari No. RM / Nama / Dokter"
+              style={{
+                width: 250,
+                padding: '6px 12px 6px 32px',
+                borderRadius: 8,
+                border: '1px solid #d1d5db',
+                fontSize: 12,
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
 
           {/* Filter Button with Dropdown */}
           <div style={{ position: 'relative' }} ref={filterDropdownRef}>
             <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+              onClick={(e) => {
+                if (showFilterDropdown) {
+                  setShowFilterDropdown(false);
+                  setFilterDropdownPos(null);
+                } else {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setFilterDropdownPos({ top: rect.bottom + 4, left: rect.right });
+                  setShowFilterDropdown(true);
+                }
+              }}
               style={{
                 padding: '6px 12px',
                 borderRadius: 8,
@@ -652,18 +853,30 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
               }}
             >
               <span>Filter</span>
-              <span style={{ fontSize: 10 }}>▼</span>
+              <svg
+                width="10" height="6" viewBox="0 0 10 6" fill="none"
+                stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{
+                  transform: showFilterDropdown ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease'
+                }}
+              >
+                <path d="M1 1L5 5L9 1"></path>
+              </svg>
             </button>
 
-            {/* Dropdown Filter */}
-            {showFilterDropdown && (
+            {/* Dropdown Filter — posisi dihitung dari rect tombol (sama
+                pola dgn Status/Surat dropdown di tabel), diarahkan ke kiri
+                lewat translateX(-100%) supaya sisi kanan panel sejajar
+                dgn sisi kanan tombol Filter, bukan meluber ke kanan. */}
+            {showFilterDropdown && filterDropdownPos && (
               <div
                 style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  padding: 12,
+                  position: 'fixed',
+                  top: filterDropdownPos.top,
+                  left: filterDropdownPos.left,
+                  transform: 'translateX(-100%)',
+                  padding: 8,
                   background: '#ffffff',
                   border: '1px solid #e5e7eb',
                   borderRadius: 12,
@@ -671,7 +884,9 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                   zIndex: 100,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8
+                  gap: 4,
+                  width: 140,
+                  colorScheme: 'light'
                 }}
               >
                 <input
@@ -679,6 +894,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                   value={tglDari}
                   onChange={(e) => setTglDari(e.target.value)}
                   style={{
+                    width: '100%',
                     padding: '6px 8px',
                     borderRadius: 8,
                     border: '1px solid #d1d5db',
@@ -691,6 +907,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                   value={tglSampai}
                   onChange={(e) => setTglSampai(e.target.value)}
                   style={{
+                    width: '100%',
                     padding: '6px 8px',
                     borderRadius: 8,
                     border: '1px solid #d1d5db',
@@ -698,6 +915,252 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                     boxSizing: 'border-box'
                   }}
                 />
+                {/* Poliklinik — bukan native <select>, tapi tombol yang
+                    membuka card terpisah (poliCardRef) di sebelah kiri
+                    card Filter ini, sama pola rect-based dgn card Filter
+                    sendiri. */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (showPoliCard) {
+                      setShowPoliCard(false);
+                      setPoliCardPos(null);
+                    } else {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setPoliCardPos({ top: rect.top, left: rect.left - 8 });
+                      setShowPoliCard(true);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px 6px 22px',
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    background: '#ffffff',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                    color: filterPoli ? '#111827' : '#6b7280',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    textAlign: 'left',
+                    position: 'relative'
+                  }}
+                >
+                  {/* Panah — mengarah ke bawah saat tertutup, berputar ke
+                      kiri (rotate 90deg) saat card terbuka, nempel di kiri
+                      tombol sama seperti panah select Dokter. */}
+                  <svg
+                    width="10" height="6" viewBox="0 0 10 6" fill="none"
+                    stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                    style={{
+                      position: 'absolute', left: 8, top: '50%',
+                      transform: showPoliCard ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%) rotate(0deg)',
+                      transition: 'transform 0.2s ease'
+                    }}
+                  >
+                    <path d="M1 1L5 5L9 1"></path>
+                  </svg>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {filterPoli ? (poliOptions.find((p) => p.kd_poli === filterPoli)?.nm_poli || 'Poliklinik') : 'Semua Poliklinik'}
+                  </span>
+                </button>
+
+                {showPoliCard && poliCardPos && createPortal(
+                  <div
+                    ref={poliCardRef}
+                    style={{
+                      position: 'fixed',
+                      top: poliCardPos.top,
+                      left: poliCardPos.left,
+                      transform: 'translateX(-100%)',
+                      background: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      zIndex: 9999,
+                      width: 220,
+                      maxHeight: 260,
+                      overflowY: 'auto',
+                      colorScheme: 'light'
+                    }}
+                  >
+                    <button
+                      onClick={() => { setFilterPoli(''); setShowPoliCard(false); }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: filterPoli === '' ? '#dbeafe' : 'transparent',
+                        color: filterPoli === '' ? '#2563eb' : '#374151',
+                        fontSize: 11,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontWeight: filterPoli === '' ? 600 : 400
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#dbeafe';
+                        e.currentTarget.style.color = '#2563eb';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = filterPoli === '' ? '#dbeafe' : 'transparent';
+                        e.currentTarget.style.color = filterPoli === '' ? '#2563eb' : '#374151';
+                      }}
+                    >
+                      Semua Poliklinik
+                    </button>
+                    {poliOptions.map((p) => (
+                      <button
+                        key={p.kd_poli}
+                        onClick={() => { setFilterPoli(p.kd_poli); setShowPoliCard(false); }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '4px 12px',
+                          border: 'none',
+                          background: filterPoli === p.kd_poli ? '#dbeafe' : 'transparent',
+                          color: filterPoli === p.kd_poli ? '#2563eb' : '#374151',
+                          fontSize: 11,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontWeight: filterPoli === p.kd_poli ? 600 : 400
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#dbeafe';
+                          e.currentTarget.style.color = '#2563eb';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = filterPoli === p.kd_poli ? '#dbeafe' : 'transparent';
+                          e.currentTarget.style.color = filterPoli === p.kd_poli ? '#2563eb' : '#374151';
+                        }}
+                      >
+                        {p.nm_poli}
+                      </button>
+                    ))}
+                  </div>,
+                  document.body
+                )}
+                {/* Dokter — pola identik dgn tombol+card Poliklinik di atas. */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (showDokterCard) {
+                      setShowDokterCard(false);
+                      setDokterCardPos(null);
+                    } else {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setDokterCardPos({ top: rect.top, left: rect.left - 8 });
+                      setShowDokterCard(true);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px 6px 22px',
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    background: '#ffffff',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                    color: filterDokter ? '#111827' : '#6b7280',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    textAlign: 'left',
+                    position: 'relative'
+                  }}
+                >
+                  <svg
+                    width="10" height="6" viewBox="0 0 10 6" fill="none"
+                    stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                    style={{
+                      position: 'absolute', left: 8, top: '50%',
+                      transform: showDokterCard ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%) rotate(0deg)',
+                      transition: 'transform 0.2s ease'
+                    }}
+                  >
+                    <path d="M1 1L5 5L9 1"></path>
+                  </svg>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {filterDokter ? (dokterOptions.find((d) => d.kd_dokter === filterDokter)?.nm_dokter || 'Dokter') : 'Semua Dokter'}
+                  </span>
+                </button>
+
+                {showDokterCard && dokterCardPos && createPortal(
+                  <div
+                    ref={dokterCardRef}
+                    style={{
+                      position: 'fixed',
+                      top: dokterCardPos.top,
+                      left: dokterCardPos.left,
+                      transform: 'translateX(-100%)',
+                      background: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      zIndex: 9999,
+                      width: 220,
+                      maxHeight: 260,
+                      overflowY: 'auto',
+                      colorScheme: 'light'
+                    }}
+                  >
+                    <button
+                      onClick={() => { setFilterDokter(''); setShowDokterCard(false); }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        background: filterDokter === '' ? '#dbeafe' : 'transparent',
+                        color: filterDokter === '' ? '#2563eb' : '#374151',
+                        fontSize: 11,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontWeight: filterDokter === '' ? 600 : 400
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#dbeafe';
+                        e.currentTarget.style.color = '#2563eb';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = filterDokter === '' ? '#dbeafe' : 'transparent';
+                        e.currentTarget.style.color = filterDokter === '' ? '#2563eb' : '#374151';
+                      }}
+                    >
+                      Semua Dokter
+                    </button>
+                    {dokterOptions.map((d) => (
+                      <button
+                        key={d.kd_dokter}
+                        onClick={() => { setFilterDokter(d.kd_dokter); setShowDokterCard(false); }}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '4px 12px',
+                          border: 'none',
+                          background: filterDokter === d.kd_dokter ? '#dbeafe' : 'transparent',
+                          color: filterDokter === d.kd_dokter ? '#2563eb' : '#374151',
+                          fontSize: 11,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontWeight: filterDokter === d.kd_dokter ? 600 : 400
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#dbeafe';
+                          e.currentTarget.style.color = '#2563eb';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = filterDokter === d.kd_dokter ? '#dbeafe' : 'transparent';
+                          e.currentTarget.style.color = filterDokter === d.kd_dokter ? '#2563eb' : '#374151';
+                        }}
+                      >
+                        {d.nm_dokter}
+                      </button>
+                    ))}
+                  </div>,
+                  document.body
+                )}
               </div>
             )}
           </div>
@@ -1578,13 +2041,17 @@ export const App: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    const stored = window.localStorage.getItem('ermapp_user');
+    // "Ingat saya" dicentang -> disimpan di localStorage (tetap login
+    // setelah browser ditutup). Tidak dicentang -> sessionStorage saja
+    // (hilang begitu tab/browser ditutup).
+    const stored = window.localStorage.getItem('ermapp_user') || window.sessionStorage.getItem('ermapp_user');
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as AppUser;
         setUser(parsed);
       } catch {
         window.localStorage.removeItem('ermapp_user');
+        window.sessionStorage.removeItem('ermapp_user');
       }
     }
   }, []);
@@ -1606,14 +2073,21 @@ export const App: React.FC = () => {
     };
   }, [showUserMenu]);
 
-  const handleLogin = (u: AppUser) => {
+  const handleLogin = (u: AppUser, remember: boolean) => {
     setUser(u);
-    window.localStorage.setItem('ermapp_user', JSON.stringify(u));
+    if (remember) {
+      window.localStorage.setItem('ermapp_user', JSON.stringify(u));
+      window.sessionStorage.removeItem('ermapp_user');
+    } else {
+      window.sessionStorage.setItem('ermapp_user', JSON.stringify(u));
+      window.localStorage.removeItem('ermapp_user');
+    }
   };
 
   const handleLogout = () => {
     setUser(null);
     window.localStorage.removeItem('ermapp_user');
+    window.sessionStorage.removeItem('ermapp_user');
   };
 
   const canAccessMenu = (menu: MenuKey, role: AppUser['role']) => {

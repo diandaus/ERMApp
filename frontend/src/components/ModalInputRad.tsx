@@ -197,26 +197,16 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
           style={{
             background: '#F3F4F6', borderRadius: 20,
             padding: '35px 8px 8px 8px', position: 'relative',
-            maxWidth: 900, width: '90%', height: '60vh', maxHeight: '92vh',
-            display: 'flex', flexDirection: 'column',
+            maxWidth: 1200, width: '52%', height: '42vh', maxHeight: '94vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Close Button */}
-          <button
-            type="button" onClick={onClose}
-            style={{
-              position: 'absolute', top: 12, right: 16,
-              background: 'transparent', border: 'none',
-              fontSize: 24, cursor: 'pointer', color: '#6b7280',
-              padding: 0, lineHeight: 1,
-            }}
-          >×</button>
-
-          {/* Header Title */}
+          {/* Header — title + close button dalam satu baris flex, sejajar
+              vertikal (bukan dua elemen absolute yang saling menumpuk). */}
           <div style={{
             position: 'absolute', top: 0, left: 0, right: 0,
-            padding: '12px 20px', color: '#000000', fontSize: 13, fontWeight: 400,
+            padding: '8px 16px 8px 20px', color: '#000000', fontSize: 13, fontWeight: 400,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -226,31 +216,21 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
               </svg>
               Form Permintaan Radiologi
             </div>
-            {/* Badge info rawat */}
-            <div style={{ display: 'flex', gap: 6, marginRight: 32 }}>
-              <span style={{
-                padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                background: infoRawat.status === 'ranap' ? '#fef3c7' : '#dbeafe',
-                color: infoRawat.status === 'ranap' ? '#92400e' : '#1e40af',
-              }}>
-                {infoRawat.status === 'ranap' ? '🏥 Ranap' : '🏃 Ralan'}
-              </span>
-              {infoRawat.nama_kamar && (
-                <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: '#f3f4f6', color: '#374151' }}>
-                  📍 {infoRawat.nama_kamar}
-                </span>
-              )}
-              {infoRawat.kelas && (
-                <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: '#f0fdf4', color: '#166534' }}>
-                  Kelas: {infoRawat.kelas}
-                </span>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                type="button" onClick={onClose}
+                style={{
+                  background: 'transparent', border: 'none',
+                  fontSize: 20, cursor: 'pointer', color: '#6b7280',
+                  padding: 0, lineHeight: 1,
+                }}
+              >×</button>
             </div>
           </div>
 
           {/* White Card Content */}
           <div style={{
-            background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '16px',
+            background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '12px',
             flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
 
@@ -313,7 +293,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
             </div>
 
             {/* Search + Selected Items */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginBottom: 16, flex: 1, minHeight: 0, overflowY: 'auto', alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16, flex: 1, minHeight: 0, overflowY: 'auto', alignItems: 'start' }}>
               {/* Kolom Kiri - Search Dropdown */}
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
@@ -348,24 +328,22 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                       <label
                         key={idx}
                         style={{
-                          display: 'flex', alignItems: 'center', padding: '10px 12px',
-                          background: selectedPemeriksaanRad.includes(item.kd_jenis_prw) ? '#e0f2fe' : '#ffffff',
+                          display: 'flex', alignItems: 'center', padding: '2px 12px',
+                          background: selectedPemeriksaanRad.includes(item.kd_jenis_prw) ? '#e0f2fe' : idx % 2 === 0 ? '#fef7f5' : '#ffffff',
                           borderBottom: idx < pemeriksaanRadList.length - 1 ? '1px solid #f3f4f6' : 'none',
                           cursor: 'pointer', transition: 'all 0.2s',
                         }}
                         onMouseEnter={(e) => { if (!selectedPemeriksaanRad.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#f9fafb'; }}
-                        onMouseLeave={(e) => { if (!selectedPemeriksaanRad.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#ffffff'; }}
+                        onMouseLeave={(e) => { if (!selectedPemeriksaanRad.includes(item.kd_jenis_prw)) e.currentTarget.style.background = idx % 2 === 0 ? '#fef7f5' : '#ffffff'; }}
                       >
                         <input
                           type="checkbox"
                           checked={selectedPemeriksaanRad.includes(item.kd_jenis_prw)}
                           onChange={() => togglePemeriksaan(item.kd_jenis_prw)}
-                          style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16 }}
+                          style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
                         />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{item.nm_perawatan}</div>
-                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Kode: {item.kd_jenis_prw}</div>
-                        </div>
+                        <div style={{ width: 90, flexShrink: 0, fontSize: 13, fontWeight: 500, color: '#111827' }}>{item.kd_jenis_prw}</div>
+                        <div style={{ flex: 1, fontSize: 13, color: '#111827' }}>{item.nm_perawatan}</div>
                       </label>
                     ))}
                   </div>
@@ -374,45 +352,30 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
 
               {/* Kolom Kanan - Item Dipilih */}
               <div>
-                <div style={{ background: '#f0f9ff', border: '1px solid #1AB1E5', borderRadius: 8, padding: '8px 12px', minHeight: 42 }}>
-                  <div style={{
-                    fontSize: 13, fontWeight: 600, color: '#1AB1E5',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginBottom: selectedPemeriksaanRad.length > 0 ? 12 : 0,
-                  }}>
-                    <span>✓ Item Dipilih ({selectedPemeriksaanRad.length})</span>
-                    {selectedPemeriksaanRad.length > 0 && (
-                      <button
-                        onClick={() => setSelectedPemeriksaanRad([])}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500, padding: '2px 8px' }}
-                      >Hapus Semua</button>
-                    )}
-                  </div>
-                  {selectedPemeriksaanRad.map((kd, idx) => {
-                    const item = pemeriksaanRadList.find(p => p.kd_jenis_prw === kd);
-                    return (
-                      <div key={idx} style={{
-                        background: '#ffffff', border: '1px solid #1AB1E5',
-                        borderRadius: 6, padding: '8px 10px', marginBottom: 8,
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      }}>
-                        <div style={{ flex: 1, marginRight: 8 }}>
-                          <div style={{ fontSize: 12, fontWeight: 500, color: '#111827' }}>{item?.nm_perawatan || kd}</div>
-                          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{kd}</div>
-                        </div>
-                        <button
-                          onClick={() => togglePemeriksaan(kd)}
-                          style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 500 }}
-                        >✕</button>
+                {selectedPemeriksaanRad.map((kd, idx) => {
+                  const item = pemeriksaanRadList.find(p => p.kd_jenis_prw === kd);
+                  return (
+                    <div key={idx} style={{
+                      borderBottom: idx < selectedPemeriksaanRad.length - 1 ? '1px solid #e5e7eb' : 'none',
+                      padding: '10px 12px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    }}>
+                      <div style={{ flex: 1, marginRight: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 90, flexShrink: 0, fontSize: 13, fontWeight: 500, color: '#111827' }}>{kd}</div>
+                        <div style={{ fontSize: 13, color: '#111827' }}>{item?.nm_perawatan || kd}</div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <button
+                        onClick={() => togglePemeriksaan(kd)}
+                        style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                      >-</button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Footer Buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', flexShrink: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', flexShrink: 0 }}>
               <div>
                 <button
                   type="button"
@@ -424,7 +387,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                 <button
                   type="button"
                   onClick={onClose}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
                 >Tutup</button>
                 <button
                   type="button"

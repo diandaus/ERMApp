@@ -47,6 +47,21 @@ type Racikan = {
   detail: RacikanDetail[];
 };
 
+// Input inline tabel master racikan — tanpa garis tabel (borderless), cuma
+// border tipis di tiap input sendiri, padanan gaya screenshot yang
+// diminta user (beda dari tabel Bootstrap `table-bordered` yang dipakai
+// tabel lain di modal ini).
+const racikanInputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '5px 10px',
+  borderRadius: 4,
+  border: '1px solid #d1d5db',
+  fontSize: 14,
+  outline: 'none',
+  boxSizing: 'border-box',
+  background: '#ffffff',
+};
+
 export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onResepSaved, isRanap = false, editResep }) => {
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
 
@@ -72,7 +87,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [showModalInputObatRacikan, setShowModalInputObatRacikan] = React.useState(false);
 
   const [racikanList, setRacikanList] = React.useState<Racikan[]>([
-    { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }
+    { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }
   ]);
   const [activeRacikanIdx, setActiveRacikanIdx] = React.useState<number>(0);
 
@@ -837,7 +852,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
       setResepNonRacikan([]);
       setSearchObatNonRacikan('');
-      setRacikanList([{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }]);
+      setRacikanList([{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }]);
       setActiveRacikanIdx(0);
       setSearchObatRacikan('');
 
@@ -936,24 +951,27 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   return (
     <>
       {/* Main Modal Resep */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }} onClick={onClose}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
         <div style={{ background: '#F3F4F6', borderRadius: 20, padding: '35px 8px 8px 8px', position: 'relative', maxWidth: 900, width: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
 
-          {/* Close Button */}
-          <button type="button" onClick={onClose} style={{ position: 'absolute', top: 12, right: 16, background: 'transparent', border: 'none', fontSize: 24, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>×</button>
-
-          {/* Header Title */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 20px', color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
-            Input Resep
-            {isRanap && <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>RANAP</span>}
-            — {patient.nm_pasien} ({patient.no_rkm_medis})
+          {/* Header — title + close button dalam satu baris flex, sejajar
+              vertikal (bukan dua elemen absolute yang saling menumpuk). */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 20px', color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Input Resep
+              {isRanap && <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>RANAP</span>}
+            </span>
+            <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>×</button>
           </div>
 
           {/* White Card Content */}
           <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '12px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-            {/* Tab Navigation */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
+            {/* Tab Navigation — segmented control di tengah + "+ Tambah
+                Racikan" di kanan (cuma tab Racikan), pola sama dengan
+                ModalValidasiObat.tsx supaya konsisten antar modal resep. */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', marginBottom: 16 }}>
+              <span />
+              <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4, justifySelf: 'center' }}>
                 {(['non-racikan', 'racikan'] as const).map((tab) => (
                   <button
                     key={tab}
@@ -972,9 +990,22 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       boxShadow: 'none'
                     }}
                   >
-                    {tab === 'non-racikan' ? 'Non Racikan' : 'Racikan'}
+                    {tab === 'non-racikan' ? `Non Racikan (${resepNonRacikan.length})` : `Racikan (${racikanList.length})`}
                   </button>
                 ))}
+              </div>
+              <div style={{ justifySelf: 'end' }}>
+                {activeResepTab === 'racikan' && (
+                  <button type="button" onClick={() => {
+                    setRacikanList(prev => [{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }, ...prev]);
+                    setActiveRacikanIdx(0);
+                  }} style={{
+                    padding: '6px 14px', borderRadius: 4, border: '1px solid #2563eb',
+                    background: '#2563eb', color: '#ffffff', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  }}>
+                    + Tambah Racikan
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1015,6 +1046,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                   <th style={{ width: '15%' }}>Kode Barang</th>
                                   <th>Nama Barang</th>
                                   <th style={{ width: '10%' }}>Satuan</th>
+                                  <th style={{ width: '8%' }}>Kps</th>
                                   <th style={{ width: '10%' }}>Stok</th>
                                   <th style={{ width: '15%' }}>Harga (Rp)</th>
                                 </tr>
@@ -1034,6 +1066,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                       </div>
                                     </td>
                                     <td className="text-center">{obat.kode_sat}</td>
+                                    <td className="text-center">{obat.kapasitas || '-'}</td>
                                     <td className="text-center">
                                       <span className={obat.stok > 0 ? 'text-success' : 'text-danger'}>
                                         {obat.stok}
@@ -1151,117 +1184,113 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
             {/* Tab Content: Racikan */}
             {activeResepTab === 'racikan' && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                {/* Racikan Baru, daftar racikan, dan Cari Obat tetap di luar area scroll agar daftar hasil pencarian tidak terpotong */}
+                {/* Tabel master racikan (Nama Racikan/Metode Racik/Jml.Racik/
+                    Aturan Pakai/Keterangan/Aksi) — klik baris untuk pilih
+                    racikan aktif, pola sama dengan tabel master racikan di
+                    ModalValidasiObat.tsx supaya konsisten antar modal resep.
+                    Tetap di luar area scroll (bareng Cari Obat) agar daftar
+                    hasil pencarian tidak terpotong. */}
                 <div style={{ flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                  <button type="button" onClick={() => {
-                    setRacikanList(prev => [{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 1, aturan_pakai: '', detail: [] }, ...prev]);
-                    setActiveRacikanIdx(0);
-                  }} style={{
-                    padding: '7px 16px', borderRadius: 4, border: 'none',
-                    background: '#16a34a', color: '#fff', cursor: 'pointer',
-                    fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Racikan Baru
-                  </button>
+                <div style={{ overflowX: 'auto', marginBottom: 20 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                      <tr style={{ color: '#6b7280', fontWeight: 700 }}>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>No</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Nama Racikan</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Metode Racik</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700, width: '1%', whiteSpace: 'nowrap' }}>Jml.Racik/Bungkus</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Aturan Pakai</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Keterangan</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 700 }}>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {racikanList.map((rac, idx) => {
+                        const isSelected = activeRacikanIdx === idx;
+                        return (
+                        <tr
+                          key={idx}
+                          onClick={() => setActiveRacikanIdx(idx)}
+                          style={{ cursor: 'pointer', background: isSelected ? '#eff6ff' : undefined }}
+                        >
+                          <td style={{ padding: '4px 6px', verticalAlign: 'middle', color: '#374151' }}>{idx + 1}</td>
+                          <td style={{ padding: '4px 6px', verticalAlign: 'middle' }}>
+                            <input
+                              ref={(el) => { namaRacikanRefs.current[idx] = el; }}
+                              type="text"
+                              style={racikanInputStyle}
+                              value={rac.nama_racikan}
+                              onFocus={() => setActiveRacikanIdx(idx)}
+                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value }))}
+                              placeholder="Contoh: Pulvis / Racikan Batuk"
+                              autoComplete="off"
+                            />
+                          </td>
+                          <td style={{ padding: '4px 4px', verticalAlign: 'middle' }}>
+                            <select
+                              style={racikanInputStyle}
+                              value={rac.metode_racik}
+                              onFocus={() => setActiveRacikanIdx(idx)}
+                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, metode_racik: e.target.value }))}
+                            >
+                              <option value="">Pilih Metode</option>
+                              <option value="Kapsul">Kapsul</option>
+                              <option value="Puyer">Puyer</option>
+                              <option value="Sirup">Sirup</option>
+                              <option value="Salep">Salep</option>
+                              <option value="Krim">Krim</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '4px 6px', verticalAlign: 'middle' }}>
+                            <input
+                              type="number"
+                              style={{ ...racikanInputStyle, color: isSelected ? '#2563eb' : undefined, fontWeight: isSelected ? 600 : undefined }}
+                              value={rac.jml_dr === 0 ? '' : rac.jml_dr}
+                              placeholder="-"
+                              onFocus={(e) => { setActiveRacikanIdx(idx); e.target.select(); }}
+                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, jml_dr: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 }))}
+                              min="1"
+                            />
+                          </td>
+                          <td style={{ padding: '4px 4px', verticalAlign: 'middle' }}>
+                            <input
+                              type="text"
+                              style={racikanInputStyle}
+                              value={rac.aturan_pakai}
+                              onFocus={() => setActiveRacikanIdx(idx)}
+                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, aturan_pakai: e.target.value }))}
+                              placeholder="3x1 sehari"
+                              autoComplete="off"
+                            />
+                          </td>
+                          <td style={{ padding: '4px 4px', verticalAlign: 'middle' }}>
+                            <input
+                              type="text"
+                              style={racikanInputStyle}
+                              value={rac.keterangan}
+                              onFocus={() => setActiveRacikanIdx(idx)}
+                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, keterangan: e.target.value }))}
+                              placeholder="Keterangan"
+                              autoComplete="off"
+                            />
+                          </td>
+                          <td style={{ padding: '4px 10px', verticalAlign: 'middle', textAlign: 'center' }}>
+                            {racikanList.length > 1 && (
+                              <button type="button" onClick={(e) => {
+                                e.stopPropagation();
+                                setRacikanList(prev => prev.filter((_, i) => i !== idx));
+                                setActiveRacikanIdx(prev => Math.max(0, prev >= idx ? prev - 1 : prev));
+                              }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 12.5, fontWeight: 500 }}>
+                                Hapus
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-
-                {racikanList.map((rac, idx) => (
-                  <div key={idx} onClick={() => setActiveRacikanIdx(idx)} style={{
-                    display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start',
-                    padding: '8px', borderRadius: 8,
-                    border: `1px solid ${activeRacikanIdx === idx ? '#2563eb' : '#e5e7eb'}`,
-                    background: activeRacikanIdx === idx ? '#eff6ff' : '#fff',
-                    cursor: 'pointer',
-                  }}>
-                    {racikanList.length > 1 && (
-                      <div style={{ paddingTop: 28, fontSize: 11, color: '#6b7280', minWidth: 18, textAlign: 'center' }}>
-                        {idx + 1}
-                      </div>
-                    )}
-                    <div style={{ flex: 3, minWidth: 0 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Nama Racikan</label>
-                      <input
-                        ref={(el) => { namaRacikanRefs.current[idx] = el; }}
-                        type="text"
-                        className="form-control"
-                        value={rac.nama_racikan}
-                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value }))}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Contoh: Pulvis / Racikan Batuk"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 2, minWidth: 0 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Metode Racik</label>
-                      <select
-                        className="form-select"
-                        value={rac.metode_racik}
-                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, metode_racik: e.target.value }))}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <option value="">Pilih Metode</option>
-                        <option value="Kapsul">Kapsul</option>
-                        <option value="Puyer">Puyer</option>
-                        <option value="Sirup">Sirup</option>
-                        <option value="Salep">Salep</option>
-                        <option value="Krim">Krim</option>
-                      </select>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Jml/Bgks</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        value={rac.jml_dr}
-                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, jml_dr: parseInt(e.target.value) || 1 }))}
-                        onClick={(e) => e.stopPropagation()}
-                        min="1"
-                        onFocus={(e) => e.target.select()}
-                      />
-                    </div>
-                    <div style={{ flex: 3, minWidth: 0 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Aturan Pakai</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={rac.aturan_pakai}
-                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, aturan_pakai: e.target.value }))}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="3x1 sehari"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 2, minWidth: 0 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, display: 'block' }}>Keterangan</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={rac.keterangan}
-                        onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, keterangan: e.target.value }))}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Keterangan"
-                        autoComplete="off"
-                      />
-                    </div>
-                    {racikanList.length > 1 && (
-                      <div style={{ paddingTop: 28 }}>
-                        <button type="button" onClick={(e) => {
-                          e.stopPropagation();
-                          setRacikanList(prev => prev.filter((_, i) => i !== idx));
-                          setActiveRacikanIdx(prev => Math.max(0, prev >= idx ? prev - 1 : prev));
-                        }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
 
                 <hr />
 
@@ -1295,6 +1324,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                               <th style={{ width: '15%' }}>Kode Barang</th>
                               <th>Nama Barang</th>
                               <th style={{ width: '10%' }}>Satuan</th>
+                              <th style={{ width: '8%' }}>Kps</th>
                               <th style={{ width: '10%' }}>Stok</th>
                               <th style={{ width: '15%' }}>Harga (Rp)</th>
                             </tr>
@@ -1314,6 +1344,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                   </div>
                                 </td>
                                 <td className="text-center">{obat.kode_sat}</td>
+                                <td className="text-center">{obat.kapasitas || '-'}</td>
                                 <td className="text-center">
                                   <span className={obat.stok > 0 ? 'text-success' : 'text-danger'}>
                                     {obat.stok}

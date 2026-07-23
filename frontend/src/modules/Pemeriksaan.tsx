@@ -8,6 +8,7 @@ import { RadTab } from '../components/RadTab';
 import { UploadTab } from '../components/UploadTab';
 import { RujukanInternalModal } from '../components/RujukanInternalModal';
 import { TindakanTab } from '../components/TindakanTab';
+import { DiagnosaTab } from '../components/DiagnosaTab';
 
 type SoapViewProps = {
   patient: any;
@@ -46,7 +47,7 @@ const InfoItem: React.FC<{ label: string; value: string; icon?: React.ReactNode;
 );
 
 export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) => {
-  const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'upload'>('soap');
+  const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'diagnosa' | 'upload'>('soap');
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [editingItem, setEditingItem] = React.useState<any>(null); // Menyimpan item yang sedang diedit
   const [loading, setLoading] = React.useState(false);
@@ -1738,6 +1739,22 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             TINDAKAN
           </button>
           <button
+            onClick={() => setActiveTab('diagnosa')}
+            style={{
+              padding: '10px 20px',
+              border: 'none',
+              background: activeTab === 'diagnosa' ? '#e0f2fe' : 'transparent',
+              borderBottom: activeTab === 'diagnosa' ? '3px solid #1AB1E5' : '3px solid transparent',
+              color: activeTab === 'diagnosa' ? '#1AB1E5' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: activeTab === 'diagnosa' ? 600 : 400,
+              transition: 'all 0.2s'
+            }}
+          >
+            DIAGNOSA
+          </button>
+          <button
             onClick={() => setActiveTab('upload')}
             style={{
               padding: '10px 20px',
@@ -3396,6 +3413,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             {activeTab === 'rad' && <RadTab patient={patient} />}
 
             {activeTab === 'tindakan' && <TindakanTab patient={patient} />}
+
+            {activeTab === 'diagnosa' && <DiagnosaTab patient={patient} />}
 
             {activeTab === 'upload' && <UploadTab patient={patient} />}
           </div>

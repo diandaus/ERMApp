@@ -140,6 +140,7 @@ export const ApotekRiwayatBarangMedisView: React.FC = () => {
   const [bangsal, setBangsal] = React.useState<KvOpsi[]>([]);
   const [items, setItems] = React.useState<RiwayatRow[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [hasSearched, setHasSearched] = React.useState(false);
 
   React.useEffect(() => {
     fetch('/api/apotek/pengaturan/depo/opsi')
@@ -148,13 +149,21 @@ export const ApotekRiwayatBarangMedisView: React.FC = () => {
       .catch(() => {});
   }, []);
 
+  // Query ke riwayat_barang_medis tidak ter-index di kolom tanggal (lihat
+  // catatan performa apotek_riwayat_barang_medis.go) — full table scan yang
+  // mahal kalau dipicu otomatis tiap keystroke/mount. Makanya laporan ini
+  // baru query ke backend saat user eksplisit klik "Cari" dengan rentang
+  // tanggal yang jelas, mirip DlgRiwayatBarangMedis.java yang juga tidak
+  // auto-load. Pencarian teks bebas (searchText) difilter di client atas
+  // data yang sudah termuat, jadi tidak menembak DB ulang tiap ketik.
   const fetchRiwayat = React.useCallback(async () => {
+    if (!tgl1 || !tgl2) return;
     setLoading(true);
+    setHasSearched(true);
     try {
       let url = `/api/apotek/riwayat-barang-medis?tgl1=${tgl1}&tgl2=${tgl2}`;
       if (kdBangsal) url += `&kd_bangsal=${encodeURIComponent(kdBangsal)}`;
       if (posisi) url += `&posisi=${encodeURIComponent(posisi)}`;
-      if (searchText) url += `&search=${encodeURIComponent(searchText)}`;
       const res = await fetch(url);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
@@ -163,24 +172,16 @@ export const ApotekRiwayatBarangMedisView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [tgl1, tgl2, kdBangsal, posisi, searchText]);
-
-  const isFirstSearch = React.useRef(true);
-  React.useEffect(() => {
-    if (isFirstSearch.current) {
-      isFirstSearch.current = false;
-      fetchRiwayat();
-      return;
-    }
-    const t = setTimeout(() => fetchRiwayat(), 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchText]);
-
-  React.useEffect(() => {
-    fetchRiwayat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tgl1, tgl2, kdBangsal, posisi]);
+
+  const displayedItems = React.useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) =>
+      [item.kode_brng, item.nama_brng, item.petugas, item.nm_bangsal, item.no_batch, item.no_faktur, item.keterangan, item.posisi]
+        .some((field) => (field || '').toLowerCase().includes(q))
+    );
+  }, [items, searchText]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
@@ -202,10 +203,28 @@ export const ApotekRiwayatBarangMedisView: React.FC = () => {
           <PillSelect value={posisi} onChange={setPosisi} options={[{ value: '', label: 'Semua Posisi' }, ...POSISI_OPTIONS.map((p) => ({ value: p, label: p }))]} />
         </div>
         <div style={{ minWidth: 220, flex: 1 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari (di hasil yang sudah dimuat)</label>
           <input style={inputStyle} placeholder="Kode / nama barang / petugas / no.faktur / keterangan..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
         </div>
-        <span style={{ fontSize: 12, color: '#6b7280', paddingBottom: 8, whiteSpace: 'nowrap' }}>{items.length} baris</span>
+        <button
+          type="button"
+          onClick={fetchRiwayat}
+          disabled={loading || !tgl1 || !tgl2}
+          style={{
+            padding: '7px 20px',
+            borderRadius: 4,
+            border: 'none',
+            background: loading || !tgl1 || !tgl2 ? '#9ca3af' : '#059669',
+            color: '#ffffff',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: loading || !tgl1 || !tgl2 ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {loading ? 'Memuat...' : 'Cari'}
+        </button>
+        <span style={{ fontSize: 12, color: '#6b7280', paddingBottom: 8, whiteSpace: 'nowrap' }}>{hasSearched ? `${displayedItems.length} baris` : ''}</span>
       </div>
 
       <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
@@ -228,10 +247,12 @@ export const ApotekRiwayatBarangMedisView: React.FC = () => {
           <tbody>
             {loading ? (
               <tr><td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
-            ) : items.length === 0 ? (
+            ) : !hasSearched ? (
+              <tr><td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Pilih rentang tanggal lalu klik "Cari" untuk menampilkan riwayat</td></tr>
+            ) : displayedItems.length === 0 ? (
               <tr><td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada riwayat pada rentang ini</td></tr>
             ) : (
-              items.map((item, index) => (
+              displayedItems.map((item, index) => (
                 <tr key={`${item.kode_brng}-${item.tanggal}-${item.jam}-${item.kd_bangsal}-${index}`} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
                     {item.tanggal.slice(0, 10)} <span style={{ color: '#9ca3af' }}>{item.jam}</span>

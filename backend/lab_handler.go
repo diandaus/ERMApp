@@ -79,6 +79,15 @@ func getJenisPerawatanLab(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
+		// Saklar Set Penggunaan Tarif (set_tarif.cara_bayar_lab/kelas_lab,
+		// lihat set_tarif_handler.go) — padanan persis mekanisme yang
+		// sudah diport untuk Radiologi di getJenisPerawatanRadiologi
+		// (rad_handler.go): filter kd_pj/kelas cuma aktif kalau saklarnya
+		// "Yes". Default "Yes" kalau baris set_tarif belum ada (padanan
+		// fallback Java saat rsset_tarif tidak punya baris).
+		caraBayarAktif, kelasAktif := "Yes", "Yes"
+		db.QueryRow(`SELECT cara_bayar_lab, kelas_lab FROM set_tarif LIMIT 1`).Scan(&caraBayarAktif, &kelasAktif)
+
 		query := `
 			SELECT
 				jns_perawatan_lab.kd_jenis_prw,
@@ -94,14 +103,16 @@ func getJenisPerawatanLab(db *sql.DB) gin.HandlerFunc {
 
 		args := []interface{}{kategori}
 
-		// Filter berdasarkan kd_pj jika ada
-		if kdPj != "" {
+		// Filter berdasarkan kd_pj — HANYA kalau saklar "Per Jenis Bayar
+		// Laborat" aktif (Yes) DAN kd_pj pasien dikirim.
+		if caraBayarAktif == "Yes" && kdPj != "" {
 			query += " AND (jns_perawatan_lab.kd_pj = ? OR jns_perawatan_lab.kd_pj = '-')"
 			args = append(args, kdPj)
 		}
 
-		// Filter berdasarkan kelas jika ada
-		if kelas != "" {
+		// Filter berdasarkan kelas — HANYA kalau saklar "Per Kelas
+		// Laborat" aktif (Yes) DAN kelas pasien dikirim.
+		if kelasAktif == "Yes" && kelas != "" {
 			query += " AND (jns_perawatan_lab.kelas = ? OR jns_perawatan_lab.kelas = '-')"
 			args = append(args, kelas)
 		}

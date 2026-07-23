@@ -42,6 +42,19 @@ func getJenisPerawatanRadiologi(db *sql.DB) gin.HandlerFunc {
 		kdPj := c.Query("kd_pj")
 		kelas := c.Query("kelas")
 
+		// Saklar Set Penggunaan Tarif (set_tarif.cara_bayar_radiologi/
+		// kelas_radiologi, lihat set_tarif_handler.go) — padanan
+		// DlgPeriksaRadiologi.java yang baca set_tarif saat dialog dibuka
+		// lalu pilih salah satu dari 4 varian query (Yes/Yes = filter
+		// keduanya, Yes/No = kd_pj saja, No/Yes = kelas saja, No/No = tanpa
+		// filter). Kalau baris set_tarif belum ada, default ke "Yes" utk
+		// KEDUA saklar (padanan persis fallback Java saat rsset_tarif tidak
+		// punya baris) — filter tetap aktif by default, bukan langsung
+		// terbuka lebar, supaya tidak mendadak menampilkan semua tarif
+		// tanpa sepengetahuan admin.
+		caraBayarAktif, kelasAktif := "Yes", "Yes"
+		db.QueryRow(`SELECT cara_bayar_radiologi, kelas_radiologi FROM set_tarif LIMIT 1`).Scan(&caraBayarAktif, &kelasAktif)
+
 		query := `
 			SELECT
 				jns_perawatan_radiologi.kd_jenis_prw,
@@ -55,14 +68,16 @@ func getJenisPerawatanRadiologi(db *sql.DB) gin.HandlerFunc {
 
 		args := []interface{}{}
 
-		// Filter berdasarkan kd_pj jika ada
-		if kdPj != "" {
+		// Filter berdasarkan kd_pj — HANYA kalau saklar "Per Jenis Bayar
+		// Radiologi" aktif (Yes) DAN kd_pj pasien dikirim.
+		if caraBayarAktif == "Yes" && kdPj != "" {
 			query += " AND (jns_perawatan_radiologi.kd_pj = ? OR jns_perawatan_radiologi.kd_pj = '-')"
 			args = append(args, kdPj)
 		}
 
-		// Filter berdasarkan kelas jika ada
-		if kelas != "" {
+		// Filter berdasarkan kelas — HANYA kalau saklar "Per Kelas
+		// Radiologi" aktif (Yes) DAN kelas pasien dikirim.
+		if kelasAktif == "Yes" && kelas != "" {
 			query += " AND (jns_perawatan_radiologi.kelas = ? OR jns_perawatan_radiologi.kelas = '-')"
 			args = append(args, kelas)
 		}

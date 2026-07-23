@@ -2811,6 +2811,16 @@ func main() {
 	// Pemeriksaan Rawat Jalan endpoint
 	r.GET("/api/pemeriksaan-ralan/*no_rawat", getPemeriksaanRalan(db))
 
+	// Diagnosa (ICD10) & Prosedur (ICD9) — tab "Diagnosa" di Pemeriksaan
+	r.GET("/api/penyakit/search", searchPenyakit(db))
+	r.GET("/api/icd9/search", searchIcd9(db))
+	r.GET("/api/pemeriksaan/diagnosa/*no_rawat", getDiagnosaPasien(db))
+	r.POST("/api/pemeriksaan/diagnosa", saveDiagnosaPasien(db))
+	r.DELETE("/api/pemeriksaan/diagnosa", deleteDiagnosaPasien(db))
+	r.GET("/api/pemeriksaan/prosedur/*no_rawat", getProsedurPasien(db))
+	r.POST("/api/pemeriksaan/prosedur", saveProsedurPasien(db))
+	r.DELETE("/api/pemeriksaan/prosedur", deleteProsedurPasien(db))
+
 	// Pemeriksaan Rawat Inap endpoints
 	r.GET("/api/pemeriksaan-ranap/*no_rawat", getPemeriksaanRanap(db))
 	r.POST("/api/pemeriksaan-ranap", savePemeriksaanRanap(db))
@@ -2845,6 +2855,12 @@ func main() {
 	})
 	r.POST("/api/tindakan/simpan", func(c *gin.Context) {
 		SimpanTindakan(c, db)
+	})
+	r.POST("/api/tindakan/simpan-petugas", func(c *gin.Context) {
+		SimpanTindakanPetugas(c, db)
+	})
+	r.POST("/api/tindakan/simpan-drpr", func(c *gin.Context) {
+		SimpanTindakanDrPr(c, db)
 	})
 	r.DELETE("/api/tindakan/delete", func(c *gin.Context) {
 		DeleteTindakan(c, db)
@@ -3013,6 +3029,10 @@ func main() {
 	r.PUT("/api/apotek/embalase-tuslah", saveSetEmbalase(db))
 	r.DELETE("/api/apotek/embalase-tuslah", deleteSetEmbalase(db))
 
+	// Pengaturan — Set Penggunaan Tarif (set_tarif)
+	r.GET("/api/pengaturan/tarif", getSetTarif(db))
+	r.PUT("/api/pengaturan/tarif", saveSetTarif(db))
+
 	// Apotek — Industri Farmasi (master data pabrik/distributor obat)
 	r.GET("/api/apotek/industri-farmasi", getIndustriFarmasiList(db))
 	r.POST("/api/apotek/industri-farmasi", createIndustriFarmasi(db))
@@ -3087,8 +3107,52 @@ func main() {
 	r.GET("/api/apotek/penerimaan/riwayat", getPenerimaanRiwayat(db))
 	r.DELETE("/api/apotek/penerimaan/:no_faktur", deletePenerimaan(db))
 
+	// Input Penjualan Obat & BHP
+	r.GET("/api/apotek/penjualan/barang-opsi", getPenjualanBarangOpsi(db))
+	r.GET("/api/apotek/penjualan/akun-bayar-opsi", getAkunBayarOpsi(db))
+	r.GET("/api/apotek/penjualan/next-nota", getNextNotaJual(db))
+	r.POST("/api/apotek/penjualan", submitPenjualan(db))
+	r.GET("/api/apotek/penjualan/riwayat", getPenjualanRiwayat(db))
+	r.DELETE("/api/apotek/penjualan/:nota_jual", deletePenjualan(db))
+
 	// Apotek — Riwayat Obat, Alkes & BHP
 	r.GET("/api/apotek/riwayat-barang-medis", getRiwayatBarangMedis(db))
+
+	// Apotek — Retur ke Suplier
+	r.GET("/api/apotek/retur-beli/barang-opsi", getReturBeliBarangOpsi(db))
+	r.POST("/api/apotek/retur-beli", submitReturBeli(db))
+	r.GET("/api/apotek/retur-beli/riwayat", getReturBeliRiwayat(db))
+	r.DELETE("/api/apotek/retur-beli/:no_retur_beli", deleteReturBeli(db))
+
+	// Apotek — Retur dari Pembeli
+	r.GET("/api/apotek/retur-jual/nota-opsi", getReturJualNotaOpsi(db))
+	r.GET("/api/apotek/retur-jual/nota/:nota_jual/items", getReturJualNotaItems(db))
+	r.POST("/api/apotek/retur-jual", submitReturJual(db))
+	r.GET("/api/apotek/retur-jual/riwayat", getReturJualRiwayat(db))
+	r.DELETE("/api/apotek/retur-jual/:no_retur_jual", deleteReturJual(db))
+
+	// Apotek — Darurat Stok
+	r.GET("/api/apotek/darurat-stok", getDaruratStok(db))
+
+	// Apotek — Obat Kadaluarsa
+	r.GET("/api/apotek/obat-kadaluarsa", getObatKadaluarsa(db))
+
+	// Permintaan Resep — Dashboard (Resep Ralan)
+	r.GET("/api/permintaan-resep/ralan", getPermintaanResepRalan(db))
+	r.GET("/api/permintaan-resep/ralan/:no_resep/items", getPermintaanResepRalanItems(db))
+	r.POST("/api/permintaan-resep/ralan/:no_resep/validasi", submitPermintaanResepValidasi(db))
+	r.POST("/api/permintaan-resep/penyerahan", submitPenyerahanResep(db))
+	r.GET("/api/permintaan-resep/telaah/:no_resep", getTelaahFarmasi(db))
+	r.POST("/api/permintaan-resep/telaah", saveTelaahFarmasi(db))
+
+	// Permintaan Resep — Dashboard Rawat Inap (Resep Ranap, Stok Pasien, Resep Pulang)
+	r.GET("/api/permintaan-resep/ranap", getPermintaanResepRanap(db))
+	r.GET("/api/permintaan-resep/ranap/:no_resep/items", getPermintaanResepRanapItems(db))
+	r.POST("/api/permintaan-resep/ranap/:no_resep/validasi", submitPermintaanResepValidasiRanap(db))
+	r.GET("/api/permintaan-resep/ranap-stok-pasien", getPermintaanStokPasienRanap(db))
+	r.GET("/api/permintaan-resep/ranap-stok-pasien/:no_permintaan/items", getPermintaanStokPasienItems(db))
+	r.GET("/api/permintaan-resep/ranap-resep-pulang", getPermintaanResepPulangRanap(db))
+	r.GET("/api/permintaan-resep/ranap-resep-pulang/:no_permintaan/items", getPermintaanResepPulangRanapItems(db))
 
 	// Registrasi List endpoint
 	r.GET("/api/registrasi/list", getRegistrasiList(db))

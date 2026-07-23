@@ -162,8 +162,39 @@ const GROUPS = [
   { id: 'kemkes',    label: 'Kemkes Lainnya',   color: '#ea580c', icon: '🏛️', bgLight: '#fff7ed', borderColor: '#fed7aa' },
 ];
 
+// Set Penggunaan Tarif — padanan setting/DlgSetTarif.java. 11 saklar
+// Yes/No system-wide (tabel set_tarif, SELALU tepat satu baris) yang
+// mengontrol apakah menu pemeriksaan/tarif di modul lain difilter
+// berdasarkan poli/ruang/jenis-bayar/kelas pasien. Nama field & urutan
+// PERSIS kolom DB (bukan urutan bebas) supaya gampang dicocokkan ke
+// backend/set_tarif_handler.go.
+type SetTarifKey =
+  | 'poli_ralan' | 'cara_bayar_ralan' | 'ruang_ranap' | 'cara_bayar_ranap'
+  | 'cara_bayar_lab' | 'cara_bayar_radiologi' | 'cara_bayar_operasi'
+  | 'kelas_ranap' | 'kelas_lab' | 'kelas_radiologi' | 'kelas_operasi';
+
+const SET_TARIF_ITEMS: { key: SetTarifKey; label: string }[] = [
+  { key: 'poli_ralan', label: 'Per Poli Ralan' },
+  { key: 'cara_bayar_ralan', label: 'Per Jenis Bayar Ralan' },
+  { key: 'ruang_ranap', label: 'Per Ruang Ranap' },
+  { key: 'cara_bayar_ranap', label: 'Per Jenis Bayar Ranap' },
+  { key: 'cara_bayar_lab', label: 'Per Jenis Bayar Laborat' },
+  { key: 'cara_bayar_radiologi', label: 'Per Jenis Bayar Radiologi' },
+  { key: 'cara_bayar_operasi', label: 'Per Jenis Bayar Operasi' },
+  { key: 'kelas_ranap', label: 'Per Kelas Ranap' },
+  { key: 'kelas_lab', label: 'Per Kelas Laborat' },
+  { key: 'kelas_radiologi', label: 'Per Kelas Radiologi' },
+  { key: 'kelas_operasi', label: 'Per Kelas Operasi' },
+];
+
+const SET_TARIF_DEFAULT: Record<SetTarifKey, 'Yes' | 'No'> = {
+  poli_ralan: 'No', cara_bayar_ralan: 'No', ruang_ranap: 'No', cara_bayar_ranap: 'No',
+  cara_bayar_lab: 'No', cara_bayar_radiologi: 'No', cara_bayar_operasi: 'No',
+  kelas_ranap: 'No', kelas_lab: 'No', kelas_radiologi: 'No', kelas_operasi: 'No',
+};
+
 export const AdminView: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging'>('users');
+  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif'>('users');
   const [users, setUsers] = React.useState<AppUser[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -185,6 +216,11 @@ export const AdminView: React.FC = () => {
   const [savingBridging, setSavingBridging]     = React.useState<string | null>(null);
   const [expandedService, setExpandedService]   = React.useState<Set<string>>(new Set());
   const [showSecret, setShowSecret]             = React.useState<Record<string, boolean>>({});
+
+  // Set Penggunaan Tarif state — padanan set_tarif.java, 11 saklar Yes/No.
+  const [setTarif, setSetTarif] = React.useState<Record<SetTarifKey, 'Yes' | 'No'>>(SET_TARIF_DEFAULT);
+  const [loadingSetTarif, setLoadingSetTarif] = React.useState(false);
+  const [savingSetTarif, setSavingSetTarif] = React.useState(false);
 
   // ─── User Management ─────────────────────────────────────────────────────
 
@@ -525,6 +561,44 @@ export const AdminView: React.FC = () => {
     );
   };
 
+  // ─── Set Penggunaan Tarif ─────────────────────────────────────────────────
+
+  const loadSetTarif = async () => {
+    setLoadingSetTarif(true);
+    try {
+      const res = await fetch('/api/pengaturan/tarif');
+      const data = await res.json();
+      if (res.ok && data) setSetTarif({ ...SET_TARIF_DEFAULT, ...data });
+    } catch { /* silent */ } finally {
+      setLoadingSetTarif(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === 'set-tarif') void loadSetTarif();
+  }, [activeTab]);
+
+  const toggleSetTarif = (key: SetTarifKey) =>
+    setSetTarif(prev => ({ ...prev, [key]: prev[key] === 'Yes' ? 'No' : 'Yes' }));
+
+  const handleSaveSetTarif = async () => {
+    setSavingSetTarif(true);
+    try {
+      const res = await fetch('/api/pengaturan/tarif', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(setTarif),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan pengaturan tarif');
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Pengaturan tarif berhasil disimpan', confirmButtonColor: '#2563eb', timer: 1500, showConfirmButton: false });
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });
+    } finally {
+      setSavingSetTarif(false);
+    }
+  };
+
   // ─── Main Render ──────────────────────────────────────────────────────────
 
   return (
@@ -532,7 +606,7 @@ export const AdminView: React.FC = () => {
       {/* Tab Navigation */}
       <div style={{ marginBottom: 24, borderBottom: '2px solid #e5e7eb' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['users', 'settings', 'bridging'] as const).map((tab) => (
+          {(['users', 'settings', 'bridging', 'set-tarif'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -545,7 +619,7 @@ export const AdminView: React.FC = () => {
                 marginBottom: -2, transition: 'all 0.2s'
               }}
             >
-              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : 'Pengaturan Bridging'}
+              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : 'Set Penggunaan Tarif'}
             </button>
           ))}
         </div>
@@ -730,6 +804,66 @@ export const AdminView: React.FC = () => {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Tab: Set Penggunaan Tarif */}
+      {activeTab === 'set-tarif' && (
+        <div>
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ margin: '0 0 4px' }}>Set Penggunaan Tarif</h2>
+            <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+              Atur apakah menu pemeriksaan/tarif di modul lain (Rawat Jalan, Rawat Inap, Laborat, Radiologi, Operasi)
+              difilter berdasarkan poli/ruang/jenis-bayar/kelas pasien. Padanan Set Tarif di Khanza Desktop.
+            </p>
+          </div>
+
+          {loadingSetTarif ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat...</div>
+          ) : (
+            <>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+                {SET_TARIF_ITEMS.map((item, idx) => {
+                  const active = setTarif[item.key] === 'Yes';
+                  return (
+                    <div
+                      key={item.key}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderBottom: idx < SET_TARIF_ITEMS.length - 1 ? '1px solid #f3f4f6' : 'none',
+                        background: idx % 2 === 0 ? '#fafafa' : '#ffffff',
+                      }}
+                    >
+                      <span style={{ fontSize: 13, color: '#111827' }}>{item.label}</span>
+                      <div
+                        onClick={() => toggleSetTarif(item.key)}
+                        style={{ width: 40, height: 22, borderRadius: 11, position: 'relative', cursor: 'pointer', background: active ? '#16a34a' : '#d1d5db', transition: 'background 0.2s', flexShrink: 0 }}
+                        title={active ? 'Yes' : 'No'}
+                      >
+                        <div style={{ position: 'absolute', top: 2, left: active ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={handleSaveSetTarif}
+                  disabled={savingSetTarif}
+                  style={{
+                    padding: '10px 24px', borderRadius: 8, border: 'none',
+                    background: savingSetTarif ? '#9ca3af' : '#2563eb', color: '#fff',
+                    fontSize: 13, fontWeight: 600, cursor: savingSetTarif ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {savingSetTarif ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </section>

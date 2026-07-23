@@ -5,9 +5,15 @@ import { ApotekStokOpnameView } from './ApotekStokOpname';
 import { ApotekMutasiView } from './ApotekMutasi';
 import { ApotekPermintaanView } from './ApotekPermintaan';
 import { ApotekPenerimaanView } from './ApotekPenerimaan';
+import { ApotekPenjualanView } from './ApotekPenjualan';
+import { ApotekReturBeliView } from './ApotekReturBeli';
+import { ApotekReturJualView } from './ApotekReturJual';
 import { ApotekRiwayatBarangMedisView } from './ApotekRiwayatBarangMedis';
+import { ApotekDaruratStokView } from './ApotekDaruratStok';
+import { ApotekObatKadaluarsaView } from './ApotekObatKadaluarsa';
+import { PermintaanResepView } from './PermintaanResep';
 
-type ApotekTab = 'overview' | 'data-barang' | 'stok-opname' | 'mutasi' | 'permintaan' | 'penerimaan' | 'riwayat-barang-medis' | 'pengaturan';
+type ApotekTab = 'overview' | 'data-barang' | 'stok-opname' | 'mutasi' | 'permintaan' | 'permintaan-resep' | 'penerimaan' | 'penjualan' | 'retur-beli' | 'retur-jual' | 'darurat-stok' | 'obat-kadaluarsa' | 'riwayat-barang-medis' | 'pengaturan';
 
 const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
   {
@@ -19,6 +25,29 @@ const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
         <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
         <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
         <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+      </svg>
+    ),
+  },
+  {
+    key: 'penjualan',
+    label: 'Input Penjualan Obat & BHP',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="9" cy="21" r="1"></circle>
+        <circle cx="20" cy="21" r="1"></circle>
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'permintaan-resep',
+    label: 'Permintaan Resep',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path>
+        <path d="M14 2v6h6"></path>
+        <path d="M9 15h6"></path>
+        <path d="M9 11h6"></path>
       </svg>
     ),
   },
@@ -79,6 +108,47 @@ const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    key: 'retur-beli',
+    label: 'Retur ke Suplier',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 14 4 9l5-5"></path>
+        <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'retur-jual',
+    label: 'Retur dari Pembeli',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 14 20 9l-5-5"></path>
+        <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'darurat-stok',
+    label: 'Darurat Stok',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 9v4"></path>
+        <path d="M12 17h.01"></path>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'obat-kadaluarsa',
+    label: 'Obat Kadaluarsa',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 7v5l3.5 2"></path>
+      </svg>
+    ),
+  },
+  {
     key: 'riwayat-barang-medis',
     label: 'Riwayat Obat, Alkes & BHP',
     icon: (
@@ -105,8 +175,11 @@ const SETTINGS_ITEM: { key: ApotekTab; label: string; icon: React.ReactNode } = 
   ),
 };
 
-const StatCard: React.FC<{ label: string; value: string; icon: React.ReactNode }> = ({ label, value, icon }) => (
-  <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+const StatCard: React.FC<{ label: string; value: string; icon: React.ReactNode; onClick?: () => void }> = ({ label, value, icon, onClick }) => (
+  <div
+    onClick={onClick}
+    style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, cursor: onClick ? 'pointer' : 'default' }}
+  >
     <div style={{ width: 40, height: 40, borderRadius: 10, background: '#e6f7ee', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {icon}
     </div>
@@ -128,8 +201,38 @@ type ApotekViewProps = {
 export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = React.useState<ApotekTab>('overview');
   const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
+  const [stokMenipisCount, setStokMenipisCount] = React.useState<number | null>(null);
+  const [resepBelumTerlayaniCount, setResepBelumTerlayaniCount] = React.useState(0);
+
+  React.useEffect(() => {
+    fetch('/api/apotek/darurat-stok')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setStokMenipisCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
+  }, []);
+
+  // Running text "Permintaan Resep Baru" — dihitung dari resep_obat yang
+  // belum divalidasi/dilayani apotek (status "Belum Terlayani", padanan
+  // status yang sama dipakai PermintaanResep.tsx), Ralan + Ranap
+  // digabung. Auto-refresh tiap 30 detik, pola sama dgn RawatJalan.tsx.
+  React.useEffect(() => {
+    const fetchCount = () => {
+      const statusQS = `status=${encodeURIComponent('Belum Terlayani')}`;
+      Promise.all([
+        fetch(`/api/permintaan-resep/ralan?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => []),
+        fetch(`/api/permintaan-resep/ranap?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => []),
+      ]).then(([ralan, ranap]) => {
+        const total = (Array.isArray(ralan) ? ralan.length : 0) + (Array.isArray(ranap) ? ranap.length : 0);
+        setResepBelumTerlayaniCount(total);
+      });
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
+    <>
     <section
       style={{
         background: '#F3F4F6',
@@ -257,9 +360,48 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
             alignItems: 'center',
           }}
         >
-          <div style={{ fontSize: 13, color: '#6b7280' }}>
+          <div style={{ fontSize: 13, color: '#6b7280', flexShrink: 0 }}>
             <span style={{ color: '#059669', fontWeight: 600 }}>Apotek</span> / {activeLabel}
           </div>
+
+          {resepBelumTerlayaniCount > 0 && (
+            <div
+              onClick={() => setActiveTab('permintaan-resep')}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                margin: '0 16px',
+                overflow: 'hidden',
+                position: 'relative',
+                background: '#fef3c7',
+                border: '1px solid #fde68a',
+                borderRadius: 999,
+                padding: '6px 0',
+                cursor: 'pointer',
+              }}
+              title="Klik untuk buka Permintaan Resep"
+            >
+              <style>{`
+                @keyframes apotekRunningText {
+                  0% { transform: translateX(100%); }
+                  100% { transform: translateX(-100%); }
+                }
+              `}</style>
+              <div
+                style={{
+                  display: 'inline-block',
+                  whiteSpace: 'nowrap',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: '#92400e',
+                  animation: 'apotekRunningText 14s linear infinite',
+                }}
+              >
+                ⚠ {resepBelumTerlayaniCount} Permintaan Resep baru belum dilayani/divalidasi — klik untuk membuka Permintaan Resep
+              </div>
+            </div>
+          )}
+
           {onBack && (
             <button
               type="button"
@@ -278,23 +420,27 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
                 gap: 6,
               }}
             >
-              Tutup
+              Ke Halaman Utama
             </button>
           )}
         </div>
 
-        {/* Body */}
+        {/* Body — tab "penjualan" sengaja dilepas dari panel putih ini
+            (padding/background/shadow ditiadakan) supaya card kiri/kanan
+            miliknya sendiri duduk langsung di background abu-abu halaman,
+            benar-benar independen, bukan bersarang di dalam panel bersama
+            yang dipakai tab-tab Apotek lain. */}
         <div
           style={{
-            padding: 24,
+            padding: activeTab === 'penjualan' ? 0 : 24,
             overflowY: 'auto',
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             gap: 16,
-            background: '#ffffff',
-            borderRadius: 24,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+            background: activeTab === 'penjualan' ? 'transparent' : '#ffffff',
+            borderRadius: activeTab === 'penjualan' ? 0 : 24,
+            boxShadow: activeTab === 'penjualan' ? 'none' : '0 10px 30px rgba(0,0,0,0.08)',
           }}
         >
           {activeTab === 'overview' && (
@@ -307,7 +453,8 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
                 />
                 <StatCard
                   label="Stok Menipis"
-                  value="-"
+                  value={stokMenipisCount === null ? '-' : String(stokMenipisCount)}
+                  onClick={() => setActiveTab('darurat-stok')}
                   icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path></svg>}
                 />
                 <StatCard
@@ -329,10 +476,17 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
           {activeTab === 'mutasi' && <ApotekMutasiView />}
           {activeTab === 'permintaan' && <ApotekPermintaanView />}
           {activeTab === 'penerimaan' && <ApotekPenerimaanView />}
+          {activeTab === 'penjualan' && <ApotekPenjualanView />}
+          {activeTab === 'retur-beli' && <ApotekReturBeliView />}
+          {activeTab === 'retur-jual' && <ApotekReturJualView />}
+          {activeTab === 'darurat-stok' && <ApotekDaruratStokView />}
+          {activeTab === 'obat-kadaluarsa' && <ApotekObatKadaluarsaView />}
           {activeTab === 'riwayat-barang-medis' && <ApotekRiwayatBarangMedisView />}
           {activeTab === 'pengaturan' && <ApotekPengaturanView />}
         </div>
       </div>
     </section>
+    {activeTab === 'permintaan-resep' && <PermintaanResepView onClose={() => setActiveTab('overview')} />}
+    </>
   );
 };
