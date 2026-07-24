@@ -240,49 +240,70 @@ func getAntrianApotekDisplay(db *sql.DB) gin.HandlerFunc {
 			activeNonRacikan = &an
 		}
 
-		// Get waiting list for racikan
+		// Get waiting list for racikan & non-racikan — sumber utama SEKARANG
+		// resep_obat.tgl_penyerahan (bukan status antrian_apotek), supaya
+		// origin-agnostic: poliklinik ini campuran, sebagian dokter masih
+		// pakai Khanza Java, sebagian sudah pakai web app ini — dua-duanya
+		// sama-sama menulis ke resep_obat yang sama, jadi query di sini
+		// otomatis mencakup keduanya tanpa peduli asalnya. Padanan query
+		// data_antrianfarmasi{racikan,nonracikan}.php di webapps Khanza
+		// (SELECT dari resep_obat langsung, split racikan/non-racikan via
+		// EXISTS ke resep_dokter_racikan), ditambah filter tgl_penyerahan
+		// kosong yang di PHP aslinya tidak ada (di sana semua resep hari
+		// itu tetap tampil, cuma kolom Penyerahan-nya kosong/terisi).
+		//
+		// no_antrian di-LEFT JOIN dari antrian_apotek (otomatis dibuat
+		// trigger utk SETIAP resep_obat baru, apa pun asalnya) sekadar
+		// buat nomor tampilan — kalau baris antrian_apotek-nya karena
+		// suatu hal tidak ada, no_antrian kosong tapi resep TETAP tampil
+		// (tidak hilang begitu saja seperti sebelumnya kalau antrian_apotek
+		// nyangkut di status 'called' gara-gara trigger Penyerahan Java
+		// yang tidak pernah lanjut ke 'done').
 		waitingRacikan := []AntrianApotek{}
 		rowsR, err := db.Query(`
-			SELECT id, no_antrian, no_resep, no_rkm_medis, nm_pasien, jenis_resep,
-			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
-			       created_at, updated_at
-			FROM antrian_apotek
-			WHERE jenis_resep = 'racikan' AND tgl_antrian = CURDATE() AND status = 'waiting'
-			ORDER BY jam_daftar ASC
+			SELECT COALESCE(aa.no_antrian, ''), r.no_resep, reg.no_rkm_medis, p.nm_pasien
+			FROM resep_obat r
+			INNER JOIN reg_periksa reg ON r.no_rawat = reg.no_rawat
+			INNER JOIN pasien p ON reg.no_rkm_medis = p.no_rkm_medis
+			LEFT JOIN antrian_apotek aa ON aa.no_resep = r.no_resep
+			WHERE r.status = 'ralan' AND r.tgl_peresepan = CURDATE()
+				AND (r.tgl_penyerahan IS NULL OR r.tgl_penyerahan = '0000-00-00')
+				AND r.no_resep IN (SELECT DISTINCT no_resep FROM resep_dokter_racikan)
+			ORDER BY r.jam_peresepan ASC
 		`)
 		if err == nil {
 			defer rowsR.Close()
 			for rowsR.Next() {
 				var a AntrianApotek
-				rowsR.Scan(
-					&a.ID, &a.NoAntrian, &a.NoResep, &a.NoRkmMedis, &a.NmPasien,
-					&a.JenisResep, &a.Status, &a.TglAntrian, &a.JamDaftar,
-					&a.JamDipanggil, &a.DipanggilOleh, &a.CreatedAt, &a.UpdatedAt,
-				)
-				waitingRacikan = append(waitingRacikan, a)
+				if rowsR.Scan(&a.NoAntrian, &a.NoResep, &a.NoRkmMedis, &a.NmPasien) == nil {
+					a.JenisResep = "racikan"
+					a.Status = "waiting"
+					waitingRacikan = append(waitingRacikan, a)
+				}
 			}
 		}
 
-		// Get waiting list for non-racikan
 		waitingNonRacikan := []AntrianApotek{}
 		rowsN, err := db.Query(`
-			SELECT id, no_antrian, no_resep, no_rkm_medis, nm_pasien, jenis_resep,
-			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
-			       created_at, updated_at
-			FROM antrian_apotek
-			WHERE jenis_resep = 'non_racikan' AND tgl_antrian = CURDATE() AND status = 'waiting'
-			ORDER BY jam_daftar ASC
+			SELECT COALESCE(aa.no_antrian, ''), r.no_resep, reg.no_rkm_medis, p.nm_pasien
+			FROM resep_obat r
+			INNER JOIN reg_periksa reg ON r.no_rawat = reg.no_rawat
+			INNER JOIN pasien p ON reg.no_rkm_medis = p.no_rkm_medis
+			LEFT JOIN antrian_apotek aa ON aa.no_resep = r.no_resep
+			WHERE r.status = 'ralan' AND r.tgl_peresepan = CURDATE()
+				AND (r.tgl_penyerahan IS NULL OR r.tgl_penyerahan = '0000-00-00')
+				AND r.no_resep NOT IN (SELECT DISTINCT no_resep FROM resep_dokter_racikan)
+			ORDER BY r.jam_peresepan ASC
 		`)
 		if err == nil {
 			defer rowsN.Close()
 			for rowsN.Next() {
 				var a AntrianApotek
-				rowsN.Scan(
-					&a.ID, &a.NoAntrian, &a.NoResep, &a.NoRkmMedis, &a.NmPasien,
-					&a.JenisResep, &a.Status, &a.TglAntrian, &a.JamDaftar,
-					&a.JamDipanggil, &a.DipanggilOleh, &a.CreatedAt, &a.UpdatedAt,
-				)
-				waitingNonRacikan = append(waitingNonRacikan, a)
+				if rowsN.Scan(&a.NoAntrian, &a.NoResep, &a.NoRkmMedis, &a.NmPasien) == nil {
+					a.JenisResep = "non_racikan"
+					a.Status = "waiting"
+					waitingNonRacikan = append(waitingNonRacikan, a)
+				}
 			}
 		}
 
