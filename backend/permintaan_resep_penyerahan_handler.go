@@ -86,6 +86,23 @@ func submitPenyerahanResep(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
+		// Tandai baris antrian_apotek (kalau ada) jadi 'done' — tanpa ini,
+		// antrian_apotek.status tidak pernah diset 'done' di manapun di
+		// codebase, jadi baris yang sudah waiting/called akan terus muncul
+		// di layar display (DisplayAntrianApotek.tsx) walau obatnya sudah
+		// benar-benar diserahkan lewat modal ini. Dibiarkan silent kalau
+		// tidak ada baris cocok (resep dibuat sebelum trigger auto-insert
+		// terpasang, atau memang belum sempat masuk antrian).
+		if _, err := tx.Exec(
+			`UPDATE antrian_apotek SET status = 'done', updated_at = NOW()
+			 WHERE no_resep = ? AND tgl_antrian = CURDATE() AND status IN ('waiting', 'called', 'serving')`,
+			body.NoResep,
+		); err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
 		if err := tx.Commit(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
