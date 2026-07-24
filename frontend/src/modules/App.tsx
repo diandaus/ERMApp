@@ -19,6 +19,7 @@ import { MappingSatuSehatView } from './MappingSatuSehat';
 import { PegawaiView } from './Pegawai';
 import { AdminView } from './Admin';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { toSpokenCase } from '../utils/tts';
 
 type MenuKey =
   | 'menu-utama'
@@ -489,7 +490,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
 
     // Gunakan Web Speech API
     if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
+      const utterance = new SpeechSynthesisUtterance(toSpokenCase(text));
       utterance.lang = 'id-ID'; // Bahasa Indonesia
       utterance.rate = 0.9; // Kecepatan bicara (0.1 - 10)
       utterance.pitch = 1; // Nada suara (0 - 2)

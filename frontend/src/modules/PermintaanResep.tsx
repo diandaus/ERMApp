@@ -6,6 +6,8 @@ import { ModalPenyerahanResep } from '../components/ModalPenyerahanResep';
 import { ModalTelaahResep } from '../components/ModalTelaahResep';
 import { ModalKonselingFarmasi } from '../components/ModalKonselingFarmasi';
 import { localDateStr } from '../utils/date';
+import { toSpokenCase } from '../utils/tts';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 
 // ============================================================================
 // PERMINTAAN RESEP — dipicu dari tab 'permintaan-resep' di sidebar Apotek
@@ -367,20 +369,42 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
       }
     });
 
-  // Panggil pasien — bel dulu, baru Web Speech API (speakQueueNumber di
-  // App.tsx untuk poli, versi loket Apotek: cukup "ATAS NAMA ... SILAHKAN
-  // MENUJU LOKET APOTEK" tanpa nomor antrian, belum terhubung ke
-  // antrian_apotek).
-  const handlePanggilPasien = (namaPasien: string) => {
-    playBell().then(() => {
-      if (!('speechSynthesis' in window)) return;
-      const utterance = new SpeechSynthesisUtterance(`ATAS NAMA ${namaPasien} SILAHKAN MENUJU LOKET APOTEK`);
-      utterance.lang = 'id-ID';
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      window.speechSynthesis.speak(utterance);
+  // Panggil pasien — sekarang juga update antrian_apotek (POST
+  // /api/antrian/apotek/call-patient) supaya layar display pasien
+  // (DisplayAntrianApotek.tsx, yang polling GET .../display) IKUT
+  // memanggil/mengumumkan, bukan cuma bunyi lokal di komputer petugas
+  // yang klik. Panggilan API dan bel+TTS lokal SENGAJA tidak saling
+  // menunggu hasil satu sama lain (Promise.allSettled) — kalau resep
+  // ini belum/tidak ada di antrian_apotek (mis. dibuat sebelum trigger
+  // auto-insert terpasang), bel+TTS lokal tetap jalan sebagai fallback,
+  // cuma dikasih tahu display tidak ikut memanggil.
+  const handlePanggilPasien = async (row: ResepRalanRow) => {
+    const callApiPromise = fetch('/api/antrian/apotek/call-patient', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ no_resep: row.no_resep, petugas_nip: getCurrentUserNip(), petugas_nama: getCurrentPetugas() }),
     });
+
+    const [apiResult] = await Promise.allSettled([callApiPromise, playBell()]);
+
+    if (!('speechSynthesis' in window)) return;
+    const utterance = new SpeechSynthesisUtterance(toSpokenCase(`ATAS NAMA ${row.nm_pasien} SILAHKAN MENUJU LOKET APOTEK`));
+    utterance.lang = 'id-ID';
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+
+    const apiOk = apiResult.status === 'fulfilled' && apiResult.value.ok;
+    if (!apiOk) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Layar display tidak ikut memanggil',
+        text: 'Resep ini tidak ditemukan di antrian apotek — suara panggilan cuma diputar di komputer ini.',
+        timer: 3500,
+        showConfirmButton: false,
+      });
+    }
   };
 
   const toggleExpand = async (row: ResepRalanRow) => {
@@ -579,7 +603,7 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }} onClick={(e) => e.stopPropagation()}>
                         <div
-                          onClick={() => handlePanggilPasien(row.nm_pasien)}
+                          onClick={() => handlePanggilPasien(row)}
                           title="Klik untuk memanggil pasien ke loket Apotek"
                           style={{
                             display: 'inline-flex',

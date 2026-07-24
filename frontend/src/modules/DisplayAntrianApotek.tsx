@@ -1,5 +1,6 @@
 import React from 'react';
 import { localDateStr } from '../utils/date';
+import { toSpokenCase } from '../utils/tts';
 
 type ApotekQueueItem = {
   no_antrian: string;
@@ -169,7 +170,7 @@ export const DisplayAntrianApotekView: React.FC = () => {
 
     // Chrome: beri jeda setelah cancel agar tidak race condition
     setTimeout(() => {
-      const utterance = new SpeechSynthesisUtterance(text);
+      const utterance = new SpeechSynthesisUtterance(toSpokenCase(text));
       utterance.lang = 'id-ID';
       utterance.rate = s.tts_rate;
       utterance.pitch = s.tts_pitch;

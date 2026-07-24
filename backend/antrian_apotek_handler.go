@@ -12,19 +12,19 @@ import (
 
 // AntrianApotek represents pharmacy queue
 type AntrianApotek struct {
-	ID             int        `json:"id"`
-	NoAntrian      string     `json:"no_antrian"`
-	NoResep        string     `json:"no_resep"`
-	NoRkmMedis     string     `json:"no_rkm_medis"`
-	NmPasien       string     `json:"nm_pasien"`
-	JenisResep     string     `json:"jenis_resep"` // "racikan" atau "non_racikan"
-	Status         string     `json:"status"`      // waiting, called, serving, done, cancelled
-	TglAntrian     time.Time  `json:"tgl_antrian"`
-	JamDaftar      string     `json:"jam_daftar"`
-	JamDipanggil   *string    `json:"jam_dipanggil"`
-	DipanggilOleh  *string    `json:"dipanggil_oleh"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID            int       `json:"id"`
+	NoAntrian     string    `json:"no_antrian"`
+	NoResep       string    `json:"no_resep"`
+	NoRkmMedis    string    `json:"no_rkm_medis"`
+	NmPasien      string    `json:"nm_pasien"`
+	JenisResep    string    `json:"jenis_resep"` // "racikan" atau "non_racikan"
+	Status        string    `json:"status"`      // waiting, called, serving, done, cancelled
+	TglAntrian    time.Time `json:"tgl_antrian"`
+	JamDaftar     string    `json:"jam_daftar"`
+	JamDipanggil  *string   `json:"jam_dipanggil"`
+	DipanggilOleh *string   `json:"dipanggil_oleh"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // ensureAntrianApotekTable creates table and trigger for apotek queue
@@ -191,19 +191,22 @@ func ensureAntrianApotekTable(db *sql.DB) error {
 // Get display data for apotek (both racikan and non-racikan)
 func getAntrianApotekDisplay(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		today := time.Now().Format("2006-01-02")
-
-		// Get active antrian for racikan
+		// "Hari ini" dihitung oleh MySQL sendiri (CURDATE()), BUKAN
+		// time.Now() Go — trigger yang insert baris antrian_apotek juga
+		// pakai CURDATE() MySQL. Kalau proses Go & server MySQL beda
+		// timezone (mis. beda mesin/container), time.Now().Format(...) Go
+		// bisa mismatch dengan tgl_antrian yang di-generate MySQL, bikin
+		// antrian hari ini tidak ketemu di query display ini.
 		var activeRacikan *AntrianApotek
 		rowR := db.QueryRow(`
 			SELECT id, no_antrian, no_resep, no_rkm_medis, nm_pasien, jenis_resep,
 			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
 			       created_at, updated_at
 			FROM antrian_apotek
-			WHERE jenis_resep = 'racikan' AND tgl_antrian = ? AND status IN ('called', 'serving')
+			WHERE jenis_resep = 'racikan' AND tgl_antrian = CURDATE() AND status IN ('called', 'serving')
 			ORDER BY jam_dipanggil DESC
 			LIMIT 1
-		`, today)
+		`)
 
 		var ar AntrianApotek
 		err := rowR.Scan(
@@ -222,10 +225,10 @@ func getAntrianApotekDisplay(db *sql.DB) gin.HandlerFunc {
 			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
 			       created_at, updated_at
 			FROM antrian_apotek
-			WHERE jenis_resep = 'non_racikan' AND tgl_antrian = ? AND status IN ('called', 'serving')
+			WHERE jenis_resep = 'non_racikan' AND tgl_antrian = CURDATE() AND status IN ('called', 'serving')
 			ORDER BY jam_dipanggil DESC
 			LIMIT 1
-		`, today)
+		`)
 
 		var an AntrianApotek
 		err = rowN.Scan(
@@ -244,9 +247,9 @@ func getAntrianApotekDisplay(db *sql.DB) gin.HandlerFunc {
 			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
 			       created_at, updated_at
 			FROM antrian_apotek
-			WHERE jenis_resep = 'racikan' AND tgl_antrian = ? AND status = 'waiting'
+			WHERE jenis_resep = 'racikan' AND tgl_antrian = CURDATE() AND status = 'waiting'
 			ORDER BY jam_daftar ASC
-		`, today)
+		`)
 		if err == nil {
 			defer rowsR.Close()
 			for rowsR.Next() {
@@ -267,9 +270,9 @@ func getAntrianApotekDisplay(db *sql.DB) gin.HandlerFunc {
 			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
 			       created_at, updated_at
 			FROM antrian_apotek
-			WHERE jenis_resep = 'non_racikan' AND tgl_antrian = ? AND status = 'waiting'
+			WHERE jenis_resep = 'non_racikan' AND tgl_antrian = CURDATE() AND status = 'waiting'
 			ORDER BY jam_daftar ASC
-		`, today)
+		`)
 		if err == nil {
 			defer rowsN.Close()
 			for rowsN.Next() {
@@ -297,21 +300,28 @@ func getAntrianApotekDisplay(db *sql.DB) gin.HandlerFunc {
 }
 
 // POST /api/antrian/apotek/call-patient
-// Call specific patient by no_resep
+// Call specific patient by no_resep — dipicu tombol "Panggil" di baris
+// resep pada Daftar Resep Dokter (PermintaanResep.tsx), supaya layar
+// display pasien (DisplayAntrianApotek.tsx, yang polling endpoint ini
+// lewat GET .../display) ikut memanggil, bukan cuma bunyi lokal di
+// komputer petugas. jenis_resep TIDAK diminta dari frontend (dulu wajib,
+// tapi belum ada pemanggil yang benar-benar tahu nilainya) — no_resep
+// sudah cukup unik untuk cari baris antrian_apotek yang tepat.
+// petugas_nip/petugas_nama SENGAJA opsional (cuma dipakai untuk kolom
+// audit dipanggil_oleh) — akun generik/belum di-link NIP tidak boleh
+// gagal memanggil pasien cuma karena field ini kosong.
 func callPatientApotek(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			NoResep       string `json:"no_resep" binding:"required"`
-			JenisResep    string `json:"jenis_resep" binding:"required"`
-			PetugasNIP    string `json:"petugas_nip" binding:"required"`
-			PetugasNama   string `json:"petugas_nama" binding:"required"`
+			NoResep     string `json:"no_resep" binding:"required"`
+			PetugasNIP  string `json:"petugas_nip"`
+			PetugasNama string `json:"petugas_nama"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		today := time.Now().Format("2006-01-02")
 		now := time.Now()
 
 		tx, err := db.Begin()
@@ -321,17 +331,18 @@ func callPatientApotek(db *sql.DB) gin.HandlerFunc {
 		}
 		defer tx.Rollback()
 
-		// Find patient queue (can be called multiple times)
+		// Find patient queue (can be called multiple times) — tgl_antrian =
+		// CURDATE() MySQL, bukan time.Now() Go, sama alasan dgn getAntrianApotekDisplay.
 		var antrian AntrianApotek
 		row := tx.QueryRow(`
 			SELECT id, no_antrian, no_resep, no_rkm_medis, nm_pasien, jenis_resep,
 			       status, tgl_antrian, jam_daftar, jam_dipanggil, dipanggil_oleh,
 			       created_at, updated_at
 			FROM antrian_apotek
-			WHERE no_resep = ? AND jenis_resep = ? AND tgl_antrian = ?
+			WHERE no_resep = ? AND tgl_antrian = CURDATE()
 			  AND status IN ('waiting', 'called', 'serving')
 			LIMIT 1
-		`, req.NoResep, req.JenisResep, today)
+		`, req.NoResep)
 
 		err = row.Scan(
 			&antrian.ID, &antrian.NoAntrian, &antrian.NoResep, &antrian.NoRkmMedis,
@@ -353,7 +364,13 @@ func callPatientApotek(db *sql.DB) gin.HandlerFunc {
 
 		// Update status to 'called' and timestamp
 		jamDipanggil := now.Format("2006-01-02 15:04:05")
-		dipanggilOleh := fmt.Sprintf("%s - %s", req.PetugasNIP, req.PetugasNama)
+		dipanggilOleh := req.PetugasNama
+		if req.PetugasNIP != "" {
+			dipanggilOleh = fmt.Sprintf("%s - %s", req.PetugasNIP, req.PetugasNama)
+		}
+		if dipanggilOleh == "" {
+			dipanggilOleh = "Permintaan Resep"
+		}
 
 		_, err = tx.Exec(`
 			UPDATE antrian_apotek
