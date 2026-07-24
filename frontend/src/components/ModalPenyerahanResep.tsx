@@ -40,23 +40,49 @@ export const ModalPenyerahanResep: React.FC<ModalPenyerahanResepProps> = ({ rese
     streamRef.current = null;
   }, []);
 
+  // Pesan error dibedakan per penyebab supaya tidak "diam saja" —
+  // sebelumnya `navigator.mediaDevices?.getUserMedia(...)` dipanggil lewat
+  // optional chaining: kalau `mediaDevices` sendiri undefined (SELALU
+  // terjadi di browser modern saat halaman diakses lewat http:// biasa,
+  // bukan https:// atau localhost — getUserMedia butuh "secure context"),
+  // seluruh ekspresi short-circuit ke undefined TANPA pernah memanggil
+  // .then()/.catch(), jadi cameraError tidak pernah ke-set dan user cuma
+  // lihat kotak video hitam kosong tanpa keterangan/fallback apa pun.
+  const startCamera = React.useCallback(() => {
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        'Kamera tidak tersedia di browser ini. Kemungkinan besar karena halaman diakses lewat http:// biasa ' +
+        '(bukan https:// atau localhost) — browser memblokir akses kamera di luar koneksi aman. ' +
+        'Silakan unggah foto secara manual di bawah, atau minta admin mengaktifkan HTTPS di server.'
+      );
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { width: 490, height: 390 } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch((err: any) => {
+        if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+          setCameraError('Akses kamera ditolak. Aktifkan izin kamera untuk halaman ini di pengaturan browser, atau unggah foto secara manual di bawah.');
+        } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+          setCameraError('Tidak ada kamera terdeteksi di komputer ini. Silakan unggah foto secara manual di bawah.');
+        } else if (err?.name === 'NotReadableError') {
+          setCameraError('Kamera sedang dipakai aplikasi lain. Tutup aplikasi tersebut lalu coba lagi, atau unggah foto secara manual di bawah.');
+        } else {
+          setCameraError('Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan, atau unggah foto secara manual di bawah.');
+        }
+      });
+  }, []);
+
   React.useEffect(() => {
     if (!resep) return;
     setCameraError('');
     setCapturedUrl(null);
     setCapturedBlob(null);
-
-    navigator.mediaDevices?.getUserMedia({ video: { width: 490, height: 390 } })
-      .then((stream) => {
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      })
-      .catch(() => {
-        setCameraError('Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan, atau unggah foto secara manual di bawah.');
-      });
-
+    startCamera();
     return () => stopCamera();
-  }, [resep, stopCamera]);
+  }, [resep, startCamera, stopCamera]);
 
   if (!resep) return null;
 
@@ -80,12 +106,8 @@ export const ModalPenyerahanResep: React.FC<ModalPenyerahanResepProps> = ({ rese
   const handleAmbilUlang = () => {
     setCapturedUrl(null);
     setCapturedBlob(null);
-    navigator.mediaDevices?.getUserMedia({ video: { width: 490, height: 390 } })
-      .then((stream) => {
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      })
-      .catch(() => setCameraError('Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan, atau unggah foto secara manual di bawah.'));
+    setCameraError('');
+    startCamera();
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

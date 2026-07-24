@@ -81,6 +81,7 @@ type permintaanResepRalanRow struct {
 	TglPenyerahan string `json:"tgl_penyerahan"`
 	JamPenyerahan string `json:"jam_penyerahan"`
 	SdhTelaah     bool   `json:"sdh_telaah"`
+	SdhKonseling  bool   `json:"sdh_konseling"`
 }
 
 func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
@@ -107,7 +108,8 @@ func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
 				IF(resep_obat.jam='00:00:00','',resep_obat.jam) AS jam_validasi,
 				IF(resep_obat.tgl_penyerahan='0000-00-00','',resep_obat.tgl_penyerahan) AS tgl_penyerahan,
 				IF(resep_obat.jam_penyerahan='00:00:00','',resep_obat.jam_penyerahan) AS jam_penyerahan,
-				IF(telaah_farmasi.no_resep IS NULL,0,1) AS sdh_telaah
+				IF(telaah_farmasi.no_resep IS NULL,0,1) AS sdh_telaah,
+				IF(konseling_farmasi.no_rawat IS NULL,0,1) AS sdh_konseling
 			FROM resep_obat
 			INNER JOIN reg_periksa ON resep_obat.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -115,6 +117,7 @@ func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
 			INNER JOIN penjab ON reg_periksa.kd_pj = penjab.kd_pj
 			LEFT JOIN telaah_farmasi ON telaah_farmasi.no_resep = resep_obat.no_resep
+			LEFT JOIN konseling_farmasi ON konseling_farmasi.no_rawat = resep_obat.no_rawat
 			WHERE resep_obat.status = 'ralan' AND resep_obat.tgl_peresepan <> '0000-00-00'
 				AND resep_obat.tgl_peresepan BETWEEN ? AND ?
 		`
@@ -146,7 +149,7 @@ func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
 			var r permintaanResepRalanRow
 			if rows.Scan(&r.NoResep, &r.TglPeresepan, &r.JamPeresepan, &r.NoRawat, &r.NoRkmMedis, &r.NmPasien,
 				&r.KdDokter, &r.NmDokter, &r.Status, &r.NmPoli, &r.KdPoli, &r.JenisBayar,
-				&r.TglValidasi, &r.JamValidasi, &r.TglPenyerahan, &r.JamPenyerahan, &r.SdhTelaah) == nil {
+				&r.TglValidasi, &r.JamValidasi, &r.TglPenyerahan, &r.JamPenyerahan, &r.SdhTelaah, &r.SdhKonseling) == nil {
 				if status == "" || status == r.Status {
 					list = append(list, r)
 				}

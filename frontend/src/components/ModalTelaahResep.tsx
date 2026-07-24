@@ -71,6 +71,35 @@ const OBAT_ITEMS: { key: keyof TelaahState; label: string }[] = [
   { key: 'obat_tepat_waktu_pemberian', label: '5. Tepat Waktu Pemberian' },
 ];
 
+// Ikon panah bulat hijau — disamakan dengan StepperIcon/pillSelectStyle di
+// PermintaanResep.tsx (dropdown Dokter/Poli/Status Daftar Resep Dokter) dan
+// ModalKonselingFarmasi.tsx, lihat "Konvensi UI — Ikon Panah Dropdown" di
+// backend/APOTEK_MODUL.md.
+const StepperIcon: React.FC = () => (
+  <div
+    style={{
+      position: 'absolute',
+      right: 4,
+      top: '50%',
+      transform: 'translateY(-50%)',
+      width: 18,
+      height: 18,
+      borderRadius: '50%',
+      background: '#059669',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      pointerEvents: 'none',
+      flexShrink: 0,
+    }}
+  >
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
 type ModalTelaahResepProps = {
   resep: ResepRalanRow | null;
   onClose: () => void;
@@ -163,7 +192,8 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
   };
 
   const selectStyle: React.CSSProperties = {
-    padding: '5px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', background: '#fff',
+    padding: '5px 26px 5px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none',
+    background: '#fff', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer',
   };
   const ketInputStyle: React.CSSProperties = {
     flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box',
@@ -189,12 +219,15 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
           <>
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Petugas Farmasi</label>
-              <select value={nip} onChange={(e) => setNip(e.target.value)} style={{ ...selectStyle, width: '100%' }}>
-                <option value="">- Pilih -</option>
-                {petugas.map((p) => (
-                  <option key={p.nip} value={p.nip}>{p.nama}</option>
-                ))}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <select value={nip} onChange={(e) => setNip(e.target.value)} style={{ ...selectStyle, width: '100%' }}>
+                  <option value="">- Pilih -</option>
+                  {petugas.map((p) => (
+                    <option key={p.nip} value={p.nip}>{p.nama}</option>
+                  ))}
+                </select>
+                <StepperIcon />
+              </div>
             </div>
 
             <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '16px 0 8px', paddingBottom: 4, borderBottom: '1px solid #e5e7eb' }}>
@@ -204,14 +237,17 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
               {RESEP_ITEMS.map((item) => (
                 <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, fontSize: 12.5, color: '#374151' }}>{item.label}</div>
-                  <select
-                    value={form[item.key] as string}
-                    onChange={(e) => setField(item.key, e.target.value as YaTidak)}
-                    style={{ ...selectStyle, width: 80 }}
-                  >
-                    <option value="Ya">Ya</option>
-                    <option value="Tidak">Tidak</option>
-                  </select>
+                  <div style={{ position: 'relative', width: 88, flexShrink: 0 }}>
+                    <select
+                      value={form[item.key] as string}
+                      onChange={(e) => setField(item.key, e.target.value as YaTidak)}
+                      style={{ ...selectStyle, width: '100%' }}
+                    >
+                      <option value="Ya">Ya</option>
+                      <option value="Tidak">Tidak</option>
+                    </select>
+                    <StepperIcon />
+                  </div>
                   <input
                     type="text"
                     placeholder="Keterangan (opsional)"
@@ -230,14 +266,17 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
               {OBAT_ITEMS.map((item) => (
                 <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, fontSize: 12.5, color: '#374151' }}>{item.label}</div>
-                  <select
-                    value={form[item.key] as string}
-                    onChange={(e) => setField(item.key, e.target.value as YaTidak)}
-                    style={{ ...selectStyle, width: 80 }}
-                  >
-                    <option value="Ya">Ya</option>
-                    <option value="Tidak">Tidak</option>
-                  </select>
+                  <div style={{ position: 'relative', width: 88, flexShrink: 0 }}>
+                    <select
+                      value={form[item.key] as string}
+                      onChange={(e) => setField(item.key, e.target.value as YaTidak)}
+                      style={{ ...selectStyle, width: '100%' }}
+                    >
+                      <option value="Ya">Ya</option>
+                      <option value="Tidak">Tidak</option>
+                    </select>
+                    <StepperIcon />
+                  </div>
                 </div>
               ))}
             </div>

@@ -1355,6 +1355,63 @@ depo ranap (bangsal → GD), bandingkan hasil `stok` sebelum/sesudah
 mapping diset (angka stok beda, membuktikan JOIN memang pakai depo hasil
 resolve) — lalu mapping test dihapus lagi.
 
+## Konvensi UI — Ikon Panah Dropdown
+
+Standar tampilan untuk semua `<select>` di modul Apotek **dan** Permintaan
+Resep (termasuk modal-modal di dalamnya): panah bulat hijau
+(`#059669`), bukan panah native browser. Sumber aslinya `StepperIcon` di
+`ModalValidasiObat.tsx`, dipakai ulang persis di dropdown Dokter/Poli/
+Status pada Daftar Resep Dokter (`frontend/src/modules/PermintaanResep.tsx`)
+dan sekarang juga di `ModalKonselingFarmasi.tsx`.
+
+Pola implementasi (copy-paste, bukan komponen bersama lintas file —
+setiap file punya salinan `StepperIcon`+style sendiri, konsisten dengan
+pola yang sudah ada sejak `BpjsSep.tsx`):
+
+```tsx
+const pillSelectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '7px 32px 7px 14px', // ruang kanan utk StepperIcon
+  borderRadius: 4,
+  border: '1px solid #d1d5db',
+  fontSize: 13,
+  boxSizing: 'border-box',
+  outline: 'none',
+  background: '#ffffff',
+  color: '#111827',
+  appearance: 'none',        // WAJIB — matikan panah native
+  WebkitAppearance: 'none',
+  cursor: 'pointer',
+};
+
+const StepperIcon: React.FC = () => (
+  <div style={{
+    position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+    width: 20, height: 20, borderRadius: '50%', background: '#059669',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    pointerEvents: 'none', flexShrink: 0,
+  }}>
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
+// Pemakaian — <select> WAJIB dibungkus position:relative:
+<div style={{ position: 'relative' }}>
+  <select style={pillSelectStyle} ...>...</select>
+  <StepperIcon />
+</div>
+```
+
+**Untuk pengembangan ke depan**: setiap `<select>` baru di modul Apotek
+atau Permintaan Resep (termasuk modal seperti Konseling Farmasi/Telaah
+Resep/Penyerahan Resep) harus pakai pola ini, bukan `<select>` polos
+dengan panah native. Sudah diterapkan di `ModalKonselingFarmasi.tsx` dan
+`ModalTelaahResep.tsx` (ikon diperkecil 18px/10px di select Ya/Tidak yang
+sempit supaya tetap proporsional, tapi bentuk & warnanya identik).
+
 ## Referensi Kode Terkait
 
 - `backend/apotek_barang_handler.go` — CRUD Data Barang + referensi.

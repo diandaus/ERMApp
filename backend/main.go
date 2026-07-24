@@ -59,33 +59,33 @@ type RegToday struct {
 
 // Payload sederhana untuk pendaftaran rawat jalan baru.
 type NewRegistration struct {
-	NoRkmMedis  string `json:"no_rkm_medis" binding:"required"`
-	KdPoli      string `json:"kd_poli" binding:"required"`
-	KdDokter    string `json:"kd_dokter" binding:"required"`
-	KdPj        string `json:"kd_pj" binding:"required"`
-	PJawab      string `json:"p_jawab"`
-	HubunganPj  string `json:"hubunganpj"`
-	AlmtPj      string `json:"almt_pj"`
-	SttsDaftar  string `json:"stts_daftar"`
-	NoReg       string `json:"no_reg"` // opsional: dari frontend via generate-noreg
+	NoRkmMedis string `json:"no_rkm_medis" binding:"required"`
+	KdPoli     string `json:"kd_poli" binding:"required"`
+	KdDokter   string `json:"kd_dokter" binding:"required"`
+	KdPj       string `json:"kd_pj" binding:"required"`
+	PJawab     string `json:"p_jawab"`
+	HubunganPj string `json:"hubunganpj"`
+	AlmtPj     string `json:"almt_pj"`
+	SttsDaftar string `json:"stts_daftar"`
+	NoReg      string `json:"no_reg"` // opsional: dari frontend via generate-noreg
 }
 
 // Informasi singkat pasien untuk ditampilkan di form pendaftaran.
 type PatientBrief struct {
-	NoRkmMedis  string `json:"no_rkm_medis"`
-	NmPasien    string `json:"nm_pasien"`
-	Jk          string `json:"jk"`
-	TmpLahir    string `json:"tmp_lahir"`
-	TglLahir    string `json:"tgl_lahir"`
-	Agama       string `json:"agama"`
-	Bahasa      string `json:"bahasa"`
-	CacatFisik  string `json:"cacat_fisik"`
-	GolDarah    string `json:"gol_darah"`
-	NmIbu       string `json:"nm_ibu"`
-	SttsNikah   string `json:"stts_nikah"`
-	Pnd         string `json:"pnd"`
-	Alamat      string `json:"alamat"`
-	Pekerjaan   string `json:"pekerjaan"`
+	NoRkmMedis string `json:"no_rkm_medis"`
+	NmPasien   string `json:"nm_pasien"`
+	Jk         string `json:"jk"`
+	TmpLahir   string `json:"tmp_lahir"`
+	TglLahir   string `json:"tgl_lahir"`
+	Agama      string `json:"agama"`
+	Bahasa     string `json:"bahasa"`
+	CacatFisik string `json:"cacat_fisik"`
+	GolDarah   string `json:"gol_darah"`
+	NmIbu      string `json:"nm_ibu"`
+	SttsNikah  string `json:"stts_nikah"`
+	Pnd        string `json:"pnd"`
+	Alamat     string `json:"alamat"`
+	Pekerjaan  string `json:"pekerjaan"`
 }
 
 type RawatInapPatient struct {
@@ -144,9 +144,9 @@ type UpdateUserRequest struct {
 	FullName       string `json:"full_name" binding:"required"`
 	Role           string `json:"role" binding:"required"`
 	IsActive       bool   `json:"is_active" binding:"required"`
-	Password       string `json:"password"`         // Optional
+	Password       string `json:"password"`        // Optional
 	AllowedModules string `json:"allowed_modules"` // Optional
-	Nip            string `json:"nip"`              // Optional — link ke petugas.nip
+	Nip            string `json:"nip"`             // Optional — link ke petugas.nip
 }
 
 type ResetPasswordRequest struct {
@@ -386,30 +386,30 @@ func loadDotEnv() {
 
 // Struct untuk data registrasi
 type RegistrasiPatient struct {
-	NoReg          string  `json:"no_reg"`
-	NoRawat        string  `json:"no_rawat"`
-	TglRegistrasi  string  `json:"tgl_registrasi"`
-	JamReg         string  `json:"jam_reg"`
-	KdDokter       string  `json:"kd_dokter"`
-	NmDokter       string  `json:"nm_dokter"`
-	NoRkmMedis     string  `json:"no_rkm_medis"`
-	NmPasien       string  `json:"nm_pasien"`
-	Jk             string  `json:"jk"`
-	Umur           string  `json:"umur"`
-	NmPoli         string  `json:"nm_poli"`
-	PJawab         string  `json:"p_jawab"`
-	AlmtPj         string  `json:"almt_pj"`
-	HubunganPj     string  `json:"hubunganpj"`
-	BiayaReg       float64 `json:"biaya_reg"`
-	SttsDaftar     string  `json:"stts_daftar"`
-	PngJawab       string  `json:"png_jawab"`
-	NoTlp          string  `json:"no_tlp"`
-	Stts           string  `json:"stts"`
-	StatusPoli     string  `json:"status_poli"`
-	KdPoli         string  `json:"kd_poli"`
-	KdPj           string  `json:"kd_pj"`
-	StatusBayar    string  `json:"status_bayar"`
-	NoSep          *string `json:"no_sep"` // nullable
+	NoReg         string  `json:"no_reg"`
+	NoRawat       string  `json:"no_rawat"`
+	TglRegistrasi string  `json:"tgl_registrasi"`
+	JamReg        string  `json:"jam_reg"`
+	KdDokter      string  `json:"kd_dokter"`
+	NmDokter      string  `json:"nm_dokter"`
+	NoRkmMedis    string  `json:"no_rkm_medis"`
+	NmPasien      string  `json:"nm_pasien"`
+	Jk            string  `json:"jk"`
+	Umur          string  `json:"umur"`
+	NmPoli        string  `json:"nm_poli"`
+	PJawab        string  `json:"p_jawab"`
+	AlmtPj        string  `json:"almt_pj"`
+	HubunganPj    string  `json:"hubunganpj"`
+	BiayaReg      float64 `json:"biaya_reg"`
+	SttsDaftar    string  `json:"stts_daftar"`
+	PngJawab      string  `json:"png_jawab"`
+	NoTlp         string  `json:"no_tlp"`
+	Stts          string  `json:"stts"`
+	StatusPoli    string  `json:"status_poli"`
+	KdPoli        string  `json:"kd_poli"`
+	KdPj          string  `json:"kd_pj"`
+	StatusBayar   string  `json:"status_bayar"`
+	NoSep         *string `json:"no_sep"` // nullable
 }
 
 // Handler untuk mendapatkan daftar registrasi
@@ -2185,9 +2185,9 @@ func main() {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Status berhasil diupdate",
+			"message":  "Status berhasil diupdate",
 			"no_rawat": payload.NoRawat,
-			"status": payload.Status,
+			"status":   payload.Status,
 		})
 	})
 
@@ -3140,6 +3140,8 @@ func main() {
 	r.POST("/api/permintaan-resep/penyerahan", submitPenyerahanResep(db))
 	r.GET("/api/permintaan-resep/telaah/:no_resep", getTelaahFarmasi(db))
 	r.POST("/api/permintaan-resep/telaah", saveTelaahFarmasi(db))
+	r.GET("/api/permintaan-resep/konseling", getKonselingFarmasi(db))
+	r.POST("/api/permintaan-resep/konseling", saveKonselingFarmasi(db))
 
 	// Permintaan Resep — Dashboard Rawat Inap (Resep Ranap, Stok Pasien, Resep Pulang)
 	r.GET("/api/permintaan-resep/ranap", getPermintaanResepRanap(db))

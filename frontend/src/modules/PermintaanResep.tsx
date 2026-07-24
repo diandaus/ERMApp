@@ -4,6 +4,7 @@ import { ModalValidasiObat, ResepItems } from '../components/ModalValidasiObat';
 import { RiwayatModal } from '../components/RiwayatModal';
 import { ModalPenyerahanResep } from '../components/ModalPenyerahanResep';
 import { ModalTelaahResep } from '../components/ModalTelaahResep';
+import { ModalKonselingFarmasi } from '../components/ModalKonselingFarmasi';
 import { localDateStr } from '../utils/date';
 
 // ============================================================================
@@ -239,6 +240,7 @@ export type ResepRalanRow = {
   tgl_penyerahan: string;
   jam_penyerahan: string;
   sdh_telaah: boolean;
+  sdh_konseling: boolean;
 };
 
 
@@ -2189,6 +2191,159 @@ const TabTelaahResep: React.FC = () => {
   );
 };
 
+// ---- Tab: Konseling Farmasi -------------------------------------------------
+
+const KONSELING_SUB_TABS: { key: 'belum' | 'sudah'; label: string }[] = [
+  { key: 'belum', label: 'Belum Konseling' },
+  { key: 'sudah', label: 'Sudah Konseling' },
+];
+
+// Padanan BtnKonselingFarmasi di DlgDaftarPermintaanResep.java — di Java
+// tombol toolbar yang bekerja atas baris resep yang sedang dipilih di
+// Daftar Resep Dokter, tapi mengikuti keputusan user sebelumnya untuk
+// Telaah Resep (dedicated tab + layar cari sendiri, bukan tombol
+// per-baris/kolom), Konseling Farmasi dibuat dengan pola yang identik.
+// Sumber daftar tetap /api/permintaan-resep/ralan (sama dgn Telaah Resep,
+// Ranap belum tercakup — konsisten dengan cakupan Telaah Resep saat ini),
+// dibedakan lewat kolom sdh_konseling (LEFT JOIN konseling_farmasi
+// ON no_rawat, BUKAN no_resep — satu kunjungan bisa punya beberapa resep,
+// semuanya berbagi status konseling yang sama).
+const TabKonselingFarmasi: React.FC = () => {
+  const [tgl1, setTgl1] = React.useState(todayStr());
+  const [tgl2, setTgl2] = React.useState(todayStr());
+  const [searchText, setSearchText] = React.useState('');
+  const [subTab, setSubTab] = React.useState<'belum' | 'sudah'>('belum');
+  const [allItems, setAllItems] = React.useState<ResepRalanRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [konselingRow, setKonselingRow] = React.useState<ResepRalanRow | null>(null);
+
+  const fetchData = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      let url = `/api/permintaan-resep/ralan?tgl1=${tgl1}&tgl2=${tgl2}`;
+      if (searchText) url += `&search=${encodeURIComponent(searchText)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setAllItems(Array.isArray(data) ? data : []);
+    } catch {
+      setAllItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tgl1, tgl2, searchText]);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const items = React.useMemo(
+    () => allItems.filter((r) => (subTab === 'belum' ? !r.sdh_konseling : r.sdh_konseling)),
+    [allItems, subTab]
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+        {KONSELING_SUB_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setSubTab(t.key)}
+            style={{
+              padding: '8px 16px',
+              border: 'none',
+              borderBottom: subTab === t.key ? '2px solid #059669' : '2px solid transparent',
+              background: 'transparent',
+              color: subTab === t.key ? '#059669' : '#6b7280',
+              fontWeight: subTab === t.key ? 600 : 400,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flexShrink: 0 }}>
+        <div style={{ width: 150 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Dari Tanggal</label>
+          <input type="date" style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, boxSizing: 'border-box' }} value={tgl1} onChange={(e) => setTgl1(e.target.value)} />
+        </div>
+        <div style={{ width: 150 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>s.d. Tanggal</label>
+          <input type="date" style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, boxSizing: 'border-box' }} value={tgl2} onChange={(e) => setTgl2(e.target.value)} />
+        </div>
+        <div style={{ minWidth: 220, flex: 1 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
+          <input
+            style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, boxSizing: 'border-box' }}
+            placeholder="No. Resep / No. Rawat / No. RM / Pasien / Dokter..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
+            <tr>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Resep</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tgl/Jam Peresepan</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Rawat</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Pasien</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Dokter Peresep</th>
+              <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>Status</th>
+              <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
+            ) : items.length === 0 ? (
+              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>{subTab === 'belum' ? 'Tidak ada resep yang belum konseling' : 'Belum ada resep yang dikonseling'}</td></tr>
+            ) : (
+              items.map((row, index) => {
+                const belum = row.status === 'Belum Terlayani';
+                return (
+                  <tr key={row.no_resep} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontWeight: 600 }}>{row.no_resep}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      {row.tgl_peresepan.slice(0, 10)} <span style={{ color: '#9ca3af' }}>{row.jam_peresepan}</span>
+                    </td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{row.no_rawat}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{row.no_rkm_medis}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{row.nm_pasien}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{row.nm_dokter}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: belum ? '#fffbeb' : '#ecfdf5', color: belum ? '#d97706' : '#059669' }}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setKonselingRow(row)}
+                        style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid #1AB1E5', background: '#ffffff', color: '#1AB1E5', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                      >
+                        {subTab === 'belum' ? 'Konseling' : 'Lihat/Edit'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <ModalKonselingFarmasi resep={konselingRow} onClose={() => setKonselingRow(null)} onSaved={fetchData} />
+    </div>
+  );
+};
+
 // ---- Shell Permintaan Resep -------------------------------------------------
 
 // Dipicu dari tab 'permintaan-resep' di sidebar Apotek.tsx, dirender
@@ -2507,7 +2662,7 @@ export const PermintaanResepView: React.FC<PermintaanResepViewProps> = ({ onClos
               <TabResepRanap onSelectPasien={setSelectedPasien} onSelectResep={setSelectedResep} />
             ))}
           {activeTab === 'telaah-resep' && <TabTelaahResep />}
-          {activeTab === 'konseling-farmasi' && <Placeholder title="Konseling Farmasi" />}
+          {activeTab === 'konseling-farmasi' && <TabKonselingFarmasi />}
           {activeTab === 'informasi-obat' && <Placeholder title="Informasi Obat" />}
           {activeTab === 'cetak-resep-awal' && <Placeholder title="Cetak Resep Awal" />}
           {activeTab === 'resep-luar' && <Placeholder title="Resep Luar" />}
