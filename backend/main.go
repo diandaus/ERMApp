@@ -124,6 +124,7 @@ type AppUser struct {
 	IsActive       bool   `json:"is_active"`
 	AllowedModules string `json:"allowed_modules"`
 	Nip            string `json:"nip"`
+	KdDokter       string `json:"kd_dokter"`
 }
 
 type LoginRequest struct {
@@ -137,7 +138,8 @@ type CreateUserRequest struct {
 	FullName       string `json:"full_name" binding:"required"`
 	Role           string `json:"role" binding:"required"`
 	AllowedModules string `json:"allowed_modules"`
-	Nip            string `json:"nip"` // Optional — link ke petugas.nip, dipakai auto-fill kolom Petugas di form klinis (mis. Adime Gizi)
+	Nip            string `json:"nip"`       // Optional — link ke petugas.nip, dipakai auto-fill kolom Petugas di form klinis (mis. Adime Gizi)
+	KdDokter       string `json:"kd_dokter"` // Optional — link ke dokter.kd_dokter, dipakai membatasi Daftar Pasien Poli (RawatJalanView di App.tsx) ke pasien milik dokter ini saja saat role = 'dokter'
 }
 
 type UpdateUserRequest struct {
@@ -147,6 +149,7 @@ type UpdateUserRequest struct {
 	Password       string `json:"password"`        // Optional
 	AllowedModules string `json:"allowed_modules"` // Optional
 	Nip            string `json:"nip"`             // Optional — link ke petugas.nip
+	KdDokter       string `json:"kd_dokter"`       // Optional — link ke dokter.kd_dokter
 }
 
 type ResetPasswordRequest struct {
@@ -200,6 +203,16 @@ func ensureAppUsersTable(db *sql.DB) error {
 	// diketik manual tiap kali.
 	if _, err := db.Exec(
 		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS nip VARCHAR(20) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi kolom kd_dokter — link ke dokter.kd_dokter (Khanza), dipakai
+	// RawatJalanView (App.tsx) untuk membatasi Daftar Pasien Poli ke pasien
+	// milik dokter ybs saat role akun = 'dokter'. Terpisah dari nip di atas
+	// karena dokter & petugas adalah 2 tabel identitas berbeda di Khanza.
+	if _, err := db.Exec(
+		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS kd_dokter VARCHAR(20) NOT NULL DEFAULT ''`,
 	); err != nil {
 		return err
 	}
@@ -851,7 +864,7 @@ func main() {
 		var isActiveInt int
 		var allowedModules sql.NullString
 		err := db.QueryRow(
-			`SELECT id, username, full_name, role, is_active, allowed_modules, nip
+			`SELECT id, username, full_name, role, is_active, allowed_modules, nip, kd_dokter
 			 FROM app_users
 			 WHERE username = ? AND password_hash = ?
 			 LIMIT 1`,
@@ -865,6 +878,7 @@ func main() {
 			&isActiveInt,
 			&allowedModules,
 			&user.Nip,
+			&user.KdDokter,
 		)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -891,7 +905,7 @@ func main() {
 
 	// === Admin: manajemen user aplikasi (sementara tanpa middleware, harap hanya dipakai oleh role admin) ===
 	r.GET("/api/admin/users", func(c *gin.Context) {
-		rows, err := db.Query(`SELECT id, username, full_name, role, is_active, allowed_modules, nip FROM app_users ORDER BY id`)
+		rows, err := db.Query(`SELECT id, username, full_name, role, is_active, allowed_modules, nip, kd_dokter FROM app_users ORDER BY id`)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -903,7 +917,7 @@ func main() {
 			var u AppUser
 			var isActiveInt int
 			var allowedModules sql.NullString
-			if err := rows.Scan(&u.ID, &u.Username, &u.FullName, &u.Role, &isActiveInt, &allowedModules, &u.Nip); err != nil {
+			if err := rows.Scan(&u.ID, &u.Username, &u.FullName, &u.Role, &isActiveInt, &allowedModules, &u.Nip, &u.KdDokter); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
@@ -926,14 +940,15 @@ func main() {
 
 		hash := hashPassword(req.Password)
 		_, err := db.Exec(
-			`INSERT INTO app_users (username, password_hash, full_name, role, is_active, allowed_modules, nip)
-			 VALUES (?, ?, ?, ?, 1, ?, ?)`,
+			`INSERT INTO app_users (username, password_hash, full_name, role, is_active, allowed_modules, nip, kd_dokter)
+			 VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
 			req.Username,
 			hash,
 			req.FullName,
 			req.Role,
 			req.AllowedModules,
 			req.Nip,
+			req.KdDokter,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -961,13 +976,14 @@ func main() {
 			// Update with password
 			hash := hashPassword(req.Password)
 			if _, err := db.Exec(
-				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, password_hash = ?, allowed_modules = ?, nip = ? WHERE id = ?`,
+				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, password_hash = ?, allowed_modules = ?, nip = ?, kd_dokter = ? WHERE id = ?`,
 				req.FullName,
 				req.Role,
 				isActiveInt,
 				hash,
 				req.AllowedModules,
 				req.Nip,
+				req.KdDokter,
 				id,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -976,12 +992,13 @@ func main() {
 		} else {
 			// Update without password
 			if _, err := db.Exec(
-				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, allowed_modules = ?, nip = ? WHERE id = ?`,
+				`UPDATE app_users SET full_name = ?, role = ?, is_active = ?, allowed_modules = ?, nip = ?, kd_dokter = ? WHERE id = ?`,
 				req.FullName,
 				req.Role,
 				isActiveInt,
 				req.AllowedModules,
 				req.Nip,
+				req.KdDokter,
 				id,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

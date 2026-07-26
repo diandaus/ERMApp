@@ -52,6 +52,7 @@ type AppUser = {
   is_active?: boolean;
   allowed_modules?: string;
   nip?: string;
+  kd_dokter?: string;
 };
 
 type LoginViewProps = {
@@ -345,6 +346,14 @@ type RawatJalanViewProps = {
 };
 
 const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }) => {
+  // Role "dokter" -> Daftar Pasien Poli DIKUNCI ke kd_dokter akun ini
+  // (app_users.kd_dokter, di-link admin lewat Pengaturan > User), tidak
+  // bisa diganti ke "Semua Dokter"/dokter lain lewat dropdown. Kalau akun
+  // belum di-link (kd_dokter kosong), daftar pasien SENGAJA dikosongkan
+  // (bukan fallback ke semua pasien) supaya kesalahan link ketahuan cepat
+  // alih-alih diam-diam bocor menampilkan pasien dokter lain.
+  const isDokterLocked = user.role === 'dokter';
+  const lockedKdDokter = user.kd_dokter || '';
   const [activeTab, setActiveTab] = React.useState<'poli-today' | 'rujukan-internal'>('poli-today');
   const [poliToday, setPoliToday] = React.useState<any[]>([]);
   const [rujukanInternal, setRujukanInternal] = React.useState<any[]>([]);
@@ -692,7 +701,11 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
       : poliToday;
 
     if (filterPoli) filtered = filtered.filter((p) => p.kd_poli === filterPoli);
-    if (filterDokter) filtered = filtered.filter((p) => p.kd_dokter === filterDokter);
+    if (isDokterLocked) {
+      filtered = lockedKdDokter ? filtered.filter((p) => p.kd_dokter === lockedKdDokter) : [];
+    } else if (filterDokter) {
+      filtered = filtered.filter((p) => p.kd_dokter === filterDokter);
+    }
 
     // Sort: status "Belum" di atas, "Sudah" di bawah
     return filtered.sort((a, b) => {
@@ -700,7 +713,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
       return 0;
     });
-  }, [poliToday, searchText, filterPoli, filterDokter]);
+  }, [poliToday, searchText, filterPoli, filterDokter, isDokterLocked, lockedKdDokter]);
 
   const filteredRujukanInternal = React.useMemo(() => {
     const search = searchText.trim().toLowerCase();
@@ -712,7 +725,11 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
       : rujukanInternal;
 
     if (filterPoli) filtered = filtered.filter((r) => r.kd_poli === filterPoli);
-    if (filterDokter) filtered = filtered.filter((r) => r.kd_dokter === filterDokter);
+    if (isDokterLocked) {
+      filtered = lockedKdDokter ? filtered.filter((r) => r.kd_dokter === lockedKdDokter) : [];
+    } else if (filterDokter) {
+      filtered = filtered.filter((r) => r.kd_dokter === filterDokter);
+    }
 
     // Sort: status "Belum" di atas, "Sudah" di bawah
     return filtered.sort((a, b) => {
@@ -720,7 +737,7 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
       return 0;
     });
-  }, [rujukanInternal, searchText, filterPoli, filterDokter]);
+  }, [rujukanInternal, searchText, filterPoli, filterDokter, isDokterLocked, lockedKdDokter]);
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -1043,125 +1060,161 @@ const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient, user }
                   </div>,
                   document.body
                 )}
-                {/* Dokter — pola identik dgn tombol+card Poliklinik di atas. */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    if (showDokterCard) {
-                      setShowDokterCard(false);
-                      setDokterCardPos(null);
-                    } else {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setDokterCardPos({ top: rect.top, left: rect.left - 8 });
-                      setShowDokterCard(true);
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px 6px 22px',
-                    borderRadius: 8,
-                    border: '1px solid #d1d5db',
-                    background: '#ffffff',
-                    fontSize: 12,
-                    boxSizing: 'border-box',
-                    color: filterDokter ? '#111827' : '#6b7280',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    textAlign: 'left',
-                    position: 'relative'
-                  }}
-                >
-                  <svg
-                    width="10" height="6" viewBox="0 0 10 6" fill="none"
-                    stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                    style={{
-                      position: 'absolute', left: 8, top: '50%',
-                      transform: showDokterCard ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%) rotate(0deg)',
-                      transition: 'transform 0.2s ease'
-                    }}
-                  >
-                    <path d="M1 1L5 5L9 1"></path>
-                  </svg>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {filterDokter ? (dokterOptions.find((d) => d.kd_dokter === filterDokter)?.nm_dokter || 'Dokter') : 'Semua Dokter'}
-                  </span>
-                </button>
-
-                {showDokterCard && dokterCardPos && createPortal(
+                {/* Dokter — pola identik dgn tombol+card Poliklinik di atas,
+                    KECUALI kalau role='dokter': dropdown dikunci, cuma
+                    menampilkan badge non-interaktif nama dokter itu sendiri
+                    (atau peringatan kalau akunnya belum di-link admin ke
+                    kd_dokter manapun). Lihat isDokterLocked di atas. */}
+                {isDokterLocked ? (
                   <div
-                    ref={dokterCardRef}
+                    title={lockedKdDokter ? 'Daftar Pasien Poli dikunci ke akun dokter yang login' : 'Akun ini belum di-link ke kode dokter manapun — hubungi admin (Pengaturan > User)'}
                     style={{
-                      position: 'fixed',
-                      top: dokterCardPos.top,
-                      left: dokterCardPos.left,
-                      transform: 'translateX(-100%)',
-                      background: '#ffffff',
-                      border: '1px solid #e5e7eb',
+                      width: '100%',
+                      padding: '6px 8px',
                       borderRadius: 8,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      zIndex: 9999,
-                      width: 220,
-                      maxHeight: 260,
-                      overflowY: 'auto',
-                      colorScheme: 'light'
+                      border: `1px solid ${lockedKdDokter ? '#d1d5db' : '#fecaca'}`,
+                      background: lockedKdDokter ? '#f9fafb' : '#fef2f2',
+                      fontSize: 12,
+                      boxSizing: 'border-box',
+                      color: lockedKdDokter ? '#111827' : '#dc2626',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      overflow: 'hidden'
                     }}
                   >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {lockedKdDokter
+                        ? (dokterOptions.find((d) => d.kd_dokter === lockedKdDokter)?.nm_dokter || user.full_name)
+                        : 'Belum di-link ke dokter'}
+                    </span>
+                  </div>
+                ) : (
+                  <>
                     <button
-                      onClick={() => { setFilterDokter(''); setShowDokterCard(false); }}
+                      type="button"
+                      onClick={(e) => {
+                        if (showDokterCard) {
+                          setShowDokterCard(false);
+                          setDokterCardPos(null);
+                        } else {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setDokterCardPos({ top: rect.top, left: rect.left - 8 });
+                          setShowDokterCard(true);
+                        }
+                      }}
                       style={{
-                        display: 'block',
                         width: '100%',
-                        padding: '8px 12px',
-                        border: 'none',
-                        background: filterDokter === '' ? '#dbeafe' : 'transparent',
-                        color: filterDokter === '' ? '#2563eb' : '#374151',
-                        fontSize: 11,
-                        textAlign: 'left',
+                        padding: '6px 8px 6px 22px',
+                        borderRadius: 8,
+                        border: '1px solid #d1d5db',
+                        background: '#ffffff',
+                        fontSize: 12,
+                        boxSizing: 'border-box',
+                        color: filterDokter ? '#111827' : '#6b7280',
                         cursor: 'pointer',
-                        fontWeight: filterDokter === '' ? 600 : 400
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#dbeafe';
-                        e.currentTarget.style.color = '#2563eb';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = filterDokter === '' ? '#dbeafe' : 'transparent';
-                        e.currentTarget.style.color = filterDokter === '' ? '#2563eb' : '#374151';
+                        display: 'flex',
+                        alignItems: 'center',
+                        textAlign: 'left',
+                        position: 'relative'
                       }}
                     >
-                      Semua Dokter
-                    </button>
-                    {dokterOptions.map((d) => (
-                      <button
-                        key={d.kd_dokter}
-                        onClick={() => { setFilterDokter(d.kd_dokter); setShowDokterCard(false); }}
+                      <svg
+                        width="10" height="6" viewBox="0 0 10 6" fill="none"
+                        stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
                         style={{
-                          display: 'block',
-                          width: '100%',
-                          padding: '4px 12px',
-                          border: 'none',
-                          background: filterDokter === d.kd_dokter ? '#dbeafe' : 'transparent',
-                          color: filterDokter === d.kd_dokter ? '#2563eb' : '#374151',
-                          fontSize: 11,
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          fontWeight: filterDokter === d.kd_dokter ? 600 : 400
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#dbeafe';
-                          e.currentTarget.style.color = '#2563eb';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = filterDokter === d.kd_dokter ? '#dbeafe' : 'transparent';
-                          e.currentTarget.style.color = filterDokter === d.kd_dokter ? '#2563eb' : '#374151';
+                          position: 'absolute', left: 8, top: '50%',
+                          transform: showDokterCard ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%) rotate(0deg)',
+                          transition: 'transform 0.2s ease'
                         }}
                       >
-                        {d.nm_dokter}
-                      </button>
-                    ))}
-                  </div>,
-                  document.body
+                        <path d="M1 1L5 5L9 1"></path>
+                      </svg>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {filterDokter ? (dokterOptions.find((d) => d.kd_dokter === filterDokter)?.nm_dokter || 'Dokter') : 'Semua Dokter'}
+                      </span>
+                    </button>
+
+                    {showDokterCard && dokterCardPos && createPortal(
+                      <div
+                        ref={dokterCardRef}
+                        style={{
+                          position: 'fixed',
+                          top: dokterCardPos.top,
+                          left: dokterCardPos.left,
+                          transform: 'translateX(-100%)',
+                          background: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 8,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                          zIndex: 9999,
+                          width: 220,
+                          maxHeight: 260,
+                          overflowY: 'auto',
+                          colorScheme: 'light'
+                        }}
+                      >
+                        <button
+                          onClick={() => { setFilterDokter(''); setShowDokterCard(false); }}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: 'none',
+                            background: filterDokter === '' ? '#dbeafe' : 'transparent',
+                            color: filterDokter === '' ? '#2563eb' : '#374151',
+                            fontSize: 11,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            fontWeight: filterDokter === '' ? 600 : 400
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#dbeafe';
+                            e.currentTarget.style.color = '#2563eb';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = filterDokter === '' ? '#dbeafe' : 'transparent';
+                            e.currentTarget.style.color = filterDokter === '' ? '#2563eb' : '#374151';
+                          }}
+                        >
+                          Semua Dokter
+                        </button>
+                        {dokterOptions.map((d) => (
+                          <button
+                            key={d.kd_dokter}
+                            onClick={() => { setFilterDokter(d.kd_dokter); setShowDokterCard(false); }}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              padding: '4px 12px',
+                              border: 'none',
+                              background: filterDokter === d.kd_dokter ? '#dbeafe' : 'transparent',
+                              color: filterDokter === d.kd_dokter ? '#2563eb' : '#374151',
+                              fontSize: 11,
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              fontWeight: filterDokter === d.kd_dokter ? 600 : 400
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = '#dbeafe';
+                              e.currentTarget.style.color = '#2563eb';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = filterDokter === d.kd_dokter ? '#dbeafe' : 'transparent';
+                              e.currentTarget.style.color = filterDokter === d.kd_dokter ? '#2563eb' : '#374151';
+                            }}
+                          >
+                            {d.nm_dokter}
+                          </button>
+                        ))}
+                      </div>,
+                      document.body
+                    )}
+                  </>
                 )}
               </div>
             )}

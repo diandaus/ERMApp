@@ -1,5 +1,6 @@
 import React from 'react';
 import { ModalCariPetugas } from './ModalCariPetugas';
+import { ModalCariDokter } from './ModalCariDokter';
 
 type AppUserRole = string;
 
@@ -28,6 +29,7 @@ type EditUser = {
   role: AppUserRole;
   allowed_modules?: string;
   nip?: string;
+  kd_dokter?: string;
 };
 
 type AddUserModalProps = {
@@ -59,6 +61,15 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
   const [newNip, setNewNip] = React.useState<string>('');
   const [newNipNama, setNewNipNama] = React.useState<string>('');
   const [nipPickerOpen, setNipPickerOpen] = React.useState<boolean>(false);
+  // kd_dokter yang di-link ke akun ini — dipakai RawatJalanView (App.tsx)
+  // buat membatasi Daftar Pasien Poli ke pasien milik dokter ini saja saat
+  // role='dokter'. Terpisah dari NIP di atas (dokter & petugas 2 tabel
+  // identitas berbeda di Khanza) dan terpisah dari username/newFullName
+  // (yang saat Tipe User=Dokter kebetulan sama dgn kd_dokter, tapi itu
+  // cuma konvensi penamaan, bukan link eksplisit yang bisa diandalkan).
+  const [newKdDokter, setNewKdDokter] = React.useState<string>('');
+  const [newKdDokterNama, setNewKdDokterNama] = React.useState<string>('');
+  const [kdDokterPickerOpen, setKdDokterPickerOpen] = React.useState<boolean>(false);
 
   // Define available modules
   const availableModules = [
@@ -107,6 +118,17 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
           })
           .catch(() => { /* ignore */ });
       }
+      setNewKdDokter(editUser.kd_dokter || '');
+      setNewKdDokterNama('');
+      if (editUser.kd_dokter) {
+        fetch(`/api/dokter?search=${encodeURIComponent(editUser.kd_dokter)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            const found = (Array.isArray(data) ? data : []).find((d: Dokter) => d.kd_dokter === editUser.kd_dokter);
+            if (found) setNewKdDokterNama(found.nm_dokter);
+          })
+          .catch(() => { /* ignore */ });
+      }
     } else if (!show) {
       // Reset form when modal closes
       setUserType(null);
@@ -121,6 +143,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
       setSelectedModules([]);
       setNewNip('');
       setNewNipNama('');
+      setNewKdDokter('');
+      setNewKdDokterNama('');
     }
   }, [show, editUser]);
 
@@ -202,6 +226,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
       setNewUsername(dokter.kd_dokter);
       setNewFullName(dokter.nm_dokter);
       setNewRole('dokter');
+      // Akun ini mewakili dokter yang sama — saran otomatis, admin tetap
+      // bisa ganti/kosongkan lewat picker Kode Dokter kalau ternyata beda.
+      setNewKdDokter(dokter.kd_dokter);
+      setNewKdDokterNama(dokter.nm_dokter);
     }
   };
 
@@ -268,7 +296,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
           role: newRole,
           is_active: true,
           allowed_modules: selectedModules.join(','),
-          nip: newNip.trim()
+          nip: newNip.trim(),
+          kd_dokter: newKdDokter.trim()
         };
         // Include password only if it's filled
         if (newPassword) {
@@ -295,7 +324,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
             full_name: newFullName,
             role: newRole,
             allowed_modules: selectedModules.join(','),
-            nip: newNip.trim()
+            nip: newNip.trim(),
+            kd_dokter: newKdDokter.trim()
           })
         });
         const data = await res.json().catch(() => ({}));
@@ -698,6 +728,39 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
                 </div>
               </div>
 
+              {/* Kode Dokter (link ke Daftar Pasien Poli) */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>
+                  Kode Dokter <span style={{ color: '#6b7280', fontWeight: 400 }}>(wajib utk role Dokter — membatasi Daftar Pasien Poli ke pasien milik dokter ini saja)</span>
+                </label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    value={newKdDokter}
+                    onChange={(e) => { setNewKdDokter(e.target.value); setNewKdDokterNama(''); }}
+                    placeholder="Kode"
+                    style={{ width: '30%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                  />
+                  <input
+                    type="text"
+                    value={newKdDokterNama}
+                    readOnly
+                    placeholder="Nama dokter"
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: '#f9fafb', color: '#374151' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setKdDokterPickerOpen(true)}
+                    style={{ padding: '0 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Cari dokter"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
               {/* Role */}
               {(editUser || userType === 'petugas') && (
                 <div style={{ marginBottom: 16 }}>
@@ -890,6 +953,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
         isOpen={nipPickerOpen}
         onClose={() => setNipPickerOpen(false)}
         onSelect={(nip, nama) => { setNewNip(nip); setNewNipNama(nama); }}
+      />
+      <ModalCariDokter
+        isOpen={kdDokterPickerOpen}
+        onClose={() => setKdDokterPickerOpen(false)}
+        onSelect={(kdDokter, nmDokter) => { setNewKdDokter(kdDokter); setNewKdDokterNama(nmDokter); }}
       />
     </div>
   );
