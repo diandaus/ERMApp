@@ -31,12 +31,13 @@ type TindakanRalanDokter struct {
 
 // TindakanRalanParamedis represents tindakan rawat jalan by paramedis
 type TindakanRalanParamedis struct {
-	TglPerawatan string  `json:"tgl_perawatan"`
-	JamRawat     string  `json:"jam_rawat"`
-	KdJenisPrw   string  `json:"kd_jenis_prw"`
-	NmPerawatan  string  `json:"nm_perawatan"`
-	NamaParamedis string `json:"nama_paramedis"`
-	BiayaRawat   float64 `json:"biaya_rawat"`
+	TglPerawatan  string  `json:"tgl_perawatan"`
+	JamRawat      string  `json:"jam_rawat"`
+	KdJenisPrw    string  `json:"kd_jenis_prw"`
+	NmPerawatan   string  `json:"nm_perawatan"`
+	Nip           string  `json:"nip"`
+	NamaParamedis string  `json:"nama_paramedis"`
+	BiayaRawat    float64 `json:"biaya_rawat"`
 }
 
 // TindakanRalanDokterParamedis represents tindakan rawat jalan by doctor and paramedis
@@ -45,7 +46,9 @@ type TindakanRalanDokterParamedis struct {
 	JamRawat      string  `json:"jam_rawat"`
 	KdJenisPrw    string  `json:"kd_jenis_prw"`
 	NmPerawatan   string  `json:"nm_perawatan"`
+	KdDokter      string  `json:"kd_dokter"`
 	NmDokter      string  `json:"nm_dokter"`
+	Nip           string  `json:"nip"`
 	NamaParamedis string  `json:"nama_paramedis"`
 	BiayaRawat    float64 `json:"biaya_rawat"`
 }
@@ -138,6 +141,7 @@ func getTindakanRalan(db *sql.DB) gin.HandlerFunc {
 		SELECT 
 			rawat_jl_pr.kd_jenis_prw,
 			jns_perawatan.nm_perawatan,
+			petugas.nip,
 			petugas.nama,
 			rawat_jl_pr.biaya_rawat,
 			DATE_FORMAT(rawat_jl_pr.tgl_perawatan, '%d/%m/%Y') as tgl_perawatan,
@@ -160,6 +164,7 @@ func getTindakanRalan(db *sql.DB) gin.HandlerFunc {
 				if err := rowsParamedis.Scan(
 					&item.KdJenisPrw,
 					&item.NmPerawatan,
+					&item.Nip,
 					&item.NamaParamedis,
 					&item.BiayaRawat,
 					&item.TglPerawatan,
@@ -179,7 +184,9 @@ func getTindakanRalan(db *sql.DB) gin.HandlerFunc {
 		SELECT 
 			rawat_jl_drpr.kd_jenis_prw,
 			jns_perawatan.nm_perawatan,
+			rawat_jl_drpr.kd_dokter,
 			dokter.nm_dokter,
+			petugas.nip,
 			petugas.nama,
 			rawat_jl_drpr.biaya_rawat,
 			DATE_FORMAT(rawat_jl_drpr.tgl_perawatan, '%d/%m/%Y') as tgl_perawatan,
@@ -203,7 +210,9 @@ func getTindakanRalan(db *sql.DB) gin.HandlerFunc {
 				if err := rowsDokterParamedis.Scan(
 					&item.KdJenisPrw,
 					&item.NmPerawatan,
+					&item.KdDokter,
 					&item.NmDokter,
+					&item.Nip,
 					&item.NamaParamedis,
 					&item.BiayaRawat,
 					&item.TglPerawatan,

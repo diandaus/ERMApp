@@ -14,6 +14,7 @@ import { DisplayAntrianApotekView } from './DisplayAntrianApotek';
 import { AntrianDashboardView } from './AntrianDashboard';
 import { DisplaySettingsView } from './DisplaySettings';
 import { AddUserModal } from '../components/AddUserModal';
+import { ModalGantiPassword } from '../components/ModalGantiPassword';
 import { SatuSehatView } from './SatuSehat';
 import { MappingSatuSehatView } from './MappingSatuSehat';
 import { PegawaiView } from './Pegawai';
@@ -1853,6 +1854,7 @@ export const App: React.FC = () => {
   const { isCompact } = useBreakpoint();
   const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(false);
   const [showUserMenu, setShowUserMenu] = React.useState<boolean>(false);
+  const [showGantiPassword, setShowGantiPassword] = React.useState<boolean>(false);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
   const [displayType, setDisplayType] = React.useState<string | null>(null);
   const [instansi, setInstansi] = React.useState<{ nama_instansi: string; logo_url: string } | null>(null);
@@ -2530,7 +2532,14 @@ export const App: React.FC = () => {
                   <div style={{ padding: 6 }}>
                     <button
                       onClick={() => {
-                        setActiveMenu('admin');
+                        // Non-admin cuma boleh ganti password sendiri —
+                        // AdminView (User, Bridging, Set Tarif, dll) khusus
+                        // role 'admin'.
+                        if (user.role === 'admin') {
+                          setActiveMenu('admin');
+                        } else {
+                          setShowGantiPassword(true);
+                        }
                         setShowUserMenu(false);
                       }}
                       style={{
@@ -2605,6 +2614,10 @@ export const App: React.FC = () => {
             </div>
           </div>
         </header>
+
+        {showGantiPassword && (
+          <ModalGantiPassword userId={user.id} onClose={() => setShowGantiPassword(false)} />
+        )}
 
         {/* Content */}
         <main

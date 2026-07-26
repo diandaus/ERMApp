@@ -177,10 +177,6 @@ export const ModalInputDiagnosa: React.FC<ModalInputDiagnosaProps> = ({ patient,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-              </svg>
               Input Diagnosa & Prosedur
             </span>
             <button
@@ -425,15 +421,15 @@ export const ModalInputDiagnosa: React.FC<ModalInputDiagnosaProps> = ({ patient,
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button
                 type="button" onClick={handleReset}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
               >Reset</button>
               <button
                 type="button" onClick={onClose}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
               >Tutup</button>
               <button
                 type="button" onClick={handleSubmit} disabled={loadingSubmit}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loadingSubmit ? '#9ca3af' : '#2563eb', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
               >{loadingSubmit ? 'Menyimpan...' : 'Simpan'}</button>
             </div>
           </div>

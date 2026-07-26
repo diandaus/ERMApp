@@ -89,7 +89,7 @@ export const DiagnosaTab: React.FC<DiagnosaTabProps> = ({ patient }) => {
           onClick={() => setShowInputModal(true)}
           style={{
             padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-            border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
             transition: 'background 0.2s',
           }}

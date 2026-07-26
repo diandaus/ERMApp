@@ -14,6 +14,7 @@ import { AntreanRsView } from './AntreanRs';
 import { AntreanTaskIdView } from './AntreanTaskId';
 import { AntreanOtomatisView } from './AntreanOtomatis';
 import { ReferensiPendaftaranMobileJknView } from './ReferensiPendaftaranMobileJkn';
+import { BpjsPengaturanView } from './BpjsPengaturan';
 
 type BpjsTab =
   | 'overview'
@@ -321,8 +322,13 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
           </div>
         </div>
 
-        {/* Menu */}
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {/* Menu — scrollbar disembunyikan default, cuma muncul tipis saat
+            hover. Di Mac (overlay scrollbar) ini sudah otomatis auto-hide,
+            tapi di Windows/Chrome browser milik user produksi, scrollbar
+            native selalu tampil tebal (lihat screenshot laporan bug) karena
+            OS itu tidak pakai overlay scrollbar — makanya perlu di-override
+            manual lewat ::-webkit-scrollbar & scrollbar-width. */}
+        <nav className="bpjs-sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {MENU.map((item) => {
             const active = activeTab === item.key;
             return (
@@ -493,9 +499,18 @@ export const BridgingBpjsView: React.FC<BridgingBpjsViewProps> = ({ onBack }) =>
           {activeTab === 'referensi-pendaftaran-mobile-jkn' && <ReferensiPendaftaranMobileJknView />}
           {activeTab === 'antrean-otomatis' && <AntreanOtomatisView />}
           {activeTab === 'log' && <Placeholder title="Log Bridging" />}
-          {activeTab === 'pengaturan' && <Placeholder title="Pengaturan BPJS" />}
+          {activeTab === 'pengaturan' && <BpjsPengaturanView />}
         </div>
       </div>
+
+      <style>{`
+        .bpjs-sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }
+        .bpjs-sidebar-nav::-webkit-scrollbar { width: 6px; }
+        .bpjs-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .bpjs-sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
+        .bpjs-sidebar-nav:hover { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.35) transparent; }
+        .bpjs-sidebar-nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); }
+      `}</style>
     </section>
   );
 };

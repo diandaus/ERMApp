@@ -6,8 +6,17 @@ type TindakanTabProps = {
   patient: any;
 };
 
+// Padanan 3 tabel terpisah DlgRawatJalan.java (tabModeDr, tabModePr,
+// tabModeDrPr) — sengaja TIDAK digabung jadi satu tabel supaya kolomnya
+// tetap sesuai sumbernya masing-masing (Dokter Yg Menangani vs Petugas Yg
+// Menangani + NIP).
+const TH_STYLE: React.CSSProperties = { padding: '8px 10px', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap' };
+const TD_STYLE: React.CSSProperties = { padding: '8px 10px', color: '#374151' };
+
 export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
-  const [tindakanList, setTindakanList] = React.useState<any[]>([]);
+  const [tindakanDokter, setTindakanDokter] = React.useState<any[]>([]);
+  const [tindakanParamedis, setTindakanParamedis] = React.useState<any[]>([]);
+  const [tindakanDokterParamedis, setTindakanDokterParamedis] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [showInputModal, setShowInputModal] = React.useState(false);
 
@@ -21,34 +30,13 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
       const res = await fetch(`/api/tindakan-ralan/${encodeURIComponent(patient.no_rawat)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-
-      const allTindakan = [
-        ...(data.tindakan_dokter || []),
-        ...(data.tindakan_paramedis || []),
-        ...(data.tindakan_dokter_paramedis || []),
-      ];
-
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-      const filtered = allTindakan.filter((item: any) => {
-        if (!item.tgl_perawatan) return false;
-        const tgl = item.tgl_perawatan;
-        if (tgl.includes('/')) {
-          const [d, m, y] = tgl.split('/');
-          return `${y}-${m}-${d}` === todayStr;
-        }
-        if (tgl.includes('T')) {
-          const d = new Date(tgl);
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === todayStr;
-        }
-        if (tgl.includes('-')) return tgl.substring(0, 10) === todayStr;
-        return false;
-      });
-
-      setTindakanList(filtered);
+      setTindakanDokter(Array.isArray(data.tindakan_dokter) ? data.tindakan_dokter : []);
+      setTindakanParamedis(Array.isArray(data.tindakan_paramedis) ? data.tindakan_paramedis : []);
+      setTindakanDokterParamedis(Array.isArray(data.tindakan_dokter_paramedis) ? data.tindakan_dokter_paramedis : []);
     } catch {
-      setTindakanList([]);
+      setTindakanDokter([]);
+      setTindakanParamedis([]);
+      setTindakanDokterParamedis([]);
     } finally {
       setLoading(false);
     }
@@ -89,6 +77,84 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
     }
   };
 
+  // Padanan handleDeleteTindakan di atas, tapi utk baris Tindakan Perawat
+  // (rawat_jl_pr, kunci nip bukan kd_dokter). item.tgl_perawatan di sini
+  // sudah dalam format DD/MM/YYYY (hasil DATE_FORMAT di query paramedis,
+  // beda dari tindakan dokter yang formatnya ISO) — perlu dibalik ke
+  // YYYY-MM-DD dulu supaya cocok dgn kolom DATE di query DELETE.
+  const handleDeleteTindakanPetugas = async (item: any) => {
+    const result = await Swal.fire({
+      title: 'Hapus Tindakan?',
+      text: `Apakah Anda yakin ingin menghapus tindakan "${item.nm_perawatan}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Hapus',
+      cancelButtonText: 'Batal',
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const [d, m, y] = (item.tgl_perawatan || '').split('/');
+      const tglPerawatan = d && m && y ? `${y}-${m}-${d}` : item.tgl_perawatan;
+
+      const params = new URLSearchParams({
+        no_rawat: patient.no_rawat,
+        kd_jenis_prw: item.kd_jenis_prw,
+        tgl_perawatan: tglPerawatan,
+        jam_rawat: item.jam_rawat,
+        nip: item.nip,
+      });
+
+      const res = await fetch(`/api/tindakan/delete-petugas?${params}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal menghapus tindakan');
+
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Tindakan berhasil dihapus', timer: 2000, showConfirmButton: false });
+      fetchTindakanList();
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message || 'Gagal menghapus tindakan' });
+    }
+  };
+
+  // Padanan handleDeleteTindakanPetugas di atas, tapi utk baris Tindakan
+  // Dokter & Perawat (rawat_jl_drpr, kuncinya kd_dokter + nip sekaligus).
+  const handleDeleteTindakanDokterPetugas = async (item: any) => {
+    const result = await Swal.fire({
+      title: 'Hapus Tindakan?',
+      text: `Apakah Anda yakin ingin menghapus tindakan "${item.nm_perawatan}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Hapus',
+      cancelButtonText: 'Batal',
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const [d, m, y] = (item.tgl_perawatan || '').split('/');
+      const tglPerawatan = d && m && y ? `${y}-${m}-${d}` : item.tgl_perawatan;
+
+      const params = new URLSearchParams({
+        no_rawat: patient.no_rawat,
+        kd_jenis_prw: item.kd_jenis_prw,
+        tgl_perawatan: tglPerawatan,
+        jam_rawat: item.jam_rawat,
+        kd_dokter: item.kd_dokter,
+        nip: item.nip,
+      });
+
+      const res = await fetch(`/api/tindakan/delete-dokter-petugas?${params}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Gagal menghapus tindakan');
+
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Tindakan berhasil dihapus', timer: 2000, showConfirmButton: false });
+      fetchTindakanList();
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message || 'Gagal menghapus tindakan' });
+    }
+  };
+
   const formatDateTime = (tgl: string, jam: string) => {
     if (!tgl || tgl === '0000-00-00') return '-';
     let date = '';
@@ -107,6 +173,8 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
   const formatRupiah = (amount: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
 
+  const hasAny = tindakanDokter.length > 0 || tindakanParamedis.length > 0 || tindakanDokterParamedis.length > 0;
+
   return (
     <div>
 
@@ -116,7 +184,7 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
           onClick={() => setShowInputModal(true)}
           style={{
             padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-            border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
             transition: 'background 0.2s',
           }}
@@ -139,38 +207,153 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
         </div>
       )}
 
-      {/* Riwayat Tindakan */}
-      {!loading && tindakanList.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {tindakanList.map((item, idx) => (
-            <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>{item.nm_perawatan}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>📅 {formatDateTime(item.tgl_perawatan, item.jam_rawat)}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>👨‍⚕️ {item.nm_dokter || '-'}</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                  <div style={{ padding: '4px 12px', background: '#d1fae5', color: '#065f46', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
-                    {formatRupiah(item.biaya_rawat || 0)}
-                  </div>
-                  <button
-                    onClick={() => handleDeleteTindakan(item)}
-                    style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-                    title="Hapus Tindakan"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Hapus
-                  </button>
+      {!loading && !hasAny && (
+        <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+          Belum ada riwayat tindakan untuk pasien ini
+        </div>
+      )}
+
+      {!loading && hasAny && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+          {/* Tindakan Dokter — padanan tabModeDr */}
+          {tindakanDokter.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tindakan Dokter</div>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: '#1AB1E5' }}>
+                        {['No.', 'No.Rawat', 'No.R.M.', 'Nama Pasien', 'Perawatan/Tindakan', 'Dokter Yg Menangani', 'Tgl.Rawat', 'Jam Rawat', 'Biaya', 'Aksi'].map((h) => (
+                          <th key={h} style={{ ...TH_STYLE, textAlign: h === 'Biaya' ? 'right' : h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tindakanDokter.map((item, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={TD_STYLE}>{idx + 1}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rawat}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rkm_medis || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#111827' }}>{patient.nm_pasien || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#1AB1E5', fontWeight: 500 }}>{item.nm_perawatan}</td>
+                          <td style={TD_STYLE}>{item.nm_dokter || '-'}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{formatDateTime(item.tgl_perawatan, '')}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{item.jam_rawat || '-'}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#065f46', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleDeleteTindakan(item)}
+                              style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                              title="Hapus Tindakan"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Tindakan Perawat — padanan tabModePr */}
+          {tindakanParamedis.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tindakan Perawat</div>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: '#1AB1E5' }}>
+                        {['No.', 'No.Rawat', 'No.R.M.', 'Nama Pasien', 'Perawatan/Tindakan', 'Petugas Yg Menangani', 'Tgl.Rawat', 'Jam Rawat', 'Biaya', 'Aksi'].map((h) => (
+                          <th key={h} style={{ ...TH_STYLE, textAlign: h === 'Biaya' ? 'right' : h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tindakanParamedis.map((item, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={TD_STYLE}>{idx + 1}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rawat}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rkm_medis || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#111827' }}>{patient.nm_pasien || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#1AB1E5', fontWeight: 500 }}>{item.nm_perawatan}</td>
+                          <td style={TD_STYLE}>{item.nama_paramedis || '-'}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{formatDateTime(item.tgl_perawatan, '')}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{item.jam_rawat || '-'}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#065f46', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleDeleteTindakanPetugas(item)}
+                              style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                              title="Hapus Tindakan"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tindakan Dokter & Perawat — padanan tabModeDrPr */}
+          {tindakanDokterParamedis.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tindakan Dokter &amp; Perawat</div>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: '#1AB1E5' }}>
+                        {['No.', 'No.Rawat', 'No.R.M.', 'Nama Pasien', 'Perawatan/Tindakan', 'Dokter Yg Menangani', 'Petugas Yg Menangani', 'Tgl.Rawat', 'Jam Rawat', 'Biaya', 'Aksi'].map((h) => (
+                          <th key={h} style={{ ...TH_STYLE, textAlign: h === 'Biaya' ? 'right' : h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tindakanDokterParamedis.map((item, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={TD_STYLE}>{idx + 1}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rawat}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rkm_medis || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#111827' }}>{patient.nm_pasien || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#1AB1E5', fontWeight: 500 }}>{item.nm_perawatan}</td>
+                          <td style={TD_STYLE}>{item.nm_dokter || '-'}</td>
+                          <td style={TD_STYLE}>{item.nama_paramedis || '-'}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{formatDateTime(item.tgl_perawatan, '')}</td>
+                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{item.jam_rawat || '-'}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#065f46', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleDeleteTindakanDokterPetugas(item)}
+                              style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                              title="Hapus Tindakan"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

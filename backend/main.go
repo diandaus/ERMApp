@@ -1023,6 +1023,38 @@ func main() {
 		c.Status(http.StatusOK)
 	})
 
+	// POST ganti password sendiri — beda dari /api/admin/users/:id/reset-password
+	// (admin-only, reset ke nilai default tanpa perlu tahu password lama):
+	// endpoint ini dipakai user BIASA (non-admin) lewat menu "Pengaturan" ->
+	// Ganti Password, WAJIB tahu password lama dulu sebelum bisa ganti.
+	r.POST("/api/auth/change-password", func(c *gin.Context) {
+		var req struct {
+			ID          int    `json:"id" binding:"required"`
+			OldPassword string `json:"old_password" binding:"required"`
+			NewPassword string `json:"new_password" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password lama dan baru wajib diisi"})
+			return
+		}
+
+		var currentHash string
+		if err := db.QueryRow(`SELECT password_hash FROM app_users WHERE id = ?`, req.ID).Scan(&currentHash); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User tidak ditemukan"})
+			return
+		}
+		if currentHash != hashPassword(req.OldPassword) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Password lama salah"})
+			return
+		}
+
+		if _, err := db.Exec(`UPDATE app_users SET password_hash = ? WHERE id = ?`, hashPassword(req.NewPassword), req.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.Status(http.StatusOK)
+	})
+
 	// GET settings instansi
 	r.GET("/api/admin/settings", func(c *gin.Context) {
 		var settings Settings
@@ -2861,6 +2893,12 @@ func main() {
 	r.DELETE("/api/tindakan/delete", func(c *gin.Context) {
 		DeleteTindakan(c, db)
 	})
+	r.DELETE("/api/tindakan/delete-petugas", func(c *gin.Context) {
+		DeleteTindakanPetugas(c, db)
+	})
+	r.DELETE("/api/tindakan/delete-dokter-petugas", func(c *gin.Context) {
+		DeleteTindakanDokterPetugas(c, db)
+	})
 
 	// Tindakan Rawat Inap endpoint
 	r.GET("/api/tindakan-ranap/*no_rawat", getTindakanRanap(db))
@@ -3183,6 +3221,17 @@ func main() {
 	r.GET("/api/mapping/loinc/search", searchLoinc(db))
 	r.GET("/api/mapping/loinc/config", getLoincConfig(db))
 	r.POST("/api/mapping/loinc/config", saveLoincConfig(db))
+
+	// Pengaturan BPJS — Mapping Poli VCLAIM & Mapping Dokter DPJP VCLAIM
+	// (padanan BPJSMapingPoli.java & BPJSMapingDokterDPJP.java di SIMRS
+	// Khanza Desktop, tabel maping_poli_bpjs & maping_dokter_dpjpvclaim
+	// sudah ada di skema Khanza).
+	r.GET("/api/bpjs/mapping-poli", getMappingPoliBpjs(db))
+	r.PUT("/api/bpjs/mapping-poli/:kd_poli", saveMappingPoliBpjs(db))
+	r.DELETE("/api/bpjs/mapping-poli/:kd_poli", deleteMappingPoliBpjs(db))
+	r.GET("/api/bpjs/mapping-dokter", getMappingDokterBpjs(db))
+	r.PUT("/api/bpjs/mapping-dokter/:kd_dokter", saveMappingDokterBpjs(db))
+	r.DELETE("/api/bpjs/mapping-dokter/:kd_dokter", deleteMappingDokterBpjs(db))
 
 	// Generate Nomor Registrasi endpoints
 	r.POST("/api/registrasi/generate-noreg", generateNoReg(db))

@@ -89,7 +89,7 @@ func getJenisPerawatanRadiologi(db *sql.DB) gin.HandlerFunc {
 			args = append(args, searchPattern, searchPattern)
 		}
 
-		query += " ORDER BY jns_perawatan_radiologi.kd_jenis_prw"
+		query += " ORDER BY jns_perawatan_radiologi.kd_jenis_prw LIMIT 50"
 
 		rows, err := db.Query(query, args...)
 		if err != nil {

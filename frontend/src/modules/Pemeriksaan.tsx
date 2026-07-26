@@ -1619,12 +1619,38 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
           height: '52px',
           boxSizing: 'border-box'
         }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151', lineHeight: '20px' }}>Pemeriksaan Rawat Jalan</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <button
+              type="button"
+              onClick={handleKeluar}
+              title="Kembali ke halaman sebelumnya"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 4,
+                border: '1px solid #d1d5db',
+                background: '#ffffff',
+                color: '#374151',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                padding: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5"></path>
+                <path d="M12 19l-7-7 7-7"></path>
+              </svg>
+            </button>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151', lineHeight: '20px' }}>Pemeriksaan Rawat Jalan</h3>
+          </div>
           <button
             onClick={handleKeluar}
             style={{
               padding: '8px 16px',
-              borderRadius: 8,
+              borderRadius: 4,
               border: '1px solid #1AB1E5',
               background: '#1AB1E5',
               color: '#ffffff',
@@ -1643,7 +1669,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               e.currentTarget.style.background = '#1AB1E5';
             }}
           >
-            Tutup
+            Kembali
           </button>
         </div>
 
@@ -1852,9 +1878,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            left: 0,
+                            left: '20%',
                             right: 0,
-                            background: '#ffffff',
+                            background: '#f3f4f6',
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -1877,8 +1903,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   borderBottom: index < filteredSubjective.length - 1 ? '1px solid #e5e7eb' : 'none',
                                   transition: 'background-color 0.15s'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 {item}
                               </div>
@@ -1931,9 +1957,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            left: 0,
+                            left: '20%',
                             right: 0,
-                            background: '#ffffff',
+                            background: '#f3f4f6',
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -1956,8 +1982,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   borderBottom: index < filteredObjective.length - 1 ? '1px solid #e5e7eb' : 'none',
                                   transition: 'background-color 0.15s'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 {item}
                               </div>
@@ -2005,9 +2031,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               <div style={{
                                 position: 'absolute',
                                 top: '100%',
-                                left: 0,
+                                left: '20%',
                                 right: 0,
-                                background: '#ffffff',
+                                background: '#f3f4f6',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2030,8 +2056,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                       borderBottom: index < filteredTensi.length - 1 ? '1px solid #e5e7eb' : 'none',
                                       transition: 'background-color 0.15s'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   >
                                     {item}
                                   </div>
@@ -2066,9 +2092,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               <div style={{
                                 position: 'absolute',
                                 top: '100%',
-                                left: 0,
+                                left: '20%',
                                 right: 0,
-                                background: '#ffffff',
+                                background: '#f3f4f6',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2091,8 +2117,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                       borderBottom: index < filteredSuhu.length - 1 ? '1px solid #e5e7eb' : 'none',
                                       transition: 'background-color 0.15s'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   >
                                     {item}
                                   </div>
@@ -2127,9 +2153,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               <div style={{
                                 position: 'absolute',
                                 top: '100%',
-                                left: 0,
+                                left: '20%',
                                 right: 0,
-                                background: '#ffffff',
+                                background: '#f3f4f6',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2152,8 +2178,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                       borderBottom: index < filteredNadi.length - 1 ? '1px solid #e5e7eb' : 'none',
                                       transition: 'background-color 0.15s'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   >
                                     {item}
                                   </div>
@@ -2188,9 +2214,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               <div style={{
                                 position: 'absolute',
                                 top: '100%',
-                                left: 0,
+                                left: '20%',
                                 right: 0,
-                                background: '#ffffff',
+                                background: '#f3f4f6',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2213,8 +2239,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                       borderBottom: index < filteredRespirasi.length - 1 ? '1px solid #e5e7eb' : 'none',
                                       transition: 'background-color 0.15s'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   >
                                     {item}
                                   </div>
@@ -2249,9 +2275,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               <div style={{
                                 position: 'absolute',
                                 top: '100%',
-                                left: 0,
+                                left: '20%',
                                 right: 0,
-                                background: '#ffffff',
+                                background: '#f3f4f6',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2274,8 +2300,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                       borderBottom: index < filteredTinggi.length - 1 ? '1px solid #e5e7eb' : 'none',
                                       transition: 'background-color 0.15s'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   >
                                     {item}
                                   </div>
@@ -2310,9 +2336,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                               <div style={{
                                 position: 'absolute',
                                 top: '100%',
-                                left: 0,
+                                left: '20%',
                                 right: 0,
-                                background: '#ffffff',
+                                background: '#f3f4f6',
                                 border: '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2335,8 +2361,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                       borderBottom: index < filteredBerat.length - 1 ? '1px solid #e5e7eb' : 'none',
                                       transition: 'background-color 0.15s'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                   >
                                     {item}
                                   </div>
@@ -2394,9 +2420,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            left: 0,
+                            left: '20%',
                             right: 0,
-                            background: '#ffffff',
+                            background: '#f3f4f6',
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2419,8 +2445,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   borderBottom: index < filteredAssessment.length - 1 ? '1px solid #e5e7eb' : 'none',
                                   transition: 'background-color 0.15s'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 {item}
                               </div>
@@ -2472,9 +2498,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            left: 0,
+                            left: '20%',
                             right: 0,
-                            background: '#ffffff',
+                            background: '#f3f4f6',
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2497,8 +2523,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   borderBottom: index < filteredPlanning.length - 1 ? '1px solid #e5e7eb' : 'none',
                                   transition: 'background-color 0.15s'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 {item}
                               </div>
@@ -2550,9 +2576,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            left: 0,
+                            left: '20%',
                             right: 0,
-                            background: '#ffffff',
+                            background: '#f3f4f6',
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2575,8 +2601,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   borderBottom: index < filteredEvaluasi.length - 1 ? '1px solid #e5e7eb' : 'none',
                                   transition: 'background-color 0.15s'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 {item}
                               </div>
@@ -2628,9 +2654,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{
                             position: 'absolute',
                             top: '100%',
-                            left: 0,
+                            left: '20%',
                             right: 0,
-                            background: '#ffffff',
+                            background: '#f3f4f6',
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
                             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -2653,8 +2679,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                   borderBottom: index < filteredInstruksi.length - 1 ? '1px solid #e5e7eb' : 'none',
                                   transition: 'background-color 0.15s'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 {item}
                               </div>
@@ -2679,8 +2705,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       type="submit"
                       disabled={loading}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: 8,
+                        padding: '10px 16px',
+                        borderRadius: 4,
                         border: 'none',
                         background: loading ? '#9ca3af' : '#1AB1E5',
                         color: '#ffffff',
@@ -2689,7 +2715,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 4
                       }}
                     >
                       {loading ? (
@@ -2709,8 +2735,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       type="button"
                       onClick={clearForm}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: 8,
+                        padding: '10px 16px',
+                        borderRadius: 4,
                         border: 'none',
                         background: '#6b7280',
                         color: '#ffffff',
@@ -2719,7 +2745,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 4
                       }}
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2732,8 +2758,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       type="button"
                       onClick={() => setShowRiwayatSoapieModal(true)}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: 8,
+                        padding: '10px 16px',
+                        borderRadius: 4,
                         border: 'none',
                         background: '#6b7280',
                         color: '#ffffff',
@@ -2742,7 +2768,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 4
                       }}
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2758,8 +2784,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       type="button"
                       onClick={() => setShowRiwayatModal(true)}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: 8,
+                        padding: '10px 16px',
+                        borderRadius: 4,
                         border: 'none',
                         background: '#6b7280',
                         color: '#ffffff',
@@ -2768,7 +2794,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 4
                       }}
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2784,8 +2810,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       type="button"
                       onClick={() => setShowRujukanInternalModal(true)}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: 8,
+                        padding: '10px 16px',
+                        borderRadius: 4,
                         border: 'none',
                         background: '#6b7280',
                         color: '#ffffff',
@@ -2794,7 +2820,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 4
                       }}
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2807,8 +2833,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       type="button"
                       onClick={handleKeluar}
                       style={{
-                        padding: '10px 20px',
-                        borderRadius: 8,
+                        padding: '10px 16px',
+                        borderRadius: 4,
                         border: 'none',
                         background: '#10b981',
                         color: '#ffffff',
@@ -2817,7 +2843,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 4
                       }}
                     >
                       Selesai
@@ -3267,22 +3293,15 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               <>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Riwayat Resep</h4>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Riwayat Permintaan Resep</h4>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => { setEditingResep(null); setShowResepModal(true); }}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                      style={{ padding: '10px 20px', borderRadius: 4, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                     >
                       + Input Resep
                     </button>
-                    <button
-                      onClick={fetchRiwayatResep}
-                      disabled={loadingRiwayatResep}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: loadingRiwayatResep ? 'not-allowed' : 'pointer', opacity: loadingRiwayatResep ? 0.6 : 1, fontSize: 13, fontWeight: 500 }}
-                    >
-                      Refresh
-                    </button>
-                  </div>
+                    </div>
                 </div>
 
                 {/* Loading state */}
@@ -3310,13 +3329,13 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: belum ? '#f9fafb' : '#f0fdf4', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: 8 }}>
                             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                               <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{resep.no_resep || '-'}</span>
-                              <span style={{ fontSize: 12, color: '#6b7280' }}>{formatDateTime(resep.tgl_peresepan, resep.jam_peresepan || '')}</span>
-                              {resep.nm_dokter && <span style={{ fontSize: 12, color: '#7c3aed' }}>{resep.nm_dokter}</span>}
+                              <span style={{ fontSize: 13, color: '#6b7280' }}>{formatDateTime(resep.tgl_peresepan, resep.jam_peresepan || '')}</span>
+                              {resep.nm_dokter && <span style={{ fontSize: 13, color: '#7c3aed' }}>{resep.nm_dokter}</span>}
                               {resep.status === 'retur' && (
-                                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: '#fee2e2', color: '#991b1b' }}>Retur</span>
+                                <span style={{ fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: '#fee2e2', color: '#991b1b' }}>Retur</span>
                               )}
                               <span style={{
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
+                                fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
                                 background: belum ? '#fef3c7' : '#d1fae5',
                                 color: belum ? '#92400e' : '#065f46'
                               }}>
@@ -3334,13 +3353,13 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                                     });
                                     setShowResepModal(true);
                                   }}
-                                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #1AB1E5', background: '#e0f2fe', color: '#1AB1E5', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                                  style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #1AB1E5', background: '#e0f2fe', color: '#1AB1E5', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
                                 >
                                   Edit
                                 </button>
                                 <button
                                   onClick={() => handleDeleteResep(resep.no_resep)}
-                                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                                  style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
                                 >
                                   Hapus
                                 </button>
@@ -3352,8 +3371,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           <div style={{ padding: '10px 16px' }}>
                             {nonRacikan.length > 0 && (
                               <div style={{ marginBottom: racikan.length > 0 ? 10 : 0 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                   <thead>
                                     <tr style={{ background: '#f9fafb' }}>
                                       <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
@@ -3375,13 +3394,13 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                             )}
                             {racikan.length > 0 && racikan.map((rack: any, ri: number) => (
                               <div key={ri} style={{ marginTop: ri > 0 ? 8 : 0 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                   Racikan — {rack.nama_racik || `R${ri + 1}`}
                                   {rack.metode_racik && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.metode_racik}</span>}
                                   {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
                                   {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
                                 </div>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                   <thead>
                                     <tr style={{ background: '#f9fafb' }}>
                                       <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>

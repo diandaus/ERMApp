@@ -65,6 +65,36 @@ export const DisplayAntrianApotekView: React.FC = () => {
   const [waitingRacikan, setWaitingRacikan] = React.useState<ApotekQueueItem[]>([]);
   const [waitingNonRacikan, setWaitingNonRacikan] = React.useState<ApotekQueueItem[]>([]);
 
+  // Auto-cycle halaman waiting list — kalau antrian lebih dari 8 orang,
+  // sebelumnya sisanya disembunyikan total (cuma .slice(0,8), tidak
+  // pernah kelihatan). Sekarang ditampilkan 8 per halaman, gonta-ganti
+  // halaman otomatis tiap PAGE_INTERVAL_MS, balik ke halaman 1 setelah
+  // habis. Racikan & non-racikan independen (jumlah antriannya beda).
+  const PAGE_SIZE = 8;
+  const PAGE_INTERVAL_MS = 5000;
+  const [nonRacikanPage, setNonRacikanPage] = React.useState(0);
+  const [racikanPage, setRacikanPage] = React.useState(0);
+
+  React.useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(waitingNonRacikan.length / PAGE_SIZE));
+    if (totalPages <= 1) {
+      setNonRacikanPage(0);
+      return;
+    }
+    const t = setInterval(() => setNonRacikanPage((p) => (p + 1) % totalPages), PAGE_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [waitingNonRacikan.length]);
+
+  React.useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(waitingRacikan.length / PAGE_SIZE));
+    if (totalPages <= 1) {
+      setRacikanPage(0);
+      return;
+    }
+    const t = setInterval(() => setRacikanPage((p) => (p + 1) % totalPages), PAGE_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [waitingRacikan.length]);
+
   // Sync settingsRef setiap kali settings state berubah
   React.useEffect(() => {
     settingsRef.current = settings;
@@ -285,14 +315,12 @@ export const DisplayAntrianApotekView: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Format waktu HH:MM:SS
+  // Format waktu HH:MM:SS — dibangun manual, BUKAN toLocaleTimeString('id-ID', ...):
+  // locale id-ID di JS memisahkan jam dengan titik ("02.38.54"), bukan
+  // titik dua/colon ("02:38:54") yang diharapkan.
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    });
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   };
 
   // Determine which queue is currently active (prioritize non-racikan, then racikan)
@@ -446,7 +474,8 @@ export const DisplayAntrianApotekView: React.FC = () => {
             background: '#2E7D32',
             padding: '15px',
             textAlign: 'center',
-            borderBottom: '4px solid #FFD700'
+            borderBottom: '4px solid #FFD700',
+            position: 'relative'
           }}>
             <div style={{
               fontSize: 'clamp(1.2rem, 2.5vw, 2rem)',
@@ -457,6 +486,11 @@ export const DisplayAntrianApotekView: React.FC = () => {
             }}>
               NON RACIKAN
             </div>
+            {waitingNonRacikan.length > PAGE_SIZE && (
+              <div style={{ position: 'absolute', right: 15, top: '50%', transform: 'translateY(-50%)', fontSize: 'clamp(0.8rem, 1.3vw, 1.1rem)', color: '#FFD700', fontWeight: 'bold' }}>
+                Hal {nonRacikanPage + 1}/{Math.ceil(waitingNonRacikan.length / PAGE_SIZE)}
+              </div>
+            )}
           </div>
 
           {/* List */}
@@ -465,7 +499,7 @@ export const DisplayAntrianApotekView: React.FC = () => {
             padding: '20px',
             overflowY: 'auto'
           }}>
-            {waitingNonRacikan.slice(0, 8).map((queue, index) => (
+            {waitingNonRacikan.slice(nonRacikanPage * PAGE_SIZE, nonRacikanPage * PAGE_SIZE + PAGE_SIZE).map((queue, index) => (
               <div
                 key={`nonracikan-${queue.no_antrian}-${index}`}
                 style={{
@@ -512,7 +546,8 @@ export const DisplayAntrianApotekView: React.FC = () => {
             background: '#F57C00',
             padding: '15px',
             textAlign: 'center',
-            borderBottom: '4px solid #FFD700'
+            borderBottom: '4px solid #FFD700',
+            position: 'relative'
           }}>
             <div style={{
               fontSize: 'clamp(1.2rem, 2.5vw, 2rem)',
@@ -523,6 +558,11 @@ export const DisplayAntrianApotekView: React.FC = () => {
             }}>
               RACIKAN
             </div>
+            {waitingRacikan.length > PAGE_SIZE && (
+              <div style={{ position: 'absolute', right: 15, top: '50%', transform: 'translateY(-50%)', fontSize: 'clamp(0.8rem, 1.3vw, 1.1rem)', color: '#FFD700', fontWeight: 'bold' }}>
+                Hal {racikanPage + 1}/{Math.ceil(waitingRacikan.length / PAGE_SIZE)}
+              </div>
+            )}
           </div>
 
           {/* List */}
@@ -531,7 +571,7 @@ export const DisplayAntrianApotekView: React.FC = () => {
             padding: '20px',
             overflowY: 'auto'
           }}>
-            {waitingRacikan.slice(0, 8).map((queue, index) => (
+            {waitingRacikan.slice(racikanPage * PAGE_SIZE, racikanPage * PAGE_SIZE + PAGE_SIZE).map((queue, index) => (
               <div
                 key={`racikan-${queue.no_antrian}-${index}`}
                 style={{

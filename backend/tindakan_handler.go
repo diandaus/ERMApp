@@ -358,3 +358,89 @@ func DeleteTindakan(c *gin.Context, db *sql.DB) {
 		"message": "Tindakan berhasil dihapus",
 	})
 }
+
+// DeleteTindakanPetugas - padanan DeleteTindakan di atas, tapi utk
+// rawat_jl_pr (tindakan Perawat/Petugas) yang primary key-nya
+// no_rawat+kd_jenis_prw+nip+tgl_perawatan+jam_rawat (bukan kd_dokter).
+func DeleteTindakanPetugas(c *gin.Context, db *sql.DB) {
+	noRawat := c.Query("no_rawat")
+	kdJenisPrw := c.Query("kd_jenis_prw")
+	tglPerawatan := c.Query("tgl_perawatan")
+	jamRawat := c.Query("jam_rawat")
+	nip := c.Query("nip")
+
+	if noRawat == "" || kdJenisPrw == "" || tglPerawatan == "" || jamRawat == "" || nip == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parameter tidak lengkap"})
+		return
+	}
+
+	query := `
+		DELETE FROM rawat_jl_pr
+		WHERE no_rawat = ?
+			AND kd_jenis_prw = ?
+			AND tgl_perawatan = ?
+			AND jam_rawat = ?
+			AND nip = ?
+	`
+
+	result, err := db.Exec(query, noRawat, kdJenisPrw, tglPerawatan, jamRawat, nip)
+	if err != nil {
+		log.Printf("Error deleting tindakan petugas: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus tindakan"})
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Tindakan tidak ditemukan"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Tindakan berhasil dihapus",
+	})
+}
+
+// DeleteTindakanDokterPetugas - padanan DeleteTindakan/DeleteTindakanPetugas
+// di atas, tapi utk rawat_jl_drpr (tindakan Dokter & Perawat) yang primary
+// key-nya no_rawat+kd_jenis_prw+kd_dokter+nip+tgl_perawatan+jam_rawat.
+func DeleteTindakanDokterPetugas(c *gin.Context, db *sql.DB) {
+	noRawat := c.Query("no_rawat")
+	kdJenisPrw := c.Query("kd_jenis_prw")
+	tglPerawatan := c.Query("tgl_perawatan")
+	jamRawat := c.Query("jam_rawat")
+	kdDokter := c.Query("kd_dokter")
+	nip := c.Query("nip")
+
+	if noRawat == "" || kdJenisPrw == "" || tglPerawatan == "" || jamRawat == "" || kdDokter == "" || nip == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parameter tidak lengkap"})
+		return
+	}
+
+	query := `
+		DELETE FROM rawat_jl_drpr
+		WHERE no_rawat = ?
+			AND kd_jenis_prw = ?
+			AND tgl_perawatan = ?
+			AND jam_rawat = ?
+			AND kd_dokter = ?
+			AND nip = ?
+	`
+
+	result, err := db.Exec(query, noRawat, kdJenisPrw, tglPerawatan, jamRawat, kdDokter, nip)
+	if err != nil {
+		log.Printf("Error deleting tindakan dokter petugas: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus tindakan"})
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Tindakan tidak ditemukan"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Tindakan berhasil dihapus",
+	})
+}

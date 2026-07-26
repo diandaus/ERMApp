@@ -184,14 +184,12 @@ export const DisplayAntrianPoliView: React.FC = () => {
     return visible;
   };
 
-  // Format waktu HH:MM:SS
+  // Format waktu HH:MM:SS — dibangun manual, BUKAN toLocaleTimeString('id-ID', ...):
+  // locale id-ID di JS memisahkan jam dengan titik ("02.38.54"), bukan
+  // titik dua/colon ("02:38:54") yang diharapkan.
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    });
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   };
 
   // Format tanggal

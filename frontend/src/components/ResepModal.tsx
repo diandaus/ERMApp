@@ -506,6 +506,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
   // Pilih Obat Non Racikan
   const pilihObatNonRacikan = (obat: ObatItem) => {
+    if (obat.stok <= 0) {
+      Swal.fire({ icon: 'warning', title: 'Stok Obat saat ini tidak tersedia' });
+      return;
+    }
     setSelectedObatNonRacikan(obat);
     setShowObatDropdown(false);
     setShowModalInputObat(true);
@@ -612,6 +616,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
   // Pilih Obat Racikan
   const pilihObatRacikan = (obat: ObatItem) => {
+    if (obat.stok <= 0) {
+      Swal.fire({ icon: 'warning', title: 'Stok Obat saat ini tidak tersedia' });
+      return;
+    }
     setSelectedObatRacikan(obat);
     setShowObatDropdownRacikan(false);
     setShowModalInputObatRacikan(true);
@@ -1432,14 +1440,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 Riwayat Resep
               </button>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
+                <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
                   Tutup
                 </button>
-                <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+                <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                     <polyline points="17 21 17 13 7 13 7 21"></polyline>

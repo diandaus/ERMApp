@@ -201,6 +201,17 @@ type ApotekViewProps = {
 export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = React.useState<ApotekTab>('overview');
   const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
+
+  // Ingat tab Apotek terakhir sebelum masuk ke Permintaan Resep (overlay
+  // full-screen terpisah), supaya tombol back di PermintaanResepView
+  // kembali ke tab yang sama persis (mis. "Input Penjualan Obat & BHP"),
+  // bukan selalu reset ke Dashboard.
+  const permintaanResepReturnTab = React.useRef<ApotekTab>('overview');
+  React.useEffect(() => {
+    if (activeTab !== 'permintaan-resep') {
+      permintaanResepReturnTab.current = activeTab;
+    }
+  }, [activeTab]);
   const [stokMenipisCount, setStokMenipisCount] = React.useState<number | null>(null);
   const [resepRalanBelumCount, setResepRalanBelumCount] = React.useState(0);
   const [resepRanapBelumCount, setResepRanapBelumCount] = React.useState(0);
@@ -271,8 +282,11 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Menu */}
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {/* Menu — scrollbar disembunyikan default, cuma tampil tipis saat
+            hover; padanan bpjs-sidebar-nav di BridgingBpjs.tsx (native
+            scrollbar Windows/Chrome selalu tampil tebal karena bukan
+            overlay scrollbar seperti Mac). */}
+        <nav className="apotek-sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {MENU.map((item) => {
             const active = activeTab === item.key;
             return (
@@ -492,8 +506,17 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
           {activeTab === 'pengaturan' && <ApotekPengaturanView />}
         </div>
       </div>
+
+      <style>{`
+        .apotek-sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }
+        .apotek-sidebar-nav::-webkit-scrollbar { width: 6px; }
+        .apotek-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .apotek-sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
+        .apotek-sidebar-nav:hover { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.35) transparent; }
+        .apotek-sidebar-nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); }
+      `}</style>
     </section>
-    {activeTab === 'permintaan-resep' && <PermintaanResepView onClose={() => setActiveTab('overview')} />}
+    {activeTab === 'permintaan-resep' && <PermintaanResepView onClose={() => setActiveTab(permintaanResepReturnTab.current)} />}
     </>
   );
 };

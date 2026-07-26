@@ -325,6 +325,16 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tgl1, tgl2, dokter, poli, status, searchText]);
 
+  // Auto-refresh tiap 30 detik — supaya resep baru yang masuk sementara
+  // layar ini terbuka langsung kelihatan tanpa perlu ganti filter/reload
+  // manual. Efek dipisah dari debounce di atas & bergantung ke fetchData
+  // (useCallback dgn deps filter) supaya intervalnya selalu pakai filter
+  // TERBARU, bukan closure basi dari saat pertama mount.
+  React.useEffect(() => {
+    const interval = setInterval(() => fetchData(), 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   const [deletingResep, setDeletingResep] = React.useState<string | null>(null);
 
   const handleHapusResep = async (row: ResepRalanRow) => {
@@ -996,6 +1006,13 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group, tgl1, tgl2, dokter, kamar, status, searchText]);
+
+  // Auto-refresh tiap 30 detik (lihat catatan sama di TabResepRalan).
+  React.useEffect(() => {
+    if (group !== 'resep') return;
+    const interval = setInterval(() => fetchResep(), 30000);
+    return () => clearInterval(interval);
+  }, [group, fetchResep]);
 
   const toggleResepExpand = async (row: ResepRanapRow) => {
     onSelectPasien({ no_rkm_medis: row.no_rkm_medis, nm_pasien: row.nm_pasien });
@@ -2104,6 +2121,12 @@ const TabTelaahResep: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  // Auto-refresh tiap 30 detik (lihat catatan sama di TabResepRalan).
+  React.useEffect(() => {
+    const interval = setInterval(() => fetchData(), 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   // "Belum Ditelaah" — resep tanpa baris di telaah_farmasi (belum pernah
   // disimpan lewat ModalTelaahResep). "Sudah Ditelaah" — kebalikannya,
   // dibuka sebagai riwayat/untuk edit ulang.
@@ -2258,6 +2281,12 @@ const TabKonselingFarmasi: React.FC = () => {
 
   React.useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // Auto-refresh tiap 30 detik (lihat catatan sama di TabResepRalan).
+  React.useEffect(() => {
+    const interval = setInterval(() => fetchData(), 30000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   const items = React.useMemo(
@@ -2640,9 +2669,35 @@ export const PermintaanResepView: React.FC<PermintaanResepViewProps> = ({ onClos
             alignItems: 'center',
           }}
         >
-          <div style={{ fontSize: 13, color: '#6b7280' }}>
-            <span style={{ color: '#111827', fontWeight: 600 }}>Permintaan Resep</span> / {activeLabel}
-            {activeTab === 'dashboard' && ` / ${daftarResepSub === 'ralan' ? 'Rawat Jalan' : 'Rawat Inap'}`}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              title="Kembali ke halaman sebelumnya"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 4,
+                border: '1px solid #d1d5db',
+                background: '#ffffff',
+                color: '#374151',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                padding: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5"></path>
+                <path d="M12 19l-7-7 7-7"></path>
+              </svg>
+            </button>
+            <div style={{ fontSize: 13, color: '#6b7280' }}>
+              <span style={{ color: '#111827', fontWeight: 600 }}>Permintaan Resep</span> / {activeLabel}
+              {activeTab === 'dashboard' && ` / ${daftarResepSub === 'ralan' ? 'Rawat Jalan' : 'Rawat Inap'}`}
+            </div>
           </div>
           <button
             type="button"

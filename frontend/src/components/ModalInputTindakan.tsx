@@ -1,7 +1,7 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { getCurrentUserNip } from '../utils/currentUser';
+import { ModalCariPetugas } from './ModalCariPetugas';
 
 type ModalInputTindakanProps = {
   patient: any;
@@ -24,38 +24,15 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
   const [jenisTindakanList, setJenisTindakanList] = React.useState<any[]>([]);
   const [selectedTindakan, setSelectedTindakan] = React.useState<string[]>([]);
   const [selectedTindakanData, setSelectedTindakanData] = React.useState<any[]>([]);
-  const [showDropdown, setShowDropdown] = React.useState(false);
+  const [loadingTindakan, setLoadingTindakan] = React.useState(false);
   const [loadingSubmit, setLoadingSubmit] = React.useState(false);
-
-  // Dropdown pencarian tindakan di-portal ke document.body supaya tidak
-  // terpotong overflow:hidden Modal Container — sama pola dgn
-  // ResepModal.tsx (nonRacikanDropdownPos).
-  const searchTindakanWrapperRef = React.useRef<HTMLDivElement>(null);
-  const [tindakanDropdownPos, setTindakanDropdownPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
-
-  React.useEffect(() => {
-    if (!showDropdown) { setTindakanDropdownPos(null); return; }
-    const updatePos = () => {
-      const rect = searchTindakanWrapperRef.current?.getBoundingClientRect();
-      if (rect) setTindakanDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-    };
-    updatePos();
-    window.addEventListener('resize', updatePos);
-    window.addEventListener('scroll', updatePos, true);
-    return () => {
-      window.removeEventListener('resize', updatePos);
-      window.removeEventListener('scroll', updatePos, true);
-    };
-  }, [showDropdown]);
 
   // Petugas — cuma relevan utk tab Petugas/Dokter & Petugas. Prefill dari
   // NIP akun yang login (getCurrentUserNip, lihat utils/currentUser.ts),
-  // tetap bisa diganti manual lewat pencarian kalau petugas yang
+  // tetap bisa diganti manual lewat ModalCariPetugas kalau petugas yang
   // menangani beda dari yang login.
-  const [searchPetugas, setSearchPetugas] = React.useState('');
-  const [petugasOptions, setPetugasOptions] = React.useState<{ nip: string; nama: string }[]>([]);
   const [selectedPetugas, setSelectedPetugas] = React.useState<{ nip: string; nama: string } | null>(null);
-  const [showPetugasDropdown, setShowPetugasDropdown] = React.useState(false);
+  const [showCariPetugas, setShowCariPetugas] = React.useState(false);
 
   React.useEffect(() => {
     const nip = getCurrentUserNip();
@@ -69,43 +46,30 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
       .catch(() => { /* silent */ });
   }, []);
 
+  // Panel daftar tindakan inline, selalu terlihat — dimuat begitu modal
+  // dibuka (query kosong -> backend balikin 50 baris awal), lalu
+  // difilter ulang (debounce) tiap kali user mengetik, padanan
+  // ModalInputDiagnosa.tsx (bukan dropdown portal yang butuh min. 2
+  // karakter & fokus).
+  const fetchJenisTindakan = React.useCallback((q: string) => {
+    setLoadingTindakan(true);
+    const params = new URLSearchParams({ search: q });
+    if (patient.kd_pj) params.append('kd_pj', patient.kd_pj);
+    fetch(`/api/tindakan/jenis-perawatan?${params}`)
+      .then(res => (res.ok ? res.json() : []))
+      .then((data) => setJenisTindakanList(Array.isArray(data) ? data : []))
+      .catch(() => setJenisTindakanList([]))
+      .finally(() => setLoadingTindakan(false));
+  }, [patient.kd_pj]);
+
   React.useEffect(() => {
-    if (searchPetugas.length < 2) {
-      setPetugasOptions([]);
-      return;
-    }
-    const t = setTimeout(() => {
-      fetch(`/api/petugas?search=${encodeURIComponent(searchPetugas)}`)
-        .then(res => (res.ok ? res.json() : []))
-        .then((data) => setPetugasOptions(Array.isArray(data) ? data : []))
-        .catch(() => setPetugasOptions([]));
-    }, 300);
+    fetchJenisTindakan('');
+  }, [fetchJenisTindakan]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchJenisTindakan(searchTindakan.trim()), 300);
     return () => clearTimeout(t);
-  }, [searchPetugas]);
-
-  React.useEffect(() => {
-    if (searchTindakan.length >= 2) {
-      fetchJenisTindakan();
-    } else {
-      setJenisTindakanList([]);
-      setShowDropdown(false);
-    }
-  }, [searchTindakan]);
-
-  const fetchJenisTindakan = async () => {
-    try {
-      const params = new URLSearchParams({ search: searchTindakan });
-      if (patient.kd_pj) params.append('kd_pj', patient.kd_pj);
-      const res = await fetch(`/api/tindakan/jenis-perawatan?${params}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setJenisTindakanList(Array.isArray(data) ? data : []);
-      if (Array.isArray(data) && data.length > 0) setShowDropdown(true);
-    } catch {
-      setJenisTindakanList([]);
-      setShowDropdown(false);
-    }
-  };
+  }, [searchTindakan, fetchJenisTindakan]);
 
   const toggleTindakan = (kdJenisPrw: string) => {
     setSelectedTindakan(prev => {
@@ -249,7 +213,6 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
     setSelectedTindakan([]);
     setSelectedTindakanData([]);
     setSearchTindakan('');
-    setJenisTindakanList([]);
   };
 
   return (
@@ -282,10 +245,6 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-              </svg>
               Input Tindakan Rawat Jalan
             </span>
             <button
@@ -336,7 +295,10 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
               ))}
             </div>
 
-            {/* Petugas — hanya utk tab Petugas/Dokter & Petugas */}
+            {/* Petugas — hanya utk tab Petugas/Dokter & Petugas. Kolom
+                diklik -> buka ModalCariPetugas (padanan pola
+                adimePetugasOpen di PemeriksaanRanap.tsx) alih-alih
+                dropdown pencarian inline. */}
             {activePenanganan !== 'dokter' && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
@@ -348,214 +310,162 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
                     border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 8,
                     padding: '8px 12px', fontSize: 13,
                   }}>
-                    <span><strong>{selectedPetugas.nama}</strong> ({selectedPetugas.nip})</span>
+                    <span>{selectedPetugas.nip} - <strong>{selectedPetugas.nama}</strong></span>
                     <button
                       type="button"
-                      onClick={() => { setSelectedPetugas(null); setSearchPetugas(''); }}
+                      onClick={() => setShowCariPetugas(true)}
                       style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
                     >Ganti</button>
                   </div>
                 ) : (
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      value={searchPetugas}
-                      onChange={(e) => setSearchPetugas(e.target.value)}
-                      onFocus={() => { if (petugasOptions.length > 0) setShowPetugasDropdown(true); }}
-                      onBlur={() => setTimeout(() => setShowPetugasDropdown(false), 300)}
-                      placeholder="Cari nama/NIP petugas..."
-                      style={{
-                        width: '100%', padding: '10px 12px',
-                        border: '1px solid #d1d5db', borderRadius: 8,
-                        fontSize: 13, boxSizing: 'border-box', outline: 'none',
-                      }}
-                    />
-                    {showPetugasDropdown && petugasOptions.length > 0 && (
-                      <div
-                        onMouseDown={(e) => e.preventDefault()}
-                        style={{
-                          position: 'absolute', top: '100%', left: 0, right: 0,
-                          marginTop: 4, maxHeight: 220, overflowY: 'auto',
-                          border: '1px solid #e5e7eb', borderRadius: 8,
-                          background: '#ffffff',
-                          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                          zIndex: 10,
-                        }}
-                      >
-                        {petugasOptions.map((p, idx) => (
-                          <div
-                            key={p.nip}
-                            onClick={() => { setSelectedPetugas(p); setShowPetugasDropdown(false); setSearchPetugas(''); }}
-                            style={{
-                              padding: '8px 12px', cursor: 'pointer', fontSize: 13,
-                              borderBottom: idx < petugasOptions.length - 1 ? '1px solid #f3f4f6' : 'none',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
-                          >
-                            <div style={{ fontWeight: 500 }}>{p.nama}</div>
-                            <div style={{ fontSize: 11, color: '#6b7280' }}>{p.nip}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div
+                    onClick={() => setShowCariPetugas(true)}
+                    style={{
+                      width: '100%', padding: '10px 12px',
+                      border: '1px solid #d1d5db', borderRadius: 8,
+                      fontSize: 13, boxSizing: 'border-box', cursor: 'pointer',
+                      color: '#9ca3af', background: '#ffffff',
+                    }}
+                  >
+                    Klik untuk pilih petugas...
                   </div>
                 )}
               </div>
             )}
 
-            {/* Search + Selected Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start', marginBottom: 16 }}>
-
-              {/* Kolom Kiri - Pencarian */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
-                  Cari Tindakan <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <div ref={searchTindakanWrapperRef} style={{ position: 'relative' }}>
-                  <div style={{
-                    position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                    pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1,
-                  }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8"></circle>
-                      <path d="m21 21-4.35-4.35"></path>
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    value={searchTindakan}
-                    onChange={(e) => setSearchTindakan(e.target.value)}
-                    onFocus={() => { if (searchTindakan.length >= 2 && jenisTindakanList.length > 0) setShowDropdown(true); }}
-                    onBlur={() => setTimeout(() => setShowDropdown(false), 300)}
-                    placeholder="Ketik minimal 2 karakter untuk mencari tindakan..."
-                    style={{
-                      width: '100%', padding: '10px 12px 10px 38px',
-                      border: '1px solid #d1d5db', borderRadius: 8,
-                      fontSize: 13, boxSizing: 'border-box', outline: 'none',
-                    }}
-                    onFocusCapture={(e) => e.target.style.borderColor = '#1AB1E5'}
-                    onBlurCapture={(e) => e.target.style.borderColor = '#d1d5db'}
-                  />
-
-                  {/* Dropdown — portal ke body, mengambang di depan modal */}
-                  {showDropdown && searchTindakan.length >= 2 && jenisTindakanList.length > 0 && tindakanDropdownPos && createPortal(
-                    <div
-                      onMouseDown={(e) => e.preventDefault()}
-                      style={{
-                        position: 'fixed', top: tindakanDropdownPos.top, left: tindakanDropdownPos.left, width: tindakanDropdownPos.width,
-                        maxHeight: 300, overflowY: 'auto',
-                        border: '1px solid #e5e7eb', borderRadius: 8,
-                        background: '#ffffff',
-                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                        zIndex: 999999,
-                      }}
-                    >
-                      {jenisTindakanList.map((item, idx) => (
-                        <label
-                          key={idx}
-                          style={{
-                            padding: '10px 12px',
-                            background: selectedTindakan.includes(item.kd_jenis_prw) ? '#e0f2fe' : '#ffffff',
-                            borderBottom: idx < jenisTindakanList.length - 1 ? '1px solid #f3f4f6' : 'none',
-                            cursor: 'pointer', display: 'flex', alignItems: 'flex-start',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#f9fafb'; }}
-                          onMouseLeave={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#ffffff'; }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedTindakan.includes(item.kd_jenis_prw)}
-                            onChange={() => toggleTindakan(item.kd_jenis_prw)}
-                            style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16 }}
-                          />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{item.nm_perawatan}</div>
-                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                              Kode: {item.kd_jenis_prw} • Tarif: {formatRupiah(getTarifTampil(item))}
-                            </div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>,
-                    document.body
-                  )}
-                </div>
-              </div>
-
-              {/* Kolom Kanan - Item Terpilih */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
-                  Item Terpilih
-                </label>
+            {/* Search + Selected Items — panel inline selalu terlihat,
+                daftar dimuat begitu modal dibuka lalu difilter ulang
+                (debounce) tiap kali user mengetik; item terpilih
+                ditampilkan di bawah panel pencarian (bukan di samping),
+                padanan ModalInputDiagnosa.tsx / ModalInputRad.tsx. */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                Cari Tindakan <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{ position: 'relative' }}>
                 <div style={{
-                  background: '#f0f9ff', border: '1px solid #1AB1E5',
-                  borderRadius: 8, padding: '8px 12px', minHeight: 42,
+                  position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                  pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1,
                 }}>
-                  <div style={{
-                    fontSize: 13, fontWeight: 600, color: '#1AB1E5',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginBottom: selectedTindakan.length > 0 ? 12 : 0,
-                  }}>
-                    <span>✓ Item Dipilih ({selectedTindakan.length})</span>
-                    {selectedTindakan.length > 0 && (
-                      <button
-                        onClick={() => { setSelectedTindakan([]); setSelectedTindakanData([]); }}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500, padding: '2px 8px' }}
-                      >Hapus Semua</button>
-                    )}
-                  </div>
-                  {selectedTindakanData.map((item) => (
-                    <div
-                      key={item.kd_jenis_prw}
-                      style={{
-                        background: '#ffffff', border: '1px solid #e5e7eb',
-                        borderRadius: 6, padding: '8px 10px', marginBottom: 8,
-                        fontSize: 12, color: '#374151',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500 }}>{item.nm_perawatan}</div>
-                        <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>
-                          {formatRupiah(getTarifTampil(item))}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => toggleTindakan(item.kd_jenis_prw)}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-                        title="Hapus"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                  </svg>
                 </div>
+                <input
+                  type="text"
+                  value={searchTindakan}
+                  onChange={(e) => setSearchTindakan(e.target.value)}
+                  placeholder="Cari nama/kode tindakan..."
+                  style={{
+                    width: '100%', padding: '10px 12px 10px 38px',
+                    border: '1px solid #d1d5db', borderRadius: 8,
+                    fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                  }}
+                  onFocusCapture={(e) => e.target.style.borderColor = '#1AB1E5'}
+                  onBlurCapture={(e) => e.target.style.borderColor = '#d1d5db'}
+                />
               </div>
+
+              <div style={{
+                marginTop: 8, maxHeight: 220, overflowY: 'auto',
+                border: '1px solid #e5e7eb', borderRadius: 8, background: '#ffffff',
+              }}>
+                {loadingTindakan ? (
+                  <div style={{ textAlign: 'center', padding: 20, color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+                ) : jenisTindakanList.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Tidak ada hasil</div>
+                ) : jenisTindakanList.map((item, idx) => (
+                  <label
+                    key={item.kd_jenis_prw}
+                    style={{
+                      padding: '2px 12px',
+                      background: selectedTindakan.includes(item.kd_jenis_prw) ? '#e0f2fe' : idx % 2 === 0 ? '#f9fafb' : '#ffffff',
+                      borderBottom: idx < jenisTindakanList.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      cursor: 'pointer', display: 'flex', alignItems: 'flex-start',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#f3f4f6'; }}
+                    onMouseLeave={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : '#ffffff'; }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedTindakan.includes(item.kd_jenis_prw)}
+                      onChange={() => toggleTindakan(item.kd_jenis_prw)}
+                      style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16 }}
+                    />
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</span>
+                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>{item.kd_jenis_prw} • {formatRupiah(getTarifTampil(item))}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              {/* Item Terpilih — kartu per item di bawah panel pencarian,
+                  padanan selectedDiagnosa/selectedProsedur di
+                  ModalInputDiagnosa.tsx (background biru muda, border
+                  #1AB1E5, tombol hapus ikon X). */}
+              {selectedTindakanData.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Item Terpilih ({selectedTindakan.length})</span>
+                    <button
+                      onClick={() => { setSelectedTindakan([]); setSelectedTindakanData([]); }}
+                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500, padding: '2px 8px' }}
+                    >Hapus Semua</button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {selectedTindakanData.map((item) => (
+                      <div
+                        key={item.kd_jenis_prw}
+                        style={{ background: '#f0f9ff', border: '1px solid #1AB1E5', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</div>
+                          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{formatRupiah(getTarifTampil(item))}</div>
+                        </div>
+                        <button
+                          onClick={() => toggleTindakan(item.kd_jenis_prw)}
+                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+                          title="Hapus"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer Buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button
                 type="button" onClick={handleReset}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
               >Reset</button>
               <button
                 type="button" onClick={onClose}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
               >Tutup</button>
               <button
                 type="button" onClick={handleSubmit} disabled={loadingSubmit}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loadingSubmit ? '#9ca3af' : '#2563eb', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
               >{loadingSubmit ? 'Menyimpan...' : 'Simpan Tindakan'}</button>
             </div>
           </div>
         </div>
       </div>
+
+      <ModalCariPetugas
+        isOpen={showCariPetugas}
+        onClose={() => setShowCariPetugas(false)}
+        onSelect={(nip, nama) => setSelectedPetugas({ nip, nama })}
+      />
     </>
   );
 };

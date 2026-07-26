@@ -650,25 +650,14 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
           <button
             type="button"
             onClick={onClose}
-            style={{
-              padding: '8px 16px', borderRadius: 8, border: 'none',
-              background: '#6b7280', color: '#fff', cursor: 'pointer',
-              fontSize: 12, fontWeight: 500,
-            }}
-          >
+            style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
             Tutup
           </button>
           <button
             type="button"
             onClick={handleSimpan}
             disabled={loading}
-            style={{
-              padding: '8px 16px', borderRadius: 8, border: 'none',
-              background: loading ? '#9ca3af' : '#2563eb', color: '#fff',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: 12, fontWeight: 500,
-            }}
-          >
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
             {loading ? 'Menyimpan...' : 'Simpan'}
           </button>
         </div>

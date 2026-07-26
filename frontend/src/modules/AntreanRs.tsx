@@ -176,6 +176,7 @@ export const AntreanRsView: React.FC = () => {
   const [showModal, setShowModal] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(emptyForm());
   const [saving, setSaving] = React.useState(false);
+  const [selectedKodeBooking, setSelectedKodeBooking] = React.useState<string | null>(null);
 
   const [farmasiKodeBooking, setFarmasiKodeBooking] = React.useState<string | null>(null);
   const [farmasiForm, setFarmasiForm] = React.useState({ jenisresep: 'non racikan', nomorantrean: '', keterangan: '' });
@@ -668,8 +669,16 @@ export const AntreanRsView: React.FC = () => {
             ) : (
               filteredItems.map((item, index) => {
                 const sc = getStatusColor(item.status);
+                const isSelected = selectedKodeBooking === item.kodebooking;
                 return (
-                  <tr key={item.kodebooking} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                  <tr
+                    key={item.kodebooking}
+                    onClick={() => setSelectedKodeBooking(item.kodebooking)}
+                    style={{
+                      background: isSelected ? '#dbeafe' : index % 2 === 0 ? '#ffffff' : '#f9fafb',
+                      cursor: 'pointer',
+                    }}
+                  >
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.kodebooking}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.norekammedis}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827' }}>{item.kodepoli}</td>

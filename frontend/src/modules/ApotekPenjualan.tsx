@@ -2,6 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { localDateStr } from '../utils/date';
+import { ModalCariPasienRingkas } from '../components/ModalCariPasienRingkas';
 
 // ============================================================================
 // APOTEK — Input Penjualan Obat & BHP (tab utama modul Apotek). Cocok
@@ -168,6 +169,7 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
   const [saving, setSaving] = React.useState(false);
   const [warnPetugas, setWarnPetugas] = React.useState(false);
   const [warnBangsal, setWarnBangsal] = React.useState(false);
+  const [showCariPasien, setShowCariPasien] = React.useState(false);
 
   React.useEffect(() => {
     fetch('/api/petugas')
@@ -189,6 +191,17 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
     // diganti manual, lihat dokumentasi getCurrentUserNip di utils/currentUser.ts).
     const nipLogin = getCurrentUserNip();
     if (nipLogin) setNip((prev) => prev || nipLogin);
+
+    // Nama Pembeli — default ke nama pasien dengan No.RM 999999 kalau ada
+    // (konvensi RS ini utk "Pasien Umum"/pembeli walk-in generik), tetap
+    // bisa diganti manual/dicari lewat tombol cari di sebelah field.
+    fetch('/api/pendaftaran/pasien/list?search=999999&limit=5')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        const pasienUmum = Array.isArray(data) ? data.find((p: any) => p.no_rkm_medis === '999999') : null;
+        if (pasienUmum) setNmPasien((prev) => prev || pasienUmum.nm_pasien);
+      })
+      .catch(() => {});
 
     // Lokasi/Depo — auto-isi dari Pengaturan > Lokasi Stok Utama Obat.
     fetch('/api/apotek/pengaturan/lokasi')
@@ -428,9 +441,22 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minWidth: 0, background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
         <TabSwitcher subTab={subTab} onChange={onSubTabChange} />
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', paddingBottom: 2, minWidth: 0, width: '100%', boxSizing: 'border-box', flexShrink: 0 }}>
-          <div style={{ width: 150, flexShrink: 0 }}>
+          <div style={{ width: 190, flexShrink: 0 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Nama Pembeli</label>
-            <input type="text" placeholder="Umum" style={inputStyle} value={nmPasien} onChange={(e) => setNmPasien(e.target.value)} />
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input type="text" placeholder="Umum" style={inputStyle} value={nmPasien} onChange={(e) => setNmPasien(e.target.value)} />
+              <button
+                type="button"
+                onClick={() => setShowCariPasien(true)}
+                title="Cari Pasien"
+                style={{ flexShrink: 0, width: 32, padding: 0, borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.35-4.35"></path>
+                </svg>
+              </button>
+            </div>
           </div>
           <div style={{ width: 120, flexShrink: 0 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
@@ -662,6 +688,12 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
           </div>
         </div>
       )}
+
+      <ModalCariPasienRingkas
+        open={showCariPasien}
+        onClose={() => setShowCariPasien(false)}
+        onSelect={(p) => setNmPasien(p.nm_pasien)}
+      />
     </div>
   );
 };

@@ -9,6 +9,26 @@ type LabTabProps = {
 export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
   const [showInputModal, setShowInputModal] = React.useState(false);
 
+  // Blok atas (tombol permintaan + riwayat + judul tabel hasil) dibuat
+  // sticky di puncak container scroll (lihat overflow:auto di
+  // Pemeriksaan.tsx sekitar activeTab content) supaya tetap terlihat
+  // saat tabel hasil lab discroll. Tinggi blok ini diukur via
+  // ResizeObserver (bukan angka statis) karena Riwayat Permintaan Lab
+  // bisa berubah jumlah kartu, sehingga header <th> tabel hasil bisa
+  // ikut ditempel tepat di bawahnya (top: stickyOffset).
+  const stickyHeaderRef = React.useRef<HTMLDivElement>(null);
+  const [stickyOffset, setStickyOffset] = React.useState(0);
+
+  React.useLayoutEffect(() => {
+    const el = stickyHeaderRef.current;
+    if (!el) return;
+    const update = () => setStickyOffset(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const [riwayatPK, setRiwayatPK] = React.useState<any[]>([]);
   const [riwayatPA, setRiwayatPA] = React.useState<any[]>([]);
   const [loadingRiwayatPK, setLoadingRiwayatPK] = React.useState(false);
@@ -52,29 +72,13 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
     }
   };
 
-  const filterToday = (data: any[]) => {
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    return data.filter((item: any) => {
-      if (!item.tgl_permintaan) return false;
-      if (item.tgl_permintaan.includes('T')) {
-        const d = new Date(item.tgl_permintaan);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === todayStr;
-      }
-      if (item.tgl_permintaan.includes('-')) {
-        return item.tgl_permintaan.split(' ')[0] === todayStr;
-      }
-      return false;
-    });
-  };
-
   const fetchRiwayatPK = async () => {
     setLoadingRiwayatPK(true);
     try {
       const res = await fetch(`/api/lab/riwayat-pk/${encodeURIComponent(patient.no_rawat)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setRiwayatPK(filterToday(Array.isArray(data) ? data : []));
+      setRiwayatPK(Array.isArray(data) ? data : []);
     } catch {
       setRiwayatPK([]);
     } finally {
@@ -88,7 +92,7 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
       const res = await fetch(`/api/lab/riwayat-pa/${encodeURIComponent(patient.no_rawat)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setRiwayatPA(filterToday(Array.isArray(data) ? data : []));
+      setRiwayatPA(Array.isArray(data) ? data : []);
     } catch {
       setRiwayatPA([]);
     } finally {
@@ -183,36 +187,72 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
   return (
     <div>
 
-      {/* Tombol Buat Permintaan */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={() => setShowInputModal(true)}
-          style={{
-            padding: '10px 20px',
-            background: '#1AB1E5',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            transition: 'background 0.2s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Buat Permintaan Lab
-        </button>
+      {/* Blok sticky: tombol permintaan + riwayat + judul tabel hasil.
+          overflow ancestor scroll-nya ada di Pemeriksaan.tsx (tab
+          content container overflow:auto) — jangan bungkus blok ini
+          atau tabel di bawah dgn overflow:hidden, itu akan membuat
+          sticky nempel ke box ini sendiri, bukan ke container scroll
+          sungguhan. */}
+      <div ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 20, background: '#f9fafb', paddingBottom: 8 }}>
+        {/* Tombol Buat Permintaan */}
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => setShowInputModal(true)}
+            style={{
+              padding: '10px 20px',
+              background: '#1AB1E5',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 4,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Buat Permintaan Lab
+          </button>
+        </div>
+
+        {/* Riwayat Permintaan Lab */}
+        {!loadingRiwayatPK && !loadingRiwayatPA && (riwayatPK.length > 0 || riwayatPA.length > 0) && (
+          <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {[
+                ...riwayatPK.map((item) => ({ item, kategori: 'pk' as const })),
+                ...riwayatPA.map((item) => ({ item, kategori: 'pa' as const })),
+              ].map(({ item, kategori }, idx) => (
+                <RiwayatCard
+                  key={idx}
+                  item={item}
+                  kategori={kategori}
+                  onDelete={() => (kategori === 'pk' ? handleDeleteLabPK(item.noorder) : handleDeleteLabPA(item.noorder))}
+                  onLihatHasil={() => handleLihatHasil(item, kategori)}
+                  formatDateTime={formatDateTime}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Judul Hasil Periksa Laboratorium */}
+        {!loadingHasilPeriksa && hasilPeriksa.length > 0 && (
+          <h4 style={{ margin: '24px 0 0 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
+            Hasil Periksa Laboratorium
+          </h4>
+        )}
       </div>
 
-      {/* Loading state */}
+      {/* Loading state — non-sticky, cuma tampil saat fetch awal */}
       {(loadingRiwayatPK || loadingRiwayatPA || loadingHasilPeriksa) && (
         <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
           <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
@@ -220,45 +260,23 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
         </div>
       )}
 
-      {/* Riwayat Permintaan Lab */}
-      {!loadingRiwayatPK && !loadingRiwayatPA && (riwayatPK.length > 0 || riwayatPA.length > 0) && (
-        <div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {[
-              ...riwayatPK.map((item) => ({ item, kategori: 'pk' as const })),
-              ...riwayatPA.map((item) => ({ item, kategori: 'pa' as const })),
-            ].map(({ item, kategori }, idx) => (
-              <RiwayatCard
-                key={idx}
-                item={item}
-                kategori={kategori}
-                onDelete={() => (kategori === 'pk' ? handleDeleteLabPK(item.noorder) : handleDeleteLabPA(item.noorder))}
-                onLihatHasil={() => handleLihatHasil(item, kategori)}
-                formatDateTime={formatDateTime}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Hasil Periksa Laboratorium */}
       {!loadingHasilPeriksa && hasilPeriksa.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <h4 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 2v6.5L3 20a1 1 0 0 0 .9 1.5h16.2a1 1 0 0 0 .9-1.5L15 8.5V2"></path>
-              <path d="M9 2h6"></path>
-              <path d="M7 15h10"></path>
-            </svg>
-            Hasil Periksa Laboratorium
-          </h4>
-
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ marginTop: 16 }}>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#1AB1E5', color: 'white' }}>
-                  {['Tanggal', 'Nama Tindakan', 'Hasil', 'Nilai Rujukan', 'Keterangan'].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Nama Tindakan' ? 'left' : 'center', fontSize: 12, fontWeight: 600 }}>{h}</th>
+                  {(['Tanggal', 'Nama Tindakan', 'Hasil', 'Nilai Rujukan', 'Keterangan'] as const).map((h, hi, arr) => (
+                    <th
+                      key={h}
+                      style={{
+                        position: 'sticky', top: stickyOffset, zIndex: 19, background: '#1AB1E5',
+                        padding: '10px 12px', textAlign: h === 'Nama Tindakan' ? 'left' : 'center', fontSize: 12, fontWeight: 600,
+                        borderTopLeftRadius: hi === 0 ? 7 : undefined,
+                        borderTopRightRadius: hi === arr.length - 1 ? 7 : undefined,
+                      }}
+                    >{h}</th>
                   ))}
                 </tr>
               </thead>
