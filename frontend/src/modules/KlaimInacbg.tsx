@@ -1,6 +1,8 @@
 import React from 'react';
 import { localDateStr } from '../utils/date';
 import { PreviewBilling } from '../components/PreviewBilling';
+import { ModalDetailPemberianObat } from '../components/ModalDetailPemberianObat';
+import { ModalDetailPeriksaLab } from '../components/ModalDetailPeriksaLab';
 
 type KlaimItem = {
   no_rawat: string;
@@ -11,6 +13,9 @@ type KlaimItem = {
   biaya_obat: number;
   biaya_lab: number;
   biaya_radiologi: number;
+  biaya_darah: number;
+  biaya_gizi: number;
+  biaya_jasa_medis: number;
   billing: number;
   selisih: number;
   klaim_inacbg: number;
@@ -21,6 +26,7 @@ const formatRupiah = (n: number) => `Rp ${(n || 0).toLocaleString('id-ID')}`;
 type AppUser = {
   username: string;
   role: string;
+  kd_dokter?: string;
 };
 
 type KlaimInacbgViewProps = {
@@ -28,12 +34,17 @@ type KlaimInacbgViewProps = {
 };
 
 export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
-  // Untuk user role dokter, username = kd_dokter (konvensi AddUserModal saat
-  // membuat akun dari data dokter) — dipakai untuk membatasi hanya pasien
-  // yang dokter ini jadi DPJP-nya, tidak bisa melihat pasien dokter lain.
-  const isDokter = user?.role === 'dokter' && !!user?.username;
+  // Untuk role dokter, dibatasi ke pasien yang dokter ini jadi DPJP-nya
+  // lewat app_users.kd_dokter (di-link admin di Pengaturan > User — lihat
+  // AddUserModal.tsx). Dulu ini memakai user.username dengan asumsi
+  // "username = kd_dokter" (konvensi kalau akun dibuat dari data dokter di
+  // AddUserModal), tapi itu cuma kebetulan penamaan, bukan link eksplisit —
+  // begitu admin membuat akun dgn username lain atau lewat tipe user
+  // "Petugas", filter ini diam-diam kirim kd_dokter yang salah dan data
+  // Monitoring Biaya Klaim BPJS jadi kosong (WHERE dpjp_ranap.kd_dokter=?
+  // tidak match apapun).
+  const isDokter = user?.role === 'dokter' && !!user?.kd_dokter;
   const [searchText, setSearchText] = React.useState<string>('');
-  const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
   const [showDpjpDropdown, setShowDpjpDropdown] = React.useState<boolean>(false);
   const [tglDari, setTglDari] = React.useState<string>(localDateStr());
   const [tglSampai, setTglSampai] = React.useState<string>(localDateStr());
@@ -45,24 +56,34 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
   const [editValue, setEditValue] = React.useState<string>('');
   const [saving, setSaving] = React.useState<boolean>(false);
   const [previewNoRawat, setPreviewNoRawat] = React.useState<string | null>(null);
-  // Default: tampilkan pasien yang belum pulang (tidak dibatasi tanggal masuk).
-  // Begitu user pilih rentang tanggal lewat Filter, mode ini otomatis nonaktif.
-  const [belumPulangOnly, setBelumPulangOnly] = React.useState<boolean>(true);
-  const filterDropdownRef = React.useRef<HTMLDivElement>(null);
+  const [previewObatNoRawat, setPreviewObatNoRawat] = React.useState<string | null>(null);
+  const [previewLabNoRawat, setPreviewLabNoRawat] = React.useState<string | null>(null);
+  // Basis filter tanggal — dipilih lewat toggle di toolbar (bukan lagi
+  // disembunyikan di dalam btn Filter): "belum-pulang" (default, tidak
+  // dibatasi tanggal), "masuk" (kamar_inap.tgl_masuk), atau "pulang"
+  // (kamar_inap.tgl_keluar). Cuma satu basis yang aktif dalam satu waktu.
+  const [dateFilterMode, setDateFilterMode] = React.useState<'belum-pulang' | 'masuk' | 'pulang'>('belum-pulang');
+  const [tglPulangDari, setTglPulangDari] = React.useState<string>(localDateStr());
+  const [tglPulangSampai, setTglPulangSampai] = React.useState<string>(localDateStr());
   const dpjpDropdownRef = React.useRef<HTMLDivElement>(null);
 
   const fetchItems = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let url = belumPulangOnly
-        ? `/api/klaim-inacbg/list?status_pulang=belum`
-        : `/api/klaim-inacbg/list?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
+      let url = `/api/klaim-inacbg/list?`;
+      if (dateFilterMode === 'belum-pulang') {
+        url += `status_pulang=belum`;
+      } else if (dateFilterMode === 'masuk') {
+        url += `tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
+      } else {
+        url += `tgl_pulang_dari=${tglPulangDari}&tgl_pulang_sampai=${tglPulangSampai}`;
+      }
       if (searchText) {
         url += `&search=${encodeURIComponent(searchText)}`;
       }
       if (isDokter) {
-        url += `&kd_dokter=${encodeURIComponent(user!.username)}`;
+        url += `&kd_dokter=${encodeURIComponent(user!.kd_dokter!)}`;
       }
       const response = await fetch(url);
       if (!response.ok) {
@@ -76,7 +97,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  }, [belumPulangOnly, tglDari, tglSampai, searchText, isDokter, user]);
+  }, [dateFilterMode, tglDari, tglSampai, searchText, isDokter, user, tglPulangDari, tglPulangSampai]);
 
   React.useEffect(() => {
     fetchItems();
@@ -120,24 +141,6 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
     }
   };
 
-  const setBulanIni = () => {
-    const now = new Date();
-    const awal = new Date(now.getFullYear(), now.getMonth(), 1);
-    const akhir = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    setTglDari(localDateStr(awal));
-    setTglSampai(localDateStr(akhir));
-    setBelumPulangOnly(false);
-  };
-
-  const setBulanLalu = () => {
-    const now = new Date();
-    const awal = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const akhir = new Date(now.getFullYear(), now.getMonth(), 0);
-    setTglDari(localDateStr(awal));
-    setTglSampai(localDateStr(akhir));
-    setBelumPulangOnly(false);
-  };
-
   const dpjpOptions = React.useMemo(() => {
     const names = new Set<string>();
     items.forEach((item) => names.add(item.nm_dokter || 'Tanpa DPJP'));
@@ -149,19 +152,51 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
     return items.filter((item) => (item.nm_dokter || 'Tanpa DPJP') === dpjpFilter);
   }, [items, dpjpFilter]);
 
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setShowFilterDropdown(false);
-      }
-    };
-    if (showFilterDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, [showFilterDropdown]);
+  // Ekspor CSV — isinya sama persis dengan data yang lagi ditampilkan di
+  // tabel (sudah kena filter DPJP/tanggal/pencarian), dikelompokkan per
+  // dokter DPJP sama seperti tampilan, tapi diratakan jadi satu tabel (kolom
+  // DPJP ditambahkan) karena CSV tidak punya konsep header grup. Dibuka
+  // dengan Excel/Sheets tanpa perlu dependency tambahan (Blob + CSV biasa).
+  const csvEscape = (value: string | number): string => {
+    const s = String(value ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  // Excel otomatis membaca isi sel CSV yang "kelihatan" seperti angka
+  // (mis. No.RM "000013") sebagai angka murni & membuang nol di depannya
+  // jadi "13" — walau nilainya dikutip di CSV. Trik standarnya: bungkus
+  // sebagai formula ="000013" supaya Excel memaksa sel tsb tetap teks apa
+  // adanya (No.Rawat aman karena sudah ada "/" sehingga tidak dianggap angka).
+  const csvForceText = (value: string): string => `="${value}"`;
+
+  const handleExport = () => {
+    const header = [
+      'No.Rawat', 'No.RM', 'Nama Pasien', 'DPJP', 'Diagnosa',
+      'Biaya Obat', 'Laboratorium', 'Radiologi', 'Pelayanan Darah', 'Gizi', 'Jasa Medis',
+      'Billing', 'Selisih', 'Klaim INACBG',
+    ];
+    const rows: (string | number)[][] = [];
+    groupedByDokter(filteredItems).forEach(([dokter, list]) => {
+      list.forEach((item) => {
+        rows.push([
+          item.no_rawat, csvForceText(item.no_rkm_medis), item.nm_pasien, dokter, item.diagnosa || '-',
+          item.biaya_obat, item.biaya_lab, item.biaya_radiologi, item.biaya_darah, item.biaya_gizi, item.biaya_jasa_medis,
+          item.billing, item.selisih, item.klaim_inacbg,
+        ]);
+      });
+    });
+
+    const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Monitoring_Biaya_Klaim_BPJS_${localDateStr()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -179,30 +214,28 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Toolbar */}
+      {/* Toolbar — dua baris: DPJP & Ekspor di paling atas, basis tanggal
+          (Belum Pulang/Tgl.Masuk/Pulang) & Cari di baris kedua. */}
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          flexDirection: 'column',
+          gap: 10,
           marginBottom: 16,
-          flexShrink: 0,
-          flexWrap: 'wrap',
-          gap: 8
+          flexShrink: 0
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Monitoring Biaya Klaim BPJS</h3>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {!isDokter && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>Tampilkan DPJP:</label>
+        {/* Baris 1 — DPJP kiri, Ekspor kanan */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          {!isDokter ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <label style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>Tampilkan DPJP : </label>
             <div ref={dpjpDropdownRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => setShowDpjpDropdown(!showDpjpDropdown)}
                 style={{
                   padding: '6px 16px',
-                  borderRadius: 8,
+                  borderRadius: 4,
                   border: '1px solid #d1d5db',
                   background: '#ffffff',
                   color: '#374151',
@@ -211,7 +244,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                   fontWeight: 500,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6
+                  gap: 2
                 }}
               >
                 <span>{dpjpFilter}</span>
@@ -230,7 +263,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                     padding: 4,
                     background: '#ffffff',
                     border: '1px solid #e5e7eb',
-                    borderRadius: 8,
+                    borderRadius: 4,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                     zIndex: 100,
                     minWidth: 180,
@@ -269,146 +302,151 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
               )}
             </div>
           </div>
-          )}
+          ) : <div />}
 
-          <input
-            type="text"
-            placeholder="Cari No. RM / Nama Pasien / Nama Dokter"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={filteredItems.length === 0}
             style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
+              padding: '6px 14px',
+              borderRadius: 4,
+              border: filteredItems.length === 0 ? '1px solid #9ca3af' : '1px solid #059669',
+              background: filteredItems.length === 0 ? '#9ca3af' : '#059669',
+              color: '#ffffff',
+              cursor: filteredItems.length === 0 ? 'default' : 'pointer',
               fontSize: 12,
-              width: 280,
-              outline: 'none'
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Ekspor
+          </button>
+        </div>
+
+        {/* Baris 2 — Basis tanggal, padanan radio button "Belum Pulang /
+            Tgl.Masuk : ... s.d ... / Pulang : ... s.d ..." di dialog Khanza
+            Desktop: ketiga opsi & field tanggalnya SELALU tampil sebaris
+            (bukan disembunyikan tergantung pilihan), user tinggal klik
+            radio utk pindah basis. Field tanggal yang bukan basis aktif
+            dinonaktifkan (abu-abu) supaya jelas mana yang sedang dipakai. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="dateFilterMode"
+              checked={dateFilterMode === 'belum-pulang'}
+              onChange={() => setDateFilterMode('belum-pulang')}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>Belum Pulang</span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="dateFilterMode"
+              checked={dateFilterMode === 'masuk'}
+              onChange={() => setDateFilterMode('masuk')}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>Tgl. Masuk :</span>
+          </label>
+          <input
+            type="date"
+            value={tglDari}
+            disabled={dateFilterMode !== 'masuk'}
+            onChange={(e) => { setTglDari(e.target.value); setDateFilterMode('masuk'); }}
+            style={{
+              padding: '4px 6px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box',
+              background: dateFilterMode === 'masuk' ? '#ffffff' : '#f3f4f6',
+              color: dateFilterMode === 'masuk' ? '#111827' : '#9ca3af'
+            }}
+          />
+          <span style={{ color: '#9ca3af', fontSize: 12 }}>s.d</span>
+          <input
+            type="date"
+            value={tglSampai}
+            disabled={dateFilterMode !== 'masuk'}
+            onChange={(e) => { setTglSampai(e.target.value); setDateFilterMode('masuk'); }}
+            style={{
+              padding: '4px 6px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box',
+              background: dateFilterMode === 'masuk' ? '#ffffff' : '#f3f4f6',
+              color: dateFilterMode === 'masuk' ? '#111827' : '#9ca3af'
             }}
           />
 
-          <div ref={filterDropdownRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              style={{
-                padding: '6px 16px',
-                borderRadius: 8,
-                border: '1px solid #d1d5db',
-                background: '#ffffff',
-                color: '#374151',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              <span>Filter</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-            </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="dateFilterMode"
+              checked={dateFilterMode === 'pulang'}
+              onChange={() => setDateFilterMode('pulang')}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>Pulang :</span>
+          </label>
+          <input
+            type="date"
+            value={tglPulangDari}
+            disabled={dateFilterMode !== 'pulang'}
+            onChange={(e) => { setTglPulangDari(e.target.value); setDateFilterMode('pulang'); }}
+            style={{
+              padding: '4px 6px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box',
+              background: dateFilterMode === 'pulang' ? '#ffffff' : '#f3f4f6',
+              color: dateFilterMode === 'pulang' ? '#111827' : '#9ca3af'
+            }}
+          />
+          <span style={{ color: '#9ca3af', fontSize: 12 }}>s.d</span>
+          <input
+            type="date"
+            value={tglPulangSampai}
+            disabled={dateFilterMode !== 'pulang'}
+            onChange={(e) => { setTglPulangSampai(e.target.value); setDateFilterMode('pulang'); }}
+            style={{
+              padding: '4px 6px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box',
+              background: dateFilterMode === 'pulang' ? '#ffffff' : '#f3f4f6',
+              color: dateFilterMode === 'pulang' ? '#111827' : '#9ca3af'
+            }}
+          />
 
-            {showFilterDropdown && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  padding: 12,
-                  background: '#ffffff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 8,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  zIndex: 100,
-                  width: 160
-                }}
-              >
-                <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 4 }}></label>
-                  <input
-                    type="date"
-                    value={tglDari}
-                    onChange={(e) => { setTglDari(e.target.value); setBelumPulangOnly(false); }}
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #d1d5db',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 4 }}></label>
-                  <input
-                    type="date"
-                    value={tglSampai}
-                    onChange={(e) => { setTglSampai(e.target.value); setBelumPulangOnly(false); }}
-                    style={{
-                      width: '100%',
-                      padding: '6px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #d1d5db',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={setBulanIni}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: 6,
-                    border: '1px solid #d1d5db',
-                    background: '#f3f4f6',
-                    color: '#4b5563',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    marginBottom: 6
-                  }}
-                >
-                  Bulan ini
-                </button>
-                <button
-                  type="button"
-                  onClick={setBulanLalu}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: 6,
-                    border: '1px solid #d1d5db',
-                    background: '#f3f4f6',
-                    color: '#4b5563',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    marginBottom: 6
-                  }}
-                >
-                  Bulan lalu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBelumPulangOnly(true)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: 6,
-                    border: '1px solid #d1d5db',
-                    background: belumPulangOnly ? '#eff6ff' : '#f3f4f6',
-                    color: belumPulangOnly ? '#2563eb' : '#4b5563',
-                    fontSize: 12,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Belum Pulang
-                </button>
-              </div>
-            )}
+          <div style={{ position: 'relative', marginLeft: 'auto' }}>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#9ca3af"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              type="text"
+              placeholder="Cari No. RM / Nama Pasien / Nama Dokter"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{
+                padding: '6px 12px 6px 30px',
+                borderRadius: 4,
+                border: '1px solid #d1d5db',
+                fontSize: 12,
+                width: 260,
+                outline: 'none'
+              }}
+            />
           </div>
         </div>
       </div>
@@ -490,9 +528,12 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Nama Pasien</th>
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Diagnosa</th>
-                      <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Biaya Obat</th>
+                      <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Obat</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Laboratorium</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Radiologi</th>
+                      <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Darah</th>
+                      <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Gizi</th>
+                      <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Jasa Medis</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Billing</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Selisih</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Klaim INACBG</th>
@@ -520,20 +561,44 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                             borderBottom: '1px solid #e5e7eb',
                             fontSize: 12,
                             textAlign: 'right',
-                            color: item.klaim_inacbg > 0 && item.biaya_obat >= item.klaim_inacbg * 0.3
-                              ? '#dc2626'
-                              : item.klaim_inacbg > 0 && item.biaya_obat >= item.klaim_inacbg * 0.2
-                                ? '#eab308'
-                                : '#374151',
-                            fontWeight: item.klaim_inacbg > 0 && item.biaya_obat >= item.klaim_inacbg * 0.2 ? 600 : undefined
                           }}>
-                            {formatRupiah(item.biaya_obat)}
+                            <span
+                              onClick={() => setPreviewObatNoRawat(item.no_rawat)}
+                              title="Klik untuk lihat detail pemberian obat"
+                              style={{
+                                cursor: 'pointer',
+                                borderBottom: '1px dashed currentColor',
+                                color: item.klaim_inacbg > 0 && item.biaya_obat >= item.klaim_inacbg * 0.3
+                                  ? '#dc2626'
+                                  : item.klaim_inacbg > 0 && item.biaya_obat >= item.klaim_inacbg * 0.2
+                                    ? '#eab308'
+                                    : '#374151',
+                                fontWeight: item.klaim_inacbg > 0 && item.biaya_obat >= item.klaim_inacbg * 0.2 ? 600 : undefined
+                              }}
+                            >
+                              {formatRupiah(item.biaya_obat)}
+                            </span>
                           </td>
-                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right' }}>
-                            {formatRupiah(item.biaya_lab)}
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, textAlign: 'right' }}>
+                            <span
+                              onClick={() => setPreviewLabNoRawat(item.no_rawat)}
+                              title="Klik untuk lihat detail pemeriksaan lab"
+                              style={{ cursor: 'pointer', borderBottom: '1px dashed currentColor', color: '#374151' }}
+                            >
+                              {formatRupiah(item.biaya_lab)}
+                            </span>
                           </td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right' }}>
                             {formatRupiah(item.biaya_radiologi)}
+                          </td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right' }}>
+                            {formatRupiah(item.biaya_darah)}
+                          </td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right' }}>
+                            {formatRupiah(item.biaya_gizi)}
+                          </td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151', textAlign: 'right' }}>
+                            {formatRupiah(item.biaya_jasa_medis)}
                           </td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#111827', fontWeight: 600, textAlign: 'right' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
@@ -609,6 +674,12 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
 
       {previewNoRawat && (
         <PreviewBilling noRawat={previewNoRawat} onClose={() => setPreviewNoRawat(null)} />
+      )}
+      {previewObatNoRawat && (
+        <ModalDetailPemberianObat noRawat={previewObatNoRawat} onClose={() => setPreviewObatNoRawat(null)} />
+      )}
+      {previewLabNoRawat && (
+        <ModalDetailPeriksaLab noRawat={previewLabNoRawat} onClose={() => setPreviewLabNoRawat(null)} />
       )}
     </section>
   );

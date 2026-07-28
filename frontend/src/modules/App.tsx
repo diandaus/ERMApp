@@ -2233,7 +2233,7 @@ export const App: React.FC = () => {
           </section>
         );
       case 'casemix':
-        return <CasemixView key={casemixResetKey} user={user} />;
+        return <CasemixView key={casemixResetKey} user={user} onBack={() => setActiveMenu('menu-utama')} />;
       case 'bridging':
         return <BridgingView key={bridgingResetKey} />;
       case 'radiologi':

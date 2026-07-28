@@ -159,3 +159,96 @@ func getObat(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, response)
 	}
 }
+
+// ============================================================================
+// DETAIL PEMBERIAN OBAT (Klaim INACBG -> klik "Biaya Obat") — padanan
+// tabModePO di DlgPemberianObat.java Khanza Desktop. Beda dari getObat di
+// atas (yang buat riwayat obat + aturan pakai, dipakai layar lain): endpoint
+// ini fokus rincian BIAYA per baris (embalase/tuslah/harga beli/gudang/
+// batch/faktur) rawat inap, cuma status='Ranap' — sama scope dgn SUM yang
+// dipakai getKlaimInacbgList (klaim_inacbg_handler.go) buat kolom Biaya Obat.
+// ============================================================================
+
+// DetailPemberianObatItem merepresentasikan satu baris tabModePO.
+type DetailPemberianObatItem struct {
+	TglBeri    string  `json:"tgl_beri"`
+	JamBeri    string  `json:"jam_beri"`
+	NoRawat    string  `json:"no_rawat"`
+	NoRkmMedis string  `json:"no_rkm_medis"`
+	NmPasien   string  `json:"nm_pasien"`
+	KodeObat   string  `json:"kode_obat"`
+	NamaObat   string  `json:"nama_obat"`
+	Embalase   float64 `json:"embalase"`
+	Tuslah     float64 `json:"tuslah"`
+	Jml        float64 `json:"jml"`
+	BiayaObat  float64 `json:"biaya_obat"`
+	Total      float64 `json:"total"`
+	HargaBeli  float64 `json:"harga_beli"`
+	Gudang     string  `json:"gudang"`
+	NoBatch    string  `json:"no_batch"`
+	NoFaktur   string  `json:"no_faktur"`
+}
+
+// getDetailPemberianObat mengambil rincian pemberian obat rawat inap
+// (status='Ranap') untuk satu no_rawat, dipakai modal ModalDetailPemberianObat.
+func getDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat is required"})
+			return
+		}
+
+		query := `
+			SELECT
+				DATE_FORMAT(dpo.tgl_perawatan, '%d/%m/%Y') as tgl_beri,
+				TIME_FORMAT(dpo.jam, '%H:%i:%s') as jam_beri,
+				dpo.no_rawat,
+				reg_periksa.no_rkm_medis,
+				pasien.nm_pasien,
+				dpo.kode_brng,
+				databarang.nama_brng,
+				COALESCE(dpo.embalase, 0) as embalase,
+				COALESCE(dpo.tuslah, 0) as tuslah,
+				dpo.jml,
+				COALESCE(dpo.biaya_obat, 0) as biaya_obat,
+				dpo.total,
+				COALESCE(dpo.h_beli, 0) as h_beli,
+				COALESCE(bangsal.nm_bangsal, dpo.kd_bangsal, '') as gudang,
+				dpo.no_batch,
+				dpo.no_faktur
+			FROM detail_pemberian_obat dpo
+			INNER JOIN databarang ON dpo.kode_brng = databarang.kode_brng
+			INNER JOIN reg_periksa ON dpo.no_rawat = reg_periksa.no_rawat
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			LEFT JOIN bangsal ON dpo.kd_bangsal = bangsal.kd_bangsal
+			WHERE dpo.no_rawat = ? AND dpo.status = 'Ranap'
+			ORDER BY dpo.tgl_perawatan, dpo.jam, databarang.nama_brng
+		`
+
+		rows, err := db.Query(query, noRawat)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		items := []DetailPemberianObatItem{}
+		for rows.Next() {
+			var it DetailPemberianObatItem
+			if err := rows.Scan(
+				&it.TglBeri, &it.JamBeri, &it.NoRawat, &it.NoRkmMedis, &it.NmPasien,
+				&it.KodeObat, &it.NamaObat, &it.Embalase, &it.Tuslah, &it.Jml,
+				&it.BiayaObat, &it.Total, &it.HargaBeli, &it.Gudang, &it.NoBatch, &it.NoFaktur,
+			); err != nil {
+				continue
+			}
+			items = append(items, it)
+		}
+
+		c.JSON(http.StatusOK, items)
+	}
+}

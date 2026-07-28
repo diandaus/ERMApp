@@ -29,10 +29,10 @@ type PotonganBiaya struct {
 
 // BiayaResponse represents the complete biaya data response
 type BiayaResponse struct {
-	PPNObat         float64           `json:"ppn_obat"`
-	TambahanBiaya   []TambahanBiaya   `json:"tambahan_biaya"`
-	PotonganBiaya   []PotonganBiaya   `json:"potongan_biaya"`
-	TotalBiaya      float64           `json:"total_biaya"`
+	PPNObat       float64         `json:"ppn_obat"`
+	TambahanBiaya []TambahanBiaya `json:"tambahan_biaya"`
+	PotonganBiaya []PotonganBiaya `json:"potongan_biaya"`
+	TotalBiaya    float64         `json:"total_biaya"`
 }
 
 // getBiaya returns biaya summary data for a given no_rawat
@@ -153,7 +153,6 @@ func getBiaya(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-
 // ============================================================================
 // BILLING PREVIEW ENDPOINT
 // ============================================================================
@@ -241,6 +240,11 @@ func fetchStoredBillingRows(db *sql.DB, noRawat string) ([]BillingRow, error) {
 func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 	items := []BillingRow{}
 
+	// Kategori yang di-nonaktifkan lewat Casemix > Pengaturan > Preview
+	// Billing (preview_billing_pengaturan_handler.go) — item & subtotal
+	// kategori tsb dilewati sepenuhnya, tidak cuma disamarkan di frontend.
+	hidden := getPreviewBillingHiddenSet(db)
+
 	var noRkmMedis, namaPasien, alamatPasien, umurDaftar, sttsUmur string
 	var kdKamar, tglRegistrasi, jamReg, tglKeluar, jamKeluar sql.NullString
 	var lama sql.NullFloat64
@@ -258,7 +262,13 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 			kamar_inap.kd_kamar,
 			IF(kamar_inap.tgl_keluar = '0000-00-00', NULL, DATE_FORMAT(kamar_inap.tgl_keluar, '%e %M %Y')) AS tgl_keluar_fmt,
 			kamar_inap.jam_keluar,
-			(SELECT SUM(ki.lama) FROM kamar_inap ki WHERE ki.no_rawat = reg_periksa.no_rawat) AS lama,
+			(
+				SELECT SUM(GREATEST(1, DATEDIFF(
+					IF(ki.tgl_keluar = '0000-00-00' OR ki.tgl_keluar IS NULL, CURDATE(), ki.tgl_keluar),
+					ki.tgl_masuk
+				)))
+				FROM kamar_inap ki WHERE ki.no_rawat = reg_periksa.no_rawat
+			) AS lama,
 			COALESCE((
 				SELECT CONCAT(pasien.alamat, ', ', kelurahan.nm_kel, ', ', kecamatan.nm_kec, ', ', kabupaten.nm_kab)
 				FROM kelurahan, kecamatan, kabupaten
@@ -316,37 +326,52 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 		items = append(items, BillingRow{No: "", NmPerawatan: "Total " + label + " : " + formatRupiahText(total)})
 	}
 
-	if biayaReg.Valid && biayaReg.Float64 != 0 {
+	if !hidden["Registrasi"] && biayaReg.Valid && biayaReg.Float64 != 0 {
 		items = append(items, BillingRow{No: "Registrasi", NmPerawatan: ":", TotalBiaya: biayaReg.Float64})
 	}
 
-	// Ruang / Kamar
-	kamarRows, err := db.Query(`
-		SELECT kamar.kd_kamar, bangsal.nm_bangsal, kamar_inap.trf_kamar, kamar_inap.lama, kamar_inap.ttl_biaya
-		FROM kamar_inap
-		INNER JOIN kamar ON kamar_inap.kd_kamar = kamar.kd_kamar
-		INNER JOIN bangsal ON kamar.kd_bangsal = bangsal.kd_bangsal
-		WHERE kamar_inap.no_rawat = ?
-	`, noRawat)
-	if err == nil {
-		var kamarSubtotal float64
-		hasKamar := false
-		for kamarRows.Next() {
-			var kdKamar, nmBangsal string
-			var trfKamar, lamaKamar, ttlBiaya float64
-			if err := kamarRows.Scan(&kdKamar, &nmBangsal, &trfKamar, &lamaKamar, &ttlBiaya); err != nil {
-				continue
+	// Ruang / Kamar — lama & ttl_biaya DIHITUNG REAL-TIME dari selisih
+	// tanggal, BUKAN dibaca dari kamar_inap.lama/ttl_biaya. Kedua kolom itu
+	// di Khanza cuma keisi kalau petugas sudah memproses closing billing
+	// (DlgBilingRanap "Ubah Lama Inap") atau pasien sudah dipulangkan lewat
+	// billing — selama pasien masih dirawat (belum closing), nilainya 0.
+	// Supaya preview biaya kamar bisa dipantau live selagi pasien masih
+	// dirawat (tanpa nunggu closing), lama dihitung dari DATEDIFF(tgl_keluar
+	// jika sudah diisi / CURDATE() kalau masih dirawat, tgl_masuk), minimal
+	// 1 hari begitu pasien menempati kamar.
+	if !hidden["Kamar Inap"] {
+		kamarRows, err := db.Query(`
+			SELECT kamar.kd_kamar, bangsal.nm_bangsal, kamar_inap.trf_kamar,
+				GREATEST(1, DATEDIFF(
+					IF(kamar_inap.tgl_keluar = '0000-00-00' OR kamar_inap.tgl_keluar IS NULL, CURDATE(), kamar_inap.tgl_keluar),
+					kamar_inap.tgl_masuk
+				)) AS lama_real
+			FROM kamar_inap
+			INNER JOIN kamar ON kamar_inap.kd_kamar = kamar.kd_kamar
+			INNER JOIN bangsal ON kamar.kd_bangsal = bangsal.kd_bangsal
+			WHERE kamar_inap.no_rawat = ?
+		`, noRawat)
+		if err == nil {
+			var kamarSubtotal float64
+			hasKamar := false
+			for kamarRows.Next() {
+				var kdKamar, nmBangsal string
+				var trfKamar, lamaKamar float64
+				if err := kamarRows.Scan(&kdKamar, &nmBangsal, &trfKamar, &lamaKamar); err != nil {
+					continue
+				}
+				ttlBiaya := trfKamar * lamaKamar
+				if !hasKamar {
+					items = append(items, BillingRow{No: "Ruang", NmPerawatan: ":"})
+					hasKamar = true
+				}
+				addItem(kdKamar+", "+nmBangsal, trfKamar, lamaKamar, 0, ttlBiaya)
+				kamarSubtotal += ttlBiaya
 			}
-			if !hasKamar {
-				items = append(items, BillingRow{No: "Ruang", NmPerawatan: ":"})
-				hasKamar = true
+			kamarRows.Close()
+			if kamarSubtotal > 0 {
+				addSubtotal("Kamar Inap", kamarSubtotal)
 			}
-			addItem(kdKamar+", "+nmBangsal, trfKamar, lamaKamar, 0, ttlBiaya)
-			kamarSubtotal += ttlBiaya
-		}
-		kamarRows.Close()
-		if kamarSubtotal > 0 {
-			addSubtotal("Kamar Inap", kamarSubtotal)
 		}
 	}
 
@@ -366,6 +391,9 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 
 		firstKategori := true
 		for _, kat := range kategoriList {
+			if hidden[kat.nm] {
+				continue
+			}
 			var subtotal float64
 			var rowsOut []BillingRow
 
@@ -441,69 +469,74 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 	}
 
 	// Pemeriksaan Lab
-	labRows, err := db.Query(`
-		SELECT jns_perawatan_lab.nm_perawatan, MAX(periksa_lab.biaya), COUNT(*), SUM(periksa_lab.biaya)
-		FROM periksa_lab
-		INNER JOIN jns_perawatan_lab ON periksa_lab.kd_jenis_prw = jns_perawatan_lab.kd_jenis_prw
-		WHERE periksa_lab.no_rawat = ? AND periksa_lab.status = 'Ranap'
-		GROUP BY periksa_lab.kd_jenis_prw
-	`, noRawat)
-	if err == nil {
-		var subtotal float64
-		hasLab := false
-		for labRows.Next() {
-			var nm string
-			var unit, jml, total float64
-			if labRows.Scan(&nm, &unit, &jml, &total) != nil {
-				continue
+	if !hidden["Pemeriksaan Lab"] {
+		labRows, err := db.Query(`
+			SELECT jns_perawatan_lab.nm_perawatan, MAX(periksa_lab.biaya), COUNT(*), SUM(periksa_lab.biaya)
+			FROM periksa_lab
+			INNER JOIN jns_perawatan_lab ON periksa_lab.kd_jenis_prw = jns_perawatan_lab.kd_jenis_prw
+			WHERE periksa_lab.no_rawat = ? AND periksa_lab.status = 'Ranap'
+			GROUP BY periksa_lab.kd_jenis_prw
+		`, noRawat)
+		if err == nil {
+			var subtotal float64
+			hasLab := false
+			for labRows.Next() {
+				var nm string
+				var unit, jml, total float64
+				if labRows.Scan(&nm, &unit, &jml, &total) != nil {
+					continue
+				}
+				if !hasLab {
+					items = append(items, BillingRow{No: strconv.Itoa(x) + ". Pemeriksaan Lab", NmPerawatan: ":"})
+					x++
+					hasLab = true
+				}
+				addItem(nm, unit, jml, 0, total)
+				subtotal += total
 			}
-			if !hasLab {
-				items = append(items, BillingRow{No: strconv.Itoa(x) + ". Pemeriksaan Lab", NmPerawatan: ":"})
-				x++
-				hasLab = true
+			labRows.Close()
+			if subtotal > 0 {
+				addSubtotal("Periksa Lab", subtotal)
 			}
-			addItem(nm, unit, jml, 0, total)
-			subtotal += total
-		}
-		labRows.Close()
-		if subtotal > 0 {
-			addSubtotal("Periksa Lab", subtotal)
 		}
 	}
 
 	// Pemeriksaan Radiologi
-	radRows, err := db.Query(`
-		SELECT jns_perawatan_radiologi.nm_perawatan, MAX(periksa_radiologi.biaya), COUNT(*), SUM(periksa_radiologi.biaya)
-		FROM periksa_radiologi
-		INNER JOIN jns_perawatan_radiologi ON periksa_radiologi.kd_jenis_prw = jns_perawatan_radiologi.kd_jenis_prw
-		WHERE periksa_radiologi.no_rawat = ? AND periksa_radiologi.status = 'Ranap'
-		GROUP BY periksa_radiologi.kd_jenis_prw
-	`, noRawat)
-	if err == nil {
-		var subtotal float64
-		hasRad := false
-		for radRows.Next() {
-			var nm string
-			var unit, jml, total float64
-			if radRows.Scan(&nm, &unit, &jml, &total) != nil {
-				continue
+	if !hidden["Pemeriksaan Radiologi"] {
+		radRows, err := db.Query(`
+			SELECT jns_perawatan_radiologi.nm_perawatan, MAX(periksa_radiologi.biaya), COUNT(*), SUM(periksa_radiologi.biaya)
+			FROM periksa_radiologi
+			INNER JOIN jns_perawatan_radiologi ON periksa_radiologi.kd_jenis_prw = jns_perawatan_radiologi.kd_jenis_prw
+			WHERE periksa_radiologi.no_rawat = ? AND periksa_radiologi.status = 'Ranap'
+			GROUP BY periksa_radiologi.kd_jenis_prw
+		`, noRawat)
+		if err == nil {
+			var subtotal float64
+			hasRad := false
+			for radRows.Next() {
+				var nm string
+				var unit, jml, total float64
+				if radRows.Scan(&nm, &unit, &jml, &total) != nil {
+					continue
+				}
+				if !hasRad {
+					items = append(items, BillingRow{No: strconv.Itoa(x) + ". Pemeriksaan Radiologi", NmPerawatan: ":"})
+					x++
+					hasRad = true
+				}
+				addItem(nm, unit, jml, 0, total)
+				subtotal += total
 			}
-			if !hasRad {
-				items = append(items, BillingRow{No: strconv.Itoa(x) + ". Pemeriksaan Radiologi", NmPerawatan: ":"})
-				x++
-				hasRad = true
+			radRows.Close()
+			if subtotal > 0 {
+				addSubtotal("Periksa Radiologi", subtotal)
 			}
-			addItem(nm, unit, jml, 0, total)
-			subtotal += total
-		}
-		radRows.Close()
-		if subtotal > 0 {
-			addSubtotal("Periksa Radiologi", subtotal)
 		}
 	}
 
 	// Obat & BHP
-	obatRows, err := db.Query(`
+	if !hidden["Obat & BHP"] {
+		obatRows, err := db.Query(`
 		SELECT databarang.nama_brng, jenis.nama, detail_pemberian_obat.biaya_obat,
 			SUM(detail_pemberian_obat.jml) AS jml,
 			SUM(detail_pemberian_obat.embalase + detail_pemberian_obat.tuslah) AS tambahan,
@@ -515,26 +548,27 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 		GROUP BY databarang.kode_brng, detail_pemberian_obat.biaya_obat
 		ORDER BY jenis.nama
 	`, noRawat)
-	if err == nil {
-		var subtotal float64
-		hasObat := false
-		for obatRows.Next() {
-			var namaBrng, namaJenis string
-			var biayaObat, jml, tambahan, total float64
-			if obatRows.Scan(&namaBrng, &namaJenis, &biayaObat, &jml, &tambahan, &total) != nil {
-				continue
+		if err == nil {
+			var subtotal float64
+			hasObat := false
+			for obatRows.Next() {
+				var namaBrng, namaJenis string
+				var biayaObat, jml, tambahan, total float64
+				if obatRows.Scan(&namaBrng, &namaJenis, &biayaObat, &jml, &tambahan, &total) != nil {
+					continue
+				}
+				if !hasObat {
+					items = append(items, BillingRow{No: strconv.Itoa(x) + ". Obat & BHP", NmPerawatan: ":"})
+					x++
+					hasObat = true
+				}
+				addItem(namaBrng+" ("+namaJenis+")", biayaObat, jml, tambahan, total+tambahan)
+				subtotal += total + tambahan
 			}
-			if !hasObat {
-				items = append(items, BillingRow{No: strconv.Itoa(x) + ". Obat & BHP", NmPerawatan: ":"})
-				x++
-				hasObat = true
+			obatRows.Close()
+			if subtotal > 0 {
+				addSubtotal("Obat & BHP", subtotal)
 			}
-			addItem(namaBrng+" ("+namaJenis+")", biayaObat, jml, tambahan, total+tambahan)
-			subtotal += total + tambahan
-		}
-		obatRows.Close()
-		if subtotal > 0 {
-			addSubtotal("Obat & BHP", subtotal)
 		}
 	}
 

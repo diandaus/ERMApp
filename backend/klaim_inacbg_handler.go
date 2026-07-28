@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,6 +36,8 @@ type KlaimInacbgItem struct {
 	BiayaObat      float64 `json:"biaya_obat"`
 	BiayaLab       float64 `json:"biaya_lab"`
 	BiayaRadiologi float64 `json:"biaya_radiologi"`
+	BiayaDarah     float64 `json:"biaya_darah"`
+	BiayaJasaMedis float64 `json:"biaya_jasa_medis"`
 	Billing        float64 `json:"billing"`
 	Selisih        float64 `json:"selisih"`
 	KlaimInacbg    float64 `json:"klaim_inacbg"`
@@ -53,20 +54,24 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 		searchText := c.Query("search")
 		statusPulang := c.Query("status_pulang")
 		kdDokter := c.Query("kd_dokter")
+		// Filter tambahan berdasarkan tanggal pulang (kamar_inap.tgl_keluar) —
+		// terpisah dari tgl_dari/tgl_sampai di atas (yang menyaring tanggal
+		// MASUK). Dua-duanya bisa dipakai bersamaan (AND), dan masing-masing
+		// ujung range opsional (buka salah satu ujung kalau cuma satu diisi).
+		tglPulangDari := c.Query("tgl_pulang_dari")
+		tglPulangSampai := c.Query("tgl_pulang_sampai")
 
 		// Mode default: tampilkan pasien yang belum pulang (stts_pulang='-'),
 		// tidak dibatasi tanggal masuk — karena pasien lama rawat bisa masuk
 		// jauh sebelum hari ini dan belum tentu keluar hari ini juga.
+		//
+		// Basis tanggal masuk vs tanggal pulang kini saling eksklusif (dipilih
+		// lewat toggle di toolbar, bukan dropdown Filter lagi) — jadi TIDAK
+		// ada lagi default diam-diam ke hari ini kalau tgl_dari/tgl_sampai
+		// kosong. Filter tgl_masuk cuma aktif kalau frontend memang mengirim
+		// keduanya (mode "masuk"); kalau kosong (mode "pulang"), tidak ada
+		// batasan tanggal masuk sama sekali.
 		belumPulangOnly := statusPulang == "belum"
-
-		if !belumPulangOnly {
-			if tglDari == "" {
-				tglDari = time.Now().Format("2006-01-02")
-			}
-			if tglSampai == "" {
-				tglSampai = time.Now().Format("2006-01-02")
-			}
-		}
 
 		query := `
 			SELECT
@@ -97,6 +102,36 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 					WHERE pr.no_rawat = kamar_inap.no_rawat AND pr.status = 'Ranap'
 				), 0) AS biaya_radiologi,
 				(
+					COALESCE((
+						SELECT SUM(rid.biaya_rawat) FROM rawat_inap_dr rid
+						INNER JOIN jns_perawatan_inap jpi ON rid.kd_jenis_prw = jpi.kd_jenis_prw
+						INNER JOIN kategori_perawatan kp ON jpi.kd_kategori = kp.kd_kategori
+						WHERE rid.no_rawat = kamar_inap.no_rawat AND kp.nm_kategori = 'Pelayanan Darah'
+					), 0)
+					+ COALESCE((
+						SELECT SUM(ridp.biaya_rawat) FROM rawat_inap_drpr ridp
+						INNER JOIN jns_perawatan_inap jpi2 ON ridp.kd_jenis_prw = jpi2.kd_jenis_prw
+						INNER JOIN kategori_perawatan kp2 ON jpi2.kd_kategori = kp2.kd_kategori
+						WHERE ridp.no_rawat = kamar_inap.no_rawat AND kp2.nm_kategori = 'Pelayanan Darah'
+					), 0)
+					+ COALESCE((
+						SELECT SUM(jpi3.total_byrpr) FROM rawat_inap_pr rip
+						INNER JOIN jns_perawatan_inap jpi3 ON rip.kd_jenis_prw = jpi3.kd_jenis_prw
+						INNER JOIN kategori_perawatan kp3 ON jpi3.kd_kategori = kp3.kd_kategori
+						WHERE rip.no_rawat = kamar_inap.no_rawat AND kp3.nm_kategori = 'Pelayanan Darah'
+					), 0)
+				) AS biaya_darah,
+				(
+					COALESCE(klaim_inacbg.klaim_inacbg, 0) *
+					COALESCE((
+						SELECT SUM(jm.persentase) FROM jasa_medis jm
+						WHERE jm.kd_dokter = '' OR EXISTS (
+							SELECT 1 FROM dpjp_ranap dr4
+							WHERE dr4.no_rawat = kamar_inap.no_rawat AND dr4.kd_dokter = jm.kd_dokter
+						)
+					), 0) / 100
+				) AS biaya_jasa_medis,
+				(
 					COALESCE(reg_periksa.biaya_reg, 0)
 					+ COALESCE(kamar_inap.ttl_biaya, 0)
 					+ COALESCE((SELECT SUM(rid.biaya_rawat) FROM rawat_inap_dr rid WHERE rid.no_rawat = kamar_inap.no_rawat), 0)
@@ -111,12 +146,12 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN reg_periksa ON kamar_inap.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN klaim_inacbg ON klaim_inacbg.no_rawat = kamar_inap.no_rawat
-			WHERE `
+			WHERE 1=1`
 		var args []interface{}
 		if belumPulangOnly {
-			query += `kamar_inap.stts_pulang = '-'`
-		} else {
-			query += `kamar_inap.tgl_masuk BETWEEN ? AND ?`
+			query += ` AND kamar_inap.stts_pulang = '-'`
+		} else if tglDari != "" && tglSampai != "" {
+			query += ` AND kamar_inap.tgl_masuk BETWEEN ? AND ?`
 			args = append(args, tglDari, tglSampai)
 		}
 
@@ -146,6 +181,15 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 			args = append(args, kdDokter)
 		}
 
+		if tglPulangDari != "" {
+			query += ` AND kamar_inap.tgl_keluar >= ?`
+			args = append(args, tglPulangDari)
+		}
+		if tglPulangSampai != "" {
+			query += ` AND kamar_inap.tgl_keluar <= ?`
+			args = append(args, tglPulangSampai)
+		}
+
 		query += " ORDER BY kamar_inap.tgl_masuk DESC, kamar_inap.jam_masuk DESC LIMIT 1000"
 
 		rows, err := db.Query(query, args...)
@@ -160,7 +204,7 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 			var it KlaimInacbgItem
 			if err := rows.Scan(
 				&it.NoRawat, &it.NoRkmMedis, &it.NmPasien, &it.NmDokter, &it.Diagnosa,
-				&it.BiayaObat, &it.BiayaLab, &it.BiayaRadiologi, &it.Billing, &it.KlaimInacbg,
+				&it.BiayaObat, &it.BiayaLab, &it.BiayaRadiologi, &it.BiayaDarah, &it.BiayaJasaMedis, &it.Billing, &it.KlaimInacbg,
 			); err != nil {
 				continue
 			}

@@ -797,6 +797,14 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel klaim_inacbg: %v", err)
 	}
 
+	if err := ensureJasaMedisTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel jasa_medis: %v", err)
+	}
+
+	if err := ensurePreviewBillingPengaturanTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel preview_billing_pengaturan: %v", err)
+	}
+
 	r := gin.Default()
 
 	// CORS middleware untuk mengizinkan request dari frontend
@@ -2930,6 +2938,14 @@ func main() {
 	r.GET("/api/klaim-inacbg/list", getKlaimInacbgList(db))
 	r.POST("/api/klaim-inacbg", saveKlaimInacbg(db))
 
+	r.GET("/api/jasa-medis", getJasaMedisList(db))
+	r.POST("/api/jasa-medis", createJasaMedis(db))
+	r.PUT("/api/jasa-medis/:id", updateJasaMedis(db))
+	r.DELETE("/api/jasa-medis/:id", deleteJasaMedis(db))
+
+	r.GET("/api/preview-billing-pengaturan", getPreviewBillingPengaturan(db))
+	r.PUT("/api/preview-billing-pengaturan/:kategori", savePreviewBillingKategori(db))
+
 	// Bridging SEP (BPJS VClaim) endpoints
 	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
 	r.GET("/api/bridging/sep/count-today", getBridgingSepCountToday(db))
@@ -3265,6 +3281,8 @@ func main() {
 
 	// Billing Preview endpoint
 	r.GET("/api/billing-preview/*no_rawat", getBillingPreview(db))
+	r.GET("/api/detail-pemberian-obat/*no_rawat", getDetailPemberianObat(db))
+	r.GET("/api/detail-periksa-lab/*no_rawat", getDetailPeriksaLab(db))
 
 	// Resume Perawatan endpoints
 	r.GET("/api/resume/*no_rawat", getResume(db))

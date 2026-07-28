@@ -33,36 +33,36 @@ type TemplateLab struct {
 
 // Struktur untuk permintaan lab PK
 type PermintaanLabPK struct {
-	NoOrder            string   `json:"noorder"`
-	NoRawat            string   `json:"no_rawat"`
-	TglPermintaan      string   `json:"tgl_permintaan"`
-	JamPermintaan      string   `json:"jam_permintaan"`
-	KdDokter           string   `json:"kd_dokter"`
-	StatusLanjut       string   `json:"status_lanjut"`
-	InformasiTambahan  string   `json:"informasi_tambahan"`
-	DiagnosisKlinis    string   `json:"diagnosis_klinis"`
-	PemeriksaanList    []string `json:"pemeriksaan_list"`     // kd_jenis_prw yang dipilih
-	DetailPemeriksaan  []string `json:"detail_pemeriksaan"`   // id_template yang dipilih
+	NoOrder           string   `json:"noorder"`
+	NoRawat           string   `json:"no_rawat"`
+	TglPermintaan     string   `json:"tgl_permintaan"`
+	JamPermintaan     string   `json:"jam_permintaan"`
+	KdDokter          string   `json:"kd_dokter"`
+	StatusLanjut      string   `json:"status_lanjut"`
+	InformasiTambahan string   `json:"informasi_tambahan"`
+	DiagnosisKlinis   string   `json:"diagnosis_klinis"`
+	PemeriksaanList   []string `json:"pemeriksaan_list"`   // kd_jenis_prw yang dipilih
+	DetailPemeriksaan []string `json:"detail_pemeriksaan"` // id_template yang dipilih
 }
 
 // Struktur untuk permintaan lab PA
 type PermintaanLabPA struct {
-	NoOrder            string   `json:"noorder"`
-	NoRawat            string   `json:"no_rawat"`
-	TglPermintaan      string   `json:"tgl_permintaan"`
-	JamPermintaan      string   `json:"jam_permintaan"`
-	KdDokter           string   `json:"kd_dokter"`
-	StatusLanjut       string   `json:"status_lanjut"`
-	InformasiTambahan  string   `json:"informasi_tambahan"`
-	DiagnosisKlinis    string   `json:"diagnosis_klinis"`
-	TglPengambilanBahan string  `json:"tgl_pengambilan_bahan"`
-	DiperolehDengan     string  `json:"diperoleh_dengan"`
-	LokasiPengambilan   string  `json:"lokasi_pengambilan"`
-	Diawetkan           string  `json:"diawetkan"`
-	DilakukanPA         string  `json:"dilakukan_pa"`
-	TglPA               string  `json:"tgl_pa"`
-	NomorPA             string  `json:"nomor_pa"`
-	DiagnosaPA          string  `json:"diagnosa_pa"`
+	NoOrder             string   `json:"noorder"`
+	NoRawat             string   `json:"no_rawat"`
+	TglPermintaan       string   `json:"tgl_permintaan"`
+	JamPermintaan       string   `json:"jam_permintaan"`
+	KdDokter            string   `json:"kd_dokter"`
+	StatusLanjut        string   `json:"status_lanjut"`
+	InformasiTambahan   string   `json:"informasi_tambahan"`
+	DiagnosisKlinis     string   `json:"diagnosis_klinis"`
+	TglPengambilanBahan string   `json:"tgl_pengambilan_bahan"`
+	DiperolehDengan     string   `json:"diperoleh_dengan"`
+	LokasiPengambilan   string   `json:"lokasi_pengambilan"`
+	Diawetkan           string   `json:"diawetkan"`
+	DilakukanPA         string   `json:"dilakukan_pa"`
+	TglPA               string   `json:"tgl_pa"`
+	NomorPA             string   `json:"nomor_pa"`
+	DiagnosaPA          string   `json:"diagnosa_pa"`
 	PemeriksaanList     []string `json:"pemeriksaan_list"`
 }
 
@@ -633,17 +633,17 @@ func getRiwayatLabPK(db *sql.DB) gin.HandlerFunc {
 			detailRows.Close()
 
 			items = append(items, map[string]interface{}{
-				"noorder":           noorder,
-				"no_rawat":          noRawatDB,
-				"tgl_permintaan":    tglPermintaan,
-				"jam_permintaan":    jamPermintaan,
-				"tgl_hasil":         tglHasil,
-				"jam_hasil":         jamHasil,
-				"dokter_perujuk":    dokterPerujuk,
-				"nm_dokter":         nmDokter,
-				"status":            status,
+				"noorder":            noorder,
+				"no_rawat":           noRawatDB,
+				"tgl_permintaan":     tglPermintaan,
+				"jam_permintaan":     jamPermintaan,
+				"tgl_hasil":          tglHasil,
+				"jam_hasil":          jamHasil,
+				"dokter_perujuk":     dokterPerujuk,
+				"nm_dokter":          nmDokter,
+				"status":             status,
 				"informasi_tambahan": infoTambahan,
-				"diagnosa_klinis":   diagnosisKlinis,
+				"diagnosa_klinis":    diagnosisKlinis,
 				"detail_pemeriksaan": details,
 			})
 		}
@@ -735,22 +735,22 @@ func getRiwayatLabPA(db *sql.DB) gin.HandlerFunc {
 			detailRows.Close()
 
 			items = append(items, map[string]interface{}{
-				"noorder":                noorder,
-				"no_rawat":               noRawatDB,
-				"tgl_permintaan":         tglPermintaan,
-				"jam_permintaan":         jamPermintaan,
-				"tgl_hasil":              tglHasil,
-				"jam_hasil":              jamHasil,
-				"dokter_perujuk":         dokterPerujuk,
-				"nm_dokter":              nmDokter,
-				"status":                 status,
-				"informasi_tambahan":     infoTambahan,
-				"diagnosa_klinis":        diagnosisKlinis,
-				"tgl_pengambilan_bahan":  tglBahan,
-				"diperoleh_dari":         diperoleh,
-				"lokasi_pengambilan":     lokasi,
-				"diawetkan":              diawetkan,
-				"detail_pemeriksaan":     details,
+				"noorder":               noorder,
+				"no_rawat":              noRawatDB,
+				"tgl_permintaan":        tglPermintaan,
+				"jam_permintaan":        jamPermintaan,
+				"tgl_hasil":             tglHasil,
+				"jam_hasil":             jamHasil,
+				"dokter_perujuk":        dokterPerujuk,
+				"nm_dokter":             nmDokter,
+				"status":                status,
+				"informasi_tambahan":    infoTambahan,
+				"diagnosa_klinis":       diagnosisKlinis,
+				"tgl_pengambilan_bahan": tglBahan,
+				"diperoleh_dari":        diperoleh,
+				"lokasi_pengambilan":    lokasi,
+				"diawetkan":             diawetkan,
+				"detail_pemeriksaan":    details,
 			})
 		}
 
@@ -1126,5 +1126,65 @@ func deletePermintaanLabPA(db *sql.DB) gin.HandlerFunc {
 			"success": true,
 			"message": "Permintaan lab PA berhasil dihapus",
 		})
+	}
+}
+
+// ============================================================================
+// DETAIL PERIKSA LAB (Klaim INACBG -> klik "Laboratorium") — rincian
+// pemeriksaan lab rawat inap (status='Ranap') per no_rawat. Sama scope dgn
+// SUM yang dipakai getKlaimInacbgList (klaim_inacbg_handler.go) utk kolom
+// Laboratorium, padanan pola getDetailPemberianObat (obat_handler.go).
+// ============================================================================
+
+// DetailPeriksaLabItem merepresentasikan satu baris pemeriksaan lab.
+type DetailPeriksaLabItem struct {
+	TglPeriksa  string  `json:"tgl_periksa"`
+	Jam         string  `json:"jam"`
+	NmPerawatan string  `json:"nm_perawatan"`
+	Biaya       float64 `json:"biaya"`
+}
+
+// getDetailPeriksaLab mengambil rincian pemeriksaan lab rawat inap
+// (status='Ranap') untuk satu no_rawat, dipakai modal ModalDetailPeriksaLab.
+func getDetailPeriksaLab(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat is required"})
+			return
+		}
+
+		query := `
+			SELECT
+				DATE_FORMAT(pl.tgl_periksa, '%d/%m/%Y') as tgl_periksa,
+				TIME_FORMAT(pl.jam, '%H:%i:%s') as jam,
+				jpl.nm_perawatan,
+				pl.biaya
+			FROM periksa_lab pl
+			INNER JOIN jns_perawatan_lab jpl ON pl.kd_jenis_prw = jpl.kd_jenis_prw
+			WHERE pl.no_rawat = ? AND pl.status = 'Ranap'
+			ORDER BY pl.tgl_periksa, pl.jam, jpl.nm_perawatan
+		`
+
+		rows, err := db.Query(query, noRawat)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		items := []DetailPeriksaLabItem{}
+		for rows.Next() {
+			var it DetailPeriksaLabItem
+			if err := rows.Scan(&it.TglPeriksa, &it.Jam, &it.NmPerawatan, &it.Biaya); err != nil {
+				continue
+			}
+			items = append(items, it)
+		}
+
+		c.JSON(http.StatusOK, items)
 	}
 }
