@@ -60,7 +60,7 @@ func getObat(db *sql.DB) gin.HandlerFunc {
 		// ====================================================================
 		// 1. GET PEMBERIAN OBAT
 		// ====================================================================
-	queryPemberian := `
+		queryPemberian := `
 		SELECT 
 			DATE_FORMAT(detail_pemberian_obat.tgl_perawatan, '%d/%m/%Y') as tgl_perawatan,
 			TIME_FORMAT(detail_pemberian_obat.jam, '%H:%i:%s') as jam,
@@ -236,6 +236,13 @@ func getDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 		}
 		defer rows.Close()
 
+		// Basis harga (kolom "Biaya Obat"/"Total") ikut pengaturan Casemix >
+		// Pengaturan > Preview Billing > Set Preview Obat, sama seperti
+		// computeBillingPreview (biaya_handler.go): "modal" pakai h_beli
+		// (tanpa embalase/tuslah), "jual" (default) pakai biaya_obat/total
+		// apa adanya dari detail_pemberian_obat.
+		modalMode := getPreviewObatMode(db) == "modal"
+
 		items := []DetailPemberianObatItem{}
 		for rows.Next() {
 			var it DetailPemberianObatItem
@@ -245,6 +252,10 @@ func getDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 				&it.BiayaObat, &it.Total, &it.HargaBeli, &it.Gudang, &it.NoBatch, &it.NoFaktur,
 			); err != nil {
 				continue
+			}
+			if modalMode {
+				it.BiayaObat = it.HargaBeli
+				it.Total = it.HargaBeli * it.Jml
 			}
 			items = append(items, it)
 		}

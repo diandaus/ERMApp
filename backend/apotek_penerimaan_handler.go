@@ -472,3 +472,19 @@ func deletePenerimaan(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Penerimaan berhasil dihapus, stok sistem sudah dikembalikan"})
 	}
 }
+
+// getPenerimaanHariIni — statistik ringan untuk StatCard "Penerimaan" di
+// DashboardApotek.tsx, padanan getPenjualanHariIni (apotek_penjualan_handler.go):
+// cuma hitung jumlah faktur (pembelian) hari ini, bukan reuse
+// getPenerimaanRiwayat yang N+1 query detail item per faktur.
+func getPenerimaanHariIni(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM pembelian WHERE tgl_beli = CURDATE()`).Scan(&count)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"count": count})
+	}
+}

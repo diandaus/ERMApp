@@ -355,3 +355,19 @@ func deleteStokOpnameRiwayat(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Riwayat opname berhasil dihapus (stok sistem TIDAK dikembalikan, sesuai perilaku Khanza Desktop)"})
 	}
 }
+
+// getStokOpnameBulanIni — statistik ringan untuk StatCard "Stok Opname
+// Bulan Ini" di DashboardApotek.tsx, padanan getPenjualanHariIni
+// (apotek_penjualan_handler.go): cuma hitung baris opname bulan berjalan,
+// bukan reuse getStokOpnameRiwayat yang mengembalikan seluruh detail baris.
+func getStokOpnameBulanIni(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM opname WHERE YEAR(tanggal) = YEAR(CURDATE()) AND MONTH(tanggal) = MONTH(CURDATE())`).Scan(&count)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"count": count})
+	}
+}

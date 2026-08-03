@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import type { ResepRalanRow } from '../modules/PermintaanResep';
+import { ModalDaftarObatPenyerahan } from './ModalDaftarObatPenyerahan';
 
 // ============================================================================
 // Modal "Penyerahan Resep" — padanan BtnPenyerahanActionPerformed di
@@ -159,10 +160,12 @@ export const ModalPenyerahanResep: React.FC<ModalPenyerahanResepProps> = ({ rese
       style={{ position: 'fixed', inset: 0, zIndex: 10001, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={handleClose}
     >
-      <div
-        style={{ background: '#ffffff', borderRadius: 16, padding: 24, width: 540, maxWidth: '92vw', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <ModalDaftarObatPenyerahan resep={resep} />
+        <div
+          style={{ background: '#ffffff', borderRadius: 16, padding: 24, width: 540, maxWidth: '92vw', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
         <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Penyerahan Resep Obat Rawat Jalan</div>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
           No. Resep {resep.no_resep} — {resep.nm_pasien} ({resep.no_rkm_medis})
@@ -225,6 +228,7 @@ export const ModalPenyerahanResep: React.FC<ModalPenyerahanResepProps> = ({ rese
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

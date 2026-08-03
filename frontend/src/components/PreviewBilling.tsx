@@ -48,6 +48,67 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
 
   const total = rows.reduce((sum, r) => sum + (r.totalbiaya || 0), 0);
 
+  // Cetak — buka jendela baru berisi tabel yang sama persis (row info,
+  // subtotal, item) lalu panggil print bawaan browser, supaya tidak perlu
+  // menambah CSS @media print global yang bisa mempengaruhi halaman lain.
+  const handleCetak = () => {
+    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    if (!printWindow) return;
+
+    const rowsHtml = rows.map((row, index) => {
+      const noTrim = (row.no || '').trim();
+      const namaTrim = (row.nm_perawatan || '').trim();
+
+      if (index < 6) {
+        return `<tr><td width="20%">${noTrim}</td><td width="40%" colspan="5">${namaTrim}</td></tr>`;
+      }
+
+      if (noTrim === '' && row.biaya === 0) {
+        const isTotal = namaTrim.startsWith('Total');
+        return `<tr><td width="20%">${noTrim}</td><td width="40%" colspan="5" style="text-align:${isTotal ? 'right' : 'left'}">${namaTrim}</td></tr>`;
+      }
+
+      return `<tr>
+        <td width="20%">${row.no}</td>
+        <td width="48%">${row.nm_perawatan}</td>
+        <td width="9%" style="text-align:right">${row.biaya === 0 ? '' : formatAngka(row.biaya)}</td>
+        <td width="2%" style="text-align:right">${row.jumlah === 0 ? '' : formatAngka(row.jumlah)}</td>
+        <td width="9%" style="text-align:right">${row.tambahan === 0 ? '' : formatAngka(row.tambahan)}</td>
+        <td width="10%" style="text-align:right">${row.totalbiaya === 0 ? '' : formatAngka(row.totalbiaya)}</td>
+      </tr>`;
+    }).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Preview Billing - ${noRawat}</title>
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; font-size: 12px; padding: 16px; color: #000; }
+            h2 { font-size: 14px; margin: 0 0 12px; }
+            table { width: 100%; border-collapse: collapse; }
+            td { padding: 4px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
+            tr.total td { font-weight: 700; font-size: 13px; background: #f3f4f6; border-top: 2px solid #333; }
+          </style>
+        </head>
+        <body>
+          <h2>Billing</h2>
+          <table>
+            <tbody>
+              ${rowsHtml}
+              <tr class="total">
+                <td width="20%">TOTAL BIAYA</td>
+                <td width="40%" colspan="5" style="text-align:right">${formatAngka(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
     <div
       style={{
@@ -89,13 +150,41 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
           }}
         >
           <span style={{ color: '#000000', fontSize: 13, fontWeight: 400 }}>Preview Billing</span>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}
-          >
-            &times;
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={handleCetak}
+              disabled={loading || !!error || rows.length === 0}
+              title="Cetak"
+              style={{
+                width: 26,
+                height: 26,
+                padding: 0,
+                borderRadius: 6,
+                border: '1px solid #d1d5db',
+                background: '#ffffff',
+                color: '#374151',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: loading || !!error || rows.length === 0 ? 'default' : 'pointer',
+                opacity: loading || !!error || rows.length === 0 ? 0.5 : 1,
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
         {/* White Card Content */}

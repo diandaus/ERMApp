@@ -296,7 +296,17 @@ function JasaMedisSetting() {
 
 type PreviewBillingKategori = { kategori: string; tampil: boolean };
 
-function PreviewBillingSetting() {
+// Preview Billing punya 2 sub-tab: "Kategori Biaya" (toggle tampil/
+// sembunyikan per kategori, sudah ada) dan "Set Preview Obat" (basis harga
+// obat di section Obat & BHP — harga jual/modal, baru).
+type PreviewBillingSubTab = 'kategori' | 'set-preview-obat';
+
+const PREVIEW_BILLING_SUB_TABS: { key: PreviewBillingSubTab; label: string }[] = [
+  { key: 'kategori', label: 'Kategori Biaya' },
+  { key: 'set-preview-obat', label: 'Set Preview Obat' },
+];
+
+function KategoriBiayaSetting() {
   const [list, setList] = React.useState<PreviewBillingKategori[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [savingKategori, setSavingKategori] = React.useState<string | null>(null);
@@ -365,6 +375,126 @@ function PreviewBillingSetting() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Set Preview Obat — basis harga obat di section Obat & BHP ─────────────
+
+type ObatMode = 'jual' | 'modal';
+
+const OBAT_MODE_OPTIONS: { key: ObatMode; label: string; desc: string }[] = [
+  { key: 'jual', label: 'Harga Jual', desc: 'Harga yang ditagihkan ke pasien (detail_pemberian_obat.biaya_obat) — bawaan.' },
+  { key: 'modal', label: 'Harga Modal', desc: 'Harga beli/modal apotek (h_beli), tanpa embalase/tuslah.' },
+];
+
+function SetPreviewObatSetting() {
+  const [mode, setMode] = React.useState<ObatMode>('jual');
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetch('/api/preview-obat-pengaturan')
+      .then((res) => res.json())
+      .then((data) => setMode(data?.mode === 'modal' ? 'modal' : 'jual'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handlePilih = async (next: ObatMode) => {
+    if (next === mode || saving) return;
+    const prev = mode;
+    setMode(next); // optimistic
+    setSaving(true);
+    try {
+      const res = await fetch('/api/preview-obat-pengaturan', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setMode(prev);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ fontSize: 12, color: '#6b7280' }}>
+        Pilih basis harga obat yang ditampilkan pada bagian "Obat & BHP" di Preview Billing.
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Memuat data...</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {OBAT_MODE_OPTIONS.map((opt) => {
+            const active = mode === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => handlePilih(opt.key)}
+                disabled={saving}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12, textAlign: 'left',
+                  padding: '12px 14px', borderRadius: 10,
+                  border: active ? '1px solid #2563eb' : '1px solid #e5e7eb',
+                  background: active ? '#eff6ff' : '#ffffff',
+                  cursor: saving ? 'default' : 'pointer',
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                <span
+                  style={{
+                    width: 16, height: 16, borderRadius: '50%', marginTop: 2, flexShrink: 0,
+                    border: active ? '5px solid #2563eb' : '1px solid #9ca3af',
+                    background: '#ffffff', boxSizing: 'border-box',
+                  }}
+                />
+                <span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: active ? '#1d4ed8' : '#111827' }}>{opt.label}</div>
+                  <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>{opt.desc}</div>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewBillingSetting() {
+  const [subTab, setSubTab] = React.useState<PreviewBillingSubTab>('kategori');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid #e5e7eb' }}>
+        {PREVIEW_BILLING_SUB_TABS.map((tab) => {
+          const active = subTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setSubTab(tab.key)}
+              style={{
+                padding: '8px 12px', border: 'none', background: 'transparent',
+                borderBottom: active ? '2px solid #2563eb' : '2px solid transparent',
+                color: active ? '#2563eb' : '#6b7280',
+                fontWeight: active ? 600 : 400, fontSize: 12.5, cursor: 'pointer',
+                marginBottom: -1,
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+      {subTab === 'kategori' && <KategoriBiayaSetting />}
+      {subTab === 'set-preview-obat' && <SetPreviewObatSetting />}
     </div>
   );
 }

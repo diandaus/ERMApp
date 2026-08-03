@@ -86,6 +86,8 @@ type PatientBrief struct {
 	Pnd        string `json:"pnd"`
 	Alamat     string `json:"alamat"`
 	Pekerjaan  string `json:"pekerjaan"`
+	Umur       string `json:"umur"`
+	NoTlp      string `json:"no_tlp"`
 }
 
 type RawatInapPatient struct {
@@ -803,6 +805,10 @@ func main() {
 
 	if err := ensurePreviewBillingPengaturanTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel preview_billing_pengaturan: %v", err)
+	}
+
+	if err := ensurePreviewObatPengaturanTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel preview_obat_pengaturan: %v", err)
 	}
 
 	r := gin.Default()
@@ -1724,7 +1730,9 @@ func main() {
 					', ',
 					COALESCE(kabupaten.nm_kab, '')
 				) as alamat,
-				pasien.pekerjaan
+				pasien.pekerjaan,
+				COALESCE(pasien.umur, '') as umur,
+				COALESCE(pasien.no_tlp, '') as no_tlp
 			FROM pasien
 			LEFT JOIN bahasa_pasien ON bahasa_pasien.id = pasien.bahasa_pasien
 			LEFT JOIN cacat_fisik ON cacat_fisik.id = pasien.cacat_fisik
@@ -1751,6 +1759,8 @@ func main() {
 			&p.Pnd,
 			&p.Alamat,
 			&p.Pekerjaan,
+			&p.Umur,
+			&p.NoTlp,
 		); err != nil {
 			if err == sql.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Pasien tidak ditemukan"})
@@ -2946,6 +2956,9 @@ func main() {
 	r.GET("/api/preview-billing-pengaturan", getPreviewBillingPengaturan(db))
 	r.PUT("/api/preview-billing-pengaturan/:kategori", savePreviewBillingKategori(db))
 
+	r.GET("/api/preview-obat-pengaturan", getPreviewObatPengaturan(db))
+	r.PUT("/api/preview-obat-pengaturan", savePreviewObatPengaturan(db))
+
 	// Bridging SEP (BPJS VClaim) endpoints
 	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
 	r.GET("/api/bridging/sep/count-today", getBridgingSepCountToday(db))
@@ -3152,12 +3165,14 @@ func main() {
 	r.POST("/api/apotek/stok-opname", submitStokOpname(db))
 	r.GET("/api/apotek/stok-opname/riwayat", getStokOpnameRiwayat(db))
 	r.DELETE("/api/apotek/stok-opname", deleteStokOpnameRiwayat(db))
+	r.GET("/api/apotek/stok-opname/bulan-ini", getStokOpnameBulanIni(db))
 
 	// Apotek — Mutasi Obat & BHP
 	r.GET("/api/apotek/mutasi/items", getMutasiItems(db))
 	r.POST("/api/apotek/mutasi", submitMutasi(db))
 	r.GET("/api/apotek/mutasi/riwayat", getMutasiRiwayat(db))
 	r.DELETE("/api/apotek/mutasi", deleteMutasiRiwayat(db))
+	r.GET("/api/apotek/mutasi/hari-ini", getMutasiHariIni(db))
 
 	// Apotek — Permintaan Obat & BHP
 	r.GET("/api/apotek/permintaan/barang-opsi", getPermintaanBarangOpsi(db))
@@ -3173,6 +3188,7 @@ func main() {
 	r.POST("/api/apotek/penerimaan", submitPenerimaan(db))
 	r.GET("/api/apotek/penerimaan/riwayat", getPenerimaanRiwayat(db))
 	r.DELETE("/api/apotek/penerimaan/:no_faktur", deletePenerimaan(db))
+	r.GET("/api/apotek/penerimaan/hari-ini", getPenerimaanHariIni(db))
 
 	// Input Penjualan Obat & BHP
 	r.GET("/api/apotek/penjualan/barang-opsi", getPenjualanBarangOpsi(db))
@@ -3181,6 +3197,7 @@ func main() {
 	r.POST("/api/apotek/penjualan", submitPenjualan(db))
 	r.GET("/api/apotek/penjualan/riwayat", getPenjualanRiwayat(db))
 	r.DELETE("/api/apotek/penjualan/:nota_jual", deletePenjualan(db))
+	r.GET("/api/apotek/penjualan/hari-ini", getPenjualanHariIni(db))
 
 	// Apotek — Riwayat Obat, Alkes & BHP
 	r.GET("/api/apotek/riwayat-barang-medis", getRiwayatBarangMedis(db))
@@ -3200,6 +3217,9 @@ func main() {
 
 	// Apotek — Darurat Stok
 	r.GET("/api/apotek/darurat-stok", getDaruratStok(db))
+	r.GET("/api/apotek/lama-pelayanan", getApotekLamaPelayanan(db))
+	r.GET("/api/apotek/detail-pemberian-obat", getApotekDetailPemberianObat(db))
+	r.GET("/api/apotek/detail-pemberian-obat/items", getApotekDetailPemberianObatItems(db))
 
 	// Apotek — Obat Kadaluarsa
 	r.GET("/api/apotek/obat-kadaluarsa", getObatKadaluarsa(db))
@@ -3213,6 +3233,10 @@ func main() {
 	r.POST("/api/permintaan-resep/telaah", saveTelaahFarmasi(db))
 	r.GET("/api/permintaan-resep/konseling", getKonselingFarmasi(db))
 	r.POST("/api/permintaan-resep/konseling", saveKonselingFarmasi(db))
+	r.GET("/api/permintaan-resep/informasi-obat", getInformasiObatList(db))
+	r.POST("/api/permintaan-resep/informasi-obat", createInformasiObat(db))
+	r.POST("/api/permintaan-resep/informasi-obat/jawaban", saveJawabanPio(db))
+	r.DELETE("/api/permintaan-resep/informasi-obat/:no_permintaan", deleteInformasiObat(db))
 
 	// Permintaan Resep — Dashboard Rawat Inap (Resep Ranap, Stok Pasien, Resep Pulang)
 	r.GET("/api/permintaan-resep/ranap", getPermintaanResepRanap(db))

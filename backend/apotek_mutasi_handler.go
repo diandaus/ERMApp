@@ -428,3 +428,18 @@ func deleteMutasiRiwayat(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Riwayat mutasi berhasil dihapus, stok sistem sudah dikembalikan ke kedua lokasi"})
 	}
 }
+
+// getMutasiHariIni — statistik ringan untuk StatCard "Mutasi Hari Ini" di
+// DashboardApotek.tsx, padanan getPenjualanHariIni (apotek_penjualan_handler.go):
+// cuma hitung baris mutasibarang hari ini, bukan reuse getMutasiRiwayat.
+func getMutasiHariIni(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM mutasibarang WHERE DATE(tanggal) = CURDATE()`).Scan(&count)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"count": count})
+	}
+}

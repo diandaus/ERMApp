@@ -566,3 +566,19 @@ func deletePenjualan(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Penjualan berhasil dihapus, stok sudah dikembalikan"})
 	}
 }
+
+// getPenjualanHariIni — statistik ringan untuk StatCard "Penjualan Hari
+// Ini" di DashboardApotek.tsx. Cuma hitung jumlah transaksi (nota_jual)
+// hari ini, BUKAN reuse getPenjualanRiwayat (yang N+1 query detail item
+// per nota) — terlalu berat untuk sekadar angka di dashboard.
+func getPenjualanHariIni(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM penjualan WHERE tgl_jual = CURDATE()`).Scan(&count)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"count": count})
+	}
+}

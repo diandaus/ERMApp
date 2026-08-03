@@ -64,24 +64,26 @@ import (
 // ============================================================================
 
 type permintaanResepRalanRow struct {
-	NoResep       string `json:"no_resep"`
-	TglPeresepan  string `json:"tgl_peresepan"`
-	JamPeresepan  string `json:"jam_peresepan"`
-	NoRawat       string `json:"no_rawat"`
-	NoRkmMedis    string `json:"no_rkm_medis"`
-	NmPasien      string `json:"nm_pasien"`
-	KdDokter      string `json:"kd_dokter"`
-	NmDokter      string `json:"nm_dokter"`
-	Status        string `json:"status"`
-	NmPoli        string `json:"nm_poli"`
-	KdPoli        string `json:"kd_poli"`
-	JenisBayar    string `json:"jenis_bayar"`
-	TglValidasi   string `json:"tgl_validasi"`
-	JamValidasi   string `json:"jam_validasi"`
-	TglPenyerahan string `json:"tgl_penyerahan"`
-	JamPenyerahan string `json:"jam_penyerahan"`
-	SdhTelaah     bool   `json:"sdh_telaah"`
-	SdhKonseling  bool   `json:"sdh_konseling"`
+	NoResep            string `json:"no_resep"`
+	TglPeresepan       string `json:"tgl_peresepan"`
+	JamPeresepan       string `json:"jam_peresepan"`
+	NoRawat            string `json:"no_rawat"`
+	NoRkmMedis         string `json:"no_rkm_medis"`
+	NmPasien           string `json:"nm_pasien"`
+	KdDokter           string `json:"kd_dokter"`
+	NmDokter           string `json:"nm_dokter"`
+	Status             string `json:"status"`
+	NmPoli             string `json:"nm_poli"`
+	KdPoli             string `json:"kd_poli"`
+	JenisBayar         string `json:"jenis_bayar"`
+	TglValidasi        string `json:"tgl_validasi"`
+	JamValidasi        string `json:"jam_validasi"`
+	TglPenyerahan      string `json:"tgl_penyerahan"`
+	JamPenyerahan      string `json:"jam_penyerahan"`
+	SdhTelaah          bool   `json:"sdh_telaah"`
+	SdhKonseling       bool   `json:"sdh_konseling"`
+	SdhInformasiObat   bool   `json:"sdh_informasi_obat"`
+	AdaPioBelumDijawab bool   `json:"ada_pio_belum_dijawab"`
 }
 
 func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
@@ -109,7 +111,13 @@ func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
 				IF(resep_obat.tgl_penyerahan='0000-00-00','',resep_obat.tgl_penyerahan) AS tgl_penyerahan,
 				IF(resep_obat.jam_penyerahan='00:00:00','',resep_obat.jam_penyerahan) AS jam_penyerahan,
 				IF(telaah_farmasi.no_resep IS NULL,0,1) AS sdh_telaah,
-				IF(konseling_farmasi.no_rawat IS NULL,0,1) AS sdh_konseling
+				IF(konseling_farmasi.no_rawat IS NULL,0,1) AS sdh_konseling,
+				EXISTS(SELECT 1 FROM pelayanan_informasi_obat pio WHERE pio.no_rawat = resep_obat.no_rawat) AS sdh_informasi_obat,
+				EXISTS(
+					SELECT 1 FROM pelayanan_informasi_obat pio2
+					LEFT JOIN jawaban_pio_apoteker j2 ON j2.no_permintaan = pio2.no_permintaan
+					WHERE pio2.no_rawat = resep_obat.no_rawat AND j2.no_permintaan IS NULL
+				) AS ada_pio_belum_dijawab
 			FROM resep_obat
 			INNER JOIN reg_periksa ON resep_obat.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -149,7 +157,8 @@ func getPermintaanResepRalan(db *sql.DB) gin.HandlerFunc {
 			var r permintaanResepRalanRow
 			if rows.Scan(&r.NoResep, &r.TglPeresepan, &r.JamPeresepan, &r.NoRawat, &r.NoRkmMedis, &r.NmPasien,
 				&r.KdDokter, &r.NmDokter, &r.Status, &r.NmPoli, &r.KdPoli, &r.JenisBayar,
-				&r.TglValidasi, &r.JamValidasi, &r.TglPenyerahan, &r.JamPenyerahan, &r.SdhTelaah, &r.SdhKonseling) == nil {
+				&r.TglValidasi, &r.JamValidasi, &r.TglPenyerahan, &r.JamPenyerahan, &r.SdhTelaah, &r.SdhKonseling,
+				&r.SdhInformasiObat, &r.AdaPioBelumDijawab) == nil {
 				if status == "" || status == r.Status {
 					list = append(list, r)
 				}

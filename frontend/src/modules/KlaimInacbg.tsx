@@ -21,7 +21,7 @@ type KlaimItem = {
   klaim_inacbg: number;
 };
 
-const formatRupiah = (n: number) => `Rp ${(n || 0).toLocaleString('id-ID')}`;
+const formatRupiah = (n: number) => `Rp ${Math.round(n || 0).toLocaleString('id-ID')}`;
 
 type AppUser = {
   username: string;
@@ -519,6 +519,9 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                     Biaya obat mencapai diatas 20%
                   </div>
                 )}
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#6b7280' }}>
+                  Total Pasien: <strong style={{ color: '#374151' }}>{list.length}</strong>
+                </span>
               </div>
               <div style={{ borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -577,6 +580,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                               }}
                             >
                               {formatRupiah(item.biaya_obat)}
+                              {item.klaim_inacbg > 0 && ` (${Math.round((item.biaya_obat / item.klaim_inacbg) * 100)}%)`}
                             </span>
                           </td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, textAlign: 'right' }}>

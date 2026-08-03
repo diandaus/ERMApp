@@ -5,6 +5,9 @@ import { RiwayatModal } from '../components/RiwayatModal';
 import { ModalPenyerahanResep } from '../components/ModalPenyerahanResep';
 import { ModalTelaahResep } from '../components/ModalTelaahResep';
 import { ModalKonselingFarmasi } from '../components/ModalKonselingFarmasi';
+import { ModalInformasiObat, type InformasiObatItem } from '../components/ModalInformasiObat';
+import { ModalJawabPio } from '../components/ModalJawabPio';
+import { ModalCariDokter } from '../components/ModalCariDokter';
 import { localDateStr } from '../utils/date';
 import { toSpokenCase } from '../utils/tts';
 import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
@@ -63,7 +66,7 @@ const StepperIcon: React.FC = () => (
       transform: 'translateY(-50%)',
       width: 20,
       height: 20,
-      borderRadius: '50%',
+      borderRadius: '30%',
       background: '#059669',
       display: 'flex',
       alignItems: 'center',
@@ -243,6 +246,8 @@ export type ResepRalanRow = {
   jam_penyerahan: string;
   sdh_telaah: boolean;
   sdh_konseling: boolean;
+  sdh_informasi_obat: boolean;
+  ada_pio_belum_dijawab: boolean;
 };
 
 
@@ -265,7 +270,7 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
   const [itemsDetail, setItemsDetail] = React.useState<Record<string, ResepItems>>({});
   const [loadingDetail, setLoadingDetail] = React.useState<string | null>(null);
   const [validasiRow, setValidasiRow] = React.useState<ResepRalanRow | null>(null);
-  const [dokterOptions, setDokterOptions] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
+  const [showCariDokter, setShowCariDokter] = React.useState(false);
   const [poliOptions, setPoliOptions] = React.useState<{ kd_poli: string; nm_poli: string }[]>([]);
   // Sub-tab dalam Rawat Jalan — padanan TabRawatJalan.addTab("Detail Rawat
   // Jalan", ...) di DlgDaftarPermintaanResep.java: laporan flat semua resep
@@ -275,10 +280,6 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
   const [loadingAllDetail, setLoadingAllDetail] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/api/dokter')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setDokterOptions(Array.isArray(data) ? data : []))
-      .catch(() => setDokterOptions([]));
     fetch('/api/pendaftaran/poli')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setPoliOptions(Array.isArray(data) ? data : []))
@@ -511,17 +512,32 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
         </div>
         <div style={{ width: 200 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Dokter</label>
-          <div style={{ position: 'relative' }}>
-            <select value={dokter} onChange={(e) => setDokter(e.target.value)} style={pillSelectStyle}>
-              <option value="">Semua Dokter</option>
-              {dokterOptions.map((d) => (
-                <option key={d.kd_dokter} value={d.nm_dokter}>
-                  {d.nm_dokter}
-                </option>
-              ))}
-            </select>
-            <StepperIcon />
-          </div>
+          {dokter ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 4,
+              padding: '7px 10px', fontSize: 13, boxSizing: 'border-box',
+            }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dokter}</span>
+              <button
+                type="button"
+                onClick={() => setDokter('')}
+                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500, flexShrink: 0, marginLeft: 6 }}
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <div
+                onClick={() => setShowCariDokter(true)}
+                style={{ ...inputStyle, paddingRight: 32, cursor: 'pointer', color: '#9ca3af', background: '#ffffff' }}
+              >
+                Semua Dokter
+              </div>
+              <StepperIcon />
+            </div>
+          )}
         </div>
         <div style={{ width: 200 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Poli/Unit</label>
@@ -857,6 +873,8 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
       <ModalValidasiObat resep={validasiRow} onClose={() => setValidasiRow(null)} onValidated={fetchData} />
 
       <ModalPenyerahanResep resep={penyerahanRow} onClose={() => setPenyerahanRow(null)} onSaved={fetchData} />
+
+      <ModalCariDokter isOpen={showCariDokter} onClose={() => setShowCariDokter(false)} onSelect={(_kode, nama) => setDokter(nama)} />
     </div>
   );
 };
@@ -951,14 +969,7 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
   const [kamar, setKamar] = React.useState('');
   const [status, setStatus] = React.useState('');
   const [searchText, setSearchText] = React.useState('');
-  const [dokterOptions, setDokterOptions] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
-
-  React.useEffect(() => {
-    fetch('/api/dokter')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setDokterOptions(Array.isArray(data) ? data : []))
-      .catch(() => setDokterOptions([]));
-  }, []);
+  const [showCariDokter, setShowCariDokter] = React.useState(false);
 
   const group: 'resep' | 'stok' | 'pulang' =
     subTab === 'resep' || subTab === 'detail-resep' ? 'resep' : subTab === 'stok' || subTab === 'detail-stok' ? 'stok' : 'pulang';
@@ -1284,17 +1295,32 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
         </div>
         <div style={{ width: 200 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Dokter</label>
-          <div style={{ position: 'relative' }}>
-            <select value={dokter} onChange={(e) => setDokter(e.target.value)} style={pillSelectStyle}>
-              <option value="">Semua Dokter</option>
-              {dokterOptions.map((d) => (
-                <option key={d.kd_dokter} value={d.nm_dokter}>
-                  {d.nm_dokter}
-                </option>
-              ))}
-            </select>
-            <StepperIcon />
-          </div>
+          {dokter ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 4,
+              padding: '7px 10px', fontSize: 13, boxSizing: 'border-box',
+            }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dokter}</span>
+              <button
+                type="button"
+                onClick={() => setDokter('')}
+                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500, flexShrink: 0, marginLeft: 6 }}
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <div
+                onClick={() => setShowCariDokter(true)}
+                style={{ ...inputStyle, paddingRight: 32, cursor: 'pointer', color: '#9ca3af', background: '#ffffff' }}
+              >
+                Semua Dokter — klik pilih
+              </div>
+              <StepperIcon />
+            </div>
+          )}
         </div>
         <div style={{ width: 160 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Ruang/Kamar</label>
@@ -1909,6 +1935,8 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
         onClose={() => setValidasiRow(null)}
         onValidated={fetchResep}
       />
+
+      <ModalCariDokter isOpen={showCariDokter} onClose={() => setShowCariDokter(false)} onSelect={(_kode, nama) => setDokter(nama)} />
     </div>
   );
 };
@@ -2397,6 +2425,276 @@ const TabKonselingFarmasi: React.FC = () => {
   );
 };
 
+// ---- Tab: Informasi Obat -----------------------------------------------------
+
+const INFORMASI_OBAT_SUB_TABS: { key: 'belum' | 'sudah'; label: string }[] = [
+  { key: 'belum', label: 'Belum Ada Pertanyaan' },
+  { key: 'sudah', label: 'Sudah Ada Pertanyaan' },
+];
+
+// Padanan BtnInformasiObat di DlgDaftarPermintaanResep.java (buka
+// permintaan/DlgPermintaanPelayananInformasiObat.java atas baris
+// resep/kunjungan yang sedang dipilih) — pola tombol toolbar yang SAMA
+// dengan BtnKonselingFarmasi, jadi dibuat dengan struktur tab yang identik
+// (dedicated tab + layar cari sendiri, belum/sudah sub-tab).
+//
+// BEDA dari Konseling: sdh_informasi_obat cuma menandai "SUDAH PERNAH ADA
+// pertanyaan PIO untuk no_rawat ini" (bisa lebih dari satu, campuran
+// sudah/belum dijawab) — bukan "sudah dijawab semua". Rincian
+// belum/sudah-dijawab PER PERTANYAAN dilihat di dropdown inline di bawah
+// (badge per entri) atau di ModalJawabPio, karena satu no_rawat bisa
+// punya banyak pertanyaan PIO independen (lihat
+// backend/permintaan_resep_informasi_obat_handler.go).
+const TabInformasiObat: React.FC = () => {
+  const [tgl1, setTgl1] = React.useState(todayStr());
+  const [tgl2, setTgl2] = React.useState(todayStr());
+  const [searchText, setSearchText] = React.useState('');
+  const [subTab, setSubTab] = React.useState<'belum' | 'sudah'>('belum');
+  const [allItems, setAllItems] = React.useState<ResepRalanRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  // informasiObatRow — buka ModalInformasiObat (form "Pertanyaan Baru",
+  // dari sub-tab "Belum Ada Pertanyaan"). jawabPioRow — buka ModalJawabPio
+  // (langsung mode menjawab, dari sub-tab "Sudah Ada Pertanyaan"), modal
+  // terpisah supaya tombol "Jawab" langsung ke sana tanpa modal antara.
+  const [informasiObatRow, setInformasiObatRow] = React.useState<ResepRalanRow | null>(null);
+  const [jawabPioRow, setJawabPioRow] = React.useState<ResepRalanRow | null>(null);
+
+  // Expand/collapse per baris — pola SAMA dengan toggleExpand di
+  // TabResepRalan (Daftar Resep Dokter/Rawat Jalan): klik baris memuat &
+  // menampilkan daftar pertanyaan PIO milik no_rawat itu inline (tanpa
+  // buka ModalInformasiObat), paling berguna di sub-tab "Sudah Ada
+  // Pertanyaan" untuk intip isi pertanyaan/jawaban tanpa modal penuh.
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [itemsDetail, setItemsDetail] = React.useState<Record<string, InformasiObatItem[]>>({});
+  const [loadingDetail, setLoadingDetail] = React.useState<string | null>(null);
+
+  const fetchDetailFor = async (row: ResepRalanRow) => {
+    setLoadingDetail(row.no_resep);
+    try {
+      const res = await fetch(`/api/permintaan-resep/informasi-obat?no_rawat=${encodeURIComponent(row.no_rawat)}`);
+      const data = await res.json();
+      setItemsDetail((prev) => ({ ...prev, [row.no_resep]: Array.isArray(data) ? data : [] }));
+    } catch {
+      setItemsDetail((prev) => ({ ...prev, [row.no_resep]: [] }));
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
+
+  const toggleExpand = async (row: ResepRalanRow) => {
+    if (expanded === row.no_resep) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(row.no_resep);
+    if (!itemsDetail[row.no_resep]) {
+      await fetchDetailFor(row);
+    }
+  };
+
+  const fetchData = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      let url = `/api/permintaan-resep/ralan?tgl1=${tgl1}&tgl2=${tgl2}`;
+      if (searchText) url += `&search=${encodeURIComponent(searchText)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setAllItems(Array.isArray(data) ? data : []);
+    } catch {
+      setAllItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tgl1, tgl2, searchText]);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Auto-refresh tiap 30 detik (lihat catatan sama di TabResepRalan).
+  React.useEffect(() => {
+    const interval = setInterval(() => fetchData(), 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const items = React.useMemo(
+    () => allItems.filter((r) => (subTab === 'belum' ? !r.sdh_informasi_obat : r.sdh_informasi_obat)),
+    [allItems, subTab]
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+        {INFORMASI_OBAT_SUB_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setSubTab(t.key)}
+            style={{
+              padding: '8px 16px',
+              border: 'none',
+              borderBottom: subTab === t.key ? '2px solid #059669' : '2px solid transparent',
+              background: 'transparent',
+              color: subTab === t.key ? '#059669' : '#6b7280',
+              fontWeight: subTab === t.key ? 600 : 400,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flexShrink: 0 }}>
+        <div style={{ width: 150 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Dari Tanggal</label>
+          <input type="date" style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, boxSizing: 'border-box' }} value={tgl1} onChange={(e) => setTgl1(e.target.value)} />
+        </div>
+        <div style={{ width: 150 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>s.d. Tanggal</label>
+          <input type="date" style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, boxSizing: 'border-box' }} value={tgl2} onChange={(e) => setTgl2(e.target.value)} />
+        </div>
+        <div style={{ minWidth: 220, flex: 1 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
+          <input
+            style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, boxSizing: 'border-box' }}
+            placeholder="No. Resep / No. Rawat / No. RM / Pasien / Dokter..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
+            <tr>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb', width: 24 }}></th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Resep</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tgl/Jam Peresepan</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Rawat</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Pasien</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Dokter Peresep</th>
+              <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>Status</th>
+              <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
+            ) : items.length === 0 ? (
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>{subTab === 'belum' ? 'Tidak ada kunjungan tanpa pertanyaan Informasi Obat' : 'Belum ada kunjungan dengan pertanyaan Informasi Obat'}</td></tr>
+            ) : (
+              items.map((row, index) => {
+                const belum = row.status === 'Belum Terlayani';
+                const isOpen = expanded === row.no_resep;
+                const detail = itemsDetail[row.no_resep];
+                return (
+                  <React.Fragment key={row.no_resep}>
+                    <tr style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb', cursor: 'pointer' }} onClick={() => toggleExpand(row)}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', color: '#9ca3af' }}>{isOpen ? '▾' : '▸'}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontWeight: 600 }}>{row.no_resep}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                        {row.tgl_peresepan.slice(0, 10)} <span style={{ color: '#9ca3af' }}>{row.jam_peresepan}</span>
+                      </td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{row.no_rawat}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{row.no_rkm_medis}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{row.nm_pasien}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>{row.nm_dokter}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                        {subTab === 'sudah' ? (
+                          <span
+                            style={{
+                              padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                              background: row.ada_pio_belum_dijawab ? '#fffbeb' : '#ecfdf5',
+                              color: row.ada_pio_belum_dijawab ? '#d97706' : '#059669',
+                            }}
+                          >
+                            {row.ada_pio_belum_dijawab ? 'Menunggu Jawaban' : 'Sudah Dijawab'}
+                          </span>
+                        ) : (
+                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: belum ? '#fffbeb' : '#ecfdf5', color: belum ? '#d97706' : '#059669' }}>
+                            {row.status}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => (subTab === 'belum' ? setInformasiObatRow(row) : setJawabPioRow(row))}
+                          style={
+                            subTab === 'sudah' && row.ada_pio_belum_dijawab
+                              ? { padding: '4px 10px', borderRadius: 4, border: '1px solid #059669', background: '#059669', color: '#ffffff', cursor: 'pointer', fontSize: 11, fontWeight: 500 }
+                              : { padding: '4px 10px', borderRadius: 4, border: '1px solid #1AB1E5', background: '#ffffff', color: '#1AB1E5', cursor: 'pointer', fontSize: 11, fontWeight: 500 }
+                          }
+                        >
+                          {subTab === 'belum' ? 'Informasi Obat' : row.ada_pio_belum_dijawab ? 'Jawab' : 'Edit'}
+                        </button>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={9} style={{ padding: '4px 8px 12px 32px', borderBottom: '1px solid #e5e7eb', background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                          {loadingDetail === row.no_resep ? (
+                            <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Memuat pertanyaan...</div>
+                          ) : !detail || detail.length === 0 ? (
+                            <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Belum ada pertanyaan Informasi Obat untuk kunjungan ini</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {detail.map((item) => (
+                                <div key={item.no_permintaan} style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 8 }}>
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#111827' }}>
+                                    {item.no_permintaan} <span style={{ fontWeight: 400, color: '#6b7280' }}>— {item.jenis_pertanyaan}</span>
+                                  </div>
+                                  <div style={{ fontSize: 10.5, color: '#6b7280', marginTop: 2 }}>
+                                    {item.tanggal.slice(0, 16).replace('T', ' ')} · {item.penanya} ({item.status_penanya}) · {item.metode} · {item.no_telp_penanya}
+                                  </div>
+                                  <div style={{ fontSize: 11.5, color: '#374151', marginTop: 6, whiteSpace: 'pre-wrap' }}>{item.uraian_pertanyaan}</div>
+                                  {item.sudah_dijawab && (
+                                    <div style={{ marginTop: 8, padding: 8, borderRadius: 4, background: '#f9fafb' }}>
+                                      <div style={{ fontSize: 11, color: '#111827' }}>{item.jawaban}</div>
+                                      <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4 }}>
+                                        Referensi: {item.referensi} · {item.penyampaian_jawaban} · oleh {item.nama_apoteker || item.nip_apoteker} · {item.tanggal_jawab.slice(0, 16).replace('T', ' ')}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <ModalInformasiObat
+        resep={informasiObatRow}
+        onClose={() => setInformasiObatRow(null)}
+        onSaved={() => {
+          fetchData();
+          setItemsDetail({});
+        }}
+      />
+      <ModalJawabPio
+        resep={jawabPioRow}
+        onClose={() => setJawabPioRow(null)}
+        onSaved={() => {
+          fetchData();
+          setItemsDetail({});
+        }}
+      />
+    </div>
+  );
+};
+
 // ---- Shell Permintaan Resep -------------------------------------------------
 
 // Dipicu dari tab 'permintaan-resep' di sidebar Apotek.tsx, dirender
@@ -2742,7 +3040,7 @@ export const PermintaanResepView: React.FC<PermintaanResepViewProps> = ({ onClos
             ))}
           {activeTab === 'telaah-resep' && <TabTelaahResep />}
           {activeTab === 'konseling-farmasi' && <TabKonselingFarmasi />}
-          {activeTab === 'informasi-obat' && <Placeholder title="Informasi Obat" />}
+          {activeTab === 'informasi-obat' && <TabInformasiObat />}
           {activeTab === 'cetak-resep-awal' && <Placeholder title="Cetak Resep Awal" />}
           {activeTab === 'resep-luar' && <Placeholder title="Resep Luar" />}
           {activeTab === 'piutang-obat' && <Placeholder title="Piutang Obat" />}

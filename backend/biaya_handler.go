@@ -534,20 +534,42 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 		}
 	}
 
-	// Obat & BHP
+	// Obat & BHP — basis harga per-unit (kolom "Biaya") diatur lewat Casemix
+	// > Pengaturan > Preview Billing > Set Preview Obat: "jual" (biaya_obat,
+	// harga jual ke pasien — default, sama seperti sebelumnya) atau "modal"
+	// (h_beli, harga beli/modal apotek). Basis "modal" TIDAK ikut menambahkan
+	// embalase/tuslah ke total (itu biaya jasa racik/kemasan yang melekat ke
+	// harga jual, bukan bagian dari modal obatnya).
 	if !hidden["Obat & BHP"] {
-		obatRows, err := db.Query(`
-		SELECT databarang.nama_brng, jenis.nama, detail_pemberian_obat.biaya_obat,
-			SUM(detail_pemberian_obat.jml) AS jml,
-			SUM(detail_pemberian_obat.embalase + detail_pemberian_obat.tuslah) AS tambahan,
-			(SUM(detail_pemberian_obat.total) - SUM(detail_pemberian_obat.embalase + detail_pemberian_obat.tuslah)) AS total
-		FROM detail_pemberian_obat
-		INNER JOIN databarang ON detail_pemberian_obat.kode_brng = databarang.kode_brng
-		INNER JOIN jenis ON databarang.kdjns = jenis.kdjns
-		WHERE detail_pemberian_obat.no_rawat = ? AND detail_pemberian_obat.status = 'Ranap'
-		GROUP BY databarang.kode_brng, detail_pemberian_obat.biaya_obat
-		ORDER BY jenis.nama
-	`, noRawat)
+		var obatRows *sql.Rows
+		var err error
+		if getPreviewObatMode(db) == "modal" {
+			obatRows, err = db.Query(`
+			SELECT databarang.nama_brng, jenis.nama, detail_pemberian_obat.h_beli,
+				SUM(detail_pemberian_obat.jml) AS jml,
+				0 AS tambahan,
+				SUM(detail_pemberian_obat.h_beli * detail_pemberian_obat.jml) AS total
+			FROM detail_pemberian_obat
+			INNER JOIN databarang ON detail_pemberian_obat.kode_brng = databarang.kode_brng
+			INNER JOIN jenis ON databarang.kdjns = jenis.kdjns
+			WHERE detail_pemberian_obat.no_rawat = ? AND detail_pemberian_obat.status = 'Ranap'
+			GROUP BY databarang.kode_brng, detail_pemberian_obat.h_beli
+			ORDER BY jenis.nama
+		`, noRawat)
+		} else {
+			obatRows, err = db.Query(`
+			SELECT databarang.nama_brng, jenis.nama, detail_pemberian_obat.biaya_obat,
+				SUM(detail_pemberian_obat.jml) AS jml,
+				SUM(detail_pemberian_obat.embalase + detail_pemberian_obat.tuslah) AS tambahan,
+				(SUM(detail_pemberian_obat.total) - SUM(detail_pemberian_obat.embalase + detail_pemberian_obat.tuslah)) AS total
+			FROM detail_pemberian_obat
+			INNER JOIN databarang ON detail_pemberian_obat.kode_brng = databarang.kode_brng
+			INNER JOIN jenis ON databarang.kdjns = jenis.kdjns
+			WHERE detail_pemberian_obat.no_rawat = ? AND detail_pemberian_obat.status = 'Ranap'
+			GROUP BY databarang.kode_brng, detail_pemberian_obat.biaya_obat
+			ORDER BY jenis.nama
+		`, noRawat)
+		}
 		if err == nil {
 			var subtotal float64
 			hasObat := false

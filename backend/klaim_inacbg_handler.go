@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -73,7 +74,18 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 		// batasan tanggal masuk sama sekali.
 		belumPulangOnly := statusPulang == "belum"
 
-		query := `
+		// Basis harga obat (kolom "Biaya Obat" & komponen obat di "Billing")
+		// ikut pengaturan Casemix > Pengaturan > Preview Billing > Set
+		// Preview Obat — sama seperti computeBillingPreview (biaya_handler.go)
+		// & getDetailPemberianObat (obat_handler.go): "modal" pakai
+		// h_beli*jml, "jual" (default) pakai dpo.total apa adanya (sudah
+		// termasuk embalase/tuslah).
+		obatSumExpr := "SUM(dpo.total)"
+		if getPreviewObatMode(db) == "modal" {
+			obatSumExpr = "SUM(dpo.h_beli * dpo.jml)"
+		}
+
+		query := fmt.Sprintf(`
 			SELECT
 				kamar_inap.no_rawat,
 				reg_periksa.no_rkm_medis,
@@ -90,7 +102,7 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 					''
 				) AS diagnosa,
 				COALESCE((
-					SELECT SUM(dpo.total) FROM detail_pemberian_obat dpo
+					SELECT %s FROM detail_pemberian_obat dpo
 					WHERE dpo.no_rawat = kamar_inap.no_rawat AND dpo.status = 'Ranap'
 				), 0) AS biaya_obat,
 				COALESCE((
@@ -137,7 +149,7 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 					+ COALESCE((SELECT SUM(rid.biaya_rawat) FROM rawat_inap_dr rid WHERE rid.no_rawat = kamar_inap.no_rawat), 0)
 					+ COALESCE((SELECT SUM(rip.biaya_rawat) FROM rawat_inap_pr rip WHERE rip.no_rawat = kamar_inap.no_rawat), 0)
 					+ COALESCE((SELECT SUM(ridp.biaya_rawat) FROM rawat_inap_drpr ridp WHERE ridp.no_rawat = kamar_inap.no_rawat), 0)
-					+ COALESCE((SELECT SUM(dpo.total) FROM detail_pemberian_obat dpo WHERE dpo.no_rawat = kamar_inap.no_rawat AND dpo.status = 'Ranap'), 0)
+					+ COALESCE((SELECT %s FROM detail_pemberian_obat dpo WHERE dpo.no_rawat = kamar_inap.no_rawat AND dpo.status = 'Ranap'), 0)
 					+ COALESCE((SELECT SUM(pl.biaya) FROM periksa_lab pl WHERE pl.no_rawat = kamar_inap.no_rawat AND pl.status = 'Ranap'), 0)
 					+ COALESCE((SELECT SUM(pr.biaya) FROM periksa_radiologi pr WHERE pr.no_rawat = kamar_inap.no_rawat AND pr.status = 'Ranap'), 0)
 				) AS billing,
@@ -146,7 +158,7 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN reg_periksa ON kamar_inap.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN klaim_inacbg ON klaim_inacbg.no_rawat = kamar_inap.no_rawat
-			WHERE 1=1`
+			WHERE 1=1`, obatSumExpr, obatSumExpr)
 		var args []interface{}
 		if belumPulangOnly {
 			query += ` AND kamar_inap.stts_pulang = '-'`
