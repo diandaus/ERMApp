@@ -17,7 +17,7 @@ import { AddUserModal } from '../components/AddUserModal';
 import { ModalGantiPassword } from '../components/ModalGantiPassword';
 import { SatuSehatView } from './SatuSehat';
 import { MappingSatuSehatView } from './MappingSatuSehat';
-import { PegawaiView } from './Pegawai';
+import { KepegawaianView } from './Kepegawaian';
 import { AdminView } from './Admin';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { toSpokenCase } from '../utils/tts';
@@ -2251,7 +2251,13 @@ export const App: React.FC = () => {
           </section>
         );
       case 'kepegawaian':
-        return <PegawaiView />;
+        // Layout sendiri (sidebar + full layar), lepas dari shell aplikasi
+        // sepenuhnya — persis pola ApotekView/BridgingBpjsView.
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+            <KepegawaianView onBack={() => setActiveMenu('menu-utama')} />
+          </div>
+        );
       case 'anjungan-antrian':
         return <AntrianDashboardView />;
       case 'rekam-medis':

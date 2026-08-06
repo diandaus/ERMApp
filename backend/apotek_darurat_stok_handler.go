@@ -97,3 +97,32 @@ func getDaruratStok(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, list)
 	}
 }
+
+// updateStokMinimal — TIDAK ada padanannya di Java (DlgDaruratStok.java
+// murni laporan, tidak ada tombol edit sama sekali di sana; ubah
+// stokminimal biasanya lewat form Data Barang terpisah) — field baru di
+// app ini supaya staf bisa langsung koreksi ambang darurat stok dari
+// laporan yang sama tempat mereka menyadari nilainya kurang pas, tanpa
+// harus pindah ke modul Data Barang.
+func updateStokMinimal(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		kodeBrng := c.Param("kode_brng")
+		var body struct {
+			StokMinimal float64 `json:"stok_minimal"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || body.StokMinimal < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Stok minimal tidak valid"})
+			return
+		}
+		res, err := db.Exec(`UPDATE databarang SET stokminimal=? WHERE kode_brng=?`, body.StokMinimal, kodeBrng)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Barang tidak ditemukan"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Stok minimal berhasil diperbarui"})
+	}
+}

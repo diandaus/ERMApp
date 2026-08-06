@@ -6,6 +6,9 @@ import { ApotekStokOpnameView } from './ApotekStokOpname';
 import { ApotekMutasiView } from './ApotekMutasi';
 import { ApotekPermintaanView } from './ApotekPermintaan';
 import { ApotekPenerimaanView } from './ApotekPenerimaan';
+import { PengadaanView } from './Pengadaan';
+import { PemesananApotekView } from './PemesananApotek';
+import { PenggunaanObatView } from './PenggunaanObat';
 import { ApotekPenjualanView } from './ApotekPenjualan';
 import { ApotekReturBeliView } from './ApotekReturBeli';
 import { ApotekReturJualView } from './ApotekReturJual';
@@ -15,7 +18,7 @@ import { ApotekObatKadaluarsaView } from './ApotekObatKadaluarsa';
 import { DetailPemberianObatView } from './DetailPemberianObat';
 import { PermintaanResepView } from './PermintaanResep';
 
-type ApotekTab = 'overview' | 'data-barang' | 'stok-opname' | 'mutasi' | 'permintaan' | 'permintaan-resep' | 'penerimaan' | 'penjualan' | 'retur-beli' | 'retur-jual' | 'darurat-stok' | 'obat-kadaluarsa' | 'riwayat-barang-medis' | 'detail-pemberian-obat' | 'pengaturan';
+type ApotekTab = 'overview' | 'data-barang' | 'stok-opname' | 'mutasi' | 'permintaan' | 'permintaan-resep' | 'penerimaan' | 'pengadaan' | 'pemesanan' | 'penggunaan-obat' | 'penjualan' | 'retur-beli' | 'retur-jual' | 'darurat-stok' | 'obat-kadaluarsa' | 'riwayat-barang-medis' | 'detail-pemberian-obat' | 'pengaturan';
 
 const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
   {
@@ -110,6 +113,38 @@ const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    key: 'pengadaan',
+    label: 'Pengadaan',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <rect x="8" y="2" width="8" height="4" rx="1"></rect>
+      </svg>
+    ),
+  },
+  {
+    key: 'pemesanan',
+    label: 'Pemesanan',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="21" r="1"></circle>
+        <circle cx="19" cy="21" r="1"></circle>
+        <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'penggunaan-obat',
+    label: 'Penggunaan Obat',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path>
+        <path d="m8.5 8.5 7 7"></path>
+        <path d="M9 12.5 12.5 9"></path>
+      </svg>
+    ),
+  },
+  {
     key: 'retur-beli',
     label: 'Retur ke Suplier',
     icon: (
@@ -166,8 +201,11 @@ const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
     label: 'Detail Pemberian Obat',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
-      </svg>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path>
+      <path d="M14 2v6h6"></path>
+      <path d="M9 15h6"></path>
+      <path d="M9 11h6"></path>
+    </svg>
     ),
   },
 ];
@@ -466,6 +504,9 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
           {activeTab === 'mutasi' && <ApotekMutasiView />}
           {activeTab === 'permintaan' && <ApotekPermintaanView />}
           {activeTab === 'penerimaan' && <ApotekPenerimaanView />}
+          {activeTab === 'pengadaan' && <PengadaanView />}
+          {activeTab === 'pemesanan' && <PemesananApotekView />}
+          {activeTab === 'penggunaan-obat' && <PenggunaanObatView />}
           {activeTab === 'penjualan' && <ApotekPenjualanView />}
           {activeTab === 'retur-beli' && <ApotekReturBeliView />}
           {activeTab === 'retur-jual' && <ApotekReturJualView />}

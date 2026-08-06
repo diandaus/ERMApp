@@ -144,9 +144,15 @@ type ModalInformasiObatProps = {
   resep: ResepRalanRow | null;
   onClose: () => void;
   onSaved: () => void;
+  // onJawabLangsung — dipanggil kalau user pilih "Jawab Langsung" di
+  // notif sukses (bukan "Tidak"). Parent (PermintaanResep.tsx) yang
+  // tahu cara buka ModalJawabPio; resep dikirim balik lewat parameter
+  // (bukan andalkan closure) supaya tidak rawan stale kalau state
+  // parent berubah di antara modal ini dibuka & disimpan.
+  onJawabLangsung?: (resep: ResepRalanRow) => void;
 };
 
-export const ModalInformasiObat: React.FC<ModalInformasiObatProps> = ({ resep, onClose, onSaved }) => {
+export const ModalInformasiObat: React.FC<ModalInformasiObatProps> = ({ resep, onClose, onSaved, onJawabLangsung }) => {
   const [newForm, setNewForm] = React.useState<PertanyaanForm>(DEFAULT_PERTANYAAN_FORM);
   const [savingNew, setSavingNew] = React.useState(false);
 
@@ -211,9 +217,21 @@ export const ModalInformasiObat: React.FC<ModalInformasiObatProps> = ({ resep, o
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan pertanyaan');
-      Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Pertanyaan tersimpan', timer: 2000, showConfirmButton: false });
       onSaved();
+      const confirm = await Swal.fire({
+        icon: 'success',
+        title: 'Berhasil!',
+        text: 'Pertanyaan tersimpan. Mau langsung dijawab sekarang?',
+        showCancelButton: true,
+        confirmButtonText: 'Jawab Langsung',
+        cancelButtonText: 'Tidak',
+        confirmButtonColor: '#059669',
+        cancelButtonColor: '#6b7280',
+      });
       onClose();
+      if (confirm.isConfirmed) {
+        onJawabLangsung?.(resep);
+      }
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
     } finally {

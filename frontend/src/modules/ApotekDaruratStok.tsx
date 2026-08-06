@@ -1,4 +1,5 @@
 import React from 'react';
+import Swal from 'sweetalert2';
 
 // ============================================================================
 // APOTEK — Darurat Stok (tab utama modul Apotek). Cocok dengan dialog
@@ -36,6 +37,49 @@ export const ApotekDaruratStokView: React.FC = () => {
   const [items, setItems] = React.useState<DaruratStokRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [hasSearched, setHasSearched] = React.useState(false);
+  const [editValues, setEditValues] = React.useState<Record<string, string>>({});
+  const [savingKeys, setSavingKeys] = React.useState<Set<string>>(new Set());
+
+  // Stok Minimal — TIDAK read-only lagi (beda dari Java, lihat catatan
+  // updateStokMinimal di backend/apotek_darurat_stok_handler.go), diedit
+  // inline & auto-save saat blur kalau nilainya berubah, supaya staf bisa
+  // langsung koreksi ambang darurat dari laporan yang sama tanpa pindah
+  // ke modul Data Barang.
+  const handleSaveStokMinimal = async (item: DaruratStokRow, rawValue: string) => {
+    const newValue = Number(rawValue);
+    if (rawValue.trim() === '' || isNaN(newValue) || newValue < 0 || newValue === item.stok_minimal) {
+      setEditValues((prev) => {
+        const next = { ...prev };
+        delete next[item.kode_brng];
+        return next;
+      });
+      return;
+    }
+    setSavingKeys((prev) => new Set(prev).add(item.kode_brng));
+    try {
+      const res = await fetch(`/api/apotek/darurat-stok/${encodeURIComponent(item.kode_brng)}/stok-minimal`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stok_minimal: newValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
+      setItems((prev) => prev.map((r) => (r.kode_brng === item.kode_brng ? { ...r, stok_minimal: newValue } : r)));
+      setEditValues((prev) => {
+        const next = { ...prev };
+        delete next[item.kode_brng];
+        return next;
+      });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Gagal menyimpan', text: err.message });
+    } finally {
+      setSavingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(item.kode_brng);
+        return next;
+      });
+    }
+  };
 
   const fetchDaruratStok = React.useCallback(async () => {
     setLoading(true);
@@ -114,7 +158,19 @@ export const ApotekDaruratStokView: React.FC = () => {
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontWeight: 600 }}>{item.nama_brng}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.satuan}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.jenis}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', color: '#374151' }}>{item.stok_minimal}</td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        step="any"
+                        min={0}
+                        value={editValues[item.kode_brng] ?? String(item.stok_minimal)}
+                        onChange={(e) => setEditValues((prev) => ({ ...prev, [item.kode_brng]: e.target.value }))}
+                        onBlur={(e) => handleSaveStokMinimal(item, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                        disabled={savingKeys.has(item.kode_brng)}
+                        style={{ width: 70, padding: '5px 6px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box', background: savingKeys.has(item.kode_brng) ? '#f3f4f6' : '#ffffff' }}
+                      />
+                    </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', color: kritis ? '#dc2626' : '#d97706', fontWeight: 700 }}>{item.stok_saat_ini}</td>
                   </tr>
                 );

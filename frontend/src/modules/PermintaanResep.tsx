@@ -2682,6 +2682,7 @@ const TabInformasiObat: React.FC = () => {
           fetchData();
           setItemsDetail({});
         }}
+        onJawabLangsung={(resep) => setJawabPioRow(resep)}
       />
       <ModalJawabPio
         resep={jawabPioRow}

@@ -113,6 +113,7 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [keterangan, setKeterangan] = React.useState('');
   const [searchText, setSearchText] = React.useState('');
   const [rows, setRows] = React.useState<MutasiRow[]>([]);
+  const [selectedRows, setSelectedRows] = React.useState<MutasiRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [warnDari, setWarnDari] = React.useState(false);
@@ -135,10 +136,7 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       if (searchText) url += `&search=${encodeURIComponent(searchText)}`;
       const res = await fetch(url);
       const data = await res.json();
-      setRows((prev) => {
-        const prevJml = new Map(prev.map((r) => [r.kode_brng, r.jml]));
-        return Array.isArray(data) ? data.map((it) => ({ ...it, jml: prevJml.get(it.kode_brng) || '' })) : [];
-      });
+      setRows(Array.isArray(data) ? data.map((it) => ({ ...it, jml: '' })) : []);
     } catch {
       setRows([]);
     } finally {
@@ -146,11 +144,12 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     }
   }, [kdBangsalDari, kdBangsalKe, searchText]);
 
-  // Ganti Dari mereset seluruh Jml yang sudah diisi — Stok Asal barang jadi
-  // tidak relevan lagi begitu lokasi asal berubah (padanan aturan "Lokasi
-  // kosong wipe Real" di Stok Opname, digeneralisasi ke Dari berubah).
+  // Ganti Dari mereset seluruh Jml yang sudah diisi (termasuk barang yang
+  // sudah "pinned" di selectedRows) — Stok Asal barang jadi tidak relevan
+  // lagi begitu lokasi asal berubah (padanan aturan "Lokasi kosong wipe
+  // Real" di Stok Opname, digeneralisasi ke Dari berubah).
   React.useEffect(() => {
-    setRows((prev) => prev.map((r) => ({ ...r, jml: '' })));
+    setSelectedRows([]);
     fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kdBangsalDari]);
@@ -166,11 +165,77 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kdBangsalKe, searchText]);
 
-  const setJml = (kodeBrng: string, value: string) => {
+  // Barang yang sudah diisi jumlahnya "pindah" jadi baris fixed di paling
+  // atas tabel (selectedRows) — tetap terlihat & bisa diedit walau user
+  // lanjut mencari barang lain, tidak lagi hilang (beserta jumlahnya)
+  // begitu keluar dari hasil pencarian saat ini. Pola sama persis dengan
+  // upsertSelected di ApotekPenjualan.tsx.
+  const upsertSelected = (item: MutasiRow) => {
+    setSelectedRows((prev) => {
+      const jmlNum = Number(item.jml);
+      const isValid = item.jml.trim() !== '' && !isNaN(jmlNum) && jmlNum > 0;
+      const idx = prev.findIndex((r) => r.kode_brng === item.kode_brng);
+      if (!isValid) {
+        return idx >= 0 ? prev.filter((r) => r.kode_brng !== item.kode_brng) : prev;
+      }
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = item;
+        return copy;
+      }
+      return [...prev, item];
+    });
+  };
+
+  // setField cuma update tampilan lokal saat mengetik di tabel pencarian —
+  // upsertSelected BARU dipanggil saat blur (commitField), sama pola
+  // dengan ApotekPenjualan.tsx (cegah bug "ketik 10 cuma kesimpen 1").
+  const setField = (kodeBrng: string, value: string) => {
     setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, jml: value } : r)));
   };
 
-  const guardJmlFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+  // Blok jumlah melebihi Stok Asal — padanan tbDokterMouseClicked di Java
+  // yang reset Jml+alert kalau jumlah melebihi stok tersedia di lokasi
+  // asal. Dipanggil dari commitField/commitPinnedField (dua-duanya).
+  const cekStokCukup = (r: MutasiRow): boolean => {
+    const val = Number(r.jml);
+    if (r.jml.trim() !== '' && val > r.stok_asal) {
+      Swal.fire({ icon: 'warning', title: 'Stok tidak mencukupi', text: `Stok asal ${r.nama_brng} cuma ${r.stok_asal}` });
+      return false;
+    }
+    return true;
+  };
+
+  const commitField = (kodeBrng: string) => {
+    const item = rows.find((r) => r.kode_brng === kodeBrng);
+    if (!item) return;
+    if (!cekStokCukup(item)) {
+      setField(kodeBrng, '');
+      return;
+    }
+    upsertSelected(item);
+    if (item.jml.trim() !== '' && Number(item.jml) > 0) {
+      setField(kodeBrng, '');
+    }
+  };
+
+  // setPinnedField cuma update nilai saat mengetik, TIDAK langsung buang
+  // baris begitu jumlah sempat kosong (mis. user select-all mau ganti
+  // "10" jadi "5"). Baris baru dibuang saat blur kalau masih kosong/tidak
+  // valid (commitPinnedField), sama pola dgn ApotekPenjualan.tsx.
+  const setPinnedField = (kodeBrng: string, value: string) => {
+    setSelectedRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, jml: value } : r)));
+  };
+
+  const commitPinnedField = (kodeBrng: string) => {
+    const item = selectedRows.find((r) => r.kode_brng === kodeBrng);
+    if (item && !cekStokCukup(item)) {
+      setPinnedField(kodeBrng, '');
+    }
+    setSelectedRows((prev) => prev.filter((r) => r.kode_brng !== kodeBrng || (r.jml.trim() !== '' && Number(r.jml) > 0)));
+  };
+
+  const guardFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     if (!kdBangsalDari || !kdBangsalKe || !keterangan.trim()) {
       e.target.blur();
       setWarnDari(!kdBangsalDari);
@@ -184,21 +249,12 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     }
   };
 
-  // Blok mengetik jumlah melebihi Stok Asal begitu meninggalkan kolom —
-  // padanan tbDokterMouseClicked di Java yang reset Jml+alert kalau jumlah
-  // melebihi stok tersedia di lokasi asal.
-  const handleJmlBlur = (r: MutasiRow) => {
-    const val = Number(r.jml);
-    if (r.jml.trim() !== '' && val > r.stok_asal) {
-      Swal.fire({ icon: 'warning', title: 'Stok tidak mencukupi', text: `Stok asal ${r.nama_brng} cuma ${r.stok_asal}` });
-      setJml(r.kode_brng, '');
-    }
-  };
-
   const hitungTotal = (r: MutasiRow) => (r.jml.trim() === '' ? null : Number(r.jml) * r.h_beli);
-  const filledCount = rows.filter((r) => r.jml.trim() !== '').length;
+  const visibleSearchRows = rows.filter((r) => !selectedRows.some((s) => s.kode_brng === r.kode_brng));
+  const filledCount = selectedRows.length;
 
   const handleBersihkanJumlah = () => {
+    setSelectedRows([]);
     setRows((prev) => prev.map((r) => ({ ...r, jml: '' })));
   };
 
@@ -219,7 +275,7 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       Swal.fire({ icon: 'warning', title: 'Keterangan wajib diisi' });
       return;
     }
-    const items = rows
+    const items = selectedRows
       .filter((r) => r.jml.trim() !== '' && Number(r.jml) > 0)
       .map((r) => ({ kode_brng: r.kode_brng, h_beli: r.h_beli, jml: Number(r.jml) }));
     if (items.length === 0) {
@@ -303,7 +359,7 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             placeholder="Mutasi rutin"
           />
         </div>
-        <div style={{ width: 160, flexShrink: 0 }}>
+        <div style={{ width: 360, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <div style={{ position: 'relative', display: 'flex' }}>
             <svg
@@ -364,14 +420,47 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             </tr>
           </thead>
           <tbody>
+            {/* Barang terpilih — fixed di atas, tetap tampil walau user
+                lanjut mencari barang lain di bawah. */}
+            {selectedRows.map((r) => {
+              const total = hitungTotal(r);
+              return (
+                <tr key={`pinned-${r.kode_brng}`} style={{ background: '#ecfdf5' }}>
+                  <td style={{ padding: '4px 6px 4px 4px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.jml}
+                      onChange={(e) => setPinnedField(r.kode_brng, e.target.value)}
+                      onBlur={() => commitPinnedField(r.kode_brng)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      style={{ width: 70, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.kode_brng}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#065f46', fontWeight: 600 }}>{r.nama_brng}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.satuan}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151', textAlign: 'right' }}>{formatRupiah(r.h_beli)}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#065f46', fontWeight: 600, textAlign: 'right' }}>{total !== null ? formatRupiah(total) : '-'}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: Number(r.jml || 0) > r.stok_asal ? '#dc2626' : '#374151', fontWeight: Number(r.jml || 0) > r.stok_asal ? 700 : 400, textAlign: 'right' }}>{r.stok_asal}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151', textAlign: 'right' }}>{r.stok_tujuan}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.expire || '-'}</td>
+                </tr>
+              );
+            })}
+
             {!kdBangsalDari ? (
-              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Pilih lokasi Dari untuk menampilkan barang yang bisa dimutasi</td></tr>
+              selectedRows.length === 0 && (
+                <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Pilih lokasi Dari untuk menampilkan barang yang bisa dimutasi</td></tr>
+              )
             ) : loading ? (
               <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang berstok di lokasi ini</td></tr>
+            ) : visibleSearchRows.length === 0 ? (
+              selectedRows.length === 0 && (
+                <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang berstok di lokasi ini</td></tr>
+              )
             ) : (
-              rows.map((r, index) => {
+              visibleSearchRows.map((r, index) => {
                 const total = hitungTotal(r);
                 return (
                   <tr key={r.kode_brng} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
@@ -380,9 +469,10 @@ const TabInputMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                         type="number"
                         step="any"
                         value={r.jml}
-                        onChange={(e) => setJml(r.kode_brng, e.target.value)}
-                        onFocus={guardJmlFocus}
-                        onBlur={() => handleJmlBlur(r)}
+                        onChange={(e) => setField(r.kode_brng, e.target.value)}
+                        onFocus={guardFocus}
+                        onBlur={() => commitField(r.kode_brng)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                         style={{ width: 70, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
                       />
                     </td>
@@ -431,6 +521,16 @@ const TabRiwayatMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [searchText, setSearchText] = React.useState('');
   const [items, setItems] = React.useState<MutasiRiwayat[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [settings, setSettings] = React.useState<{ nama_instansi: string; alamat: string; logo_url: string; kontak: string; email_rs: string }>({
+    nama_instansi: '', alamat: '', logo_url: '', kontak: '', email_rs: '',
+  });
+
+  React.useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setSettings(data))
+      .catch(() => {});
+  }, []);
 
   const fetchRiwayat = React.useCallback(async () => {
     setLoading(true);
@@ -483,6 +583,114 @@ const TabRiwayatMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     }
   };
 
+  // handleCetak — cetak LAPORAN MUTASI OBAT (rekap semua riwayat yang
+  // lolos filter tanggal/lokasi/cari saat ini), pola print-HTML browser
+  // sama dengan modul lain (window.open + document.write + print()
+  // bawaan browser). Pakai `items` yang sudah di-fetch, tidak perlu
+  // request baru.
+  const handleCetak = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=1000');
+    if (!printWindow) return;
+
+    const logoSrc = settings.logo_url
+      ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
+      : '';
+    const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+      .filter(Boolean)
+      .join(', ');
+
+    const grandTotal = items.reduce((sum, it) => sum + (it.total || 0), 0);
+    const rowsHtml = items.map((it, index) => `
+      <tr>
+        <td style="text-align:center">${index + 1}</td>
+        <td>${it.tanggal.slice(0, 10)}</td>
+        <td>${it.nama_brng} (${it.satuan})</td>
+        <td>${it.nm_bangsal_dari}</td>
+        <td>${it.nm_bangsal_ke}</td>
+        <td style="text-align:right">${it.jml}</td>
+        <td style="text-align:right">${formatRupiah(it.harga)}</td>
+        <td style="text-align:right">${formatRupiah(it.total)}</td>
+        <td>${it.keterangan || '-'}</td>
+      </tr>
+    `).join('');
+
+    const filterParts = [
+      kdBangsal ? `Lokasi: ${bangsal.find((b) => b.kode === kdBangsal)?.nama || kdBangsal}` : '',
+      searchText ? `Cari: "${searchText}"` : '',
+    ].filter(Boolean).join(' — ');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Laporan Mutasi Obat ${tgl1} s.d. ${tgl2}</title>
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; font-size: 12px; padding: 16px; color: #000; }
+            table.tbl_form td { border: 0; vertical-align: middle; }
+            .info { margin: 10px 0; font-size: 12px; }
+            .info div { margin-bottom: 2px; }
+            hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
+            table.tbl_data { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+            table.tbl_data th, table.tbl_data td { border: 1px solid #333; padding: 4px 6px; }
+            table.tbl_data th { background: #f3f4f6; }
+            .totals { margin-top: 8px; font-size: 12px; }
+            .totals div { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 2px; }
+            .totals span:first-child { width: 140px; }
+            .totals span:last-child { width: 130px; text-align: right; }
+          </style>
+        </head>
+        <body>
+          <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="15%">
+                ${logoSrc ? `<img width="50" height="50" src="${logoSrc}" />` : ''}
+              </td>
+              <td width="70%">
+                <center>
+                  <font color="#000000" size="3" face="Tahoma"><b>${settings.nama_instansi}</b></font><br/>
+                  <font color="#000000" size="1" face="Tahoma">
+                    ${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}
+                  </font>
+                </center>
+              </td>
+              <td width="15%"></td>
+            </tr>
+          </table>
+          <hr/>
+          <center><font color="#000000" size="2" face="Tahoma"><b>LAPORAN MUTASI OBAT</b></font></center>
+          <div class="info">
+            <div>Periode : ${tgl1} s.d. ${tgl2}</div>
+            ${filterParts ? `<div>Filter : ${filterParts}</div>` : ''}
+          </div>
+          <table class="tbl_data">
+            <thead>
+              <tr>
+                <th>No.</th>
+                <th>Tanggal</th>
+                <th>Barang</th>
+                <th>Dari</th>
+                <th>Ke</th>
+                <th>Jumlah</th>
+                <th>Harga</th>
+                <th>Total</th>
+                <th>Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div><span>Jumlah Baris</span><span>${items.length}</span></div>
+            <div style="font-weight:bold"><span>Total</span><span>Rp ${formatRupiah(grandTotal)}</span></div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => printWindow.print();
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -502,6 +710,18 @@ const TabRiwayatMutasi: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <input style={inputStyle} placeholder="Kode / nama barang / keterangan..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
         </div>
+        <button
+          type="button"
+          onClick={handleCetak}
+          title="Cetak Laporan Mutasi"
+          style={{ flexShrink: 0, width: 32, height: 32, padding: 0, borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 'auto' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+        </button>
       </div>
 
       <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>

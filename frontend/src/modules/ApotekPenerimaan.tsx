@@ -106,6 +106,7 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [ppnPercent, setPpnPercent] = React.useState('11');
   const [searchText, setSearchText] = React.useState('');
   const [rows, setRows] = React.useState<PenerimaanRow[]>([]);
+  const [selectedRows, setSelectedRows] = React.useState<PenerimaanRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [warnSuplier, setWarnSuplier] = React.useState(false);
@@ -129,21 +130,7 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       const url = `/api/apotek/penerimaan/barang-opsi${searchText ? `?search=${encodeURIComponent(searchText)}` : ''}`;
       const res = await fetch(url);
       const data = await res.json();
-      setRows((prev) => {
-        const prevMap = new Map(prev.map((r) => [r.kode_brng, r]));
-        return Array.isArray(data)
-          ? data.map((it) => {
-              const old = prevMap.get(it.kode_brng);
-              return {
-                ...it,
-                jumlah: old?.jumlah || '',
-                harga: old?.harga || String(it.h_beli || ''),
-                dis: old?.dis || '',
-                kadaluwarsa: old?.kadaluwarsa || '',
-              };
-            })
-          : [];
-      });
+      setRows(Array.isArray(data) ? data.map((it) => ({ ...it, jumlah: '', harga: String(it.h_beli || ''), dis: '', kadaluwarsa: '' })) : []);
     } catch {
       setRows([]);
     } finally {
@@ -163,8 +150,52 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchText]);
 
+  // Barang yang sudah diisi jumlahnya "pindah" jadi baris fixed di paling
+  // atas tabel (selectedRows) — tetap terlihat & bisa diedit walau user
+  // lanjut mencari barang lain, tidak lagi hilang (beserta jumlahnya)
+  // begitu keluar dari hasil pencarian saat ini. Pola sama persis dengan
+  // ApotekPenjualan.tsx/ApotekMutasi.tsx.
+  const upsertSelected = (item: PenerimaanRow) => {
+    setSelectedRows((prev) => {
+      const jumlahNum = Number(item.jumlah);
+      const isValid = item.jumlah.trim() !== '' && !isNaN(jumlahNum) && jumlahNum > 0;
+      const idx = prev.findIndex((r) => r.kode_brng === item.kode_brng);
+      if (!isValid) {
+        return idx >= 0 ? prev.filter((r) => r.kode_brng !== item.kode_brng) : prev;
+      }
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = item;
+        return copy;
+      }
+      return [...prev, item];
+    });
+  };
+
+  // setField cuma update tampilan lokal saat mengetik di tabel pencarian —
+  // upsertSelected BARU dipanggil saat blur (commitField), sama pola
+  // dengan ApotekPenjualan.tsx (cegah bug "ketik 10 cuma kesimpen 1").
   const setField = (kodeBrng: string, field: 'jumlah' | 'harga' | 'dis' | 'kadaluwarsa', value: string) => {
     setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, [field]: value } : r)));
+  };
+
+  const commitField = (kodeBrng: string) => {
+    const item = rows.find((r) => r.kode_brng === kodeBrng);
+    if (!item) return;
+    upsertSelected(item);
+    if (item.jumlah.trim() !== '' && Number(item.jumlah) > 0) {
+      setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, jumlah: '', dis: '', kadaluwarsa: '' } : r)));
+    }
+  };
+
+  // setPinnedField/commitPinnedField — sama pola dgn setField/commitField
+  // di atas, tapi utk baris yang sudah pinned di selectedRows.
+  const setPinnedField = (kodeBrng: string, field: 'jumlah' | 'harga' | 'dis' | 'kadaluwarsa', value: string) => {
+    setSelectedRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, [field]: value } : r)));
+  };
+
+  const commitPinnedField = (kodeBrng: string) => {
+    setSelectedRows((prev) => prev.filter((r) => r.kode_brng !== kodeBrng || (r.jumlah.trim() !== '' && Number(r.jumlah) > 0)));
   };
 
   const guardFocus = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -192,7 +223,8 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     return { subtotal, besardis, total };
   };
 
-  const filledRows = rows.filter((r) => r.jumlah.trim() !== '' && Number(r.jumlah) > 0);
+  const visibleSearchRows = rows.filter((r) => !selectedRows.some((s) => s.kode_brng === r.kode_brng));
+  const filledRows = selectedRows;
   const totals = filledRows.reduce(
     (acc, r) => {
       const c = hitung(r);
@@ -209,6 +241,7 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const tagihan = total2 + ppnAmount;
 
   const handleBersihkan = () => {
+    setSelectedRows([]);
     setRows((prev) => prev.map((r) => ({ ...r, jumlah: '', dis: '', kadaluwarsa: '' })));
   };
 
@@ -363,12 +396,65 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             </tr>
           </thead>
           <tbody>
+            {/* Barang terpilih — fixed di atas, tetap tampil walau user
+                lanjut mencari barang lain di bawah. */}
+            {selectedRows.map((r) => {
+              const c = hitung(r);
+              return (
+                <tr key={`pinned-${r.kode_brng}`} style={{ background: '#ecfdf5' }}>
+                  <td style={{ padding: '4px 6px 4px 4px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.jumlah}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'jumlah', e.target.value)}
+                      onBlur={() => commitPinnedField(r.kode_brng)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      style={{ width: 60, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.kode_brng}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#065f46', fontWeight: 600 }}>{r.nama_brng}</td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.satuan}</td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.harga}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'harga', e.target.value)}
+                      style={{ width: 90, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.dis}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'dis', e.target.value)}
+                      style={{ width: 50, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', textAlign: 'right', color: '#065f46', fontWeight: 600 }}>{c ? formatRupiah(c.total) : '-'}</td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5' }}>
+                    <input
+                      type="date"
+                      value={r.kadaluwarsa}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'kadaluwarsa', e.target.value)}
+                      style={{ width: '100%', padding: '4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 11.5, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+
             {loading ? (
               <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang aktif</td></tr>
+            ) : visibleSearchRows.length === 0 ? (
+              selectedRows.length === 0 && (
+                <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang aktif</td></tr>
+              )
             ) : (
-              rows.map((r, index) => {
+              visibleSearchRows.map((r, index) => {
                 const c = hitung(r);
                 return (
                   <tr key={r.kode_brng} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
@@ -379,6 +465,8 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                         value={r.jumlah}
                         onChange={(e) => setField(r.kode_brng, 'jumlah', e.target.value)}
                         onFocus={guardFocus}
+                        onBlur={() => commitField(r.kode_brng)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                         style={{ width: 60, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
                       />
                     </td>

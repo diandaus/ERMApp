@@ -32,3 +32,21 @@ export function getCurrentUserNip(): string {
     return '';
   }
 }
+
+// Role akun yang sedang login ('admin', 'dokter', 'farmasi', dst — lihat
+// Admin.tsx untuk daftar lengkap). Dipakai form yang auto-fill Petugas
+// dari sesi login (getCurrentPetugas/getCurrentUserNip di atas) tapi
+// perlu tetap membolehkan admin memilih petugas LAIN secara manual (mis.
+// admin mengisikan form atas nama staf farmasi tertentu lewat
+// ModalCariPetugas), sementara akun non-admin tetap terkunci ke
+// identitasnya sendiri.
+export function getCurrentUserRole(): string {
+  try {
+    const stored = window.localStorage.getItem('ermapp_user');
+    if (!stored) return '';
+    const user = JSON.parse(stored) as { role?: string };
+    return user.role || '';
+  } catch {
+    return '';
+  }
+}

@@ -1,5 +1,7 @@
 import React from 'react';
+import QRCode from 'qrcode';
 import { localDateStr } from '../utils/date';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 
 // ============================================================================
 // APOTEK — Detail Pemberian Obat (menu baru di sidebar Apotek.tsx). Cocok
@@ -117,17 +119,26 @@ const ModalLihatItemPemberianObat: React.FC<{
   if (!target) return null;
 
   // handleCetak — padanan cetak "RINCIAN PEMAKAIAN OBAT/BMHP" Khanza
-  // Desktop (kop logo+nama+alamat instansi di atas, lalu tabel item),
-  // diadaptasi ke skema settings app ini (/api/admin/settings:
-  // nama_instansi/alamat/logo_url — versi ringkas dari
-  // namars/alamatrs/kabupatenrs/propinsirs/kontakrs/emailrs Khanza yang
-  // TIDAK ada di skema app ini). Pola cetak SAMA dengan
-  // PreviewBilling.tsx: buka jendela baru, tulis HTML siap-print, panggil
-  // window.print() bawaan browser (user pilih "Simpan sebagai PDF" di
-  // dialog print) — bukan generate PDF di server, proyek ini belum punya
-  // library PDF sisi backend.
+  // Desktop (kop logo+nama+alamat instansi di atas, lalu tabel item, lalu
+  // blok tanda tangan elektronik kota+tanggal+QR code), diadaptasi ke
+  // skema settings app ini (/api/admin/settings: nama_instansi/alamat/
+  // logo_url/kota_rs — versi ringkas dari namars/alamatrs/kabupatenrs/
+  // propinsirs/kontakrs/emailrs Khanza yang TIDAK ada di skema app ini).
+  // Pola cetak SAMA dengan PreviewBilling.tsx: buka jendela baru, tulis
+  // HTML siap-print, panggil window.print() bawaan browser (user pilih
+  // "Simpan sebagai PDF" di dialog print) — bukan generate PDF di server,
+  // proyek ini belum punya library PDF sisi backend.
+  //
+  // QR code — padanan teks "finger" param di DlgPemberianObat.java
+  // (Dikeluarkan di .../Ditandatangani secara elektronik oleh .../ID ...),
+  // TAPI app ini belum punya fitur sidik jari (tabel sidikjari Khanza) —
+  // ID penandatangan diganti NIP user yang sedang login
+  // (getCurrentUserNip(), sumber yang sama dipakai auto-fill Petugas di
+  // modal lain). QR di-generate 100% di browser lewat library 'qrcode'
+  // (data URL, tanpa network call ke pihak ketiga) supaya data pasien
+  // tidak pernah keluar dari perangkat.
   const handleCetak = async () => {
-    let settings = { nama_instansi: '', alamat: '', logo_url: '' };
+    let settings = { nama_instansi: '', alamat: '', logo_url: '', kota_rs: '', kontak: '', email_rs: '' };
     try {
       const res = await fetch('/api/admin/settings');
       if (res.ok) settings = await res.json();
@@ -141,6 +152,29 @@ const ModalLihatItemPemberianObat: React.FC<{
     const logoSrc = settings.logo_url
       ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
       : '';
+
+    // kontakEmail — padanan akses.getkontakrs()+", E-mail : "+akses.getemailrs()
+    // Khanza (baris ke-2 kop, di bawah alamat) — cuma ditampilkan kalau
+    // salah satu diisi, supaya tidak muncul ", E-mail : " kosong.
+    const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+      .filter(Boolean)
+      .join(', ');
+
+    const namaPenandatangan = getCurrentPetugas() || '-';
+    const nipPenandatangan = getCurrentUserNip() || '-';
+    const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const kotaTanggal = settings.kota_rs ? `${settings.kota_rs}, ${tanggalCetak}` : tanggalCetak;
+    const fingerText =
+      `Dikeluarkan di ${settings.nama_instansi}, Kabupaten/Kota ${settings.kota_rs}\n` +
+      `Ditandatangani secara elektronik oleh ${namaPenandatangan}\n` +
+      `ID ${nipPenandatangan}\n` +
+      tanggalCetak;
+    let qrDataUrl = '';
+    try {
+      qrDataUrl = await QRCode.toDataURL(fingerText, { width: 80, margin: 1 });
+    } catch {
+      // kalau QR gagal dibuat, tetap lanjut cetak tanpa QR
+    }
 
     const totalBiaya = rows.reduce((sum, r) => sum + (r.total || 0), 0);
     const rowsHtml = rows.map((row, index) => `
@@ -179,7 +213,7 @@ const ModalLihatItemPemberianObat: React.FC<{
                 <center>
                   <font color="#000000" size="3" face="Tahoma"><b>${settings.nama_instansi}</b></font><br/>
                   <font color="#000000" size="1" face="Tahoma">
-                    ${settings.alamat}
+                    ${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}
                   </font>
                 </center>
               </td>
@@ -213,6 +247,12 @@ const ModalLihatItemPemberianObat: React.FC<{
               </tr>
             </tbody>
           </table>
+
+          <div style="width:150px; margin:32px 40px 0 auto; text-align:center;">
+            <div>${kotaTanggal}</div>
+            ${qrDataUrl ? `<img src="${qrDataUrl}" width="65" height="65" style="margin:8px 0;" />` : '<div style="height:65px;"></div>'}
+            <div style="font-weight:bold; text-decoration:underline;">${namaPenandatangan}</div>
+          </div>
         </body>
       </html>
     `);

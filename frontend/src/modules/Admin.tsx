@@ -206,6 +206,12 @@ export const AdminView: React.FC = () => {
 
   const [namaInstansi, setNamaInstansi] = React.useState<string>('');
   const [alamatInstansi, setAlamatInstansi] = React.useState<string>('');
+  const [kotaRs, setKotaRs] = React.useState<string>('');
+  const [kontak, setKontak] = React.useState<string>('');
+  const [emailRs, setEmailRs] = React.useState<string>('');
+  const [kodePpkBpjs, setKodePpkBpjs] = React.useState<string>('');
+  const [kodePpkKemenkes, setKodePpkKemenkes] = React.useState<string>('');
+  const [nomorIzinSarana, setNomorIzinSarana] = React.useState<string>('');
   const [logoFile, setLogoFile] = React.useState<File | null>(null);
   const [logoPreview, setLogoPreview] = React.useState<string>('');
   const [savingSettings, setSavingSettings] = React.useState<boolean>(false);
@@ -323,6 +329,12 @@ export const AdminView: React.FC = () => {
       if (res.ok) {
         setNamaInstansi(data.nama_instansi || '');
         setAlamatInstansi(data.alamat || '');
+        setKotaRs(data.kota_rs || '');
+        setKontak(data.kontak || '');
+        setEmailRs(data.email_rs || '');
+        setKodePpkBpjs(data.kode_ppk_bpjs || '');
+        setKodePpkKemenkes(data.kode_ppk_kemenkes || '');
+        setNomorIzinSarana(data.nomor_izin_sarana || '');
         if (data.logo_url) setLogoPreview(data.logo_url);
       }
     } catch (e) {
@@ -352,6 +364,12 @@ export const AdminView: React.FC = () => {
       const formData = new FormData();
       formData.append('nama_instansi', namaInstansi);
       formData.append('alamat', alamatInstansi);
+      formData.append('kota_rs', kotaRs);
+      formData.append('kontak', kontak);
+      formData.append('email_rs', emailRs);
+      formData.append('kode_ppk_bpjs', kodePpkBpjs);
+      formData.append('kode_ppk_kemenkes', kodePpkKemenkes);
+      formData.append('nomor_izin_sarana', nomorIzinSarana);
       if (logoFile) formData.append('logo', logoFile);
       const res = await fetch('/api/admin/settings', { method: 'POST', body: formData });
       const data = await res.json();
@@ -759,6 +777,36 @@ export const AdminView: React.FC = () => {
               <div>
                 <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Alamat</label>
                 <textarea value={alamatInstansi} onChange={(e) => setAlamatInstansi(e.target.value)} placeholder="Contoh: Jl. Merdeka No. 123, Jakarta Pusat" required rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Kota/Kabupaten RS</label>
+                <input type="text" value={kotaRs} onChange={(e) => setKotaRs(e.target.value)} placeholder="Contoh: Sigli" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                <div style={{ marginTop: 4, fontSize: 11.5, color: '#9ca3af' }}>Dipakai di blok "Dikeluarkan di ..., Kabupaten/Kota ..." pada tanda tangan elektronik cetakan PDF.</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Kontak</label>
+                  <input type="text" value={kontak} onChange={(e) => setKontak(e.target.value)} placeholder="Contoh: (0653) 123456" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Email</label>
+                  <input type="email" value={emailRs} onChange={(e) => setEmailRs(e.target.value)} placeholder="Contoh: info@rsharapansehat.id" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Kode PPK BPJS</label>
+                  <input type="text" value={kodePpkBpjs} onChange={(e) => setKodePpkBpjs(e.target.value)} placeholder="Contoh: 0301R001" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Kode PPK Kemenkes</label>
+                  <input type="text" value={kodePpkKemenkes} onChange={(e) => setKodePpkKemenkes(e.target.value)} placeholder="Kode Fasyankes" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Nomor Izin Sarana</label>
+                <input type="text" value={nomorIzinSarana} onChange={(e) => setNomorIzinSarana(e.target.value)} placeholder="Contoh: 503/001/IOSK/DPMPTSP/2024" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                <div style={{ marginTop: 4, fontSize: 11.5, color: '#9ca3af' }}>Nomor izin operasional sarana kesehatan (Dinkes/DPMPTSP) — bisa dipakai identitas legal RS di kop cetakan resmi.</div>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: '#374151' }}>Logo Instansi</label>

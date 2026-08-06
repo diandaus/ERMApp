@@ -633,6 +633,16 @@ const TabRiwayatOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [searchText, setSearchText] = React.useState('');
   const [items, setItems] = React.useState<OpnameRiwayat[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [settings, setSettings] = React.useState<{ nama_instansi: string; alamat: string; logo_url: string; kontak: string; email_rs: string }>({
+    nama_instansi: '', alamat: '', logo_url: '', kontak: '', email_rs: '',
+  });
+
+  React.useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setSettings(data))
+      .catch(() => {});
+  }, []);
 
   const fetchRiwayat = React.useCallback(async () => {
     setLoading(true);
@@ -683,6 +693,120 @@ const TabRiwayatOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     }
   };
 
+  // handleCetak — cetak LAPORAN STOK OPNAME (rekap semua riwayat yang
+  // lolos filter tanggal/lokasi/cari saat ini), pola print-HTML browser
+  // sama dengan modul lain (window.open + document.write + print()
+  // bawaan browser). Pakai `items` yang sudah di-fetch, tidak perlu
+  // request baru.
+  const handleCetak = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=1000');
+    if (!printWindow) return;
+
+    const logoSrc = settings.logo_url
+      ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
+      : '';
+    const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+      .filter(Boolean)
+      .join(', ');
+
+    const grandHilang = items.reduce((sum, it) => sum + (it.nomihilang || 0), 0);
+    const grandLebih = items.reduce((sum, it) => sum + (it.nomilebih || 0), 0);
+    const rowsHtml = items.map((it, index) => `
+      <tr>
+        <td style="text-align:center">${index + 1}</td>
+        <td>${it.tanggal.slice(0, 10)}</td>
+        <td>${it.nama_brng} (${it.satuan})</td>
+        <td>${it.nm_bangsal}</td>
+        <td style="text-align:right">${it.stok}</td>
+        <td style="text-align:right">${it.real}</td>
+        <td style="text-align:right">${it.selisih}</td>
+        <td style="text-align:right">${it.lebih}</td>
+        <td style="text-align:right">${it.nomihilang > 0 ? formatRupiah(it.nomihilang) : '-'}</td>
+        <td style="text-align:right">${it.nomilebih > 0 ? formatRupiah(it.nomilebih) : '-'}</td>
+        <td>${it.keterangan || '-'}</td>
+      </tr>
+    `).join('');
+
+    const filterParts = [
+      kdBangsal ? `Lokasi: ${bangsal.find((b) => b.kode === kdBangsal)?.nama || kdBangsal}` : '',
+      searchText ? `Cari: "${searchText}"` : '',
+    ].filter(Boolean).join(' — ');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Laporan Stok Opname ${tgl1} s.d. ${tgl2}</title>
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; font-size: 12px; padding: 16px; color: #000; }
+            table.tbl_form td { border: 0; vertical-align: middle; }
+            .info { margin: 10px 0; font-size: 12px; }
+            .info div { margin-bottom: 2px; }
+            hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
+            table.tbl_data { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+            table.tbl_data th, table.tbl_data td { border: 1px solid #333; padding: 4px 6px; }
+            table.tbl_data th { background: #f3f4f6; }
+            .totals { margin-top: 8px; font-size: 12px; }
+            .totals div { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 2px; }
+            .totals span:first-child { width: 140px; }
+            .totals span:last-child { width: 130px; text-align: right; }
+          </style>
+        </head>
+        <body>
+          <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="15%">
+                ${logoSrc ? `<img width="50" height="50" src="${logoSrc}" />` : ''}
+              </td>
+              <td width="70%">
+                <center>
+                  <font color="#000000" size="3" face="Tahoma"><b>${settings.nama_instansi}</b></font><br/>
+                  <font color="#000000" size="1" face="Tahoma">
+                    ${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}
+                  </font>
+                </center>
+              </td>
+              <td width="15%"></td>
+            </tr>
+          </table>
+          <hr/>
+          <center><font color="#000000" size="2" face="Tahoma"><b>LAPORAN STOK OPNAME</b></font></center>
+          <div class="info">
+            <div>Periode : ${tgl1} s.d. ${tgl2}</div>
+            ${filterParts ? `<div>Filter : ${filterParts}</div>` : ''}
+          </div>
+          <table class="tbl_data">
+            <thead>
+              <tr>
+                <th>No.</th>
+                <th>Tanggal</th>
+                <th>Barang</th>
+                <th>Lokasi</th>
+                <th>Stok</th>
+                <th>Real</th>
+                <th>Selisih</th>
+                <th>Lebih</th>
+                <th>Nominal Hilang</th>
+                <th>Nominal Lebih</th>
+                <th>Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div><span>Jumlah Baris</span><span>${items.length}</span></div>
+            <div><span>Total Nominal Hilang</span><span>Rp ${formatRupiah(grandHilang)}</span></div>
+            <div style="font-weight:bold"><span>Total Nominal Lebih</span><span>Rp ${formatRupiah(grandLebih)}</span></div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => printWindow.print();
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -702,6 +826,18 @@ const TabRiwayatOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <input style={inputStyle} placeholder="Kode / nama barang / keterangan..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
         </div>
+        <button
+          type="button"
+          onClick={handleCetak}
+          title="Cetak Laporan Stok Opname"
+          style={{ flexShrink: 0, width: 32, height: 32, padding: 0, borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 'auto' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+        </button>
       </div>
 
       <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>

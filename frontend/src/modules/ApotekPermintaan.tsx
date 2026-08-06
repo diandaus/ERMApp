@@ -103,6 +103,7 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [tanggal, setTanggal] = React.useState(todayStr());
   const [searchText, setSearchText] = React.useState('');
   const [rows, setRows] = React.useState<PermintaanRow[]>([]);
+  const [selectedRows, setSelectedRows] = React.useState<PermintaanRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [warnAsal, setWarnAsal] = React.useState(false);
@@ -122,12 +123,7 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       const url = `/api/apotek/permintaan/barang-opsi${searchText ? `?search=${encodeURIComponent(searchText)}` : ''}`;
       const res = await fetch(url);
       const data = await res.json();
-      setRows((prev) => {
-        const prevMap = new Map(prev.map((r) => [r.kode_brng, { jumlah: r.jumlah, keterangan: r.keterangan }]));
-        return Array.isArray(data)
-          ? data.map((it) => ({ ...it, jumlah: prevMap.get(it.kode_brng)?.jumlah || '', keterangan: prevMap.get(it.kode_brng)?.keterangan || '' }))
-          : [];
-      });
+      setRows(Array.isArray(data) ? data.map((it) => ({ ...it, jumlah: '', keterangan: '' })) : []);
     } catch {
       setRows([]);
     } finally {
@@ -147,8 +143,52 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchText]);
 
+  // Barang yang sudah diisi jumlahnya "pindah" jadi baris fixed di paling
+  // atas tabel (selectedRows) — tetap terlihat & bisa diedit walau user
+  // lanjut mencari barang lain, tidak lagi hilang (beserta jumlahnya)
+  // begitu keluar dari hasil pencarian saat ini. Pola sama persis dengan
+  // ApotekPenjualan.tsx/ApotekMutasi.tsx/ApotekPenerimaan.tsx.
+  const upsertSelected = (item: PermintaanRow) => {
+    setSelectedRows((prev) => {
+      const jumlahNum = Number(item.jumlah);
+      const isValid = item.jumlah.trim() !== '' && !isNaN(jumlahNum) && jumlahNum > 0;
+      const idx = prev.findIndex((r) => r.kode_brng === item.kode_brng);
+      if (!isValid) {
+        return idx >= 0 ? prev.filter((r) => r.kode_brng !== item.kode_brng) : prev;
+      }
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = item;
+        return copy;
+      }
+      return [...prev, item];
+    });
+  };
+
+  // setField cuma update tampilan lokal saat mengetik di tabel pencarian —
+  // upsertSelected BARU dipanggil saat blur (commitField), sama pola
+  // dengan ApotekPenjualan.tsx (cegah bug "ketik 10 cuma kesimpen 1").
   const setField = (kodeBrng: string, field: 'jumlah' | 'keterangan', value: string) => {
     setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, [field]: value } : r)));
+  };
+
+  const commitField = (kodeBrng: string) => {
+    const item = rows.find((r) => r.kode_brng === kodeBrng);
+    if (!item) return;
+    upsertSelected(item);
+    if (item.jumlah.trim() !== '' && Number(item.jumlah) > 0) {
+      setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, jumlah: '', keterangan: '' } : r)));
+    }
+  };
+
+  // setPinnedField/commitPinnedField — sama pola dgn setField/commitField
+  // di atas, tapi utk baris yang sudah pinned di selectedRows.
+  const setPinnedField = (kodeBrng: string, field: 'jumlah' | 'keterangan', value: string) => {
+    setSelectedRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, [field]: value } : r)));
+  };
+
+  const commitPinnedField = (kodeBrng: string) => {
+    setSelectedRows((prev) => prev.filter((r) => r.kode_brng !== kodeBrng || (r.jumlah.trim() !== '' && Number(r.jumlah) > 0)));
   };
 
   const guardFocus = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -165,9 +205,11 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     }
   };
 
-  const filledCount = rows.filter((r) => r.jumlah.trim() !== '' && Number(r.jumlah) > 0).length;
+  const visibleSearchRows = rows.filter((r) => !selectedRows.some((s) => s.kode_brng === r.kode_brng));
+  const filledCount = selectedRows.length;
 
   const handleBersihkan = () => {
+    setSelectedRows([]);
     setRows((prev) => prev.map((r) => ({ ...r, jumlah: '', keterangan: '' })));
   };
 
@@ -188,7 +230,7 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       Swal.fire({ icon: 'warning', title: 'Pilih Petugas dulu' });
       return;
     }
-    const items = rows
+    const items = selectedRows
       .filter((r) => r.jumlah.trim() !== '' && Number(r.jumlah) > 0)
       .map((r) => ({ kode_brng: r.kode_brng, kode_sat: r.kode_sat, jumlah: Number(r.jumlah), keterangan: r.keterangan }));
     if (items.length === 0) {
@@ -323,12 +365,44 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             </tr>
           </thead>
           <tbody>
+            {/* Barang terpilih — fixed di atas, tetap tampil walau user
+                lanjut mencari barang lain di bawah. */}
+            {selectedRows.map((r) => (
+              <tr key={`pinned-${r.kode_brng}`} style={{ background: '#ecfdf5' }}>
+                <td style={{ padding: '4px 6px 4px 4px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                  <input
+                    type="number"
+                    step="any"
+                    value={r.jumlah}
+                    onChange={(e) => setPinnedField(r.kode_brng, 'jumlah', e.target.value)}
+                    onBlur={() => commitPinnedField(r.kode_brng)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    style={{ width: 70, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </td>
+                <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.kode_brng}</td>
+                <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#065f46', fontWeight: 600 }}>{r.nama_brng}</td>
+                <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.satuan}</td>
+                <td style={{ padding: '4px 8px', borderBottom: '1px solid #d1fae5' }}>
+                  <input
+                    type="text"
+                    value={r.keterangan}
+                    onChange={(e) => setPinnedField(r.kode_brng, 'keterangan', e.target.value)}
+                    placeholder="opsional"
+                    style={{ width: '100%', padding: '5px 6px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </td>
+              </tr>
+            ))}
+
             {loading ? (
               <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang aktif</td></tr>
+            ) : visibleSearchRows.length === 0 ? (
+              selectedRows.length === 0 && (
+                <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang aktif</td></tr>
+              )
             ) : (
-              rows.map((r, index) => (
+              visibleSearchRows.map((r, index) => (
                 <tr key={r.kode_brng} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                   <td style={{ padding: '4px 6px 4px 4px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
                     <input
@@ -337,6 +411,8 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                       value={r.jumlah}
                       onChange={(e) => setField(r.kode_brng, 'jumlah', e.target.value)}
                       onFocus={guardFocus}
+                      onBlur={() => commitField(r.kode_brng)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                       style={{ width: 70, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
                     />
                   </td>
@@ -396,6 +472,16 @@ const TabDaftarPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [items, setItems] = React.useState<PermintaanRiwayat[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [settings, setSettings] = React.useState<{ nama_instansi: string; alamat: string; logo_url: string; kontak: string; email_rs: string }>({
+    nama_instansi: '', alamat: '', logo_url: '', kontak: '', email_rs: '',
+  });
+
+  React.useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setSettings(data))
+      .catch(() => {});
+  }, []);
 
   const [approveTarget, setApproveTarget] = React.useState<PermintaanRiwayat | null>(null);
   const [approveRows, setApproveRows] = React.useState<ApproveRow[]>([]);
@@ -471,6 +557,113 @@ const TabDaftarPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
     }
+  };
+
+  // handleCetak — cetak LAPORAN PERMINTAAN OBAT (rekap semua permintaan
+  // yang lolos filter tanggal/lokasi/status/cari saat ini), pola
+  // print-HTML browser sama dengan modul lain (window.open +
+  // document.write + print() bawaan browser). Pakai `items` yang sudah
+  // di-fetch, tidak perlu request baru. Tidak ada kolom harga/total —
+  // Permintaan memang tidak menyimpan harga (murni dokumen permintaan
+  // internal antar depo, beda dari Penerimaan/Penjualan).
+  const handleCetak = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=1000');
+    if (!printWindow) return;
+
+    const logoSrc = settings.logo_url
+      ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
+      : '';
+    const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+      .filter(Boolean)
+      .join(', ');
+
+    const rowsHtml = items.map((it, index) => `
+      <tr>
+        <td style="text-align:center">${index + 1}</td>
+        <td>${it.tanggal.slice(0, 10)}</td>
+        <td>${it.no_permintaan}</td>
+        <td>${it.nm_bangsal}</td>
+        <td>${it.nm_bangsal_tujuan}</td>
+        <td>${it.nm_pegawai}</td>
+        <td style="text-align:center">${it.status}</td>
+        <td style="text-align:right">${it.items.length}</td>
+      </tr>
+    `).join('');
+
+    const filterParts = [
+      kdBangsal ? `Lokasi: ${bangsal.find((b) => b.kode === kdBangsal)?.nama || kdBangsal}` : '',
+      status ? `Status: ${status}` : '',
+      searchText ? `Cari: "${searchText}"` : '',
+    ].filter(Boolean).join(' — ');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Laporan Permintaan Obat ${tgl1} s.d. ${tgl2}</title>
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; font-size: 12px; padding: 16px; color: #000; }
+            table.tbl_form td { border: 0; vertical-align: middle; }
+            .info { margin: 10px 0; font-size: 12px; }
+            .info div { margin-bottom: 2px; }
+            hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
+            table.tbl_data { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+            table.tbl_data th, table.tbl_data td { border: 1px solid #333; padding: 4px 6px; }
+            table.tbl_data th { background: #f3f4f6; }
+            .totals { margin-top: 8px; font-size: 12px; }
+            .totals div { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 2px; }
+            .totals span:first-child { width: 140px; }
+            .totals span:last-child { width: 130px; text-align: right; }
+          </style>
+        </head>
+        <body>
+          <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="15%">
+                ${logoSrc ? `<img width="50" height="50" src="${logoSrc}" />` : ''}
+              </td>
+              <td width="70%">
+                <center>
+                  <font color="#000000" size="3" face="Tahoma"><b>${settings.nama_instansi}</b></font><br/>
+                  <font color="#000000" size="1" face="Tahoma">
+                    ${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}
+                  </font>
+                </center>
+              </td>
+              <td width="15%"></td>
+            </tr>
+          </table>
+          <hr/>
+          <center><font color="#000000" size="2" face="Tahoma"><b>LAPORAN PERMINTAAN OBAT</b></font></center>
+          <div class="info">
+            <div>Periode : ${tgl1} s.d. ${tgl2}</div>
+            ${filterParts ? `<div>Filter : ${filterParts}</div>` : ''}
+          </div>
+          <table class="tbl_data">
+            <thead>
+              <tr>
+                <th>No.</th>
+                <th>Tanggal</th>
+                <th>No. Permintaan</th>
+                <th>Asal</th>
+                <th>Ditujukan Ke</th>
+                <th>Petugas</th>
+                <th>Status</th>
+                <th>Jml Item</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div style="font-weight:bold"><span>Jumlah Permintaan</span><span>${items.length}</span></div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => printWindow.print();
   };
 
   const openApprove = async (item: PermintaanRiwayat) => {
@@ -580,6 +773,18 @@ const TabDaftarPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <input style={inputStyle} placeholder="No. Permintaan / lokasi / petugas..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
         </div>
+        <button
+          type="button"
+          onClick={handleCetak}
+          title="Cetak Laporan Permintaan"
+          style={{ flexShrink: 0, width: 32, height: 32, padding: 0, borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 'auto' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+        </button>
       </div>
 
       <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>

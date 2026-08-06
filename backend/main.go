@@ -159,12 +159,18 @@ type ResetPasswordRequest struct {
 }
 
 type Settings struct {
-	ID           int       `json:"id"`
-	NamaInstansi string    `json:"nama_instansi"`
-	Alamat       string    `json:"alamat"`
-	LogoURL      string    `json:"logo_url"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              int       `json:"id"`
+	NamaInstansi    string    `json:"nama_instansi"`
+	Alamat          string    `json:"alamat"`
+	LogoURL         string    `json:"logo_url"`
+	KotaRs          string    `json:"kota_rs"`
+	Kontak          string    `json:"kontak"`
+	EmailRs         string    `json:"email_rs"`
+	KodePpkBpjs     string    `json:"kode_ppk_bpjs"`
+	KodePpkKemenkes string    `json:"kode_ppk_kemenkes"`
+	NomorIzinSarana string    `json:"nomor_izin_sarana"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func hashPassword(pw string) string {
@@ -256,6 +262,55 @@ func ensureSettingsTable(db *sql.DB) error {
 	`
 
 	if _, err := db.Exec(createTable); err != nil {
+		return err
+	}
+
+	// Migrasi kolom kota_rs — "Kota/Kabupaten RS" (padanan
+	// akses.getkabupatenrs() Khanza Desktop), dipakai di blok tanda
+	// tangan elektronik cetakan PDF (mis. Detail Pemberian Obat):
+	// "Dikeluarkan di {nama_instansi}, Kabupaten/Kota {kota_rs}".
+	if _, err := db.Exec(
+		`ALTER TABLE setting_simrs_web ADD COLUMN IF NOT EXISTS kota_rs VARCHAR(255) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi kolom kontak/email_rs — padanan akses.getkontakrs()/
+	// getemailrs() Khanza Desktop (baris "{kontak}, E-mail : {email}" di
+	// kop cetakan). kode_ppk_bpjs/kode_ppk_kemenkes — kode provider RS
+	// yang ditugaskan BPJS Kesehatan & Kemenkes (Kode Fasyankes), padanan
+	// akses.getkodeppk()-style field identitas RS Khanza — dipakai
+	// tampilan/identitas, BUKAN kredensial API bridging (itu tetap di
+	// bridging_config terpisah, mis. CONSID/SECRETKEY layanan bpjs_vclaim).
+	if _, err := db.Exec(
+		`ALTER TABLE setting_simrs_web ADD COLUMN IF NOT EXISTS kontak VARCHAR(255) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+	if _, err := db.Exec(
+		`ALTER TABLE setting_simrs_web ADD COLUMN IF NOT EXISTS email_rs VARCHAR(255) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+	if _, err := db.Exec(
+		`ALTER TABLE setting_simrs_web ADD COLUMN IF NOT EXISTS kode_ppk_bpjs VARCHAR(50) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+	if _, err := db.Exec(
+		`ALTER TABLE setting_simrs_web ADD COLUMN IF NOT EXISTS kode_ppk_kemenkes VARCHAR(50) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi kolom nomor_izin_sarana — Nomor Izin Sarana (izin operasional
+	// RS/sarana kesehatan dari Dinkes/Kemenkes), field identitas legal RS
+	// yang belum ada padanannya di kolom-kolom sebelumnya — dipakai
+	// tampilan/identitas instansi, bisa dipakai di kop cetakan resmi
+	// (mis. Surat Pesanan Obat-obat Tertentu/Prekursor) kalau diperlukan.
+	if _, err := db.Exec(
+		`ALTER TABLE setting_simrs_web ADD COLUMN IF NOT EXISTS nomor_izin_sarana VARCHAR(100) NOT NULL DEFAULT ''`,
+	); err != nil {
 		return err
 	}
 
@@ -811,6 +866,14 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel preview_obat_pengaturan: %v", err)
 	}
 
+	if err := ensurePemesananTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi kolom surat_pemesanan_medis: %v", err)
+	}
+
+	if err := ensurePetugasTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi kolom petugas: %v", err)
+	}
+
 	r := gin.Default()
 
 	// CORS middleware untuk mengizinkan request dari frontend
@@ -1090,7 +1153,7 @@ func main() {
 	r.GET("/api/admin/settings", func(c *gin.Context) {
 		var settings Settings
 		err := db.QueryRow(`
-			SELECT id, nama_instansi, alamat, logo_url, created_at, updated_at
+			SELECT id, nama_instansi, alamat, logo_url, kota_rs, kontak, email_rs, kode_ppk_bpjs, kode_ppk_kemenkes, nomor_izin_sarana, created_at, updated_at
 			FROM setting_simrs_web
 			LIMIT 1
 		`).Scan(
@@ -1098,6 +1161,12 @@ func main() {
 			&settings.NamaInstansi,
 			&settings.Alamat,
 			&settings.LogoURL,
+			&settings.KotaRs,
+			&settings.Kontak,
+			&settings.EmailRs,
+			&settings.KodePpkBpjs,
+			&settings.KodePpkKemenkes,
+			&settings.NomorIzinSarana,
 			&settings.CreatedAt,
 			&settings.UpdatedAt,
 		)
@@ -1105,9 +1174,15 @@ func main() {
 		if err == sql.ErrNoRows {
 			// Return default empty settings if no row exists
 			c.JSON(http.StatusOK, gin.H{
-				"nama_instansi": "",
-				"alamat":        "",
-				"logo_url":      "",
+				"nama_instansi":     "",
+				"alamat":            "",
+				"logo_url":          "",
+				"kota_rs":           "",
+				"kontak":            "",
+				"email_rs":          "",
+				"kode_ppk_bpjs":     "",
+				"kode_ppk_kemenkes": "",
+				"nomor_izin_sarana": "",
 			})
 			return
 		}
@@ -1124,6 +1199,12 @@ func main() {
 	r.POST("/api/admin/settings", func(c *gin.Context) {
 		namaInstansi := c.PostForm("nama_instansi")
 		alamat := c.PostForm("alamat")
+		kotaRs := c.PostForm("kota_rs")
+		kontak := c.PostForm("kontak")
+		emailRs := c.PostForm("email_rs")
+		kodePpkBpjs := c.PostForm("kode_ppk_bpjs")
+		kodePpkKemenkes := c.PostForm("kode_ppk_kemenkes")
+		nomorIzinSarana := c.PostForm("nomor_izin_sarana")
 
 		if namaInstansi == "" || alamat == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Nama instansi dan alamat wajib diisi"})
@@ -1178,23 +1259,23 @@ func main() {
 		if err == sql.ErrNoRows {
 			// Insert new settings
 			_, err = db.Exec(`
-				INSERT INTO setting_simrs_web (nama_instansi, alamat, logo_url, created_at, updated_at)
-				VALUES (?, ?, ?, NOW(), NOW())
-			`, namaInstansi, alamat, logoURL)
+				INSERT INTO setting_simrs_web (nama_instansi, alamat, logo_url, kota_rs, kontak, email_rs, kode_ppk_bpjs, kode_ppk_kemenkes, nomor_izin_sarana, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+			`, namaInstansi, alamat, logoURL, kotaRs, kontak, emailRs, kodePpkBpjs, kodePpkKemenkes, nomorIzinSarana)
 		} else if err == nil {
 			// Update existing settings
 			if logoURL != "" {
 				_, err = db.Exec(`
 					UPDATE setting_simrs_web
-					SET nama_instansi = ?, alamat = ?, logo_url = ?, updated_at = NOW()
+					SET nama_instansi = ?, alamat = ?, logo_url = ?, kota_rs = ?, kontak = ?, email_rs = ?, kode_ppk_bpjs = ?, kode_ppk_kemenkes = ?, nomor_izin_sarana = ?, updated_at = NOW()
 					WHERE id = ?
-				`, namaInstansi, alamat, logoURL, existingID)
+				`, namaInstansi, alamat, logoURL, kotaRs, kontak, emailRs, kodePpkBpjs, kodePpkKemenkes, nomorIzinSarana, existingID)
 			} else {
 				_, err = db.Exec(`
 					UPDATE setting_simrs_web
-					SET nama_instansi = ?, alamat = ?, updated_at = NOW()
+					SET nama_instansi = ?, alamat = ?, kota_rs = ?, kontak = ?, email_rs = ?, kode_ppk_bpjs = ?, kode_ppk_kemenkes = ?, nomor_izin_sarana = ?, updated_at = NOW()
 					WHERE id = ?
-				`, namaInstansi, alamat, existingID)
+				`, namaInstansi, alamat, kotaRs, kontak, emailRs, kodePpkBpjs, kodePpkKemenkes, nomorIzinSarana, existingID)
 			}
 		}
 
@@ -1204,10 +1285,16 @@ func main() {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message":       "Pengaturan berhasil disimpan",
-			"nama_instansi": namaInstansi,
-			"alamat":        alamat,
-			"logo_url":      logoURL,
+			"message":           "Pengaturan berhasil disimpan",
+			"nama_instansi":     namaInstansi,
+			"alamat":            alamat,
+			"logo_url":          logoURL,
+			"kota_rs":           kotaRs,
+			"kontak":            kontak,
+			"email_rs":          emailRs,
+			"kode_ppk_bpjs":     kodePpkBpjs,
+			"kode_ppk_kemenkes": kodePpkKemenkes,
+			"nomor_izin_sarana": nomorIzinSarana,
 		})
 	})
 
@@ -1299,6 +1386,15 @@ func main() {
 
 		c.JSON(http.StatusOK, petugasList)
 	})
+
+	// Fitur Petugas (Kepegawaian) — list/tambah/edit/hapus lengkap,
+	// padanan DlgPetugas.java, terpisah dari GET /api/petugas ringan
+	// di atas (yang cuma nip+nama utk typeahead).
+	r.GET("/api/petugas/list", getPetugasList(db))
+	r.POST("/api/petugas", tambahPetugas(db))
+	r.PUT("/api/petugas/:nip", editPetugas(db))
+	r.DELETE("/api/petugas/:nip", hapusPetugas(db))
+	r.GET("/api/jabatan/opsi", getJabatanOpsi(db))
 
 	// GET /api/pegawai - Mengambil semua pegawai
 	r.GET("/api/pegawai", func(c *gin.Context) {
@@ -1492,6 +1588,31 @@ func main() {
 			items = append(items, p)
 		}
 
+		c.JSON(http.StatusOK, items)
+	})
+
+	// Daftar bangsal aktif (semua bangsal RS, bukan cuma depo Apotek —
+	// beda dari /api/apotek/pengaturan/depo/opsi) — dipakai filter "Asal
+	// Stok" di Penggunaan Obat, dan bisa dipakai fitur lain yang butuh
+	// daftar bangsal umum.
+	r.GET("/api/bangsal/opsi", func(c *gin.Context) {
+		rows, err := db.Query(`SELECT kd_bangsal, COALESCE(nm_bangsal,'') FROM bangsal WHERE status='1' ORDER BY nm_bangsal`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+		type bangsalOpsi struct {
+			KdBangsal string `json:"kd_bangsal"`
+			NmBangsal string `json:"nm_bangsal"`
+		}
+		items := []bangsalOpsi{}
+		for rows.Next() {
+			var b bangsalOpsi
+			if rows.Scan(&b.KdBangsal, &b.NmBangsal) == nil {
+				items = append(items, b)
+			}
+		}
 		c.JSON(http.StatusOK, items)
 	})
 
@@ -3190,6 +3311,18 @@ func main() {
 	r.DELETE("/api/apotek/penerimaan/:no_faktur", deletePenerimaan(db))
 	r.GET("/api/apotek/penerimaan/hari-ini", getPenerimaanHariIni(db))
 
+	// Apotek — Pemesanan (Surat Pemesanan ke Supplier)
+	r.GET("/api/apotek/pemesanan/barang-opsi", getPemesananBarangOpsi(db))
+	r.GET("/api/apotek/pemesanan/industri-opsi", getPemesananIndustriOpsi(db))
+	r.GET("/api/apotek/pemesanan/next-no", getPemesananNextNo(db))
+	r.POST("/api/apotek/pemesanan", submitPemesanan(db))
+	r.GET("/api/apotek/pemesanan/riwayat", getPemesananRiwayat(db))
+	r.PUT("/api/apotek/pemesanan/:no_pemesanan/status", updateStatusPemesanan(db))
+	r.DELETE("/api/apotek/pemesanan/:no_pemesanan", deletePemesanan(db))
+
+	// Apotek — Penggunaan Obat
+	r.GET("/api/apotek/penggunaan-obat", getPenggunaanObat(db))
+
 	// Input Penjualan Obat & BHP
 	r.GET("/api/apotek/penjualan/barang-opsi", getPenjualanBarangOpsi(db))
 	r.GET("/api/apotek/penjualan/akun-bayar-opsi", getAkunBayarOpsi(db))
@@ -3217,6 +3350,7 @@ func main() {
 
 	// Apotek — Darurat Stok
 	r.GET("/api/apotek/darurat-stok", getDaruratStok(db))
+	r.PUT("/api/apotek/darurat-stok/:kode_brng/stok-minimal", updateStokMinimal(db))
 	r.GET("/api/apotek/lama-pelayanan", getApotekLamaPelayanan(db))
 	r.GET("/api/apotek/detail-pemberian-obat", getApotekDetailPemberianObat(db))
 	r.GET("/api/apotek/detail-pemberian-obat/items", getApotekDetailPemberianObatItems(db))
