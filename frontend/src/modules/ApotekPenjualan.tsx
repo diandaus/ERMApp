@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { localDateStr } from '../utils/date';
 import { ModalCariPasienRingkas } from '../components/ModalCariPasienRingkas';
+import { ModalCariPetugas } from '../components/ModalCariPetugas';
 
 // ============================================================================
 // APOTEK — Input Penjualan Obat & BHP (tab utama modul Apotek). Cocok
@@ -153,8 +154,8 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
   const [kdBangsal, setKdBangsal] = React.useState('');
   const [nmPasien, setNmPasien] = React.useState('');
   const [jnsJual, setJnsJual] = React.useState('Jual Bebas');
-  const [nip, setNip] = React.useState('');
-  const [petugas, setPetugas] = React.useState<KvOpsi[]>([]);
+  const [selectedPetugas, setSelectedPetugas] = React.useState<{ nip: string; nama: string } | null>(null);
+  const [showCariPetugas, setShowCariPetugas] = React.useState(false);
   const [tanggal, setTanggal] = React.useState(todayStr());
   const [ppnPercent, setPpnPercent] = React.useState('0');
   const [namaBayar, setNamaBayar] = React.useState('');
@@ -172,10 +173,6 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
   const [showCariPasien, setShowCariPasien] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/api/petugas')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPetugas(Array.isArray(data) ? data.map((p: any) => ({ kode: p.nip, nama: p.nama })) : []))
-      .catch(() => {});
     fetch('/api/apotek/penjualan/akun-bayar-opsi')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
@@ -188,9 +185,10 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
       .catch(() => {});
 
     // Petugas — auto-isi dari NIP yang di-link ke akun login (tetap bisa
-    // diganti manual, lihat dokumentasi getCurrentUserNip di utils/currentUser.ts).
+    // diganti manual lewat ModalCariPetugas, lihat dokumentasi
+    // getCurrentUserNip di utils/currentUser.ts).
     const nipLogin = getCurrentUserNip();
-    if (nipLogin) setNip((prev) => prev || nipLogin);
+    if (nipLogin) setSelectedPetugas((prev) => prev || { nip: nipLogin, nama: getCurrentPetugas() || nipLogin });
 
     // Nama Pembeli — default ke nama pasien dengan No.RM 999999 kalau ada
     // (konvensi RS ini utk "Pasien Umum"/pembeli walk-in generik), tetap
@@ -318,9 +316,9 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
   };
 
   const guardFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (!nip || !kdBangsal) {
+    if (!selectedPetugas || !kdBangsal) {
       e.target.blur();
-      setWarnPetugas(!nip);
+      setWarnPetugas(!selectedPetugas);
       setWarnBangsal(!kdBangsal);
       setTimeout(() => {
         setWarnPetugas(false);
@@ -360,7 +358,7 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
   };
 
   const handleSimpan = async () => {
-    if (!nip) {
+    if (!selectedPetugas) {
       Swal.fire({ icon: 'warning', title: 'Pilih Petugas dulu' });
       return;
     }
@@ -400,7 +398,7 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
         body: JSON.stringify({
           nm_pasien: nmPasien,
           jns_jual: jnsJual,
-          nip,
+          nip: selectedPetugas.nip,
           tanggal,
           kd_bangsal: kdBangsal,
           ppn_percent: Number(ppnPercent || 0),
@@ -458,13 +456,39 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
               </button>
             </div>
           </div>
-          <div style={{ width: 120, flexShrink: 0 }}>
+          <div style={{ width: 170, flexShrink: 0 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
               Petugas
               {warnPetugas && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
             </label>
             <div className={warnPetugas ? 'blink-red-field-penjualan' : ''}>
-              <PillSelect value={nip} onChange={setNip} options={[{ value: '', label: '- Pilih -' }, ...petugas.map((p) => ({ value: p.kode, label: p.nama }))]} />
+              {selectedPetugas ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, minWidth: 0,
+                  border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 4,
+                  padding: '7px 8px', fontSize: 12,
+                }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${selectedPetugas.nip} - ${selectedPetugas.nama}`}>
+                    {selectedPetugas.nama}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCariPetugas(true)}
+                    style={{ flexShrink: 0, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 10.5, fontWeight: 500 }}
+                  >Ganti</button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => setShowCariPetugas(true)}
+                  style={{
+                    width: '100%', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: 4,
+                    fontSize: 12, boxSizing: 'border-box', cursor: 'pointer', color: '#9ca3af', background: '#ffffff',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}
+                >
+                  - Pilih -
+                </div>
+              )}
             </div>
           </div>
           <div style={{ width: 105, flexShrink: 0 }}>
@@ -693,6 +717,12 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
         open={showCariPasien}
         onClose={() => setShowCariPasien(false)}
         onSelect={(p) => setNmPasien(p.nm_pasien)}
+      />
+
+      <ModalCariPetugas
+        isOpen={showCariPetugas}
+        onClose={() => setShowCariPetugas(false)}
+        onSelect={(nip, nama) => setSelectedPetugas({ nip, nama })}
       />
     </div>
   );

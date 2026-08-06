@@ -1,7 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { getCurrentPetugas } from '../utils/currentUser';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { localDateStr } from '../utils/date';
+import { ModalCariPetugas } from '../components/ModalCariPetugas';
 
 // ============================================================================
 // APOTEK — Retur ke Suplier (tab utama modul Apotek). Cocok dengan dialog
@@ -98,8 +99,8 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [kdBangsal, setKdBangsal] = React.useState('');
   const [kodeSuplier, setKodeSuplier] = React.useState('');
   const [suplier, setSuplier] = React.useState<KvOpsi[]>([]);
-  const [nip, setNip] = React.useState('');
-  const [petugas, setPetugas] = React.useState<KvOpsi[]>([]);
+  const [selectedPetugas, setSelectedPetugas] = React.useState<{ nip: string; nama: string } | null>(null);
+  const [showCariPetugas, setShowCariPetugas] = React.useState(false);
   const [tanggal, setTanggal] = React.useState(todayStr());
   const [searchText, setSearchText] = React.useState('');
   const [rows, setRows] = React.useState<ReturRow[]>([]);
@@ -114,10 +115,11 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setSuplier(Array.isArray(data) ? data.map((s: any) => ({ kode: s.kode_suplier, nama: s.nama_suplier })) : []))
       .catch(() => {});
-    fetch('/api/petugas')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPetugas(Array.isArray(data) ? data.map((p: any) => ({ kode: p.nip, nama: p.nama })) : []))
-      .catch(() => {});
+
+    // Petugas — auto-isi dari NIP yang di-link ke akun login (tetap bisa
+    // diganti manual lewat ModalCariPetugas).
+    const nipLogin = getCurrentUserNip();
+    if (nipLogin) setSelectedPetugas((prev) => prev || { nip: nipLogin, nama: getCurrentPetugas() || nipLogin });
   }, []);
 
   const fetchItems = React.useCallback(async () => {
@@ -161,10 +163,10 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   };
 
   const guardFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (!kodeSuplier || !nip || !kdBangsal) {
+    if (!kodeSuplier || !selectedPetugas || !kdBangsal) {
       e.target.blur();
       setWarnSuplier(!kodeSuplier);
-      setWarnPetugas(!nip);
+      setWarnPetugas(!selectedPetugas);
       setWarnBangsal(!kdBangsal);
       setTimeout(() => {
         setWarnSuplier(false);
@@ -196,7 +198,7 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       Swal.fire({ icon: 'warning', title: 'Pilih Supplier dulu' });
       return;
     }
-    if (!nip) {
+    if (!selectedPetugas) {
       Swal.fire({ icon: 'warning', title: 'Pilih Petugas dulu' });
       return;
     }
@@ -239,7 +241,7 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       const res = await fetch('/api/apotek/retur-beli', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kode_suplier: kodeSuplier, nip, tanggal, kd_bangsal: kdBangsal, petugas: getCurrentPetugas(), items }),
+        body: JSON.stringify({ kode_suplier: kodeSuplier, nip: selectedPetugas.nip, tanggal, kd_bangsal: kdBangsal, petugas: getCurrentPetugas(), items }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
@@ -278,7 +280,33 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             {warnPetugas && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
           </label>
           <div className={warnPetugas ? 'blink-red-field-retur-beli' : ''}>
-            <PillSelect value={nip} onChange={setNip} options={[{ value: '', label: '- Pilih -' }, ...petugas.map((p) => ({ value: p.kode, label: p.nama }))]} />
+            {selectedPetugas ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, minWidth: 0,
+                border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 4,
+                padding: '7px 8px', fontSize: 12,
+              }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${selectedPetugas.nip} - ${selectedPetugas.nama}`}>
+                  {selectedPetugas.nama}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCariPetugas(true)}
+                  style={{ flexShrink: 0, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 10.5, fontWeight: 500 }}
+                >Ganti</button>
+              </div>
+            ) : (
+              <div
+                onClick={() => setShowCariPetugas(true)}
+                style={{
+                  width: '100%', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: 4,
+                  fontSize: 12, boxSizing: 'border-box', cursor: 'pointer', color: '#9ca3af', background: '#ffffff',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                - Pilih -
+              </div>
+            )}
           </div>
         </div>
         <div style={{ width: 105, flexShrink: 0 }}>
@@ -390,6 +418,12 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
           </tbody>
         </table>
       </div>
+
+      <ModalCariPetugas
+        isOpen={showCariPetugas}
+        onClose={() => setShowCariPetugas(false)}
+        onSelect={(nip, nama) => setSelectedPetugas({ nip, nama })}
+      />
     </div>
   );
 };

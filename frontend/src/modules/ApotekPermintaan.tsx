@@ -1,7 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { getCurrentPetugas } from '../utils/currentUser';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { localDateStr } from '../utils/date';
+import { ModalCariPegawai } from '../components/ModalCariPegawai';
 
 // ============================================================================
 // APOTEK — Permintaan Obat & BHP (tab utama modul Apotek). Cocok dengan
@@ -98,8 +99,8 @@ type PermintaanRow = BarangOpsi & { jumlah: string; keterangan: string };
 const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [kdBangsal, setKdBangsal] = React.useState('');
   const [kdBangsalTujuan, setKdBangsalTujuan] = React.useState('');
-  const [nip, setNip] = React.useState('');
-  const [pegawai, setPegawai] = React.useState<KvOpsi[]>([]);
+  const [selectedPegawai, setSelectedPegawai] = React.useState<{ nik: string; nama: string } | null>(null);
+  const [showCariPegawai, setShowCariPegawai] = React.useState(false);
   const [tanggal, setTanggal] = React.useState(todayStr());
   const [searchText, setSearchText] = React.useState('');
   const [rows, setRows] = React.useState<PermintaanRow[]>([]);
@@ -110,11 +111,14 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [warnTujuan, setWarnTujuan] = React.useState(false);
   const [warnNip, setWarnNip] = React.useState(false);
 
+  // Petugas — field ini disimpan sebagai pegawai.nik (padanan DlgCariPegawai
+  // Java, BUKAN petugas.nip — lihat backend/apotek_permintaan_handler.go),
+  // jadi pakai ModalCariPegawai (bukan ModalCariPetugas). Auto-isi dari NIP
+  // yang di-link ke akun login (nilainya sama persis dengan pegawai.nik
+  // berkat FK petugas.nip -> pegawai.nik), tetap bisa diganti manual.
   React.useEffect(() => {
-    fetch('/api/apotek/permintaan/pegawai-opsi')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPegawai(Array.isArray(data) ? data.map((p: any) => ({ kode: p.nik, nama: p.nama })) : []))
-      .catch(() => {});
+    const nipLogin = getCurrentUserNip();
+    if (nipLogin) setSelectedPegawai((prev) => prev || { nik: nipLogin, nama: getCurrentPetugas() || nipLogin });
   }, []);
 
   const fetchItems = React.useCallback(async () => {
@@ -192,11 +196,11 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   };
 
   const guardFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (!kdBangsal || !kdBangsalTujuan || !nip) {
+    if (!kdBangsal || !kdBangsalTujuan || !selectedPegawai) {
       e.target.blur();
       setWarnAsal(!kdBangsal);
       setWarnTujuan(!kdBangsalTujuan);
-      setWarnNip(!nip);
+      setWarnNip(!selectedPegawai);
       setTimeout(() => {
         setWarnAsal(false);
         setWarnTujuan(false);
@@ -226,7 +230,7 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       Swal.fire({ icon: 'warning', title: 'Asal Permintaan dan Ditujukan Ke harus berbeda' });
       return;
     }
-    if (!nip) {
+    if (!selectedPegawai) {
       Swal.fire({ icon: 'warning', title: 'Pilih Petugas dulu' });
       return;
     }
@@ -254,7 +258,7 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       const res = await fetch('/api/apotek/permintaan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kd_bangsal: kdBangsal, kd_bangsal_tujuan: kdBangsalTujuan, nip, tanggal, items }),
+        body: JSON.stringify({ kd_bangsal: kdBangsal, kd_bangsal_tujuan: kdBangsalTujuan, nip: selectedPegawai.nik, tanggal, items }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
@@ -301,7 +305,33 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             {warnNip && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
           </label>
           <div className={warnNip ? 'blink-red-field-permintaan' : ''}>
-            <PillSelect value={nip} onChange={setNip} options={[{ value: '', label: '- Pilih -' }, ...pegawai.map((p) => ({ value: p.kode, label: p.nama }))]} />
+            {selectedPegawai ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, minWidth: 0,
+                border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 4,
+                padding: '7px 8px', fontSize: 12,
+              }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${selectedPegawai.nik} - ${selectedPegawai.nama}`}>
+                  {selectedPegawai.nama}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCariPegawai(true)}
+                  style={{ flexShrink: 0, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 10.5, fontWeight: 500 }}
+                >Ganti</button>
+              </div>
+            ) : (
+              <div
+                onClick={() => setShowCariPegawai(true)}
+                style={{
+                  width: '100%', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: 4,
+                  fontSize: 12, boxSizing: 'border-box', cursor: 'pointer', color: '#9ca3af', background: '#ffffff',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                - Pilih -
+              </div>
+            )}
           </div>
         </div>
         <div style={{ width: 118, flexShrink: 0 }}>
@@ -434,6 +464,12 @@ const TabBuatPermintaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
           </tbody>
         </table>
       </div>
+
+      <ModalCariPegawai
+        isOpen={showCariPegawai}
+        onClose={() => setShowCariPegawai(false)}
+        onSelect={(nik, nama) => setSelectedPegawai({ nik, nama })}
+      />
     </div>
   );
 };
