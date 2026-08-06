@@ -2466,6 +2466,16 @@ const TabInformasiObat: React.FC = () => {
   // Pertanyaan" untuk intip isi pertanyaan/jawaban tanpa modal penuh.
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [itemsDetail, setItemsDetail] = React.useState<Record<string, InformasiObatItem[]>>({});
+  // obatDetail — dipakai KHUSUS sub-tab "Belum Ada Pertanyaan": expand baris
+  // di sini dulunya selalu memuat/menampilkan detail PIO (itemsDetail di
+  // atas), padahal di sub-tab ini PIO-nya SELALU kosong (baris di sini per
+  // definisi belum punya pertanyaan sama sekali — lihat filter `items`
+  // di bawah). Diganti jadi tampilkan daftar obat resep, biar apoteker bisa
+  // lihat dulu obat apa saja sebelum mengajukan pertanyaan Informasi Obat.
+  // Sama seperti "Obat Tervalidasi" di sidebar (handleObatTervalidasiClick),
+  // cuma obat resep yang SUDAH tervalidasi (status="Sudah Terlayani") yang
+  // ditampilkan — resep yang belum divalidasi tidak fetch apa-apa.
+  const [obatDetail, setObatDetail] = React.useState<Record<string, ResepItems>>({});
   const [loadingDetail, setLoadingDetail] = React.useState<string | null>(null);
 
   const fetchDetailFor = async (row: ResepRalanRow) => {
@@ -2481,13 +2491,30 @@ const TabInformasiObat: React.FC = () => {
     }
   };
 
+  const fetchObatDetailFor = async (row: ResepRalanRow) => {
+    setLoadingDetail(row.no_resep);
+    try {
+      const res = await fetch(`/api/permintaan-resep/ralan/${encodeURIComponent(row.no_resep)}/items`);
+      const data = await res.json();
+      setObatDetail((prev) => ({ ...prev, [row.no_resep]: data }));
+    } catch {
+      setObatDetail((prev) => ({ ...prev, [row.no_resep]: { no_rawat: '', kd_bangsal: '', nm_bangsal: '', total: 0, ppn: 0, total_ppn: 0, non_racikan: [], racikan: [] } }));
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
+
   const toggleExpand = async (row: ResepRalanRow) => {
     if (expanded === row.no_resep) {
       setExpanded(null);
       return;
     }
     setExpanded(row.no_resep);
-    if (!itemsDetail[row.no_resep]) {
+    if (subTab === 'belum') {
+      if (row.status === 'Sudah Terlayani' && !obatDetail[row.no_resep]) {
+        await fetchObatDetailFor(row);
+      }
+    } else if (!itemsDetail[row.no_resep]) {
       await fetchDetailFor(row);
     }
   };
@@ -2591,6 +2618,7 @@ const TabInformasiObat: React.FC = () => {
                 const belum = row.status === 'Belum Terlayani';
                 const isOpen = expanded === row.no_resep;
                 const detail = itemsDetail[row.no_resep];
+                const obat = obatDetail[row.no_resep];
                 return (
                   <React.Fragment key={row.no_resep}>
                     <tr style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb', cursor: 'pointer' }} onClick={() => toggleExpand(row)}>
@@ -2637,7 +2665,72 @@ const TabInformasiObat: React.FC = () => {
                     {isOpen && (
                       <tr>
                         <td colSpan={9} style={{ padding: '4px 8px 12px 32px', borderBottom: '1px solid #e5e7eb', background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                          {loadingDetail === row.no_resep ? (
+                          {subTab === 'belum' ? (
+                            row.status !== 'Sudah Terlayani' ? (
+                              <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Resep belum divalidasi — daftar obat baru bisa dilihat setelah resep ini divalidasi.</div>
+                            ) : loadingDetail === row.no_resep ? (
+                              <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Memuat obat tervalidasi...</div>
+                            ) : !obat || (obat.non_racikan.length === 0 && obat.racikan.length === 0) ? (
+                              <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Tidak ada item obat pada resep ini</div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {obat.non_racikan.length > 0 && (
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                                    <thead>
+                                      <tr style={{ color: '#6b7280' }}>
+                                        <th style={{ padding: '3px 6px', textAlign: 'left' }}>Kode</th>
+                                        <th style={{ padding: '3px 6px', textAlign: 'left' }}>Nama Obat</th>
+                                        <th style={{ padding: '3px 6px', textAlign: 'right' }}>Jumlah</th>
+                                        <th style={{ padding: '3px 6px', textAlign: 'left' }}>Satuan</th>
+                                        <th style={{ padding: '3px 6px', textAlign: 'left' }}>Aturan Pakai</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {obat.non_racikan.map((it) => (
+                                        <tr key={it.kode_brng}>
+                                          <td style={{ padding: '3px 6px', color: '#374151' }}>{it.kode_brng}</td>
+                                          <td style={{ padding: '3px 6px', color: '#111827' }}>{it.nama_brng}</td>
+                                          <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>{it.jml}</td>
+                                          <td style={{ padding: '3px 6px', color: '#374151' }}>{it.kode_sat}</td>
+                                          <td style={{ padding: '3px 6px', color: '#6b7280' }}>{it.aturan_pakai}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                                {obat.racikan.map((rc) => (
+                                  <div key={rc.no_racik} style={{ border: '1px solid #e5e7eb', borderRadius: 4, padding: 8 }}>
+                                    <div style={{ fontSize: 11.5, fontWeight: 600, color: '#4f46e5', marginBottom: 4 }}>
+                                      Racikan #{rc.no_racik} — {rc.nama_racik} ({rc.metode_racik}) × {rc.jml_dr}
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                                      <thead>
+                                        <tr style={{ color: '#6b7280' }}>
+                                          <th style={{ padding: '3px 6px', textAlign: 'left' }}>Kode</th>
+                                          <th style={{ padding: '3px 6px', textAlign: 'left' }}>Nama Obat</th>
+                                          <th style={{ padding: '3px 6px', textAlign: 'right' }}>Jumlah</th>
+                                          <th style={{ padding: '3px 6px', textAlign: 'left' }}>Satuan</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {rc.detail.map((d) => (
+                                          <tr key={d.kode_brng}>
+                                            <td style={{ padding: '3px 6px', color: '#374151' }}>{d.kode_brng}</td>
+                                            <td style={{ padding: '3px 6px', color: '#111827' }}>{d.nama_brng}</td>
+                                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>{d.jml}</td>
+                                            <td style={{ padding: '3px 6px', color: '#374151' }}>{d.kode_sat}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                                      Aturan Pakai: {rc.aturan_pakai} {rc.keterangan && `— ${rc.keterangan}`}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          ) : loadingDetail === row.no_resep ? (
                             <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Memuat pertanyaan...</div>
                           ) : !detail || detail.length === 0 ? (
                             <div style={{ padding: 12, color: '#6b7280', fontSize: 11.5 }}>Belum ada pertanyaan Informasi Obat untuk kunjungan ini</div>
