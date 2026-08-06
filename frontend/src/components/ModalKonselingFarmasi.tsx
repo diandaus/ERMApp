@@ -1,7 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import type { ResepRalanRow } from '../modules/PermintaanResep';
-import { getCurrentUserNip } from '../utils/currentUser';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
+import { ModalCariPetugas } from './ModalCariPetugas';
 
 // ============================================================================
 // Modal "Konseling Farmasi" — padanan rekammedis/RMKonselingFarmasi.java,
@@ -72,19 +73,20 @@ type ModalKonselingFarmasiProps = {
 
 export const ModalKonselingFarmasi: React.FC<ModalKonselingFarmasiProps> = ({ resep, onClose, onSaved }) => {
   const [form, setForm] = React.useState<KonselingState>(DEFAULT_STATE);
-  const [nip, setNip] = React.useState('');
-  const [petugas, setPetugas] = React.useState<{ nip: string; nama: string }[]>([]);
+  const [selectedPetugas, setSelectedPetugas] = React.useState<{ nip: string; nama: string } | null>(null);
+  const [showCariPetugas, setShowCariPetugas] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [sudahAda, setSudahAda] = React.useState(false);
 
+  // Default petugas dari akun yang sedang login (kalau akunnya sudah
+  // di-link ke NIP lewat Pengaturan User) — tetap bisa diganti manual
+  // lewat ModalCariPetugas kalau petugas yang konseling beda dari yang login.
+  const currentNip = getCurrentUserNip();
+
   React.useEffect(() => {
     if (!resep) return;
     setLoading(true);
-    fetch('/api/petugas')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPetugas(Array.isArray(data) ? data : []))
-      .catch(() => setPetugas([]));
 
     fetch(`/api/permintaan-resep/konseling?no_rawat=${encodeURIComponent(resep.no_rawat)}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -98,21 +100,25 @@ export const ModalKonselingFarmasi: React.FC<ModalKonselingFarmasiProps> = ({ re
             keluhan: data.keluhan || '',
             tindak_lanjut: data.tindak_lanjut || '',
           });
-          setNip(data.nip || getCurrentUserNip());
+          setSelectedPetugas(
+            data.nip ? { nip: data.nip, nama: data.nama_petugas || data.nip }
+            : currentNip ? { nip: currentNip, nama: getCurrentPetugas() || currentNip }
+            : null
+          );
           setSudahAda(true);
         } else {
           setForm(DEFAULT_STATE);
-          setNip(getCurrentUserNip());
+          setSelectedPetugas(currentNip ? { nip: currentNip, nama: getCurrentPetugas() || currentNip } : null);
           setSudahAda(false);
         }
       })
       .catch(() => {
         setForm(DEFAULT_STATE);
-        setNip(getCurrentUserNip());
+        setSelectedPetugas(currentNip ? { nip: currentNip, nama: getCurrentPetugas() || currentNip } : null);
         setSudahAda(false);
       })
       .finally(() => setLoading(false));
-  }, [resep]);
+  }, [resep, currentNip]);
 
   if (!resep) return null;
 
@@ -121,7 +127,7 @@ export const ModalKonselingFarmasi: React.FC<ModalKonselingFarmasiProps> = ({ re
   };
 
   const handleSimpan = async () => {
-    if (!nip) {
+    if (!selectedPetugas) {
       Swal.fire({ icon: 'warning', title: 'Pilih Petugas/Apoteker dulu' });
       return;
     }
@@ -146,7 +152,7 @@ export const ModalKonselingFarmasi: React.FC<ModalKonselingFarmasiProps> = ({ re
       const res = await fetch('/api/permintaan-resep/konseling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ no_rawat: resep.no_rawat, nip, ...form }),
+        body: JSON.stringify({ no_rawat: resep.no_rawat, nip: selectedPetugas.nip, ...form }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
@@ -196,15 +202,32 @@ export const ModalKonselingFarmasi: React.FC<ModalKonselingFarmasiProps> = ({ re
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Petugas / Apoteker</label>
-                <div style={{ position: 'relative' }}>
-                  <select value={nip} onChange={(e) => setNip(e.target.value)} style={{ ...selectStyle, width: '100%' }}>
-                    <option value="">- Pilih -</option>
-                    {petugas.map((p) => (
-                      <option key={p.nip} value={p.nip}>{p.nama}</option>
-                    ))}
-                  </select>
-                  <StepperIcon />
-                </div>
+                {selectedPetugas ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 8,
+                    padding: '7px 10px', fontSize: 12.5,
+                  }}>
+                    <span>{selectedPetugas.nip} - <strong>{selectedPetugas.nama}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCariPetugas(true)}
+                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                    >Ganti</button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => setShowCariPetugas(true)}
+                    style={{
+                      width: '100%', padding: '7px 10px',
+                      border: '1px solid #d1d5db', borderRadius: 4,
+                      fontSize: 12.5, boxSizing: 'border-box', cursor: 'pointer',
+                      color: '#9ca3af', background: '#ffffff',
+                    }}
+                  >
+                    Klik untuk pilih petugas...
+                  </div>
+                )}
               </div>
               <div style={{ width: 190 }}>
                 <label style={labelStyle}>Pernah Konseling Sebelumnya</label>
@@ -264,6 +287,12 @@ export const ModalKonselingFarmasi: React.FC<ModalKonselingFarmasiProps> = ({ re
           </button>
         </div>
       </div>
+
+      <ModalCariPetugas
+        isOpen={showCariPetugas}
+        onClose={() => setShowCariPetugas(false)}
+        onSelect={(nip, nama) => setSelectedPetugas({ nip, nama })}
+      />
     </div>
   );
 };

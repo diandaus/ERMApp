@@ -1,7 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import type { ResepRalanRow } from '../modules/PermintaanResep';
-import { getCurrentUserNip } from '../utils/currentUser';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
+import { ModalCariPetugas } from './ModalCariPetugas';
 
 // ============================================================================
 // Modal "Telaah Resep" — padanan inventory/InventoryTelaahResep.java (2155
@@ -108,18 +109,19 @@ type ModalTelaahResepProps = {
 
 export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClose, onSaved }) => {
   const [form, setForm] = React.useState<TelaahState>(DEFAULT_STATE);
-  const [nip, setNip] = React.useState('');
-  const [petugas, setPetugas] = React.useState<{ nip: string; nama: string }[]>([]);
+  const [selectedPetugas, setSelectedPetugas] = React.useState<{ nip: string; nama: string } | null>(null);
+  const [showCariPetugas, setShowCariPetugas] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+
+  // Default petugas dari akun yang sedang login (kalau akunnya sudah
+  // di-link ke NIP lewat Pengaturan User) — tetap bisa diganti manual
+  // lewat ModalCariPetugas kalau petugas yang telaah beda dari yang login.
+  const currentNip = getCurrentUserNip();
 
   React.useEffect(() => {
     if (!resep) return;
     setLoading(true);
-    fetch('/api/petugas')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPetugas(Array.isArray(data) ? data : []))
-      .catch(() => setPetugas([]));
 
     fetch(`/api/permintaan-resep/telaah/${encodeURIComponent(resep.no_resep)}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -148,18 +150,22 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
             obat_tepat_cara_pemberian: data.obat_tepat_cara_pemberian || 'Ya',
             obat_tepat_waktu_pemberian: data.obat_tepat_waktu_pemberian || 'Ya',
           });
-          setNip(data.nip || getCurrentUserNip());
+          setSelectedPetugas(
+            data.nip ? { nip: data.nip, nama: data.nama_petugas || data.nip }
+            : currentNip ? { nip: currentNip, nama: getCurrentPetugas() || currentNip }
+            : null
+          );
         } else {
           setForm(DEFAULT_STATE);
-          setNip(getCurrentUserNip());
+          setSelectedPetugas(currentNip ? { nip: currentNip, nama: getCurrentPetugas() || currentNip } : null);
         }
       })
       .catch(() => {
         setForm(DEFAULT_STATE);
-        setNip(getCurrentUserNip());
+        setSelectedPetugas(currentNip ? { nip: currentNip, nama: getCurrentPetugas() || currentNip } : null);
       })
       .finally(() => setLoading(false));
-  }, [resep]);
+  }, [resep, currentNip]);
 
   if (!resep) return null;
 
@@ -168,7 +174,7 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
   };
 
   const handleSimpan = async () => {
-    if (!nip) {
+    if (!selectedPetugas) {
       Swal.fire({ icon: 'warning', title: 'Pilih Petugas dulu' });
       return;
     }
@@ -177,7 +183,7 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
       const res = await fetch('/api/permintaan-resep/telaah', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ no_resep: resep.no_resep, nip, ...form }),
+        body: JSON.stringify({ no_resep: resep.no_resep, nip: selectedPetugas.nip, ...form }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
@@ -219,15 +225,32 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
           <>
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Petugas Farmasi</label>
-              <div style={{ position: 'relative' }}>
-                <select value={nip} onChange={(e) => setNip(e.target.value)} style={{ ...selectStyle, width: '100%' }}>
-                  <option value="">- Pilih -</option>
-                  {petugas.map((p) => (
-                    <option key={p.nip} value={p.nip}>{p.nama}</option>
-                  ))}
-                </select>
-                <StepperIcon />
-              </div>
+              {selectedPetugas ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 8,
+                  padding: '8px 12px', fontSize: 13,
+                }}>
+                  <span>{selectedPetugas.nip} - <strong>{selectedPetugas.nama}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCariPetugas(true)}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                  >Ganti</button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => setShowCariPetugas(true)}
+                  style={{
+                    width: '100%', padding: '10px 12px',
+                    border: '1px solid #d1d5db', borderRadius: 8,
+                    fontSize: 13, boxSizing: 'border-box', cursor: 'pointer',
+                    color: '#9ca3af', background: '#ffffff',
+                  }}
+                >
+                  Klik untuk pilih petugas...
+                </div>
+              )}
             </div>
 
             <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: '16px 0 8px', paddingBottom: 4, borderBottom: '1px solid #e5e7eb' }}>
@@ -301,6 +324,12 @@ export const ModalTelaahResep: React.FC<ModalTelaahResepProps> = ({ resep, onClo
           </button>
         </div>
       </div>
+
+      <ModalCariPetugas
+        isOpen={showCariPetugas}
+        onClose={() => setShowCariPetugas(false)}
+        onSelect={(nip, nama) => setSelectedPetugas({ nip, nama })}
+      />
     </div>
   );
 };
