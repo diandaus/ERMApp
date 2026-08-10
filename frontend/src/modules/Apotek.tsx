@@ -249,8 +249,8 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
   // Running text "Permintaan Resep Baru" — dihitung dari resep_obat yang
   // belum divalidasi/dilayani apotek (status "Belum Terlayani", padanan
   // status yang sama dipakai PermintaanResep.tsx), Ralan & Ranap dihitung
-  // terpisah supaya bisa ditampilkan rinciannya. Auto-refresh tiap 30
-  // detik, pola sama dgn RawatJalan.tsx.
+  // terpisah supaya bisa ditampilkan rinciannya. Auto-refresh tiap 10
+  // detik (dipercepat dari 30 detik supaya badge lebih responsif).
   React.useEffect(() => {
     const fetchCount = () => {
       const statusQS = `status=${encodeURIComponent('Belum Terlayani')}`;
@@ -260,7 +260,22 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
         .then((data) => setResepRanapBelumCount(Array.isArray(data) ? data.length : 0));
     };
     fetchCount();
-    const interval = setInterval(fetchCount, 30000);
+    const interval = setInterval(fetchCount, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Badge "Permintaan Obat & BHP" — dihitung dari permintaan_medis yang
+  // masih berstatus "Baru" (belum disetujui/ditolak, padanan status yang
+  // sama dipakai ApotekPermintaan.tsx), sama pola dengan badge Permintaan
+  // Resep di atas.
+  const [permintaanBaruCount, setPermintaanBaruCount] = React.useState(0);
+  React.useEffect(() => {
+    const fetchCount = () => {
+      fetch(`/api/apotek/permintaan/riwayat?status=${encodeURIComponent('Baru')}`).then((res) => (res.ok ? res.json() : [])).catch(() => [])
+        .then((data) => setPermintaanBaruCount(Array.isArray(data) ? data.length : 0));
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -311,6 +326,10 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
         <nav className="apotek-sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {MENU.map((item) => {
             const active = activeTab === item.key;
+            const badgeCount =
+              item.key === 'permintaan-resep' ? resepBelumTerlayaniCount :
+              item.key === 'permintaan' ? permintaanBaruCount :
+              0;
             return (
               <button
                 key={item.key}
@@ -340,6 +359,27 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
               >
                 {item.icon}
                 {item.label}
+                {badgeCount > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      minWidth: 18,
+                      height: 18,
+                      padding: '0 5px',
+                      borderRadius: 9,
+                      background: '#dc2626',
+                      color: '#ffffff',
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {badgeCount}
+                  </span>
+                )}
               </button>
             );
           })}

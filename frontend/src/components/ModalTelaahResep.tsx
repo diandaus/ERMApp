@@ -85,7 +85,7 @@ const StepperIcon: React.FC = () => (
       transform: 'translateY(-50%)',
       width: 18,
       height: 18,
-      borderRadius: '50%',
+      borderRadius: '30%',
       background: '#059669',
       display: 'flex',
       alignItems: 'center',

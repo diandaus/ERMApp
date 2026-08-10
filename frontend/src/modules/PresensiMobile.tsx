@@ -1,0 +1,1731 @@
+import React from 'react';
+import Swal from 'sweetalert2';
+
+// Ikon garis (feather-style) senada dengan ikon lain di aplikasi ini
+// (mis. Kepegawaian.tsx) — dipakai di sini menggantikan emoji supaya
+// tampilannya konsisten lintas OS/browser.
+type IconProps = { size?: number; color?: string };
+
+const IconHome: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" />
+  </svg>
+);
+
+const IconCamera: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+    <circle cx="12" cy="13" r="3.5" />
+  </svg>
+);
+
+const IconFaceScan: React.FC<IconProps> = ({ size = 28, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 8V6a2 2 0 0 1 2-2h2" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v2" />
+    <path d="M20 16v2a2 2 0 0 1-2 2h-2" />
+    <path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+    <path d="M9 10v1" />
+    <path d="M15 10v1" />
+    <path d="M9 15c.83.67 1.5 1 3 1s2.17-.33 3-1" />
+  </svg>
+);
+
+const IconCalendar: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" />
+  </svg>
+);
+
+const IconClipboard: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 3h6a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="M8 11h8" /><path d="M8 15h5" />
+  </svg>
+);
+
+const IconLogOut: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+);
+
+const IconUser: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" />
+  </svg>
+);
+
+const IconAlertTriangle: React.FC<IconProps> = ({ size = 36, color = '#f59e0b' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const IconCheckCircle: React.FC<IconProps> = ({ size = 36, color = '#16a34a' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);
+
+const IconClock: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+  </svg>
+);
+
+const IconPercent: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="19" y1="5" x2="5" y2="19" />
+    <circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
+  </svg>
+);
+
+// Ikon menu kartu "Layanan Lainnya" (Lembur/Cuti/Izin/Poli/IGD/Ranap/
+// Jadwal Obat/Permintaan Obat) — lihat LayananCard di bawah.
+const IconOvertime: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="13" r="8" />
+    <path d="M12 9v4l2.5 2.5" />
+    <path d="M9 2h6" />
+  </svg>
+);
+
+const IconUmbrella: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 11a9 9 0 0 1 18 0z" />
+    <path d="M12 11v9a2 2 0 0 1-4 0" />
+    <path d="M12 2v2" />
+  </svg>
+);
+
+const IconFileText: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M9 13h6" /><path d="M9 17h6" /><path d="M9 9h1" />
+  </svg>
+);
+
+const IconStethoscope: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 3v6a4 4 0 0 0 8 0V3" />
+    <path d="M9 15v2a4 4 0 0 0 8 0v-3a6 6 0 0 0-3-5.2" />
+    <circle cx="20" cy="10" r="1.7" />
+  </svg>
+);
+
+const IconSiren: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 18v-6a5 5 0 0 1 10 0v6" />
+    <path d="M19 18H5a1 1 0 0 0 0 2h14a1 1 0 0 0 0-2z" />
+    <path d="M12 2v3" /><path d="M4.5 7 6 8.3" /><path d="M19.5 7 18 8.3" />
+  </svg>
+);
+
+const IconBed: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 18v-7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3" />
+    <path d="M2 14h20" />
+    <path d="M22 18v-4a2 2 0 0 0-2-2h-6" />
+    <path d="M2 18v3" /><path d="M22 18v3" />
+    <circle cx="7" cy="8" r="1.4" />
+  </svg>
+);
+
+const IconPill: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="10.5" width="18" height="7" rx="3.5" transform="rotate(-45 12 13.5)" />
+    <line x1="9.5" y1="9" x2="14.5" y2="14" />
+  </svg>
+);
+
+const IconFlask: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2v6.5L4.5 17a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L15 8.5V2" />
+    <path d="M9 2h6" /><path d="M7.5 15h9" />
+  </svg>
+);
+
+const IconRadiology: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 3v3" /><path d="M12 18v3" /><path d="M3 12h3" /><path d="M18 12h3" />
+  </svg>
+);
+
+const IconScalpel: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 20 14 10" />
+    <path d="M14 10 19 5a1.7 1.7 0 0 0-2.4-2.4L12 7" />
+    <circle cx="5.5" cy="18.5" r="1.5" />
+  </svg>
+);
+
+const IconTaskCheck: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 3h6a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="m9 13 2 2 4-4" />
+  </svg>
+);
+
+const IconMonitor: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
+  </svg>
+);
+
+const IconMegaphone: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m3 11 18-5v12L3 14v-3z" />
+    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+  </svg>
+);
+
+// Ikon tambahan utk tab Saya > Profil/Pengaturan Akun.
+const IconSettings: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.04 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.04z" />
+  </svg>
+);
+
+const IconChevronRight: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+
+const IconArrowLeft: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+  </svg>
+);
+
+const IconLock: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+);
+
+const IconPhone: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
+const IconMail: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <polyline points="2 7 12 13 22 7" />
+  </svg>
+);
+
+const IconBuilding: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="2" width="16" height="20" rx="1" />
+    <line x1="9" y1="7" x2="9" y2="7.01" /><line x1="15" y1="7" x2="15" y2="7.01" />
+    <line x1="9" y1="11" x2="9" y2="11.01" /><line x1="15" y1="11" x2="15" y2="11.01" />
+    <line x1="9" y1="15" x2="15" y2="15" />
+  </svg>
+);
+
+const IconIdCard: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <circle cx="8" cy="12" r="2" />
+    <line x1="14" y1="10" x2="19" y2="10" /><line x1="14" y1="14" x2="19" y2="14" />
+  </svg>
+);
+
+type AppUserLite = {
+  id: number;
+  full_name: string;
+  role: string;
+  nip?: string;
+  kd_dokter?: string;
+  allowed_modules?: string;
+};
+
+// Padanan canAccessMenu di modules/App.tsx (shell desktop) — Poli/IGD/
+// Ranap di kartu Layanan Lainnya cuma tampil kalau modul terkait
+// ('rawat-jalan'/'igd'/'rawat-inap') diizinkan buat akun yang login,
+// entah lewat allowed_modules (diatur admin) atau fallback per role.
+// Sengaja disamakan persis (termasuk "celah" IGD yang cuma masuk fallback
+// admin) supaya konsisten dgn kontrol akses shell utama.
+function canAccessModule(user: AppUserLite, moduleKey: 'rawat-jalan' | 'igd' | 'rawat-inap'): boolean {
+  if (user.allowed_modules) {
+    return user.allowed_modules.split(',').filter(Boolean).includes(moduleKey);
+  }
+  switch (user.role) {
+    case 'dokter':
+      return moduleKey === 'rawat-jalan' || moduleKey === 'rawat-inap';
+    case 'admin':
+      return true;
+    default:
+      return false;
+  }
+}
+
+type PresensiHariIni = {
+  sudah_checkin: boolean;
+  sudah_checkout: boolean;
+  jam_datang: string;
+  jam_pulang: string;
+  status: string;
+  keterlambatan: string;
+  shift: string;
+};
+
+type PerformaBulanIni = {
+  persentase_kehadiran: number;
+  total_hari_kerja: number;
+  total_hari_terjadwal: number;
+  rata_rata_jam_kerja: number;
+};
+
+type MeResponse = {
+  nama: string;
+  photo: string;
+  hari_ini: PresensiHariIni;
+  performa: PerformaBulanIni;
+};
+
+// pegawai.photo sering berisi path legacy Khanza desktop (mis.
+// "pages/pegawai/photo/xxx.jpg") yang tidak bisa diakses backend web ini
+// — hanya dipakai kalau sudah berupa URL yang valid (/uploads/... hasil
+// upload baru, atau http/https), selain itu fallback ke avatar inisial.
+function isUsablePhotoUrl(photo: string): boolean {
+  return photo.startsWith('/uploads/') || photo.startsWith('http://') || photo.startsWith('https://');
+}
+
+const Avatar: React.FC<{ nama: string; photo?: string; size?: number }> = ({ nama, photo, size = 44 }) => {
+  const usable = photo && isUsablePhotoUrl(photo);
+  const initial = (nama || '?').trim().charAt(0).toUpperCase();
+  const base: React.CSSProperties = {
+    width: size, height: size, borderRadius: '50%', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: size * 0.4, fontWeight: 700, color: '#059669', background: '#d1fae5',
+    overflow: 'hidden', border: '2px solid rgba(255,255,255,0.6)',
+  };
+  if (usable) {
+    return <img src={photo} alt={nama} style={{ ...base, objectFit: 'cover' }} />;
+  }
+  return <div style={base}>{initial}</div>;
+};
+
+type RiwayatRow = {
+  tanggal: string; shift: string; jam_datang: string; jam_pulang: string;
+  status: string; keterlambatan: string; durasi: string;
+};
+
+const GRADIENT = 'linear-gradient(135deg, #34d399 0%, #059669 100%)';
+
+const getStatusStyle = (status: string) => {
+  const base = status.replace(' & PSW', '');
+  switch (base) {
+    case 'Tepat Waktu':          return { bg: '#dcfce7', color: '#166534' };
+    case 'Terlambat Toleransi':  return { bg: '#fef9c3', color: '#854d0e' };
+    case 'Terlambat I':          return { bg: '#ffedd5', color: '#9a3412' };
+    case 'Terlambat II':         return { bg: '#fee2e2', color: '#991b1b' };
+    default:                     return { bg: '#f3f4f6', color: '#374151' };
+  }
+};
+
+// Padanan getCurrentUserNip()/kd_dokter di utils/currentUser.ts — dokter.
+// kd_dokter dan petugas.nip sama-sama FK ke pegawai.nik (lihat catatan
+// backend/dokter_handler.go & petugas_handler.go), jadi presensi cukup
+// pakai salah satu yang terisi utk resolve ke pegawai.id di backend.
+function resolveNik(user: AppUserLite): string {
+  if (user.role === 'dokter' && user.kd_dokter) return user.kd_dokter;
+  return user.nip || '';
+}
+
+async function getGeolocation(): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
+}
+
+// ---------------------------------------------------------------------
+// Tab: Absen — live camera preview + capture, lalu kirim foto + GPS ke
+// backend. Otomatis menentukan check-in atau check-out berdasarkan
+// status hari ini (bukan dipilih manual) supaya alurnya sesederhana
+// mungkin di HP.
+// ---------------------------------------------------------------------
+
+const AbsenTab: React.FC<{
+  nik: string;
+  hariIni: PresensiHariIni | null;
+  onSelesai: () => void;
+}> = ({ nik, hariIni, onSelesai }) => {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const streamRef = React.useRef<MediaStream | null>(null);
+  const [ready, setReady] = React.useState(false);
+  const [camError, setCamError] = React.useState<string | null>(null);
+  const [captured, setCaptured] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const aksi: 'checkin' | 'checkout' = hariIni?.sudah_checkin && !hariIni?.sudah_checkout ? 'checkout' : 'checkin';
+  const sudahSelesaiHariIni = hariIni?.sudah_checkin && hariIni?.sudah_checkout;
+
+  const startCamera = React.useCallback(() => {
+    navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; }
+        setReady(true);
+      })
+      .catch(() => setCamError('Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan.'));
+  }, []);
+
+  React.useEffect(() => {
+    if (sudahSelesaiHariIni) return;
+    startCamera();
+    return () => {
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sudahSelesaiHariIni]);
+
+  // Satu klik: ambil foto lalu langsung kirim (GPS + upload + check-in/
+  // out) tanpa langkah konfirmasi/preview lagi — sesuai permintaan biar
+  // absen secepat mungkin buat pegawai.
+  const handleCaptureAndSubmit = async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const photoDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    setCaptured(photoDataUrl);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+
+    setSubmitting(true);
+    try {
+      const lokasi = await getGeolocation();
+      if (!lokasi) {
+        await Swal.fire({ icon: 'warning', title: 'Lokasi tidak ditemukan', text: 'Aktifkan izin lokasi lalu coba lagi.', confirmButtonColor: '#059669' });
+        setSubmitting(false);
+        setCaptured(null);
+        startCamera();
+        return;
+      }
+
+      const blob = await (await fetch(photoDataUrl)).blob();
+      const formData = new FormData();
+      formData.append('file', blob, `presensi-${Date.now()}.jpg`);
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Gagal mengunggah foto');
+      const photoUrl: string = uploadData.url || uploadData.path || uploadData.filename || '';
+
+      const alamat = `${lokasi.lat.toFixed(5)}, ${lokasi.lng.toFixed(5)}`;
+      const endpoint = aksi === 'checkin' ? '/api/presensi/checkin' : '/api/presensi/checkout';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nik, lat: lokasi.lat, lng: lokasi.lng, alamat, photo: photoUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan presensi');
+
+      await Swal.fire({
+        icon: 'success',
+        title: aksi === 'checkin' ? 'Check-in Berhasil' : 'Check-out Berhasil',
+        text: `Jam ${data.jam} — ${data.status}`,
+        confirmButtonColor: '#059669',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      onSelesai();
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+      setCaptured(null);
+      startCamera();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (sudahSelesaiHariIni) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconCheckCircle size={40} /></div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Presensi hari ini sudah lengkap</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Check-in {hariIni?.jam_datang} · Check-out {hariIni?.jam_pulang}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#111827' }}>
+        {aksi === 'checkin' ? 'Absen Check In' : 'Absen Check Out'}
+      </div>
+
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', borderRadius: 16, overflow: 'hidden', background: '#111827' }}>
+        {camError ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, padding: 20, textAlign: 'center' }}>
+            {camError}
+          </div>
+        ) : captured ? (
+          <img src={captured} alt="Hasil foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+        )}
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleCaptureAndSubmit}
+        disabled={!ready || submitting}
+        style={{
+          padding: '12px', borderRadius: 12, border: 'none', background: ready && !submitting ? GRADIENT : '#d1d5db',
+          color: '#fff', fontSize: 14, fontWeight: 600, cursor: ready && !submitting ? 'pointer' : 'not-allowed',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}
+      >
+        {submitting ? 'Menyimpan...' : <><IconCamera size={18} /> Absen — {aksi === 'checkin' ? 'Masuk' : 'Pulang'}</>}
+      </button>
+      <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'center' }}>
+        Foto & lokasi GPS langsung tersimpan begitu foto diambil.
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Home
+// ---------------------------------------------------------------------
+
+type LayananItem = { key: string; label: string; icon: React.ReactNode };
+
+// Kartu "Layanan Lainnya" — menu jalan pintas ke fitur yang belum
+// dibangun mobile-nya (Lembur/Cuti/Izin/Jadwal Obat/Permintaan Obat
+// masih tahap placeholder, sama seperti pola tab Presensi/Rekap
+// Kehadiran/Pengajuan Cuti di Kepegawaian.tsx sebelum dikembangkan).
+// Poli/IGD/Ranap cuma tampil kalau modul terkait diizinkan buat akun
+// yang login (lihat canAccessModule di atas).
+const LayananCard: React.FC<{ user: AppUserLite; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void }> = ({ user, onOpenLembur, onOpenCutiIzin }) => {
+  const items: LayananItem[] = [
+    { key: 'lembur', label: 'Lembur', icon: <IconOvertime size={22} color="#059669" /> },
+    { key: 'cuti', label: 'Cuti', icon: <IconUmbrella size={22} color="#059669" /> },
+    { key: 'izin', label: 'Izin', icon: <IconFileText size={22} color="#059669" /> },
+    { key: 'tugas', label: 'Tugas', icon: <IconTaskCheck size={22} color="#059669" /> },
+    { key: 'lapor-it', label: 'Lapor IT', icon: <IconMonitor size={22} color="#059669" /> },
+    ...(canAccessModule(user, 'rawat-jalan') ? [{ key: 'poli', label: 'Poli', icon: <IconStethoscope size={22} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'igd') ? [{ key: 'igd', label: 'IGD', icon: <IconSiren size={22} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'rawat-inap') ? [{ key: 'ranap', label: 'Ranap', icon: <IconBed size={22} color="#059669" /> }] : []),
+    { key: 'farmasi', label: 'Farmasi', icon: <IconPill size={22} color="#059669" /> },
+    { key: 'lab', label: 'Lab', icon: <IconFlask size={22} color="#059669" /> },
+    { key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={22} color="#059669" /> },
+    { key: 'operasi', label: 'Operasi', icon: <IconScalpel size={22} color="#059669" /> },
+  ];
+
+  const handleClick = (key: string, label: string) => {
+    if (key === 'lembur') { onOpenLembur(); return; }
+    if (key === 'cuti' || key === 'izin') { onOpenCutiIzin(key); return; }
+    Swal.fire({ icon: 'info', title: label, text: 'Fitur ini akan segera hadir.', confirmButtonColor: '#059669', timer: 1800, showConfirmButton: false });
+  };
+
+  return (
+    <div style={{ padding: '0 16px 16px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Menu Utama</div>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => handleClick(item.key, item.label)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 0 }}
+            >
+              <div style={{ width: 44, height: 44, borderRadius: 14, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {item.icon}
+              </div>
+              <span style={{ fontSize: 10, color: '#374151', textAlign: 'center', lineHeight: 1.2 }}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Kartu "Pengumuman & Informasi Penting" — di bawah kartu Layanan
+// Lainnya. Dikelola HRD/admin lewat Kepegawaian > Pengumuman (desktop,
+// lihat modules/PengumumanKepegawaian.tsx); di sini cuma tampilkan yang
+// aktif=1. Kartu disembunyikan total kalau tidak ada pengumuman aktif
+// (tidak menampilkan state kosong yang tidak berguna).
+// ---------------------------------------------------------------------
+
+type PengumumanItem = {
+  id: number; judul: string; isi: string; prioritas: 'info' | 'penting' | 'urgent'; tanggal: string;
+};
+
+const pengumumanPrioritasStyle = (p: string) => {
+  switch (p) {
+    case 'urgent':
+      return { border: '#dc2626', badgeBg: '#fee2e2', badgeColor: '#991b1b', label: 'Urgent' };
+    case 'penting':
+      return { border: '#f59e0b', badgeBg: '#fef9c3', badgeColor: '#854d0e', label: 'Penting' };
+    default:
+      return { border: '#2563eb', badgeBg: '#dbeafe', badgeColor: '#1d4ed8', label: 'Info' };
+  }
+};
+
+const PengumumanCard: React.FC = () => {
+  const [list, setList] = React.useState<PengumumanItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [expandedId, setExpandedId] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/pengumuman?aktif=1')
+      .then(r => r.json())
+      .then(d => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (!loading && list.length === 0) return null;
+
+  return (
+    <div style={{ padding: '0 16px 16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {loading ? (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : (
+          list.map((item) => {
+            const st = pengumumanPrioritasStyle(item.prioritas);
+            const expanded = expandedId === item.id;
+            return (
+              <div
+                key={item.id}
+                onClick={() => setExpandedId(expanded ? null : item.id)}
+                style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, cursor: 'pointer', display: 'flex', gap: 10 }}
+              >
+                <div style={{ width: 30, height: 30, borderRadius: 10, background: st.badgeBg, color: st.border, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <IconMegaphone size={15} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', flex: 1 }}>{item.judul}</div>
+                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 700, background: st.badgeBg, color: st.badgeColor, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>{item.tanggal}</div>
+                  <div
+                    style={{
+                      fontSize: 11, color: '#6b7280', marginTop: 4,
+                      ...(expanded ? {} : {
+                        overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box',
+                        WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                      }),
+                    }}
+                  >
+                    {item.isi}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
+const HomeTab: React.FC<{ user: AppUserLite; me: MeResponse | null; loading: boolean; onAbsen: () => void; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void }> = ({ user, me, loading, onAbsen, onOpenLembur, onOpenCutiIzin }) => {
+  const hariIni = me?.hari_ini;
+  const performa = me?.performa;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: GRADIENT, padding: '20px 16px 56px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Avatar nama={me?.nama || user.full_name} photo={me?.photo} />
+        <div>
+          <div style={{ fontSize: 11, opacity: 0.85 }}>Assalamualaikum Wr. Wb.</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{user.full_name}</div>
+          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2, textTransform: 'capitalize' }}>{user.role}</div>
+        </div>
+      </div>
+
+      <div style={{ margin: '-40px 16px 0', background: '#fff', borderRadius: 16, boxShadow: '0 10px 30px rgba(15,23,42,0.12)', padding: 16 }}>
+        <div style={{ display: 'flex' }}>
+          <div style={{ flex: 1, textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, letterSpacing: 0.5 }}>MASUK</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#111827', marginTop: 4 }}>{hariIni?.jam_datang || '--:--'}</div>
+            <div style={{ fontSize: 10, color: hariIni?.keterlambatan && hariIni.keterlambatan !== '-' ? '#dc2626' : '#9ca3af' }}>
+              {hariIni?.status || (loading ? 'Memuat...' : 'Belum absen')}
+            </div>
+          </div>
+          <div style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, letterSpacing: 0.5 }}>PULANG</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#111827', marginTop: 4 }}>{hariIni?.jam_pulang || '--:--'}</div>
+            <div style={{ fontSize: 10, color: '#9ca3af' }}>{hariIni?.sudah_checkout ? 'Selesai' : ' '}</div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onAbsen}
+          style={{
+            width: '100%', marginTop: 16, padding: '12px', borderRadius: 12, border: 'none',
+            background: GRADIENT, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          {!hariIni?.sudah_checkin ? 'Absen Masuk' : !hariIni?.sudah_checkout ? 'Absen Pulang' : 'Presensi Hari Ini Selesai'}
+        </button>
+      </div>
+
+      <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Performa Kehadiran Bulan Ini</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: 8 }}><IconPercent size={14} /></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{performa ? Math.round(performa.persentase_kehadiran) : 0}%</div>
+            <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Kehadiran</div>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: 8 }}><IconCalendar size={14} /></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{performa?.total_hari_kerja ?? 0}/{performa?.total_hari_terjadwal ?? 0}</div>
+            <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Hari Kerja</div>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: 8 }}><IconClock size={14} /></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{performa ? performa.rata_rata_jam_kerja.toFixed(1) : '0.0'}</div>
+            <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Jam/Hari</div>
+          </div>
+        </div>
+      </div>
+
+      <LayananCard user={user} onOpenLembur={onOpenLembur} onOpenCutiIzin={onOpenCutiIzin} />
+      <PengumumanCard />
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Kehadiran (riwayat bulan berjalan)
+// ---------------------------------------------------------------------
+
+const KehadiranTab: React.FC<{ nik: string }> = ({ nik }) => {
+  const [list, setList] = React.useState<RiwayatRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!nik) return;
+    setLoading(true);
+    fetch(`/api/presensi/riwayat?nik=${encodeURIComponent(nik)}`)
+      .then(r => r.json())
+      .then(d => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [nik]);
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 12 }}>Riwayat Kehadiran Bulan Ini</div>
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
+      ) : list.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Belum ada riwayat presensi bulan ini</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {list.map((r) => {
+            const st = getStatusStyle(r.status);
+            return (
+              <div key={`${r.tanggal}-${r.jam_datang}`} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{r.tanggal}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                    {r.jam_datang || '--:--'} → {r.jam_pulang || '--:--'} · {r.durasi}
+                  </div>
+                </div>
+                <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                  {r.status}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Jadwal — jadwal shift sebulan (read-only), dari skema Khanza
+// jadwal_pegawai + jam_masuk (lihat backend/presensi_handler.go). Tidak
+// ada UI edit di sini — pengaturan jadwal shift tetap lewat menu Khanza
+// yang sudah ada, ini cuma tampilan buat pegawai lihat jadwalnya sendiri
+// lewat HP.
+// ---------------------------------------------------------------------
+
+type JadwalRow = { tanggal: string; shift: string; jam_masuk: string; jam_pulang: string };
+
+const HARI_INDO = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
+
+const JadwalTab: React.FC<{ nik: string }> = ({ nik }) => {
+  const [list, setList] = React.useState<JadwalRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const today = new Date();
+
+  React.useEffect(() => {
+    if (!nik) return;
+    setLoading(true);
+    fetch(`/api/presensi/jadwal?nik=${encodeURIComponent(nik)}`)
+      .then(r => r.json())
+      .then(d => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [nik]);
+
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 12 }}>
+        Jadwal Shift — {today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+      </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {list.map((r) => {
+            const tglObj = new Date(r.tanggal + 'T00:00:00');
+            const isToday = r.tanggal === todayStr;
+            const adaJadwal = !!r.shift;
+            return (
+              <div
+                key={r.tanggal}
+                style={{
+                  background: isToday ? '#ecfdf5' : '#fff',
+                  border: isToday ? '1px solid #059669' : '1px solid #e5e7eb',
+                  borderRadius: 10, padding: '10px 12px',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>
+                    {tglObj.getDate()} {HARI_INDO[tglObj.getDay()]}
+                    {isToday && <span style={{ marginLeft: 6, fontSize: 9, color: '#059669', fontWeight: 700 }}>HARI INI</span>}
+                  </div>
+                  {adaJadwal && (
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                      {r.jam_masuk?.slice(0, 5)} – {r.jam_pulang?.slice(0, 5)}
+                    </div>
+                  )}
+                </div>
+                <span style={{
+                  padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+                  background: adaJadwal ? '#d1fae5' : '#f3f4f6', color: adaJadwal ? '#047857' : '#9ca3af',
+                }}>
+                  {adaJadwal ? r.shift : 'Libur'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Saya — menu profil ringkas pegawai + akses ke Profil (data diri
+// + upload foto) dan Pengaturan Akun (ubah password), tombol Keluar
+// tetap di paling bawah.
+// ---------------------------------------------------------------------
+
+type PresensiProfilResp = {
+  nik: string; nama: string; no_telp: string; email: string; departemen: string; photo: string;
+};
+
+const SubPageHeader: React.FC<{ title: string; onBack: () => void }> = ({ title, onBack }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 16px 8px' }}>
+    <button type="button" onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', color: '#111827' }}>
+      <IconArrowLeft size={20} />
+    </button>
+    <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</span>
+  </div>
+);
+
+const MenuRow: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void }> = ({ icon, label, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    style={{
+      width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px',
+      borderBottom: '1px solid #f3f4f6', textAlign: 'left',
+    }}
+  >
+    <div style={{ width: 32, height: 32, borderRadius: 10, background: '#eef2ff', color: '#4338ca', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {icon}
+    </div>
+    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#111827' }}>{label}</span>
+    <IconChevronRight size={16} color="#9ca3af" />
+  </button>
+);
+
+const ProfilRow: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({ icon, label, value }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid #f3f4f6' }}>
+    <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f3f4f6', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {icon}
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: '#9ca3af' }}>{label}</div>
+      <div style={{ fontSize: 13, color: '#111827', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || '-'}</div>
+    </div>
+  </div>
+);
+
+// Tab: Saya > Profil — data diri (read-only, sumber: pegawai + petugas/
+// dokter, lihat backend/presensi_handler.go getPresensiProfil) + upload
+// foto profil (satu-satunya field yang bisa diedit dari sini).
+const ProfilDetailView: React.FC<{ nik: string; onBack: () => void; onFotoUpdated: () => void }> = ({ nik, onBack, onFotoUpdated }) => {
+  const [profil, setProfil] = React.useState<PresensiProfilResp | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const fetchProfil = React.useCallback(() => {
+    if (!nik) return;
+    setLoading(true);
+    fetch(`/api/presensi/profil?nik=${encodeURIComponent(nik)}`)
+      .then(r => r.json())
+      .then(d => setProfil(d))
+      .catch(() => setProfil(null))
+      .finally(() => setLoading(false));
+  }, [nik]);
+
+  React.useEffect(() => { fetchProfil(); }, [fetchProfil]);
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Gagal mengunggah foto');
+
+      const res = await fetch('/api/presensi/profil/foto', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nik, photo: uploadData.url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memperbarui foto');
+
+      await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Foto profil diperbarui', confirmButtonColor: '#059669', timer: 1500, showConfirmButton: false });
+      fetchProfil();
+      onFotoUpdated();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div>
+      <SubPageHeader title="Profil" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 20px' }}>
+          <div style={{ position: 'relative' }}>
+            <Avatar nama={profil?.nama || ''} photo={profil?.photo} size={80} />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Ganti foto profil"
+              style={{
+                position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: '50%',
+                background: GRADIENT, border: '3px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: uploading ? 'not-allowed' : 'pointer', padding: 0,
+              }}
+            >
+              <IconCamera size={13} color="#fff" />
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFotoChange} style={{ display: 'none' }} />
+          </div>
+          <div style={{ fontSize: 11, color: uploading ? '#059669' : '#9ca3af', marginTop: 8 }}>
+            {uploading ? 'Mengunggah...' : 'Ketuk ikon kamera utk ganti foto'}
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '4px 14px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
+          ) : !profil ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Data profil tidak ditemukan</div>
+          ) : (
+            <>
+              <ProfilRow icon={<IconIdCard size={15} />} label="NIP" value={profil.nik} />
+              <ProfilRow icon={<IconUser size={15} />} label="Nama" value={profil.nama} />
+              <ProfilRow icon={<IconPhone size={15} />} label="No. Handphone" value={profil.no_telp} />
+              <ProfilRow icon={<IconMail size={15} />} label="Email" value={profil.email} />
+              <ProfilRow icon={<IconBuilding size={15} />} label="Departemen" value={profil.departemen} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Tab: Saya > Pengaturan Akun > Ubah Password — reuse endpoint yang
+// sama dgn ModalGantiPassword.tsx (shell desktop): POST /api/auth/
+// change-password, wajib password lama.
+const PengaturanAkunView: React.FC<{ userId: number; onBack: () => void }> = ({ userId, onBack }) => {
+  const [oldPassword, setOldPassword] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
+
+  const handleSimpan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      Swal.fire({ icon: 'warning', title: 'Semua field wajib diisi', confirmButtonColor: '#059669' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      Swal.fire({ icon: 'warning', title: 'Password baru minimal 6 karakter', confirmButtonColor: '#059669' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Swal.fire({ icon: 'warning', title: 'Konfirmasi password baru tidak cocok', confirmButtonColor: '#059669' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, old_password: oldPassword, new_password: newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal mengganti password');
+      await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Password berhasil diganti', confirmButtonColor: '#059669', timer: 1800, showConfirmButton: false });
+      setOldPassword(''); setNewPassword(''); setConfirmPassword('');
+      onBack();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <SubPageHeader title="Pengaturan Akun" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <IconLock size={16} color="#4338ca" />
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>Ubah Password</span>
+          </div>
+          <form onSubmit={handleSimpan} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Password Lama</label>
+              <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Password Baru</label>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Konfirmasi Password Baru</label>
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={inputStyle} />
+            </div>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                marginTop: 4, padding: '11px', borderRadius: 10, border: 'none',
+                background: saving ? '#a7f3d0' : GRADIENT, color: '#fff', fontSize: 13, fontWeight: 600,
+                cursor: saving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {saving ? 'Menyimpan...' : 'Simpan Password Baru'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SayaTab: React.FC<{ user: AppUserLite; nik: string; me: MeResponse | null; onLogout: () => void; onProfilUpdated: () => void }> = ({ user, nik, me, onLogout, onProfilUpdated }) => {
+  const [view, setView] = React.useState<'menu' | 'profil' | 'pengaturan'>('menu');
+
+  if (view === 'profil') {
+    return <ProfilDetailView nik={nik} onBack={() => setView('menu')} onFotoUpdated={onProfilUpdated} />;
+  }
+  if (view === 'pengaturan') {
+    return <PengaturanAkunView userId={user.id} onBack={() => setView('menu')} />;
+  }
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 4 }}>
+        <Avatar nama={me?.nama || user.full_name} photo={me?.photo} size={64} />
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginTop: 8 }}>{user.full_name}</div>
+        <div style={{ fontSize: 12, color: '#6b7280', textTransform: 'capitalize' }}>{user.role}</div>
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '2px 14px', marginTop: 16 }}>
+        <MenuRow icon={<IconUser size={16} />} label="Profil" onClick={() => setView('profil')} />
+        <MenuRow icon={<IconSettings size={16} />} label="Pengaturan Akun" onClick={() => setView('pengaturan')} />
+      </div>
+
+      <button
+        type="button"
+        onClick={onLogout}
+        style={{
+          width: '100%', marginTop: 16, padding: '12px', borderRadius: 12, border: '1px solid #fecaca',
+          background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}
+      >
+        <IconLogOut size={16} color="#dc2626" /> Keluar
+      </button>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Lembur — ajukan lembur dari HP (tanggal, jam mulai/selesai,
+// keterangan) + riwayat status. Fitur baru murni ERMApp, lihat
+// backend/lembur_handler.go. Disetujui/ditolak oleh HRD lewat desktop
+// (Kepegawaian > Lembur, modules/LemburKepegawaian.tsx) — di sini cuma
+// ajukan + pantau status, tidak ada approval.
+// ---------------------------------------------------------------------
+
+type LemburItem = {
+  id: number; tanggal: string; jam_mulai: string; jam_selesai: string; durasi_menit: number;
+  keterangan: string; status: 'menunggu' | 'disetujui' | 'ditolak'; catatan_approval: string; disetujui_oleh: string;
+};
+
+const lemburStatusStyle = (s: string) => {
+  switch (s) {
+    case 'disetujui': return { bg: '#dcfce7', color: '#166534', label: 'Disetujui' };
+    case 'ditolak':   return { bg: '#fee2e2', color: '#991b1b', label: 'Ditolak' };
+    default:          return { bg: '#fef9c3', color: '#854d0e', label: 'Menunggu' };
+  }
+};
+
+function formatJamMenit(menit: number): string {
+  const j = Math.floor(menit / 60);
+  const m = menit % 60;
+  return j > 0 ? `${j}j ${m}m` : `${m}m`;
+}
+
+const LemburView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack }) => {
+  const [list, setList] = React.useState<LemburItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [tanggal, setTanggal] = React.useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [jamMulai, setJamMulai] = React.useState('');
+  const [jamSelesai, setJamSelesai] = React.useState('');
+  const [keterangan, setKeterangan] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
+
+  const fetchList = React.useCallback(() => {
+    if (!nik) return;
+    setLoading(true);
+    fetch(`/api/lembur/saya?nik=${encodeURIComponent(nik)}`)
+      .then(r => r.json())
+      .then(d => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [nik]);
+
+  React.useEffect(() => { fetchList(); }, [fetchList]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tanggal || !jamMulai || !jamSelesai || !keterangan.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Semua field wajib diisi', confirmButtonColor: '#059669' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/lembur', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nik, tanggal, jam_mulai: jamMulai, jam_selesai: jamSelesai, keterangan }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim pengajuan');
+      await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Pengajuan lembur terkirim, tunggu persetujuan HRD', confirmButtonColor: '#059669', timer: 2000, showConfirmButton: false });
+      setShowForm(false);
+      setJamMulai(''); setJamSelesai(''); setKeterangan('');
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <SubPageHeader title="Lembur" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        {!showForm ? (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            style={{
+              width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: GRADIENT,
+              color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            <IconOvertime size={16} color="#fff" /> Ajukan Lembur Baru
+          </button>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Tanggal</label>
+              <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Jam Mulai</label>
+                <input type="time" value={jamMulai} onChange={e => setJamMulai(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Jam Selesai</label>
+                <input type="time" value={jamSelesai} onChange={e => setJamSelesai(e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>Keterangan</label>
+              <textarea value={keterangan} onChange={e => setKeterangan(e.target.value)} placeholder="Alasan/tugas lembur" rows={3} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setShowForm(false)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Batal
+              </button>
+              <button type="submit" disabled={saving} style={{ flex: 2, padding: '10px', borderRadius: 10, border: 'none', background: saving ? '#a7f3d0' : GRADIENT, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? 'Mengirim...' : 'Kirim Pengajuan'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Riwayat Pengajuan</div>
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
+          ) : list.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Belum ada pengajuan lembur</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {list.map((item) => {
+                const st = lemburStatusStyle(item.status);
+                return (
+                  <div key={item.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{item.tanggal}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                          {item.jam_mulai} – {item.jam_selesai} · {formatJamMenit(item.durasi_menit)}
+                        </div>
+                      </div>
+                      <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                        {st.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{item.keterangan}</div>
+                    {item.status !== 'menunggu' && item.catatan_approval && (
+                      <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6, borderTop: '1px solid #f3f4f6', paddingTop: 6 }}>
+                        Catatan {item.disetujui_oleh ? `(${item.disetujui_oleh})` : ''}: {item.catatan_approval}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Cuti & Izin — padanan PengajuanCutiPegawai.java/PengajuanCutiAdmin
+// .java (Khanza). SATU alur yang sama utk kedua menu ("Cuti" & "Izin"
+// di kartu Menu Utama), cuma beda `mode` yang menyaring pilihan
+// urgensi & riwayat yang ditampilkan (lihat backend/cuti_izin_handler
+// .go, kategoriUrgensiList). Jumlah hari dihitung persis formula Java
+// (to_days akhir - to_days awal, tidak inklusif, tidak mengecualikan
+// akhir pekan/libur) dan TIDAK ada pengecekan sisa jatah cuti — Khanza
+// sendiri tidak pernah mengecek itu di alur ini.
+// ---------------------------------------------------------------------
+
+type CutiIzinItem = {
+  no_pengajuan: string; tanggal_awal: string; tanggal_akhir: string; urgensi: string;
+  alamat: string; jumlah: number; kepentingan: string; nik_pj: string; nama_pj: string;
+  status: string; catatan_approval: string; disetujui_oleh: string;
+};
+
+const URGENSI_CUTI = ['Tahunan', 'Besar', 'Sakit', 'Bersalin'];
+const URGENSI_IZIN = ['Alasan Penting', 'Keterangan Lainnya'];
+
+const cutiIzinStatusStyle = (s: string) => {
+  switch (s) {
+    case 'Disetujui': return { bg: '#dcfce7', color: '#166534' };
+    case 'Ditolak':   return { bg: '#fee2e2', color: '#991b1b' };
+    default:          return { bg: '#fef9c3', color: '#854d0e' };
+  }
+};
+
+function hitungJumlahHariFE(awal: string, akhir: string): number {
+  if (!awal || !akhir) return 0;
+  const a = new Date(awal + 'T00:00:00');
+  const b = new Date(akhir + 'T00:00:00');
+  const diff = Math.round((b.getTime() - a.getTime()) / 86400000);
+  return diff > 0 ? diff : 0;
+}
+
+type PegawaiOpsi = { nik: string; nama: string; jbtn: string };
+
+const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () => void }> = ({ nik, mode, onBack }) => {
+  const judul = mode === 'cuti' ? 'Cuti' : 'Izin';
+  const urgensiOpsi = mode === 'cuti' ? URGENSI_CUTI : URGENSI_IZIN;
+
+  const [list, setList] = React.useState<CutiIzinItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [tanggalAwal, setTanggalAwal] = React.useState('');
+  const [tanggalAkhir, setTanggalAkhir] = React.useState('');
+  const [urgensi, setUrgensi] = React.useState(urgensiOpsi[0]);
+  const [alamat, setAlamat] = React.useState('');
+  const [kepentingan, setKepentingan] = React.useState('');
+  const [pjSearch, setPjSearch] = React.useState('');
+  const [pjOpsi, setPjOpsi] = React.useState<PegawaiOpsi[]>([]);
+  const [pjTerpilih, setPjTerpilih] = React.useState<PegawaiOpsi | null>(null);
+  const [showPjList, setShowPjList] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const jumlahHari = hitungJumlahHariFE(tanggalAwal, tanggalAkhir);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
+
+  const fetchList = React.useCallback(() => {
+    if (!nik) return;
+    setLoading(true);
+    fetch(`/api/pengajuan-cuti/saya?nik=${encodeURIComponent(nik)}&kategori=${mode}`)
+      .then(r => r.json())
+      .then(d => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [nik, mode]);
+
+  React.useEffect(() => { fetchList(); }, [fetchList]);
+
+  React.useEffect(() => {
+    if (pjSearch.trim().length < 2) { setPjOpsi([]); return; }
+    const timeout = setTimeout(() => {
+      fetch(`/api/pegawai/list?search=${encodeURIComponent(pjSearch)}`)
+        .then(r => r.json())
+        .then(d => setPjOpsi(Array.isArray(d) ? d.slice(0, 8) : []))
+        .catch(() => setPjOpsi([]));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [pjSearch]);
+
+  const resetForm = () => {
+    setTanggalAwal(''); setTanggalAkhir(''); setUrgensi(urgensiOpsi[0]);
+    setAlamat(''); setKepentingan(''); setPjSearch(''); setPjTerpilih(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tanggalAwal || !tanggalAkhir || !alamat.trim() || !kepentingan.trim() || !pjTerpilih) {
+      Swal.fire({ icon: 'warning', title: 'Semua field wajib diisi', text: !pjTerpilih ? 'Pilih penanggung jawab pengganti dulu' : undefined, confirmButtonColor: '#059669' });
+      return;
+    }
+    if (tanggalAkhir < tanggalAwal) {
+      Swal.fire({ icon: 'warning', title: 'Tanggal akhir tidak boleh sebelum tanggal awal', confirmButtonColor: '#059669' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/pengajuan-cuti', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nik, tanggal_awal: tanggalAwal, tanggal_akhir: tanggalAkhir, urgensi, alamat, kepentingan, nik_pj: pjTerpilih.nik,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim pengajuan');
+      await Swal.fire({ icon: 'success', title: 'Berhasil', text: `Pengajuan ${judul.toLowerCase()} terkirim, tunggu persetujuan HRD`, confirmButtonColor: '#059669', timer: 2000, showConfirmButton: false });
+      setShowForm(false);
+      resetForm();
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBatalkan = async (item: CutiIzinItem) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Batalkan Pengajuan?',
+      html: `Pengajuan ${judul.toLowerCase()} ${item.tanggal_awal} – ${item.tanggal_akhir} akan dibatalkan.`,
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Batalkan',
+      cancelButtonText: 'Tidak',
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/pengajuan-cuti/${item.no_pengajuan}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal membatalkan pengajuan');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Pengajuan dibatalkan', confirmButtonColor: '#059669', timer: 1200, showConfirmButton: false });
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    }
+  };
+
+  return (
+    <div>
+      <SubPageHeader title={judul} onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        {!showForm ? (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            style={{
+              width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: GRADIENT,
+              color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {mode === 'cuti' ? <IconUmbrella size={16} color="#fff" /> : <IconFileText size={16} color="#fff" />}
+            Ajukan {judul} Baru
+          </button>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Tanggal Awal</label>
+                <input type="date" value={tanggalAwal} onChange={e => setTanggalAwal(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Tanggal Akhir</label>
+                <input type="date" value={tanggalAkhir} onChange={e => setTanggalAkhir(e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+            {jumlahHari > 0 && (
+              <div style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{jumlahHari} hari</div>
+            )}
+            <div>
+              <label style={labelStyle}>Jenis {judul}</label>
+              <select value={urgensi} onChange={e => setUrgensi(e.target.value)} style={inputStyle}>
+                {urgensiOpsi.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Alamat Tujuan</label>
+              <input value={alamat} onChange={e => setAlamat(e.target.value)} placeholder="Alamat selama izin/cuti" maxLength={100} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Keperluan</label>
+              <textarea value={kepentingan} onChange={e => setKepentingan(e.target.value)} placeholder="Alasan pengajuan" rows={2} maxLength={70} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ position: 'relative' }}>
+              <label style={labelStyle}>Penanggung Jawab Pengganti</label>
+              {pjTerpilih ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: 10, border: '1px solid #a7f3d0', background: '#f0fdf4' }}>
+                  <span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{pjTerpilih.nama}</span>
+                  <button type="button" onClick={() => { setPjTerpilih(null); setPjSearch(''); }} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Ganti</button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={pjSearch}
+                    onChange={e => { setPjSearch(e.target.value); setShowPjList(true); }}
+                    onFocus={() => setShowPjList(true)}
+                    placeholder="Cari nama pegawai pengganti..."
+                    style={inputStyle}
+                  />
+                  {showPjList && pjOpsi.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 20px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: 180, overflowY: 'auto' }}>
+                      {pjOpsi.map(p => (
+                        <div
+                          key={p.nik}
+                          onClick={() => { setPjTerpilih(p); setShowPjList(false); }}
+                          style={{ padding: '9px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                        >
+                          <div style={{ fontWeight: 500, color: '#111827' }}>{p.nama}</div>
+                          <div style={{ fontSize: 10, color: '#9ca3af' }}>{p.nik}{p.jbtn ? ` · ${p.jbtn}` : ''}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => { setShowForm(false); resetForm(); }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Batal
+              </button>
+              <button type="submit" disabled={saving} style={{ flex: 2, padding: '10px', borderRadius: 10, border: 'none', background: saving ? '#a7f3d0' : GRADIENT, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? 'Mengirim...' : 'Kirim Pengajuan'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Riwayat Pengajuan</div>
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
+          ) : list.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Belum ada pengajuan {judul.toLowerCase()}</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {list.map((item) => {
+                const st = cutiIzinStatusStyle(item.status);
+                return (
+                  <div key={item.no_pengajuan} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{item.tanggal_awal} – {item.tanggal_akhir}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{item.urgensi} · {item.jumlah} hari</div>
+                      </div>
+                      <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{item.kepentingan}</div>
+                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>PJ Pengganti: {item.nama_pj || '-'}</div>
+                    {item.catatan_approval && (
+                      <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6, borderTop: '1px solid #f3f4f6', paddingTop: 6 }}>
+                        Catatan{item.disetujui_oleh ? ` (${item.disetujui_oleh})` : ''}: {item.catatan_approval}
+                      </div>
+                    )}
+                    {item.status === 'Proses Pengajuan' && (
+                      <button
+                        type="button"
+                        onClick={() => handleBatalkan(item)}
+                        style={{ marginTop: 8, padding: '5px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Batalkan
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------
+
+type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin';
+
+export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => void }> = ({ user, onLogout }) => {
+  const nik = resolveNik(user);
+  const [tab, setTab] = React.useState<TabKey>('home');
+  const [me, setMe] = React.useState<MeResponse | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [notFound, setNotFound] = React.useState(false);
+
+  const fetchMe = React.useCallback(async () => {
+    if (!nik) { setNotFound(true); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/presensi/me?nik=${encodeURIComponent(nik)}`);
+      if (!res.ok) { setNotFound(true); return; }
+      const data = await res.json();
+      setMe(data);
+      setNotFound(false);
+    } catch {
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [nik]);
+
+  React.useEffect(() => { fetchMe(); }, [fetchMe]);
+
+  const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+    { key: 'home', label: 'Home', icon: <IconHome size={18} /> },
+    { key: 'jadwal', label: 'Jadwal', icon: <IconClipboard size={18} /> },
+    { key: 'kehadiran', label: 'Kehadiran', icon: <IconCalendar size={18} /> },
+    { key: 'saya', label: 'Saya', icon: <IconUser size={18} /> },
+  ];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#f3f4f6', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 88 }}>
+        {notFound ? (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconAlertTriangle size={36} /></div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>Akun belum terhubung ke data Pegawai</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Hubungi admin untuk menautkan akun ini ke NIP/data pegawai.</div>
+            <button type="button" onClick={onLogout} style={{ marginTop: 20, padding: '8px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
+              Keluar
+            </button>
+          </div>
+        ) : tab === 'home' ? (
+          <HomeTab user={user} me={me} loading={loading} onAbsen={() => setTab('absen')} onOpenLembur={() => setTab('lembur')} onOpenCutiIzin={(mode) => setTab(mode)} />
+        ) : tab === 'absen' ? (
+          <AbsenTab nik={nik} hariIni={me?.hari_ini || null} onSelesai={() => { fetchMe(); setTab('home'); }} />
+        ) : tab === 'jadwal' ? (
+          <JadwalTab nik={nik} />
+        ) : tab === 'saya' ? (
+          <SayaTab user={user} nik={nik} me={me} onLogout={onLogout} onProfilUpdated={fetchMe} />
+        ) : tab === 'lembur' ? (
+          <LemburView nik={nik} onBack={() => setTab('home')} />
+        ) : tab === 'cuti' ? (
+          <CutiIzinView nik={nik} mode="cuti" onBack={() => setTab('home')} />
+        ) : tab === 'izin' ? (
+          <CutiIzinView nik={nik} mode="izin" onBack={() => setTab('home')} />
+        ) : (
+          <KehadiranTab nik={nik} />
+        )}
+      </div>
+
+      {!notFound && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }}>
+            {navItems.slice(0, 2).map((item) => {
+              const active = tab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setTab(item.key)}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                    color: active ? '#059669' : '#9ca3af', fontSize: 10, fontWeight: active ? 600 : 400,
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              );
+            })}
+            {/* Ruang kosong di tengah utk tombol Absen melayang di bawah */}
+            <div style={{ flex: 1 }} />
+            {navItems.slice(2).map((item) => {
+              const active = tab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setTab(item.key)}
+                  style={{
+                    flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                    color: active ? '#059669' : '#9ca3af', fontSize: 10, fontWeight: active ? 600 : 400,
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tombol Absen — melayang di tengah, lebih besar & terangkat
+              dari bar (pola "raised FAB" bottom nav), pakai ikon scan
+              wajah sesuai alur AbsenTab (kamera depan + GPS). FAB + label
+              digabung jadi satu kolom flex dgn padding-bottom yang SAMA
+              persis dengan baris nav lain, supaya label "Absen" sejajar
+              dengan label Home/Jadwal/dst apa pun nilai safe-area-inset
+              perangkatnya (bukan dihitung manual pakai `bottom` terpisah). */}
+          <div style={{
+            position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+            paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
+          }}>
+            <button
+              type="button"
+              onClick={() => setTab('absen')}
+              style={{
+                width: 60, height: 60, marginTop: -42, borderRadius: '50%', border: '4px solid #f3f4f6',
+                background: GRADIENT, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 8px 20px rgba(5,150,105,0.45)', cursor: 'pointer', padding: 0,
+              }}
+            >
+              <IconFaceScan size={28} color="#fff" />
+            </button>
+            <span style={{
+              fontSize: 10, fontWeight: tab === 'absen' ? 600 : 400, color: tab === 'absen' ? '#059669' : '#9ca3af',
+            }}>
+              Absen
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

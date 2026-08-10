@@ -1,11 +1,11 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { ModalTambahPetugas } from '../components/ModalTambahPetugas';
+import { ModalTambahDokter } from '../components/ModalTambahDokter';
 
-type Petugas = {
-  nip: string; nama: string; jk: string; tmp_lahir: string; tgl_lahir: string;
-  gol_darah: string; agama: string; stts_nikah: string; alamat: string;
-  kd_jbtn: string; nm_jbtn: string; no_telp: string; email: string; str_sipa: string;
+type Dokter = {
+  kd_dokter: string; nm_dokter: string; jk: string; tmp_lahir: string; tgl_lahir: string;
+  gol_drh: string; agama: string; almt_tgl: string; no_telp: string; email: string;
+  stts_nikah: string; kd_sps: string; nm_sps: string; alumni: string; no_ijn_praktek: string;
 };
 
 const JK_OPTIONS = [
@@ -38,16 +38,16 @@ const StepperIcon: React.FC = () => (
   </div>
 );
 
-export const PetugasView: React.FC = () => {
+export const DokterView: React.FC = () => {
   const [status, setStatus] = React.useState<'1' | '0'>('1');
   const [searchText, setSearchText] = React.useState('');
   const [jk, setJk] = React.useState('');
   const [golDarah, setGolDarah] = React.useState('');
   const [sttsNikah, setSttsNikah] = React.useState('');
-  const [list, setList] = React.useState<Petugas[]>([]);
+  const [list, setList] = React.useState<Dokter[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [selected, setSelected] = React.useState<Petugas | null>(null);
+  const [selected, setSelected] = React.useState<Dokter | null>(null);
   const [showTambahModal, setShowTambahModal] = React.useState(false);
   const [editData, setEditData] = React.useState<any>(null);
 
@@ -59,10 +59,10 @@ export const PetugasView: React.FC = () => {
       params.set('status', status);
       if (searchText) params.set('search', searchText);
       if (jk) params.set('jk', jk);
-      if (golDarah) params.set('gol_darah', golDarah);
+      if (golDarah) params.set('gol_drh', golDarah);
       if (sttsNikah) params.set('stts_nikah', sttsNikah);
-      const res = await fetch(`/api/petugas/list?${params}`);
-      if (!res.ok) throw new Error('Gagal mengambil data petugas');
+      const res = await fetch(`/api/dokter/list?${params}`);
+      if (!res.ok) throw new Error('Gagal mengambil data dokter');
       const data = await res.json();
       setList(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -78,13 +78,13 @@ export const PetugasView: React.FC = () => {
 
   const handleRestore = async () => {
     if (!selected) {
-      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih petugas terlebih dahulu', confirmButtonColor: '#4338ca' });
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih dokter terlebih dahulu', confirmButtonColor: '#4338ca' });
       return;
     }
     const result = await Swal.fire({
       icon: 'question',
-      title: 'Pulihkan Petugas?',
-      html: `<strong>${selected.nama}</strong> (${selected.nip}) akan muncul lagi di daftar aktif.`,
+      title: 'Pulihkan Dokter?',
+      html: `<strong>${selected.nm_dokter}</strong> (${selected.kd_dokter}) akan muncul lagi di daftar aktif.`,
       showCancelButton: true,
       confirmButtonColor: '#059669',
       cancelButtonColor: '#6b7280',
@@ -93,10 +93,10 @@ export const PetugasView: React.FC = () => {
     });
     if (!result.isConfirmed) return;
     try {
-      const res = await fetch(`/api/petugas/${encodeURIComponent(selected.nip)}/restore`, { method: 'PUT' });
+      const res = await fetch(`/api/dokter/${encodeURIComponent(selected.kd_dokter)}/restore`, { method: 'PUT' });
       const data = await res.json();
       if (!res.ok) { Swal.fire({ icon: 'error', title: 'Gagal', text: data.error || 'Gagal memulihkan data', confirmButtonColor: '#4338ca' }); return; }
-      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Petugas berhasil dipulihkan', confirmButtonColor: '#4338ca', timer: 1500, showConfirmButton: false });
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokter berhasil dipulihkan', confirmButtonColor: '#4338ca', timer: 1500, showConfirmButton: false });
       setSelected(null);
       fetchList();
     } catch {
@@ -106,13 +106,13 @@ export const PetugasView: React.FC = () => {
 
   const handleHapusPermanen = async () => {
     if (!selected) {
-      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih petugas terlebih dahulu', confirmButtonColor: '#4338ca' });
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih dokter terlebih dahulu', confirmButtonColor: '#4338ca' });
       return;
     }
     const result = await Swal.fire({
       icon: 'warning',
       title: 'Hapus Permanen?',
-      html: `Data petugas <strong>${selected.nama}</strong> (${selected.nip}) akan dihapus <strong>permanen</strong> dan TIDAK BISA dikembalikan lagi.<br/><br/>Kalau petugas ini masih tercatat di data transaksi (resep, pembelian, dll), penghapusan akan ditolak otomatis.`,
+      html: `Data dokter <strong>${selected.nm_dokter}</strong> (${selected.kd_dokter}) akan dihapus <strong>permanen</strong> dan TIDAK BISA dikembalikan lagi.<br/><br/>Kalau dokter ini masih tercatat di data transaksi (registrasi, tindakan, dll), penghapusan akan ditolak otomatis.`,
       showCancelButton: true,
       confirmButtonColor: '#dc2626',
       cancelButtonColor: '#6b7280',
@@ -121,10 +121,10 @@ export const PetugasView: React.FC = () => {
     });
     if (!result.isConfirmed) return;
     try {
-      const res = await fetch(`/api/petugas/${encodeURIComponent(selected.nip)}/permanent`, { method: 'DELETE' });
+      const res = await fetch(`/api/dokter/${encodeURIComponent(selected.kd_dokter)}/permanent`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) { Swal.fire({ icon: 'error', title: 'Tidak Bisa Dihapus', text: data.error || 'Gagal menghapus data', confirmButtonColor: '#4338ca' }); return; }
-      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Data petugas berhasil dihapus permanen', confirmButtonColor: '#4338ca', timer: 1500, showConfirmButton: false });
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Data dokter berhasil dihapus permanen', confirmButtonColor: '#4338ca', timer: 1500, showConfirmButton: false });
       setSelected(null);
       fetchList();
     } catch {
@@ -185,7 +185,7 @@ export const PetugasView: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (!selected) {
-                    Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih petugas terlebih dahulu', confirmButtonColor: '#4338ca' });
+                    Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih dokter terlebih dahulu', confirmButtonColor: '#4338ca' });
                     return;
                   }
                   setEditData({ ...selected });
@@ -199,19 +199,20 @@ export const PetugasView: React.FC = () => {
                 </svg>
               </button>
 
-              {/* Hapus Button — soft delete (status='0'), lihat catatan
-                  di hapusPetugas backend & PetugasView status tab. */}
+              {/* Hapus Button — soft delete (status='0'), padanan
+                  BtnHapusActionPerformed di DlgDokter.java (juga
+                  menandai pegawai.stts_aktif='KELUAR', lihat backend). */}
               <button
                 type="button"
                 onClick={async () => {
                   if (!selected) {
-                    Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih petugas terlebih dahulu', confirmButtonColor: '#4338ca' });
+                    Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Silakan pilih dokter terlebih dahulu', confirmButtonColor: '#4338ca' });
                     return;
                   }
                   const result = await Swal.fire({
                     icon: 'warning',
                     title: 'Konfirmasi Hapus',
-                    html: `Apakah Anda yakin ingin menghapus data petugas:<br><strong>${selected.nama}</strong><br>(${selected.nip})?`,
+                    html: `Apakah Anda yakin ingin menghapus data dokter:<br><strong>${selected.nm_dokter}</strong><br>(${selected.kd_dokter})?`,
                     showCancelButton: true,
                     confirmButtonColor: '#dc2626',
                     cancelButtonColor: '#6b7280',
@@ -220,10 +221,10 @@ export const PetugasView: React.FC = () => {
                   });
                   if (result.isConfirmed) {
                     try {
-                      const res = await fetch(`/api/petugas/${encodeURIComponent(selected.nip)}`, { method: 'DELETE' });
+                      const res = await fetch(`/api/dokter/${encodeURIComponent(selected.kd_dokter)}`, { method: 'DELETE' });
                       const data = await res.json();
                       if (!res.ok) { Swal.fire({ icon: 'error', title: 'Gagal', text: data.error || 'Gagal menghapus data', confirmButtonColor: '#4338ca' }); return; }
-                      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Data petugas berhasil dihapus', confirmButtonColor: '#4338ca', timer: 1500, showConfirmButton: false });
+                      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Data dokter berhasil dihapus', confirmButtonColor: '#4338ca', timer: 1500, showConfirmButton: false });
                       setSelected(null);
                       fetchList();
                     } catch {
@@ -282,11 +283,11 @@ export const PetugasView: React.FC = () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Tambah Petugas
+            Tambah Dokter
           </button>
           <input
             type="text"
-            placeholder="Cari NIP / nama / jabatan..."
+            placeholder="Cari Kode / nama / spesialis..."
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
             style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 12, width: 220, outline: 'none' }}
@@ -299,7 +300,7 @@ export const PetugasView: React.FC = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
-              {['NIP', 'Nama Petugas', 'J.K.', 'Tmp.Lahir', 'Tgl.Lahir', 'G.D.', 'Agama', 'Stts.Nikah', 'Alamat', 'Jabatan', 'STR/SIPA', 'No.Telp', 'Email'].map((h) => (
+              {['Kode Dokter', 'Nama Dokter', 'J.K.', 'Tmp.Lahir', 'Tgl.Lahir', 'G.D.', 'Agama', 'Alamat Tinggal', 'No.HP/Telp', 'Email', 'Stts.Nikah', 'Spesialis', 'Alumni', 'No.Ijin Praktek'].map((h) => (
                 <th key={h} style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>
                   {h}
                 </th>
@@ -308,36 +309,37 @@ export const PetugasView: React.FC = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={13} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat data...</td></tr>
+              <tr><td colSpan={14} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat data...</td></tr>
             ) : error ? (
-              <tr><td colSpan={13} style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 13 }}>{error}</td></tr>
+              <tr><td colSpan={14} style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 13 }}>{error}</td></tr>
             ) : list.length === 0 ? (
-              <tr><td colSpan={13} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Tidak ada data petugas</td></tr>
+              <tr><td colSpan={14} style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Tidak ada data dokter</td></tr>
             ) : (
-              list.map((p, index) => {
-                const isSelected = selected?.nip === p.nip;
+              list.map((d, index) => {
+                const isSelected = selected?.kd_dokter === d.kd_dokter;
                 const baseBg = index % 2 === 0 ? '#ffffff' : '#f9fafb';
                 return (
                   <tr
-                    key={p.nip}
-                    onClick={() => setSelected(p)}
+                    key={d.kd_dokter}
+                    onClick={() => setSelected(d)}
                     style={{ background: isSelected ? '#e0e7ff' : baseBg, cursor: 'pointer', transition: 'background 0.2s' }}
                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#fef3c7'; }}
                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = baseBg; }}
                   >
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, color: '#4338ca', whiteSpace: 'nowrap' }}>{p.nip}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontWeight: 500, whiteSpace: 'nowrap' }}>{p.nama}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{p.jk === 'P' ? 'P' : 'L'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.tmp_lahir || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.tgl_lahir || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{p.gol_darah || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.agama || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.stts_nikah || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{p.alamat || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.nm_jbtn || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.str_sipa || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.no_telp || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{p.email || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, color: '#4338ca', whiteSpace: 'nowrap' }}>{d.kd_dokter}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontWeight: 500, whiteSpace: 'nowrap' }}>{d.nm_dokter}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{d.jk === 'P' ? 'P' : 'L'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.tmp_lahir || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.tgl_lahir || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{d.gol_drh || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.agama || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{d.almt_tgl || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.no_telp || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.email || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.stts_nikah || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.nm_sps || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.alumni || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{d.no_ijn_praktek || '-'}</td>
                   </tr>
                 );
               })
@@ -348,12 +350,12 @@ export const PetugasView: React.FC = () => {
 
       {!loading && list.length > 0 && (
         <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right', flexShrink: 0 }}>
-          {list.length} petugas ditemukan
+          {list.length} dokter ditemukan
         </div>
       )}
     </section>
 
-    <ModalTambahPetugas
+    <ModalTambahDokter
       isOpen={showTambahModal}
       onClose={() => { setShowTambahModal(false); setEditData(null); }}
       onSuccess={fetchList}

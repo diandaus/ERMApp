@@ -55,6 +55,11 @@ const iStyle: React.CSSProperties = {
   border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
 };
 
+const selectStyle: React.CSSProperties = {
+  ...iStyle, paddingRight: 30, appearance: 'none', WebkitAppearance: 'none',
+  cursor: 'pointer', background: '#ffffff',
+};
+
 const lStyle: React.CSSProperties = {
   display: 'block', fontSize: 11, marginBottom: 3, color: '#374151', fontWeight: 500,
 };
@@ -67,13 +72,38 @@ const F: React.FC<{ label: string; req?: boolean; children: React.ReactNode; hin
   </div>
 );
 
+const StepperIcon: React.FC = () => (
+  <div
+    style={{
+      position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+      width: 22, height: 22, borderRadius: '50%', background: '#4338ca',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'none', flexShrink: 0,
+    }}
+  >
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
+const Sel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ position: 'relative' }}>
+    {children}
+    <StepperIcon />
+  </div>
+);
+
 const SelectKN: React.FC<{ value: string; onChange: (v: string) => void; items: MasterItem[]; empty?: boolean }> = ({ value, onChange, items, empty }) => (
-  <select style={iStyle} value={value} onChange={e => onChange(e.target.value)}>
-    {empty && <option value="">-- Pilih --</option>}
-    {items.map(it => (
-      <option key={it.kode} value={it.kode}>{it.kode !== '-' ? `${it.kode} — ${it.nama}` : '-'}</option>
-    ))}
-  </select>
+  <Sel>
+    <select style={selectStyle} value={value} onChange={e => onChange(e.target.value)}>
+      {empty && <option value="">-- Pilih --</option>}
+      {items.map(it => (
+        <option key={it.kode} value={it.kode}>{it.kode !== '-' ? `${it.kode} — ${it.nama}` : '-'}</option>
+      ))}
+    </select>
+  </Sel>
 );
 
 export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess, editData }) => {
@@ -157,10 +187,12 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
                 <input style={iStyle} value={form.nama} onChange={set('nama')} placeholder="Nama pegawai" maxLength={50} />
               </F>
               <F label="Jenis Kelamin" req>
-                <select style={iStyle} value={form.jk} onChange={set('jk')}>
-                  <option value="Pria">Pria</option>
-                  <option value="Wanita">Wanita</option>
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.jk} onChange={set('jk')}>
+                    <option value="Pria">Pria</option>
+                    <option value="Wanita">Wanita</option>
+                  </select>
+                </Sel>
               </F>
               <F label="No KTP">
                 <input style={iStyle} value={form.no_ktp} onChange={set('no_ktp')} placeholder="16 digit NIK KTP" maxLength={20} />
@@ -201,14 +233,18 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
                 <SelectKN value={form.departemen} onChange={v => setForm(p => ({ ...p, departemen: v }))} items={master.departemen} />
               </F>
               <F label="Bagian (Bidang)">
-                <select style={iStyle} value={form.bidang} onChange={set('bidang')}>
-                  {master.bidang.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.bidang} onChange={set('bidang')}>
+                    {master.bidang.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </Sel>
               </F>
               <F label="Pendidikan">
-                <select style={iStyle} value={form.pendidikan} onChange={set('pendidikan')}>
-                  {master.pendidikan.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.pendidikan} onChange={set('pendidikan')}>
+                    {master.pendidikan.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </Sel>
               </F>
               <F label="Resiko Kerja">
                 <SelectKN value={form.kode_resiko} onChange={v => setForm(p => ({ ...p, kode_resiko: v }))} items={master.resiko_kerja} />
@@ -223,12 +259,14 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
                 <SelectKN value={form.stts_kerja} onChange={v => setForm(p => ({ ...p, stts_kerja: v }))} items={master.stts_kerja} />
               </F>
               <F label="Status Aktif">
-                <select style={iStyle} value={form.stts_aktif} onChange={set('stts_aktif')}>
-                  <option value="AKTIF">AKTIF</option>
-                  <option value="CUTI">CUTI</option>
-                  <option value="KELUAR">KELUAR</option>
-                  <option value="TENAGA LUAR">TENAGA LUAR</option>
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.stts_aktif} onChange={set('stts_aktif')}>
+                    <option value="AKTIF">AKTIF</option>
+                    <option value="CUTI">CUTI</option>
+                    <option value="KELUAR">KELUAR</option>
+                    <option value="TENAGA LUAR">TENAGA LUAR</option>
+                  </select>
+                </Sel>
               </F>
             </div>
 
@@ -242,24 +280,30 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
                 <input type="date" style={iStyle} value={form.mulai_kontrak} onChange={set('mulai_kontrak')} />
               </F>
               <F label="Ms Kerja">
-                <select style={iStyle} value={form.ms_kerja} onChange={set('ms_kerja')}>
-                  <option value="<1">&lt;1 tahun</option>
-                  <option value="PT">Part Time (PT)</option>
-                  <option value="FT>1">Full Time &gt;1 (FT&gt;1)</option>
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.ms_kerja} onChange={set('ms_kerja')}>
+                    <option value="<1">&lt;1 tahun</option>
+                    <option value="PT">Part Time (PT)</option>
+                    <option value="FT>1">Full Time &gt;1 (FT&gt;1)</option>
+                  </select>
+                </Sel>
               </F>
               <F label="Kode Index (Indexins)">
-                <select style={iStyle} value={form.indexins} onChange={set('indexins')}>
-                  {master.indexins.map(it => (
-                    <option key={it.kode} value={it.kode}>{it.kode !== '-' ? `${it.kode} — ${it.persen}%` : '-'}</option>
-                  ))}
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.indexins} onChange={set('indexins')}>
+                    {master.indexins.map(it => (
+                      <option key={it.kode} value={it.kode}>{it.kode !== '-' ? `${it.kode} — ${it.persen}%` : '-'}</option>
+                    ))}
+                  </select>
+                </Sel>
               </F>
               <F label="Bank (BPD)">
-                <select style={iStyle} value={form.bpd} onChange={set('bpd')}>
-                  <option value="-">-- Pilih Bank --</option>
-                  {master.bank.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <Sel>
+                  <select style={selectStyle} value={form.bpd} onChange={set('bpd')}>
+                    <option value="-">-- Pilih Bank --</option>
+                    {master.bank.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </Sel>
               </F>
               <F label="No Rekening">
                 <input style={iStyle} value={form.rekening} onChange={set('rekening')} placeholder="Nomor rekening" maxLength={25} />

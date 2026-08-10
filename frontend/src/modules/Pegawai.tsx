@@ -14,6 +14,21 @@ type Pegawai = {
 
 const STATUSES = ['AKTIF', 'CUTI', 'KELUAR', 'TENAGA LUAR'] as const;
 
+const StepperIcon: React.FC = () => (
+  <span
+    style={{
+      width: 16, height: 16, borderRadius: '50%', background: '#4338ca',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+    }}
+  >
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </span>
+);
+
 const getStatusStyle = (status: string) => {
   switch (status) {
     case 'AKTIF':       return { bg: '#dcfce7', color: '#166534', label: 'Aktif' };
@@ -207,7 +222,7 @@ export const PegawaiView: React.FC = () => {
               onClick={() => { setEditData(null); setShowTambahModal(true); }}
               style={{
                 padding: '6px 14px', borderRadius: 8, border: 'none',
-                background: '#2563eb', color: '#ffffff',
+                background: '#4338ca', color: '#ffffff',
                 fontSize: 12, fontWeight: 500, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap'
               }}
@@ -238,7 +253,7 @@ export const PegawaiView: React.FC = () => {
                 }}
               >
                 <span>Departemen</span>
-                <span style={{ fontSize: 10 }}>▼</span>
+                <StepperIcon />
               </button>
 
               {showFilterDropdown && (

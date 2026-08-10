@@ -19,7 +19,8 @@ import { SatuSehatView } from './SatuSehat';
 import { MappingSatuSehatView } from './MappingSatuSehat';
 import { KepegawaianView } from './Kepegawaian';
 import { AdminView } from './Admin';
-import { useBreakpoint } from '../hooks/useBreakpoint';
+import { PresensiMobileView } from './PresensiMobile';
+import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
 import { toSpokenCase } from '../utils/tts';
 
 type MenuKey =
@@ -77,6 +78,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [error, setError] = React.useState<string | null>(null);
   const [instansi, setInstansi] = React.useState<InstansiSettings | null>(null);
   const [wallpaper, setWallpaper] = React.useState<LoginWallpaperSettings | null>(null);
+  // Breakpoint HP (beda dari isMobileLogin di App — dipakai di sini
+  // krn LoginView dirender SEBELUM login, jadi belum tahu account-nya
+  // pegawai atau bukan; ini murni penyesuaian ukuran layar).
+  const isMobile = useMediaQuery(480);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -131,45 +136,48 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           ? `linear-gradient(rgba(15,23,42,0.35), rgba(15,23,42,0.45)), center/cover no-repeat url(${wallpaper.login_wallpaper_url})`
           : 'radial-gradient(circle at top left, #eff6ff 0, #e0f2fe 40%, #eef2ff 100%)',
         fontFamily: 'Tahoma, Geneva, sans-serif',
-        fontSize: 14
+        fontSize: 14,
+        padding: isMobile ? 16 : 0,
+        boxSizing: 'border-box',
       }}
     >
       <div
         style={{
-          width: 350,
-          maxWidth: '90%',
+          width: isMobile ? '100%' : 350,
+          maxWidth: isMobile ? 380 : '90%',
           background: 'rgba(255,255,255,0.98)',
           backdropFilter: 'blur(10px)',
-          borderRadius: 8,
-          padding: '36px 32px 28px',
+          borderRadius: isMobile ? 16 : 8,
+          padding: isMobile ? '28px 22px 22px' : '36px 32px 28px',
           boxShadow: '0 25px 60px rgba(15,23,42,0.3)',
-          border: '1px solid rgba(148,163,184,0.2)'
+          border: '1px solid rgba(148,163,184,0.2)',
+          boxSizing: 'border-box',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: isMobile ? 22 : 28 }}>
           {instansi?.logo_url ? (
             <img
               src={instansi.logo_url}
               alt="Logo"
-              style={{ height: 96, maxWidth: '100%', objectFit: 'contain', marginBottom: 14 }}
+              style={{ height: isMobile ? 76 : 96, maxWidth: '100%', objectFit: 'contain', marginBottom: 14 }}
             />
           ) : (
             <div
               style={{
-                width: 64, height: 64, borderRadius: '50%',
+                width: isMobile ? 56 : 64, height: isMobile ? 56 : 64, borderRadius: '50%',
                 background: 'linear-gradient(135deg, #1AB1E5, #2563eb)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 marginBottom: 14, boxShadow: '0 8px 20px rgba(37,99,235,0.3)'
               }}
             >
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width={isMobile ? 26 : 30} height={isMobile ? 26 : 30} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
               </svg>
             </div>
           )}
           <div
             style={{
-              fontSize: 17,
+              fontSize: isMobile ? 16 : 17,
               fontWeight: 700,
               color: '#111827',
               textAlign: 'center',
@@ -229,7 +237,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   padding: '9px 12px 9px 36px',
                   borderRadius: 4,
                   border: '1px solid #d1d5db',
-                  fontSize: 13,
+                  fontSize: 16,
                   boxSizing: 'border-box',
                   outline: 'none',
                   transition: 'border-color 0.15s ease'
@@ -259,7 +267,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   padding: '9px 36px 9px 36px',
                   borderRadius: 4,
                   border: '1px solid #d1d5db',
-                  fontSize: 13,
+                  fontSize: 16,
                   boxSizing: 'border-box',
                   outline: 'none',
                   transition: 'border-color 0.15s ease'
@@ -1905,6 +1913,10 @@ export const App: React.FC = () => {
   const [loadingHealth, setLoadingHealth] = React.useState<boolean>(false);
   const [selectedPatientForExam, setSelectedPatientForExam] = React.useState<any | null>(null);
   const { isCompact } = useBreakpoint();
+  // Login dari HP (lebar layar <=640px, breakpoint khusus phone — beda
+  // dari isCompact/900px yang dipakai buat tablet) -> tampilkan aplikasi
+  // Presensi Mandiri mobile penuh layar, bukan shell SIMRS desktop.
+  const isMobileLogin = useMediaQuery(640);
   const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(false);
   const [showUserMenu, setShowUserMenu] = React.useState<boolean>(false);
   const [showGantiPassword, setShowGantiPassword] = React.useState<boolean>(false);
@@ -2184,6 +2196,10 @@ export const App: React.FC = () => {
 
   if (!user) {
     return <LoginView onLogin={handleLogin} />;
+  }
+
+  if (isMobileLogin) {
+    return <PresensiMobileView user={user} onLogout={handleLogout} />;
   }
 
   // Jika ada pasien yang dipilih untuk pemeriksaan, tampilkan fullscreen tanpa sidebar/header

@@ -49,7 +49,7 @@ const StepperIcon: React.FC = () => (
       transform: 'translateY(-50%)',
       width: 22,
       height: 22,
-      borderRadius: '50%',
+      borderRadius: '30%',
       background: '#059669',
       display: 'flex',
       alignItems: 'center',
@@ -362,7 +362,7 @@ const TabInputOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Tanggal</label>
           <input type="date" style={{ ...inputStyle, padding: '7px 8px' }} value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
         </div>
-        <div style={{ width: 150, flexShrink: 0 }}>
+        <div style={{ width: 250, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
             Keterangan
             {warnKeterangan && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
@@ -375,7 +375,7 @@ const TabInputOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             placeholder="Opname rutin"
           />
         </div>
-        <div style={{ width: 230, flexShrink: 0 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <div style={{ position: 'relative', display: 'flex' }}>
             <svg
@@ -402,7 +402,7 @@ const TabInputOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             />
           </div>
         </div>
-        <div ref={filterDropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <div ref={filterDropdownRef} style={{ position: 'relative', flexShrink: 0, marginLeft: 'auto' }}>
           <button
             type="button"
             onClick={() => setShowFilterDropdown((v) => !v)}
@@ -530,7 +530,6 @@ const TabInputOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
         >
           {saving ? 'Menyimpan...' : 'Simpan Opname'}
         </button>
-        <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'flex-start', flexShrink: 0, whiteSpace: 'nowrap' }}>{filledCount} siap disimpan</span>
         {(totals.nomihilang > 0 || totals.nomilebih > 0) && (
           <span style={{ fontSize: 12, flexShrink: 0, whiteSpace: 'nowrap' }}>
             {totals.nomihilang > 0 && <span style={{ color: '#dc2626' }}>Hilang: Rp {formatRupiah(totals.nomihilang)}</span>}
@@ -540,7 +539,9 @@ const TabInputOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
         )}
       </div>
 
-      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+      <div style={{ overflow: 'auto', height: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
@@ -593,6 +594,19 @@ const TabInputOpname: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             )}
           </tbody>
         </table>
+      </div>
+      </div>
+      {!loading && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 4,
+            padding: '2px 8px', borderRadius: 10,
+            fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+          }}
+        >
+          {filledCount} siap disimpan
+        </div>
+      )}
       </div>
     </div>
   );

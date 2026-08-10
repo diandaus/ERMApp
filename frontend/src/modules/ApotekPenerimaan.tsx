@@ -12,7 +12,15 @@ import { ModalCariPetugas } from '../components/ModalCariPetugas';
 // sub-tab di sini meniru pemisahan itu: "Terima Barang" dan "Riwayat
 // Penerimaan". Lihat backend/apotek_penerimaan_handler.go untuk rumus
 // lengkap & penyederhanaan yang disengaja (tanpa Jurnal/akuntansi, tanpa
-// konversi satuan besar/kecil, tanpa batch).
+// harga jual per kategori/setKonversi()).
+//
+// Kolom Satuan Beli/G/No.Batch/Isi meniru tbDokter Java (28 kolom, cuma
+// 14 yang visible — sisanya hidden, dipakai internal untuk fitur harga
+// jual per kategori yang sengaja tidak diport). Isi = faktor konversi 1
+// tingkat (Jml × Isi = jumlah yang benar-benar nambah stok) — beda dari
+// Java yang 2 tingkat (Isi ÷ Isibesar). G ("Ganti") = checkbox per baris,
+// kalau dicentang saat Simpan akan menimpa databarang.h_beli dengan
+// harga baris ini (HANYA harga beli, bukan harga jual per kategori).
 // ============================================================================
 
 const pillSelectStyle: React.CSSProperties = {
@@ -95,7 +103,16 @@ type KvOpsi = { kode: string; nama: string };
 // ---- Tab: Terima Barang ----------------------------------------------------
 
 type BarangOpsi = { kode_brng: string; nama_brng: string; kode_sat: string; satuan: string; h_beli: number };
-type PenerimaanRow = BarangOpsi & { jumlah: string; harga: string; dis: string; kadaluwarsa: string };
+// satuanBeli — default = kode_sat (satuan dasar barang), tapi bisa
+// diketik ulang manual kalau beli dalam satuan besar (mis. "BKS" utk
+// barang yang stoknya dalam "AMP5") — lihat komentar backend
+// penerimaanSubmitItem. isi — faktor konversi 1 Satuan Beli ke berapa
+// Satuan dasar, default '1' (artinya tidak ada konversi, sama seperti
+// sebelum fitur ini ada).
+type PenerimaanRow = BarangOpsi & {
+  jumlah: string; harga: string; dis: string; kadaluwarsa: string;
+  satuanBeli: string; isi: string; noBatch: string; ganti: boolean;
+};
 
 const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [kdBangsal, setKdBangsal] = React.useState('');
@@ -104,6 +121,11 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   const [selectedPetugas, setSelectedPetugas] = React.useState<{ nip: string; nama: string } | null>(null);
   const [showCariPetugas, setShowCariPetugas] = React.useState(false);
   const [tanggal, setTanggal] = React.useState(todayStr());
+  const [noFakturManual, setNoFakturManual] = React.useState('');
+  const [previewNoFaktur, setPreviewNoFaktur] = React.useState('');
+  const [noOrder, setNoOrder] = React.useState('');
+  const [tglFaktur, setTglFaktur] = React.useState('');
+  const [jatuhTempo, setJatuhTempo] = React.useState('');
   const [ppnPercent, setPpnPercent] = React.useState('11');
   const [searchText, setSearchText] = React.useState('');
   const [rows, setRows] = React.useState<PenerimaanRow[]>([]);
@@ -126,13 +148,33 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     if (nipLogin) setSelectedPetugas((prev) => prev || { nip: nipLogin, nama: getCurrentPetugas() || nipLogin });
   }, []);
 
+  // No. Faktur — langsung tampil begitu form dibuka (padanan autoNomor()
+  // di Java yang dipanggil saat dialog dibuka), cuma preview (server tidak
+  // mengunci/reserve nomor ini) — di-refresh ulang tiap kali Tgl. Datang
+  // berubah supaya prefix tanggalnya tetap akurat. Field tetap bisa diisi
+  // manual (noFakturManual) untuk override, sama pola dgn No. Surat di
+  // PemesananApotek.tsx.
+  const fetchPreviewNoFaktur = React.useCallback(() => {
+    fetch(`/api/apotek/penerimaan/next-faktur?tanggal=${tanggal}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setPreviewNoFaktur(data?.no_faktur || ''))
+      .catch(() => {});
+  }, [tanggal]);
+
+  React.useEffect(() => {
+    fetchPreviewNoFaktur();
+  }, [fetchPreviewNoFaktur]);
+
   const fetchItems = React.useCallback(async () => {
     setLoading(true);
     try {
       const url = `/api/apotek/penerimaan/barang-opsi${searchText ? `?search=${encodeURIComponent(searchText)}` : ''}`;
       const res = await fetch(url);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data.map((it) => ({ ...it, jumlah: '', harga: String(it.h_beli || ''), dis: '', kadaluwarsa: '' })) : []);
+      setRows(Array.isArray(data) ? data.map((it) => ({
+        ...it, jumlah: '', harga: String(it.h_beli || ''), dis: '', kadaluwarsa: '',
+        satuanBeli: it.kode_sat, isi: '1', noBatch: '', ganti: false,
+      })) : []);
     } catch {
       setRows([]);
     } finally {
@@ -177,8 +219,13 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
   // setField cuma update tampilan lokal saat mengetik di tabel pencarian —
   // upsertSelected BARU dipanggil saat blur (commitField), sama pola
   // dengan ApotekPenjualan.tsx (cegah bug "ketik 10 cuma kesimpen 1").
-  const setField = (kodeBrng: string, field: 'jumlah' | 'harga' | 'dis' | 'kadaluwarsa', value: string) => {
+  type EditableField = 'jumlah' | 'harga' | 'dis' | 'kadaluwarsa' | 'satuanBeli' | 'isi' | 'noBatch';
+  const setField = (kodeBrng: string, field: EditableField, value: string) => {
     setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, [field]: value } : r)));
+  };
+
+  const toggleGanti = (kodeBrng: string) => {
+    setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, ganti: !r.ganti } : r)));
   };
 
   const commitField = (kodeBrng: string) => {
@@ -186,14 +233,20 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     if (!item) return;
     upsertSelected(item);
     if (item.jumlah.trim() !== '' && Number(item.jumlah) > 0) {
-      setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, jumlah: '', dis: '', kadaluwarsa: '' } : r)));
+      setRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng
+        ? { ...r, jumlah: '', dis: '', kadaluwarsa: '', satuanBeli: r.kode_sat, isi: '1', noBatch: '', ganti: false }
+        : r)));
     }
   };
 
   // setPinnedField/commitPinnedField — sama pola dgn setField/commitField
   // di atas, tapi utk baris yang sudah pinned di selectedRows.
-  const setPinnedField = (kodeBrng: string, field: 'jumlah' | 'harga' | 'dis' | 'kadaluwarsa', value: string) => {
+  const setPinnedField = (kodeBrng: string, field: EditableField, value: string) => {
     setSelectedRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, [field]: value } : r)));
+  };
+
+  const togglePinnedGanti = (kodeBrng: string) => {
+    setSelectedRows((prev) => prev.map((r) => (r.kode_brng === kodeBrng ? { ...r, ganti: !r.ganti } : r)));
   };
 
   const commitPinnedField = (kodeBrng: string) => {
@@ -225,6 +278,19 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     return { subtotal, besardis, total };
   };
 
+  // diskonRpToPercent — Diskon(Rp) & Disk(%) sengaja saling terhubung
+  // (padanan kolom index 9/10 tbDokter di DlgPemesanan.java, dua-duanya
+  // editable — lihat isCellEditable) TANPA kolom/state terpisah: `dis`
+  // (persen) tetap satu-satunya sumber data yang disimpan/dikirim ke
+  // backend, Diskon(Rp) cuma "pintu masuk" alternatif yang langsung
+  // dikonversi balik ke persen berdasarkan subtotal baris itu.
+  const diskonRpToPercent = (r: PenerimaanRow, rpValue: string): string => {
+    const subtotal = Number(r.jumlah || 0) * Number(r.harga || 0);
+    if (subtotal <= 0) return r.dis;
+    if (rpValue.trim() === '') return '0';
+    return String((Number(rpValue) / subtotal) * 100);
+  };
+
   const visibleSearchRows = rows.filter((r) => !selectedRows.some((s) => s.kode_brng === r.kode_brng));
   const filledRows = selectedRows;
   const totals = filledRows.reduce(
@@ -244,7 +310,12 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
 
   const handleBersihkan = () => {
     setSelectedRows([]);
-    setRows((prev) => prev.map((r) => ({ ...r, jumlah: '', dis: '', kadaluwarsa: '' })));
+    setRows((prev) => prev.map((r) => ({ ...r, jumlah: '', dis: '', kadaluwarsa: '', satuanBeli: r.kode_sat, isi: '1', noBatch: '', ganti: false })));
+    setNoFakturManual('');
+    setNoOrder('');
+    setTglFaktur('');
+    setJatuhTempo('');
+    fetchPreviewNoFaktur();
   };
 
   const handleSimpan = async () => {
@@ -262,11 +333,14 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
     }
     const items = filledRows.map((r) => ({
       kode_brng: r.kode_brng,
-      kode_sat: r.kode_sat,
+      kode_sat: r.satuanBeli || r.kode_sat,
       jumlah: Number(r.jumlah),
+      isi: Number(r.isi || 1),
       h_beli: Number(r.harga || 0),
       dis: Number(r.dis || 0),
       kadaluwarsa: r.kadaluwarsa,
+      no_batch: r.noBatch,
+      ganti: r.ganti,
     }));
     if (items.length === 0) {
       Swal.fire({ icon: 'warning', title: 'Belum ada barang yang diisi jumlah penerimaannya' });
@@ -289,7 +363,12 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
       const res = await fetch('/api/apotek/penerimaan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kode_suplier: kodeSuplier, nip: selectedPetugas.nip, tanggal, kd_bangsal: kdBangsal, ppn_percent: Number(ppnPercent || 0), petugas: getCurrentPetugas(), items }),
+        body: JSON.stringify({
+          kode_suplier: kodeSuplier, nip: selectedPetugas.nip, tanggal, kd_bangsal: kdBangsal,
+          ppn_percent: Number(ppnPercent || 0), petugas: getCurrentPetugas(),
+          no_faktur: noFakturManual.trim(), no_order: noOrder, tgl_faktur: tglFaktur, jatuh_tempo: jatuhTempo,
+          items,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
@@ -311,8 +390,30 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
         }
         .blink-red-field-penerimaan { animation: blinkRedFieldPenerimaan 0.4s ease-in-out 3; border-radius: 4px; }
       `}</style>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'nowrap', paddingBottom: 2, minWidth: 0, width: '100%', boxSizing: 'border-box', flexShrink: 0 }}>
-        <div style={{ width: 130, flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'nowrap', minWidth: 0, width: '100%', boxSizing: 'border-box', flexShrink: 0 }}>
+        <div style={{ width: 155, flexShrink: 0 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>No. Faktur</label>
+          <input
+            type="text"
+            placeholder={previewNoFaktur || '...'}
+            style={inputStyle}
+            value={noFakturManual}
+            onChange={(e) => setNoFakturManual(e.target.value)}
+          />
+        </div>
+        <div style={{ width: 112, flexShrink: 0 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Tgl. Datang</label>
+          <input type="date" style={{ ...inputStyle, padding: '7px 8px' }} value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
+        </div>
+        <div style={{ width: 112, flexShrink: 0 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Tgl. Faktur</label>
+          <input type="date" style={{ ...inputStyle, padding: '7px 8px' }} value={tglFaktur} onChange={(e) => setTglFaktur(e.target.value)} />
+        </div>
+        <div style={{ width: 112, flexShrink: 0 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Jth. Tempo</label>
+          <input type="date" style={{ ...inputStyle, padding: '7px 8px' }} value={jatuhTempo} onChange={(e) => setJatuhTempo(e.target.value)} />
+        </div>
+        <div style={{ width: 230, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
             Supplier
             {warnSuplier && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
@@ -321,7 +422,7 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             <PillSelect value={kodeSuplier} onChange={setKodeSuplier} options={[{ value: '', label: '- Pilih -' }, ...suplier.map((s) => ({ value: s.kode, label: s.nama }))]} />
           </div>
         </div>
-        <div style={{ width: 120, flexShrink: 0 }}>
+        <div style={{ width: 220, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
             Petugas
             {warnPetugas && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
@@ -356,7 +457,7 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             )}
           </div>
         </div>
-        <div style={{ width: 105, flexShrink: 0 }}>
+        <div style={{ width: 110, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
             Lokasi
             {warnBangsal && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
@@ -365,15 +466,17 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             <PillSelect value={kdBangsal} onChange={setKdBangsal} options={[{ value: '', label: '- Pilih -' }, ...bangsal.map((b) => ({ value: b.kode, label: b.nama }))]} />
           </div>
         </div>
-        <div style={{ width: 105, flexShrink: 0 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Tanggal</label>
-          <input type="date" style={{ ...inputStyle, padding: '7px 8px' }} value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'nowrap', paddingBottom: 2, minWidth: 0, width: '100%', boxSizing: 'border-box', flexShrink: 0 }}>
+        <div style={{ width: 120, flexShrink: 0 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>SP/Order</label>
+          <input type="text" style={inputStyle} value={noOrder} onChange={(e) => setNoOrder(e.target.value)} />
         </div>
         <div style={{ width: 65, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>PPN %</label>
           <input type="number" step="any" style={inputStyle} value={ppnPercent} onChange={(e) => setPpnPercent(e.target.value)} />
         </div>
-        <div style={{ width: 140, flexShrink: 0 }}>
+        <div style={{ width: 440, flexShrink: 0 }}>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
           <div style={{ position: 'relative', display: 'flex' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
@@ -390,37 +493,46 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             />
           </div>
         </div>
-        <button type="button" onClick={handleBersihkan} style={{ padding: '7px 12px', borderRadius: 4, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
-          Bersihkan
-        </button>
-        <button
-          type="button"
-          onClick={handleSimpan}
-          disabled={saving}
-          style={{ padding: '7px 12px', borderRadius: 4, border: 'none', background: '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}
-        >
-          {saving ? 'Menyimpan...' : 'Simpan Penerimaan'}
-        </button>
-        <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'flex-start', flexShrink: 0, whiteSpace: 'nowrap' }}>{filledRows.length} barang</span>
-        {totals.subtotal > 0 && (
-          <span style={{ fontSize: 12, flexShrink: 0, whiteSpace: 'nowrap' }}>
-            Tagihan: <strong>Rp {formatRupiah(tagihan)}</strong>
-          </span>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {totals.subtotal > 0 && (
+            <span style={{ fontSize: 12, flexShrink: 0, whiteSpace: 'nowrap' }}>
+              Tagihan: <strong>Rp {formatRupiah(tagihan)}</strong>
+            </span>
+          )}
+          <button type="button" onClick={handleBersihkan} style={{ padding: '7px 12px', borderRadius: 4, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            Bersihkan
+          </button>
+          <button
+            type="button"
+            onClick={handleSimpan}
+            disabled={saving}
+            style={{ padding: '7px 12px', borderRadius: 4, border: 'none', background: '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan Penerimaan'}
+          </button>
+        </div>
       </div>
 
-      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+      <div style={{ overflow: 'auto', height: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
-              <th style={{ padding: '8px 6px 8px 4px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 60 }}>Jumlah</th>
+              <th style={{ padding: '8px 6px 8px 4px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 55 }}>Jumlah</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb', width: 75 }}>Satuan Beli</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Kode</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Nama Barang</th>
-              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Satuan</th>
-              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 100 }}>Harga Beli</th>
-              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 60 }}>Diskon %</th>
-              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Total</th>
-              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb', width: 130 }}>Kadaluwarsa</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb', width: 60 }}>Satuan</th>
+              <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #e5e7eb', width: 28 }} title="Ganti — timpa harga beli barang ini di data master">G</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb', width: 120 }}>Kadaluwarsa</th>
+              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 90 }}>Harga(Rp)</th>
+              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 90 }}>Subtotal(Rp)</th>
+              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 55 }}>Disk(%)</th>
+              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 90 }}>Diskon(Rp)</th>
+              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 90 }}>Total</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb', width: 85 }}>No.Batch</th>
+              <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #e5e7eb', width: 50 }}>Isi</th>
             </tr>
           </thead>
           <tbody>
@@ -438,31 +550,23 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                       onChange={(e) => setPinnedField(r.kode_brng, 'jumlah', e.target.value)}
                       onBlur={() => commitPinnedField(r.kode_brng)}
                       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                      style={{ width: 60, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                      style={{ width: 55, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5' }}>
+                    <input
+                      type="text"
+                      value={r.satuanBeli}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'satuanBeli', e.target.value)}
+                      style={{ width: 60, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
                     />
                   </td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.kode_brng}</td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#065f46', fontWeight: 600 }}>{r.nama_brng}</td>
                   <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', color: '#374151' }}>{r.satuan}</td>
-                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
-                    <input
-                      type="number"
-                      step="any"
-                      value={r.harga}
-                      onChange={(e) => setPinnedField(r.kode_brng, 'harga', e.target.value)}
-                      style={{ width: 90, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                    />
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'center' }}>
+                    <input type="checkbox" checked={r.ganti} onChange={() => togglePinnedGanti(r.kode_brng)} style={{ accentColor: '#059669', cursor: 'pointer' }} />
                   </td>
-                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
-                    <input
-                      type="number"
-                      step="any"
-                      value={r.dis}
-                      onChange={(e) => setPinnedField(r.kode_brng, 'dis', e.target.value)}
-                      style={{ width: 50, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                    />
-                  </td>
-                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', textAlign: 'right', color: '#065f46', fontWeight: 600 }}>{c ? formatRupiah(c.total) : '-'}</td>
                   <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5' }}>
                     <input
                       type="date"
@@ -471,15 +575,61 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                       style={{ width: '100%', padding: '4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 11.5, outline: 'none', boxSizing: 'border-box' }}
                     />
                   </td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.harga}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'harga', e.target.value)}
+                      style={{ width: 80, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', textAlign: 'right', color: '#374151' }}>{c ? formatRupiah(c.subtotal) : '-'}</td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.dis}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'dis', e.target.value)}
+                      style={{ width: 45, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={c ? Math.round(c.besardis) : ''}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'dis', diskonRpToPercent(r, e.target.value))}
+                      style={{ width: 75, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px', borderBottom: '1px solid #d1fae5', textAlign: 'right', color: '#065f46', fontWeight: 600 }}>{c ? formatRupiah(c.total) : '-'}</td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5' }}>
+                    <input
+                      type="text"
+                      value={r.noBatch}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'noBatch', e.target.value)}
+                      style={{ width: '100%', padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '4px 6px', borderBottom: '1px solid #d1fae5', textAlign: 'right' }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={r.isi}
+                      onChange={(e) => setPinnedField(r.kode_brng, 'isi', e.target.value)}
+                      style={{ width: 40, padding: '5px 4px', borderRadius: 4, border: '1px solid #6ee7b7', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
                 </tr>
               );
             })}
 
             {loading ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
+              <tr><td colSpan={14} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
             ) : visibleSearchRows.length === 0 ? (
               selectedRows.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang aktif</td></tr>
+                <tr><td colSpan={14} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Tidak ada barang aktif</td></tr>
               )
             ) : (
               visibleSearchRows.map((r, index) => {
@@ -495,31 +645,23 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                         onFocus={guardFocus}
                         onBlur={() => commitField(r.kode_brng)}
                         onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                        style={{ width: 60, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                        style={{ width: 55, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb' }}>
+                      <input
+                        type="text"
+                        value={r.satuanBeli}
+                        onChange={(e) => setField(r.kode_brng, 'satuanBeli', e.target.value)}
+                        style={{ width: 60, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
                       />
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{r.kode_brng}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827' }}>{r.nama_brng}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{r.satuan}</td>
-                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
-                      <input
-                        type="number"
-                        step="any"
-                        value={r.harga}
-                        onChange={(e) => setField(r.kode_brng, 'harga', e.target.value)}
-                        style={{ width: 90, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                      />
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                      <input type="checkbox" checked={r.ganti} onChange={() => toggleGanti(r.kode_brng)} style={{ accentColor: '#059669', cursor: 'pointer' }} />
                     </td>
-                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
-                      <input
-                        type="number"
-                        step="any"
-                        value={r.dis}
-                        onChange={(e) => setField(r.kode_brng, 'dis', e.target.value)}
-                        style={{ width: 50, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                      />
-                    </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', color: '#374151' }}>{c ? formatRupiah(c.total) : '-'}</td>
                     <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb' }}>
                       <input
                         type="date"
@@ -528,12 +670,71 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                         style={{ width: '100%', padding: '4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 11.5, outline: 'none', boxSizing: 'border-box' }}
                       />
                     </td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        step="any"
+                        value={r.harga}
+                        onChange={(e) => setField(r.kode_brng, 'harga', e.target.value)}
+                        style={{ width: 80, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', color: '#374151' }}>{c ? formatRupiah(c.subtotal) : '-'}</td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        step="any"
+                        value={r.dis}
+                        onChange={(e) => setField(r.kode_brng, 'dis', e.target.value)}
+                        style={{ width: 45, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        step="any"
+                        value={c ? Math.round(c.besardis) : ''}
+                        onChange={(e) => setField(r.kode_brng, 'dis', diskonRpToPercent(r, e.target.value))}
+                        style={{ width: 75, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', color: '#374151' }}>{c ? formatRupiah(c.total) : '-'}</td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb' }}>
+                      <input
+                        type="text"
+                        value={r.noBatch}
+                        onChange={(e) => setField(r.kode_brng, 'noBatch', e.target.value)}
+                        style={{ width: '100%', padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </td>
+                    <td style={{ padding: '4px 6px', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        step="any"
+                        value={r.isi}
+                        onChange={(e) => setField(r.kode_brng, 'isi', e.target.value)}
+                        style={{ width: 40, padding: '5px 4px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </td>
                   </tr>
                 );
               })
             )}
           </tbody>
         </table>
+      </div>
+      </div>
+      {!loading && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 4,
+            padding: '2px 8px', borderRadius: 10,
+            fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+          }}
+        >
+          {filledRows.length} barang
+        </div>
+      )}
       </div>
 
       <ModalCariPetugas
@@ -550,13 +751,16 @@ const TabTerimaBarang: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
 type PenerimaanDetailItem = {
   kode_brng: string;
   nama_brng: string;
+  satuan_beli: string;
   satuan: string;
   jumlah: number;
+  jumlah2: number;
   h_beli: number;
   subtotal: number;
   dis: number;
   besardis: number;
   total: number;
+  no_batch: string;
   kadaluwarsa: string;
 };
 type PenerimaanRiwayat = {
@@ -695,10 +899,12 @@ const TabRiwayatPenerimaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                                 <th style={{ padding: '3px 6px', textAlign: 'left' }}>Kode</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'left' }}>Nama Barang</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'right' }}>Jumlah</th>
+                                <th style={{ padding: '3px 6px', textAlign: 'left' }}>Satuan Beli</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'left' }}>Satuan</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'right' }}>Harga</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'right' }}>Diskon</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'right' }}>Total</th>
+                                <th style={{ padding: '3px 6px', textAlign: 'left' }}>No.Batch</th>
                                 <th style={{ padding: '3px 6px', textAlign: 'left' }}>Kadaluwarsa</th>
                               </tr>
                             </thead>
@@ -707,11 +913,15 @@ const TabRiwayatPenerimaan: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
                                 <tr key={it.kode_brng}>
                                   <td style={{ padding: '3px 6px', color: '#374151' }}>{it.kode_brng}</td>
                                   <td style={{ padding: '3px 6px', color: '#111827' }}>{it.nama_brng}</td>
-                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>{it.jumlah}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>
+                                    {it.jumlah}{it.jumlah2 !== it.jumlah ? ` (= ${it.jumlah2} ${it.satuan})` : ''}
+                                  </td>
+                                  <td style={{ padding: '3px 6px', color: '#374151' }}>{it.satuan_beli || it.satuan}</td>
                                   <td style={{ padding: '3px 6px', color: '#374151' }}>{it.satuan}</td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>{formatRupiah(it.h_beli)}</td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>{it.dis}%</td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', color: '#374151' }}>{formatRupiah(it.total)}</td>
+                                  <td style={{ padding: '3px 6px', color: '#6b7280' }}>{it.no_batch || '-'}</td>
                                   <td style={{ padding: '3px 6px', color: '#6b7280' }}>{it.kadaluwarsa || '-'}</td>
                                 </tr>
                               ))}

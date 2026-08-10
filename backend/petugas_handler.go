@@ -47,10 +47,14 @@ type PetugasDetail struct {
 }
 
 // GET /api/petugas/list — padanan tampil()/prosesCari() di DlgPetugas.java
-// (Khanza), join ke jabatan utk nama jabatan, hanya petugas aktif
-// (status='1', DlgPetugas.java tidak punya toggle nonaktif).
+// (Khanza), join ke jabatan utk nama jabatan. DlgPetugas.java sendiri
+// tidak punya toggle nonaktif (selalu status='1') — parameter `status` di
+// sini tambahan ERMApp supaya ada layar "Petugas Nonaktif" (lihat
+// restorePetugas/hapusPetugasPermanen di bawah), default tetap '1'
+// (aktif) kalau parameternya tidak dikirim, sama seperti perilaku lama.
 func getPetugasList(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		status := strings.TrimSpace(c.DefaultQuery("status", "1"))
 		jk := strings.TrimSpace(c.DefaultQuery("jk", ""))
 		golDarah := strings.TrimSpace(c.DefaultQuery("gol_darah", ""))
 		sttsNikah := strings.TrimSpace(c.DefaultQuery("stts_nikah", ""))
@@ -73,9 +77,9 @@ func getPetugasList(db *sql.DB) gin.HandlerFunc {
 			FROM petugas
 			INNER JOIN jabatan ON jabatan.kd_jbtn = petugas.kd_jbtn
 			LEFT JOIN petugas_ext ON petugas_ext.nip = petugas.nip
-			WHERE petugas.status = '1'`
+			WHERE petugas.status = ?`
 
-		args := []interface{}{}
+		args := []interface{}{status}
 
 		if jk != "" {
 			query += " AND petugas.jk = ?"
@@ -249,5 +253,59 @@ func hapusPetugas(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "Petugas berhasil dihapus"})
+	}
+}
+
+// PUT /api/petugas/:nip/restore — kebalikan hapusPetugas, kembalikan
+// status jadi '1' supaya muncul lagi di daftar aktif.
+func restorePetugas(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		nip := c.Param("nip")
+		if nip == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "nip wajib diisi"})
+			return
+		}
+		res, err := db.Exec(`UPDATE petugas SET status='1' WHERE nip=?`, nip)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Petugas tidak ditemukan"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Petugas berhasil dipulihkan"})
+	}
+}
+
+// DELETE /api/petugas/:nip/permanent — hapus baris sungguhan (bukan
+// toggle status). petugas.nip direferensikan FK oleh RATUSAN tabel lain
+// di skema Khanza (hampir semua modul transaksi punya kolom nip), jadi
+// ini HAMPIR SELALU akan gagal dengan foreign key constraint kalau
+// petugas itu pernah dipakai di transaksi apa pun — itu memang perilaku
+// yang benar (mencegah data transaksi kehilangan referensinya), bukan
+// bug. Errornya ditangkap dan diberi pesan yang jelas alih-alih
+// membocorkan pesan SQL mentah ke user.
+func hapusPetugasPermanen(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		nip := c.Param("nip")
+		if nip == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "nip wajib diisi"})
+			return
+		}
+		res, err := db.Exec(`DELETE FROM petugas WHERE nip=?`, nip)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "foreign key constraint") {
+				c.JSON(http.StatusConflict, gin.H{"error": "Petugas ini tidak bisa dihapus permanen karena masih direferensikan di data transaksi lain (mis. resep, pembelian, dll). Data akan tetap nonaktif."})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Petugas tidak ditemukan"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Petugas berhasil dihapus permanen"})
 	}
 }

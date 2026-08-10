@@ -62,7 +62,7 @@ const StepperIcon: React.FC = () => (
       transform: 'translateY(-50%)',
       width: 22,
       height: 22,
-      borderRadius: '50%',
+      borderRadius: '30%',
       background: '#059669',
       display: 'flex',
       alignItems: 'center',
@@ -456,7 +456,7 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
               </button>
             </div>
           </div>
-          <div style={{ width: 170, flexShrink: 0 }}>
+          <div style={{ width: 250, flexShrink: 0 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
               Petugas
               {warnPetugas && <span style={{ color: '#dc2626', marginLeft: 6 }}>! Wajib isi</span>}
@@ -500,7 +500,7 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
               <PillSelect value={kdBangsal} onChange={setKdBangsal} options={[{ value: '', label: '- Pilih -' }, ...bangsal.map((b) => ({ value: b.kode, label: b.nama }))]} />
             </div>
           </div>
-          <div style={{ width: 360, flexShrink: 0 }}>
+          <div style={{ width: 460, flexShrink: 0 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cari</label>
             <div style={{ position: 'relative', display: 'flex' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
@@ -517,10 +517,11 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
               />
             </div>
           </div>
-          <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'flex-start', flexShrink: 0, whiteSpace: 'nowrap' }}>{filledRows.length} barang</span>
         </div>
 
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
               <tr>
@@ -616,6 +617,19 @@ const TabInputPenjualan: React.FC<{ bangsal: KvOpsi[]; subTab: SubTab; onSubTabC
               )}
             </tbody>
           </table>
+        </div>
+        </div>
+        {!loading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {filledRows.length} barang
+          </div>
+        )}
         </div>
       </div>
 

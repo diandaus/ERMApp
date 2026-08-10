@@ -350,7 +350,6 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
         >
           {saving ? 'Menyimpan...' : 'Simpan Retur'}
         </button>
-        <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'flex-start', flexShrink: 0, whiteSpace: 'nowrap' }}>{filledRows.length} barang</span>
         {totalRetur > 0 && (
           <span style={{ fontSize: 12, flexShrink: 0, whiteSpace: 'nowrap' }}>
             Nilai Retur: <strong>Rp {formatRupiah(totalRetur)}</strong>
@@ -358,7 +357,9 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
         )}
       </div>
 
-      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+      <div style={{ overflow: 'auto', height: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
@@ -417,6 +418,19 @@ const TabBuatRetur: React.FC<{ bangsal: KvOpsi[] }> = ({ bangsal }) => {
             )}
           </tbody>
         </table>
+      </div>
+      </div>
+      {!loading && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 4,
+            padding: '2px 8px', borderRadius: 10,
+            fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+          }}
+        >
+          {filledRows.length} barang
+        </div>
+      )}
       </div>
 
       <ModalCariPetugas

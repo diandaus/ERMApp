@@ -608,7 +608,7 @@ mundur walau permintaan pertama sudah ditolak) → Setujui (Mutasi) jml=5
 manual dikembalikan ke nilai asal (AP=49, GD=1546) supaya data dev tidak
 tertinggal berubah.
 
-### Tab "Penerimaan Obat & BHP" — SELESAI
+### Tab "Penerimaan Obat & BHP" — SELESAI (+ diperluas: field faktur, Satuan Beli/Isi, No.Batch, "G"/Ganti harga, Diskon(Rp) dua-arah)
 
 Cocok dengan **dua** dialog Khanza Desktop terpisah: **"Pembelian"**
 (`inventory/DlgPembelian.java` — form transaksi pembelian/penerimaan dari
@@ -620,12 +620,24 @@ sakit** yang langsung menambah stok — beda dari Mutasi (pindah stok antar
 lokasi INTERNAL) dan beda dari Permintaan (dokumen internal yang baru
 mengubah stok setelah disetujui lewat Mutasi).
 
+Field header (No.Faktur/Tgl.Datang/Tgl.Faktur/SP-Order/Jth.Tempo) dan
+kolom tabel item (Satuan Beli/G/No.Batch/Isi) meniru `tbDokter` Java
+(28 kolom di `DlgPembelian.java`/`DlgPemesanan.java`, TAPI cuma **14 yang
+visible** — sisanya `setMinWidth(0)`/`setMaxWidth(0)`, dipakai internal
+utk fitur harga jual per kategori yang sengaja tidak diport, lihat
+"Penyederhanaan yang disengaja" di bawah).
+
 **Rumus per baris** (persis `getData()` di `DlgPembelian.java`):
 ```
-subtotal = jumlah * h_beli
-besardis = subtotal * (dis% / 100)
-total    = subtotal - besardis
+subtotal        = jumlah * h_beli
+besardis        = subtotal * (dis% / 100)
+total           = subtotal - besardis
+jumlah_konversi = jumlah * isi   (isi default 1 kalau kosong/≤0)
 ```
+Harga/Subtotal/Diskon/Total **selalu** dari `jumlah` mentah (harga selalu
+per Satuan Beli, Isi TIDAK memengaruhi nilai transaksi) — HANYA
+`jumlah_konversi` yang menambah `gudangbarang.stok`/dicatat
+`catatRiwayatBarangMedis`/disimpan ke `detailbeli.jumlah2`.
 **Rumus header**:
 ```
 total1 (subtotal) = SUM(subtotal semua baris)
@@ -636,97 +648,231 @@ tagihan           = total2 + ppn
 ```
 Diverifikasi persis lewat `curl`: 10×`h_beli 237857` dengan diskon 5% dan
 PPN 11% menghasilkan `tagihan=2508202.065`, cocok dihitung manual
-step-by-step.
+step-by-step. Konversi Isi diverifikasi terpisah: jml=5, isi=3, `h_beli
+30000` → `tagihan=150000` (harga TIDAK kena isi) tapi
+`gudangbarang.stok` naik 15 (10→25, KENA isi) dan `detailbeli.jumlah2=15`
+sementara `detailbeli.jumlah=5` (mentah).
 
 **Tabel**: `pembelian` (`no_faktur` PK, `kode_suplier`, `nip`, `tgl_beli`,
-`total1`, `potongan`, `total2`, `ppn`, `tagihan`, `kd_bangsal`, `kd_rek`)
-dan `detailbeli` (`no_faktur`, `kode_brng`, `kode_sat`, `jumlah`,
-`h_beli`, `subtotal`, `dis`, `besardis`, `total`, `no_batch`, `jumlah2`,
-`kadaluarsa`). **Penting**: `detailbeli.no_faktur` punya FK
+`total1`, `potongan`, `total2`, `ppn`, `tagihan`, `kd_bangsal`, `kd_rek` —
+**PERSIS 11 kolom, JANGAN PERNAH ditambah kolom baru di sini**) dan
+`detailbeli` (`no_faktur`, `kode_brng`, `kode_sat`, `jumlah`, `h_beli`,
+`subtotal`, `dis`, `besardis`, `total`, `no_batch`, `jumlah2`,
+`kadaluarsa` — **PERSIS 12 kolom, sama-sama JANGAN PERNAH ditambah
+kolom**). **Penting**: `detailbeli.no_faktur` punya FK
 `ON DELETE CASCADE` ke `pembelian` di level skema DB — jadi hapus baris
 `pembelian` otomatis membersihkan `detailbeli`-nya tanpa perlu `DELETE`
 manual terpisah (diverifikasi lewat `SHOW CREATE TABLE` DAN lewat test
 `curl`: hapus faktur test, `detailbeli` langsung 0 baris).
 
-**No.Faktur** digenerate server-side, rumus identik `autoNomor()` Java:
-prefix `"PG"+YYYYMMDD` + 3 digit urut per tanggal
-(`MAX(RIGHT(no_faktur,3))+1`), dalam transaksi yang sama dengan `INSERT`
-(pola sama persis dengan No.Permintaan di fitur Permintaan, cuma beda
-prefix "PG" vs "PM" dan tabel sumbernya).
+**⚠️ KENAPA tabel `pembelian`/`detailbeli` tidak boleh ditambah kolom** —
+`DlgPembelian.java` (dan `DlgPemesanan.java`) menyimpan lewat
+`Sequel.menyimpantf2(table, "?,?,...", ..., N, ...)`, yang membangun SQL
+`insert into <table> values (?,?,...)` **TANPA daftar nama kolom** (fully
+positional) — jumlah placeholder-nya (11 utk `pembelian`, 12 utk
+`detailbeli`) harus **persis sama** dengan jumlah kolom tabel. Kalau
+Khanza Java desktop masih dipakai paralel di database yang sama (kasus di
+proyek ini — dikonfirmasi user), menambah kolom baru bikin `INSERT` lama
+itu gagal dengan `Column count doesn't match value count`. Pelajaran yang
+sama persis pertama kali ditemukan di `petugas`/`petugas_ext` (lihat
+`backend/petugas_handler.go`). **Solusi**: field tambahan (No.Order/
+Tgl.Faktur/Jatuh Tempo) disimpan di **tabel pendamping terpisah**
+`pembelian_ext` (1:1 lewat `no_faktur`, FK `ON DELETE CASCADE`); field
+lain (Satuan Beli/No.Batch/Isi hasil) muat di kolom `detailbeli` yang
+**sudah ada tapi dulu tidak dipakai** (`kode_sat` dulu selalu = satuan
+dasar, sekarang berarti "Satuan Beli"; `no_batch` dulu selalu `''`,
+sekarang beneran diisi; `jumlah2` dulu selalu = `jumlah`, sekarang hasil
+konversi Isi) — **NOL kolom baru** di kedua tabel inti.
 
-**Hapus riwayat REVERT stok** (`gudangbarang.stok -= jumlah`) — persis
+```sql
+CREATE TABLE pembelian_ext (
+  no_faktur VARCHAR(20) PRIMARY KEY,
+  no_order VARCHAR(30) NOT NULL DEFAULT '',
+  tgl_faktur DATE NULL,
+  jatuh_tempo DATE NULL,
+  FOREIGN KEY (no_faktur) REFERENCES pembelian(no_faktur)
+    ON UPDATE CASCADE ON DELETE CASCADE
+)
+```
+Dibuat otomatis lewat `ensurePembelianExtTable(db)`, dipanggil sekali di
+`main.go` saat startup (pola sama `ensurePetugasTable`).
+
+**No.Faktur** default digenerate server-side, rumus identik `autoNomor()`
+Java: prefix `"PG"+YYYYMMDD` + 3 digit urut per tanggal
+(`MAX(RIGHT(no_faktur,3))+1`) — **TAPI sekarang bisa di-override manual**
+dari field "No. Faktur" di form (mengikuti Java: kolom itu editable, TIDAK
+`setEditable(false)`), divalidasi unik saat Simpan (`SELECT COUNT(*) FROM
+pembelian WHERE no_faktur=?`, tolak dengan pesan jelas kalau sudah
+dipakai). Preview endpoint `GET /api/apotek/penerimaan/next-faktur?tanggal=`
+dipanggil begitu form dibuka/tanggal berubah, murni query baca (pola sama
+`getPemesananNextNo` di fitur Pemesanan) — nomor final tetap divalidasi
+ulang saat submit, jadi race condition antar dua user gagal dengan pesan
+jelas, bukan bikin data korup.
+
+**Konversi satuan (Isi)** — 1 tingkat saja, **disederhanakan** dari Isi ÷
+Isibesar 2-tingkat milik Java (kolom 25 & 26 `tbDokter`, dipakai bareng
+kolom "Dasar" utk rumus 2-tingkat yang juga terjalin erat dengan
+`setKonversi()`/harga-jual-per-kategori — lihat penjelasan lengkap di
+"Penyederhanaan yang disengaja"). Field "Satuan Beli" default = satuan
+dasar barang (`databarang.kode_sat`), tapi bisa diketik ulang manual
+(mis. beli per "BKS" utk barang yang stoknya per "AMP5"); field "Isi"
+default `1` (artinya tidak ada konversi sama sekali, identik perilaku
+sebelum fitur ini ada).
+
+**No.Batch** — sekarang benar-benar disimpan (`detailbeli.no_batch`)
+sebagai catatan/audit per baris. **TETAP TIDAK ADA lot-level stock
+tracking sungguhan** — `gudangbarang` tetap 1 baris agregat per
+`kode_brng`+`kd_bangsal` (`no_batch=''`/`no_faktur=''` tetap dipakai
+sebagai kondisi `WHERE`-nya), beda dari Khanza asli yang punya baris
+`gudangbarang` terpisah per batch (lihat sample data lama: kombinasi
+`no_batch`/`no_faktur` berbeda-beda punya baris `gudangbarang` sendiri-
+sendiri). Kalau nanti butuh FEFO/lot-level stock sungguhan, itu
+perombakan besar tersendiri, di luar scope perubahan ini.
+
+**"G" (Ganti)** — checkbox per baris (kolom 5 `tbDokter` Java — nama
+aslinya **"Ganti"**, BUKAN "Gratis" seperti kelihatannya sekilas dari
+singkatan "G"; dikonfirmasi baca `boolean[] ganti` di kode Java). Kalau
+dicentang saat Simpan: `UPDATE databarang SET h_beli=? WHERE
+kode_brng=?` pakai harga beli baris itu. **HANYA menimpa harga beli/HPP
+dasar**, BUKAN seluruh harga jual per kategori (Ralan/Kelas1-3/Utama/VIP/
+VVIP/Beli Luar/Jual Bebas/Karyawan) seperti `setKonversi()` Java (yang
+juga butuh tabel `setpenjualan`/pengaturan markup per jenis, jauh lebih
+kompleks) — manajemen harga jual tetap fitur terpisah yang di luar scope
+di sini. Status checkbox-nya sendiri **TIDAK disimpan ke DB** (sama
+seperti Java — array `ganti[]` cuma dipakai sesaat lalu dibuang, tidak
+ada kolomnya di `detailbeli`).
+
+**Diskon(Rp)** — sekarang **dua arah** dengan Disk(%): kedua kolom itu
+editable (padanan kolom 9/10 `tbDokter` Java yang dua-duanya
+`isCellEditable=true`), TAPI **tanpa state/kolom terpisah** — `dis`
+(persen) tetap satu-satunya sumber data yang dikirim ke backend, Diskon
+(Rp) cuma "pintu masuk" alternatif yang langsung dikonversi balik ke
+persen berdasarkan subtotal baris itu (`diskonRpToPercent` di
+`ApotekPenerimaan.tsx`). **Tidak ada perubahan backend** utk fitur ini.
+
+**Hapus riwayat REVERT stok** (`gudangbarang.stok -= jumlah_konversi`,
+BUKAN `jumlah` mentah — pakai `detailbeli.jumlah2`) — persis
 `ppHapusActionPerformed` di `DlgCariPembelian.java`, **TANPA guard stok
 tidak boleh minus** (Java sendiri juga tidak menjaga ini, jadi endpoint
 kami disamakan — beda dari `submitMutasi`/`setujuiPermintaan` yang memang
 ada validasi stok karena itu **pemindahan** antar lokasi yang harus
 konsisten dua sisi, sementara di sini cuma revert SATU transaksi yang
 secara logis boleh membuat stok "seolah belum pernah diterima", bahkan
-kalau sudah keburu terpakai oleh transaksi lain sesudahnya).
+kalau sudah keburu terpakai oleh transaksi lain sesudahnya). **Catatan**:
+"G"/Ganti TIDAK di-revert saat hapus (perubahan `databarang.h_beli`
+bersifat satu arah, sama seperti Java tidak pernah mencoba membalikkannya
+juga).
 
 **Penyederhanaan yang disengaja** (pola sama modul lain):
 - **Tidak ada integrasi Jurnal/akuntansi** (`tampjurnal`, `AkunBayar`,
   `jur.simpanJurnal` di Java) — modul Keuangan/Jurnal tidak ada sama
   sekali di proyek ini, kolom `kd_rek` di `pembelian` cukup diisi `NULL`.
-- **Tidak ada konversi satuan besar/kecil** (`SatuanBeli`/`isi`/
-  `hargabesar` di Java, beli per-dus otomatis dikonversi ke satuan
-  kecil/pcs) — harga & jumlah selalu dalam satuan dasar
-  `databarang.kode_sat`; kolom `jumlah2` (Java: "jumlah setelah
-  konversi") selalu SAMA dengan `jumlah`.
-- **Tidak melacak batch** (`aktifkanbatch="no"`, `no_batch` selalu `''`)
-  dan **tidak insert ke `data_batch`** — pola sama Stok Opname/Mutasi/
-  Permintaan.
-- **Tidak update `databarang.h_beli`/harga jual** (checkbox "update
-  harga" per baris + `simpanbatch()` di Java) — di luar scope sengaja:
-  manajemen harga jual adalah fitur terpisah yang bisa memengaruhi modul
-  lain (Kasir, Resep) kalau diubah sembarangan tanpa pertimbangan lebih
-  lanjut; harga beli per transaksi cukup tersimpan sebagai riwayat di
-  `detailbeli.h_beli`, tidak mengubah master `databarang`.
+- **Tidak ada harga jual per kategori/`setKonversi()`** (Ralan/Kelas1-3/
+  Utama/VIP/VVIP/Beli Luar/Jual Bebas/Karyawan/HPP — kolom 14-24
+  `tbDokter`, semua HIDDEN di Java sendiri, cuma dipakai internal utk
+  auto-markup berdasarkan tabel `setpenjualan`) — manajemen harga jual
+  tetap fitur terpisah yang di luar scope, supaya perubahan harga tidak
+  diam-diam memengaruhi modul lain (Kasir, Resep) tanpa sengaja. "G"/
+  Ganti di atas cuma versi sangat disederhanakan (harga beli/HPP dasar
+  saja) dari fitur asli ini.
+- **Konversi satuan 1 tingkat saja** (Isi, bukan Isi ÷ Isibesar 2-tingkat
+  Java) — lihat penjelasan lengkap di atas.
+- **Tidak ada lot-level stock tracking** (`gudangbarang` tetap 1 baris
+  agregat per lokasi, bukan per batch) — lihat penjelasan No.Batch di
+  atas.
 
-Backend: `backend/apotek_penerimaan_handler.go` — 4 endpoint:
+Backend: `backend/apotek_penerimaan_handler.go` — 6 endpoint:
 - `GET /api/apotek/penerimaan/barang-opsi?search=` — daftar barang aktif
   + `h_beli` (dipakai sebagai default harga yang bisa diubah staf saat
   input, beda dari Permintaan yang tidak butuh harga sama sekali).
+- `GET /api/apotek/penerimaan/next-faktur?tanggal=` — preview No.Faktur
+  berikutnya (murni baca, lihat penjelasan No.Faktur di atas).
 - `POST /api/apotek/penerimaan` — body `{kode_suplier, nip, tanggal,
-  kd_bangsal, ppn_percent, items[]}`, hitung rumus di atas server-side,
-  generate No.Faktur, `INSERT` `pembelian`+`detailbeli` dan
-  `UPDATE`/`INSERT` `gudangbarang` (tambah stok) semua dalam satu
+  kd_bangsal, ppn_percent, no_faktur?, no_order?, tgl_faktur?,
+  jatuh_tempo?, items: [{kode_brng, kode_sat, jumlah, isi, h_beli, dis,
+  kadaluwarsa, no_batch, ganti}]}`, hitung rumus di atas server-side,
+  resolve No.Faktur (override atau auto-generate), `INSERT`
+  `pembelian`+`pembelian_ext`+`detailbeli`, `UPDATE`/`INSERT`
+  `gudangbarang` (tambah stok pakai `jumlah_konversi`), dan `UPDATE
+  databarang.h_beli` per baris ber-`ganti=true`, semua dalam satu
   transaksi.
 - `GET /api/apotek/penerimaan/riwayat?tgl1=&tgl2=&kd_bangsal=&kode_suplier=&search=`
-  — daftar penerimaan (header) dengan `items[]` di-embed per baris
-  (pola sama Permintaan), default 30 hari terakhir.
+  — daftar penerimaan (header, termasuk `no_order`/`tgl_faktur`/
+  `jatuh_tempo` dari `pembelian_ext`) dengan `items[]` di-embed per baris
+  (termasuk `satuan_beli`/`jumlah2`/`no_batch`), pola sama Permintaan,
+  default 30 hari terakhir.
 - `DELETE /api/apotek/penerimaan/:no_faktur` — revert stok tiap baris
-  lalu hapus header (`detailbeli` ikut lewat cascade DB).
+  (pakai `jumlah2`) lalu hapus header (`detailbeli`+`pembelian_ext` ikut
+  lewat cascade DB).
 
 Reuse endpoint yang SUDAH ADA (tidak bikin baru): `GET /api/apotek/suplier`
 (picker Supplier, dari fitur Pengaturan → Data Supplier) dan
-`GET /api/petugas` (picker Petugas — **beda tabel dari Permintaan**:
-`pembelian.nip` ber-FK ke tabel `petugas`, sementara
+`GET /api/petugas` (dipanggil dari dalam `ModalCariPetugas`, komponen
+picker bersama yang juga dipakai fitur lain — **beda tabel dari
+Permintaan**: `pembelian.nip` ber-FK ke tabel `petugas`, sementara
 `permintaan_medis.nip` ber-FK ke tabel `pegawai` — dua tabel kepegawaian
 terpisah di skema native Khanza, bukan salah ketik; endpoint yang dipilih
 mengikuti FK constraint masing-masing tabel, diverifikasi lewat
-`SHOW CREATE TABLE`).
+`SHOW CREATE TABLE`). Field Petugas auto-terisi dari NIP yang di-link ke
+akun login (`getCurrentUserNip()`), tetap bisa diganti manual lewat
+picker (tombol "Ganti").
 
 Frontend: `frontend/src/modules/ApotekPenerimaan.tsx` — 2 sub-tab meniru
-pemisahan dua dialog Java: **"Terima Barang"** (pilih Supplier/Petugas/
-Lokasi/Tanggal/PPN%, tabel katalog barang muncul begitu tab dibuka — staf
-isi Jumlah + boleh ubah Harga Beli (prefill dari `databarang.h_beli`) +
-Diskon% + Kadaluwarsa opsional per baris, kolom Total per baris dihitung
-live, ringkasan Tagihan ditampilkan di toolbar sebelum Simpan, guard
-blink-merah kalau Supplier/Petugas/Lokasi belum lengkap saat isi Jumlah —
-pola identik fitur-fitur Apotek lainnya) dan **"Riwayat Penerimaan"**
-(filter tanggal + lokasi + cari, baris bisa diklik untuk expand/collapse
-detail barang + ringkasan Subtotal/Potongan/PPN/Tagihan, tombol Hapus per
-baris dengan teks konfirmasi yang menjelaskan stok AKAN dikurangi
-kembali). Dipasang sebagai tab utama modul Apotek (`Apotek.tsx`).
+pemisahan dua dialog Java: **"Terima Barang"** dan **"Riwayat
+Penerimaan"**. Dipasang sebagai tab utama modul Apotek (`Apotek.tsx`).
 
-**Diuji end-to-end lewat `curl` di database dev**: terima barang `2018003`
-di `AP` (jml=10, harga=237857, diskon=5%, PPN=11%) → dapat
-`no_faktur="PG20260717001"` (format persis Java) dan `tagihan=2508202.065`
-(cocok hitung manual) → verifikasi `gudangbarang.stok` AP naik 49→59 →
-riwayat menampilkan baris baru dengan detail item lengkap → hapus riwayat
-→ verifikasi stok kembali tepat ke 49 DAN `pembelian`+`detailbeli` bersih
-(0 baris masing-masing, bukti cascade DB bekerja) supaya data dev tidak
-tertinggal berubah.
+**"Terima Barang"** — 2 baris filter di atas tabel:
+- **Baris 1**: No. Faktur (editable, placeholder = preview auto-generate)
+  → Tgl. Datang → Tgl. Faktur → Jth. Tempo → Supplier → Petugas (picker
+  `ModalCariPetugas`) → Lokasi.
+- **Baris 2**: SP/Order → PPN % → Cari → (rata kanan sebagai satu grup:
+  Tagihan → tombol Bersihkan → tombol Simpan Penerimaan).
+
+Tabel katalog barang (14 kolom, urutan persis `tbDokter` Java yang
+visible): Jumlah, Satuan Beli, Kode, Nama Barang, Satuan, G, Kadaluwarsa,
+Harga(Rp), Subtotal(Rp), Disk(%), Diskon(Rp), Total, No.Batch, Isi — muncul
+begitu tab dibuka, staf isi Jumlah (baris otomatis "pin" ke atas tabel,
+pola pinned-rows sama modul lain) + boleh ubah Satuan Beli/Harga Beli
+(prefill dari `databarang.h_beli`)/Diskon% ATAU Diskon(Rp) langsung/
+Kadaluwarsa/No.Batch/Isi/checkbox G per baris, kolom Total per baris
+dihitung live, guard blink-merah kalau Supplier/Petugas/Lokasi belum
+lengkap saat isi Jumlah. Badge "N barang" **melayang** (`position:
+absolute`) tepat di bawah kotak tabel (tidak menambah tinggi
+layout/tidak mengurangi area tabel yang tersedia), bukan elemen normal
+di alur flex.
+
+**"Riwayat Penerimaan"** (tidak berubah strukturnya sesi ini): filter
+tanggal + lokasi + cari, baris bisa diklik untuk expand/collapse detail
+barang (sekarang termasuk Satuan Beli & No.Batch, dan jumlah tampil
+`"5 (= 15 Ampul)"` kalau `jumlah2` beda dari `jumlah` mentah) + ringkasan
+Subtotal/Potongan/PPN/Tagihan, tombol Hapus per baris dengan teks
+konfirmasi yang menjelaskan stok AKAN dikurangi kembali.
+
+**Diuji end-to-end lewat `curl` di database dev** (dua putaran, sesi
+awal + sesi field faktur/Isi/G/No.Batch):
+- Sesi awal: terima barang `2018003` di `AP` (jml=10, harga=237857,
+  diskon=5%, PPN=11%) → dapat `no_faktur="PG20260717001"` (format persis
+  Java) dan `tagihan=2508202.065` (cocok hitung manual) → verifikasi
+  `gudangbarang.stok` AP naik 49→59 → riwayat menampilkan baris baru
+  dengan detail item lengkap → hapus riwayat → verifikasi stok kembali
+  tepat ke 49 DAN `pembelian`+`detailbeli` bersih (0 baris masing-masing,
+  bukti cascade DB bekerja).
+- Sesi field baru: `pembelian_ext` dibuat otomatis (`DESCRIBE` konfirmasi
+  4 kolom), `pembelian`/`detailbeli` TETAP 11/12 kolom (tidak berubah).
+  Simulasi **persis** `INSERT INTO petugas VALUES(...)` gaya Java (13
+  placeholder) berhasil tanpa error setelah fix `petugas_ext` — pola
+  verifikasi yang sama diterapkan konsep-nya di sini (walau tidak
+  disimulasikan ulang literal utk `pembelian` karena kolomnya memang
+  tidak pernah disentuh). Submit dgn `no_order`, `tgl_faktur`,
+  `jatuh_tempo`, `isi=3` (jml=5, `h_beli=30000`), `no_batch=BATCH-TEST-01`,
+  `ganti=true` → `tagihan=150000` (harga tidak kena isi) → `stok` naik
+  15 (10→25) → `databarang.h_beli` jadi 30000 (G/Ganti bekerja) →
+  `detailbeli.jumlah=5`, `jumlah2=15`, `no_batch="BATCH-TEST-01"` semua
+  benar → riwayat menampilkan `satuan_beli="Bungkus"`,
+  `jumlah2=15`, `no_batch` benar → hapus → stok kembali ke 10 →
+  `databarang.h_beli` di-restore manual (bukan otomatis, sesuai
+  desain "G tidak di-revert") → `pembelian`/`pembelian_ext` 0 baris
+  (cascade bekerja).
 
 ### Tab "Riwayat Obat, Alkes & BHP" — SELESAI
 

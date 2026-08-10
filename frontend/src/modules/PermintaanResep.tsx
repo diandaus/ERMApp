@@ -589,11 +589,12 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             />
           </div>
         </div>
-        <span style={{ fontSize: 12, color: '#6b7280', paddingBottom: 8, whiteSpace: 'nowrap' }}>{loading ? 'Memuat...' : `${items.length} resep`}</span>
       </div>
 
       {ralanView === 'daftar' && (
-      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+      <div style={{ overflow: 'auto', height: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
@@ -776,10 +777,25 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
           </tbody>
         </table>
       </div>
+      </div>
+      {!loading && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 4,
+            padding: '2px 8px', borderRadius: 10,
+            fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+          }}
+        >
+          {items.length} resep
+        </div>
+      )}
+      </div>
       )}
 
       {ralanView === 'detail' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0, padding: 10 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%', padding: 10 }}>
           {loading ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</div>
           ) : items.length === 0 ? (
@@ -867,6 +883,19 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
               })}
             </div>
           )}
+        </div>
+        </div>
+        {!loading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {items.length} resep
+          </div>
+        )}
         </div>
       )}
 
@@ -1362,12 +1391,13 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             />
           </div>
         </div>
-        <span style={{ fontSize: 12, color: '#6b7280', paddingBottom: 8, whiteSpace: 'nowrap' }}>{isLoading ? 'Memuat...' : countLabel}</span>
       </div>
 
       {/* ---- Resep Rawat Inap (daftar) ---- */}
       {subTab === 'resep' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
               <tr>
@@ -1500,11 +1530,26 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             </tbody>
           </table>
         </div>
+        </div>
+        {!isLoading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {countLabel}
+          </div>
+        )}
+        </div>
       )}
 
       {/* ---- Detail Rawat Inap (flat, semua resep + item sekaligus) ---- */}
       {subTab === 'detail-resep' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0, padding: 10 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%', padding: 10 }}>
           {resepLoading ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</div>
           ) : resepItems.length === 0 ? (
@@ -1593,11 +1638,26 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             </div>
           )}
         </div>
+        </div>
+        {!isLoading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {countLabel}
+          </div>
+        )}
+        </div>
       )}
 
       {/* ---- Permintaan Stok Pasien (daftar) ---- */}
       {subTab === 'stok' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
               <tr>
@@ -1684,11 +1744,26 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             </tbody>
           </table>
         </div>
+        </div>
+        {!isLoading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {countLabel}
+          </div>
+        )}
+        </div>
       )}
 
       {/* ---- Detail Stok Pasien (flat) ---- */}
       {subTab === 'detail-stok' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0, padding: 10 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%', padding: 10 }}>
           {stokLoading ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</div>
           ) : stokItems.length === 0 ? (
@@ -1760,11 +1835,26 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             </div>
           )}
         </div>
+        </div>
+        {!isLoading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {countLabel}
+          </div>
+        )}
+        </div>
       )}
 
       {/* ---- Permintaan Resep Pulang (daftar) ---- */}
       {subTab === 'pulang' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
               <tr>
@@ -1849,11 +1939,26 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             </tbody>
           </table>
         </div>
+        </div>
+        {!isLoading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {countLabel}
+          </div>
+        )}
+        </div>
       )}
 
       {/* ---- Detail Resep Pulang (flat) ---- */}
       {subTab === 'detail-pulang' && (
-        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0, padding: 10 }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div style={{ borderRadius: 4, border: '1px solid #e5e7eb', overflow: 'hidden', height: '100%' }}>
+        <div style={{ overflow: 'auto', height: '100%', padding: 10 }}>
           {pulangLoading ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</div>
           ) : pulangItems.length === 0 ? (
@@ -1922,6 +2027,19 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
               })}
             </div>
           )}
+        </div>
+        </div>
+        {!isLoading && (
+          <div
+            style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              padding: '2px 8px', borderRadius: 10,
+              fontSize: 11, color: '#6b7280', pointerEvents: 'none',
+            }}
+          >
+            {countLabel}
+          </div>
+        )}
         </div>
       )}
 

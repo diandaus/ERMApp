@@ -2,25 +2,25 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { ModalCariPegawai } from './ModalCariPegawai';
 
-type PetugasForm = {
-  nip: string; nama: string; jk: string; tmp_lahir: string; tgl_lahir: string;
-  gol_darah: string; agama: string; stts_nikah: string; alamat: string;
-  kd_jbtn: string; no_telp: string; email: string; str_sipa: string;
+type DokterForm = {
+  kd_dokter: string; nm_dokter: string; jk: string; tmp_lahir: string; tgl_lahir: string;
+  gol_drh: string; agama: string; almt_tgl: string; no_telp: string; email: string;
+  stts_nikah: string; kd_sps: string; alumni: string; no_ijn_praktek: string;
 };
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  editData?: PetugasForm;
+  editData?: DokterForm;
 }
 
-type JabatanOpsi = { kd_jbtn: string; nm_jbtn: string };
+type SpesialisOpsi = { kd_sps: string; nm_sps: string };
 
-const INIT: PetugasForm = {
-  nip: '', nama: '', jk: 'L', tmp_lahir: '', tgl_lahir: '',
-  gol_darah: 'A', agama: 'ISLAM', stts_nikah: 'BELUM MENIKAH', alamat: '',
-  kd_jbtn: '', no_telp: '', email: '', str_sipa: '',
+const INIT: DokterForm = {
+  kd_dokter: '', nm_dokter: '', jk: 'L', tmp_lahir: '', tgl_lahir: '',
+  gol_drh: 'A', agama: 'ISLAM', almt_tgl: '', no_telp: '', email: '',
+  stts_nikah: 'BELUM MENIKAH', kd_sps: '', alumni: '', no_ijn_praktek: '',
 };
 
 const iStyle: React.CSSProperties = {
@@ -67,16 +67,16 @@ const Sel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </div>
 );
 
-export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess, editData }) => {
+export const ModalTambahDokter: React.FC<Props> = ({ isOpen, onClose, onSuccess, editData }) => {
   const isEdit = !!editData;
-  const [form, setForm] = React.useState<PetugasForm>({ ...INIT });
+  const [form, setForm] = React.useState<DokterForm>({ ...INIT });
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [jabatanList, setJabatanList] = React.useState<JabatanOpsi[]>([]);
+  const [spesialisList, setSpesialisList] = React.useState<SpesialisOpsi[]>([]);
   const [showCariPegawai, setShowCariPegawai] = React.useState(false);
 
   React.useEffect(() => {
-    fetch('/api/jabatan/opsi').then(r => r.json()).then(d => setJabatanList(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch('/api/spesialis/opsi').then(r => r.json()).then(d => setSpesialisList(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   React.useEffect(() => {
@@ -86,15 +86,15 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
     }
   }, [isOpen, editData]);
 
-  const set = (k: keyof PetugasForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const set = (k: keyof DokterForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
 
-  // Pegawai dipilih dari data pegawai yang sudah ada (petugas.nip adalah
-  // FK ke pegawai.nik) — setelah pilih, ambil detail lengkap (jk/tempat
-  // lahir/tgl lahir/alamat) lewat /api/pegawai/list supaya tidak perlu
-  // diketik ulang manual.
+  // Dokter dipilih dari data pegawai yang sudah ada (dokter.kd_dokter
+  // adalah FK ke pegawai.nik) — setelah pilih, ambil detail lengkap
+  // (jk/tempat lahir/tgl lahir/alamat) lewat /api/pegawai/list supaya
+  // tidak perlu diketik ulang manual.
   const handlePilihPegawai = async (nik: string, nama: string) => {
-    setForm(prev => ({ ...prev, nip: nik, nama }));
+    setForm(prev => ({ ...prev, kd_dokter: nik, nm_dokter: nama }));
     try {
       const res = await fetch(`/api/pegawai/list?search=${encodeURIComponent(nik)}`);
       const data = await res.json();
@@ -102,12 +102,12 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
       if (match) {
         setForm(prev => ({
           ...prev,
-          nip: match.nik,
-          nama: match.nama,
+          kd_dokter: match.nik,
+          nm_dokter: match.nama,
           jk: match.jk === 'Wanita' ? 'P' : 'L',
           tmp_lahir: match.tmp_lahir || '',
           tgl_lahir: match.tgl_lahir || '',
-          alamat: match.alamat || '',
+          almt_tgl: match.alamat || '',
           email: match.email || prev.email,
         }));
       }
@@ -118,17 +118,17 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nip) { setError('NIP wajib diisi (pilih dari data Pegawai)'); return; }
-    if (!form.nama) { setError('Nama wajib diisi'); return; }
-    if (!form.kd_jbtn) { setError('Jabatan wajib dipilih'); return; }
+    if (!form.kd_dokter) { setError('Kode Dokter wajib diisi (pilih dari data Pegawai)'); return; }
+    if (!form.nm_dokter) { setError('Nama wajib diisi'); return; }
+    if (!form.kd_sps) { setError('Spesialis wajib dipilih'); return; }
     setSaving(true); setError(null);
     try {
-      const url = isEdit ? `/api/petugas/${encodeURIComponent(form.nip)}` : '/api/petugas';
+      const url = isEdit ? `/api/dokter/${encodeURIComponent(form.kd_dokter)}` : '/api/dokter';
       const method = isEdit ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
-      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: `Petugas ${form.nama} berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`, confirmButtonColor: '#4338ca', timer: 1800, showConfirmButton: false });
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: `Dokter ${form.nm_dokter} berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`, confirmButtonColor: '#4338ca', timer: 1800, showConfirmButton: false });
       onSuccess(); onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Terjadi kesalahan');
@@ -155,7 +155,7 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
         {/* Header */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
-            {isEdit ? 'Edit Data Petugas' : 'Tambah Petugas Baru'}
+            {isEdit ? 'Edit Data Dokter' : 'Tambah Dokter Baru'}
           </span>
           <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>×</button>
         </div>
@@ -167,9 +167,9 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
 
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginBottom: 16 }}>
-              <F label="NIP (dari data Pegawai)" req>
+              <F label="Kode Dokter (dari data Pegawai)" req>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input style={{ ...iStyle, background: '#f3f4f6', color: '#6b7280' }} value={form.nip} readOnly placeholder="Klik Cari Pegawai" />
+                  <input style={{ ...iStyle, background: '#f3f4f6', color: '#6b7280' }} value={form.kd_dokter} readOnly placeholder="Klik Cari Pegawai" />
                   {!isEdit && (
                     <button type="button" onClick={() => setShowCariPegawai(true)}
                       style={{ padding: '0 12px', borderRadius: 8, border: '1px solid #4338ca', background: '#eef2ff', color: '#4338ca', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -178,8 +178,8 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
                   )}
                 </div>
               </F>
-              <F label="Nama Petugas" req>
-                <input style={{ ...iStyle, background: '#f3f4f6', color: '#6b7280' }} value={form.nama} readOnly placeholder="Terisi otomatis" />
+              <F label="Nama Dokter" req>
+                <input style={{ ...iStyle, background: '#f3f4f6', color: '#6b7280' }} value={form.nm_dokter} readOnly placeholder="Terisi otomatis" />
               </F>
               <F label="Jenis Kelamin" req>
                 <Sel>
@@ -191,7 +191,7 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
               </F>
               <F label="Golongan Darah">
                 <Sel>
-                  <select style={selectStyle} value={form.gol_darah} onChange={set('gol_darah')}>
+                  <select style={selectStyle} value={form.gol_drh} onChange={set('gol_drh')}>
                     {['A', 'B', 'O', 'AB', '-'].map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </Sel>
@@ -216,11 +216,11 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
                   </select>
                 </Sel>
               </F>
-              <F label="Jabatan" req>
+              <F label="Spesialis" req>
                 <Sel>
-                  <select style={selectStyle} value={form.kd_jbtn} onChange={set('kd_jbtn')}>
-                    <option value="">-- Pilih Jabatan --</option>
-                    {jabatanList.map(j => <option key={j.kd_jbtn} value={j.kd_jbtn}>{j.nm_jbtn}</option>)}
+                  <select style={selectStyle} value={form.kd_sps} onChange={set('kd_sps')}>
+                    <option value="">-- Pilih Spesialis --</option>
+                    {spesialisList.map(s => <option key={s.kd_sps} value={s.kd_sps}>{s.nm_sps}</option>)}
                   </select>
                 </Sel>
               </F>
@@ -230,12 +230,15 @@ export const ModalTambahPetugas: React.FC<Props> = ({ isOpen, onClose, onSuccess
               <F label="Email">
                 <input type="text" style={iStyle} value={form.email} onChange={set('email')} placeholder="email@contoh.com" maxLength={70} />
               </F>
-              <F label="STR/SIPA">
-                <input style={iStyle} value={form.str_sipa} onChange={set('str_sipa')} placeholder="Nomor STR / SIPA (opsional)" maxLength={50} />
+              <F label="Alumni">
+                <input style={iStyle} value={form.alumni} onChange={set('alumni')} placeholder="Asal universitas" maxLength={30} />
+              </F>
+              <F label="No. Ijin Praktek">
+                <input style={iStyle} value={form.no_ijn_praktek} onChange={set('no_ijn_praktek')} placeholder="Nomor SIP" maxLength={30} />
               </F>
               <div style={{ gridColumn: '1 / -1' }}>
                 <F label="Alamat">
-                  <input style={iStyle} value={form.alamat} onChange={set('alamat')} placeholder="Alamat lengkap" maxLength={60} />
+                  <input style={iStyle} value={form.almt_tgl} onChange={set('almt_tgl')} placeholder="Alamat lengkap" maxLength={60} />
                 </F>
               </div>
             </div>

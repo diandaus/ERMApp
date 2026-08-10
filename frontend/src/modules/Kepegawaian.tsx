@@ -1,8 +1,15 @@
 import React from 'react';
 import { PegawaiView } from './Pegawai';
 import { PetugasView } from './Petugas';
+import { DokterView } from './Dokter';
+import { PresensiRekapView } from './PresensiRekap';
+import { JadwalPegawaiView } from './JadwalPegawai';
+import { RekapKehadiranView } from './RekapKehadiran';
+import { PengumumanKepegawaianView } from './PengumumanKepegawaian';
+import { LemburKepegawaianView } from './LemburKepegawaian';
+import { PengajuanCutiKepegawaianView } from './PengajuanCutiKepegawaian';
 
-type KepegawaianTab = 'data-pegawai' | 'petugas' | 'dokter' | 'presensi' | 'rekap-kehadiran' | 'pengajuan-cuti';
+type KepegawaianTab = 'data-pegawai' | 'petugas' | 'dokter' | 'presensi' | 'jadwal-pegawai' | 'rekap-kehadiran' | 'pengajuan-cuti' | 'pengumuman' | 'lembur';
 
 const MENU: { key: KepegawaianTab; label: string; icon: React.ReactNode }[] = [
   {
@@ -52,6 +59,17 @@ const MENU: { key: KepegawaianTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    key: 'jadwal-pegawai',
+    label: 'Jadwal Pegawai',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+        <path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path>
+        <path d="M8 15h.01"></path><path d="M12 15h.01"></path><path d="M16 15h.01"></path>
+      </svg>
+    ),
+  },
+  {
     key: 'rekap-kehadiran',
     label: 'Rekap Kehadiran',
     icon: (
@@ -77,16 +95,28 @@ const MENU: { key: KepegawaianTab; label: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    key: 'pengumuman',
+    label: 'Pengumuman',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 11l18-5v12L3 14v-3z"></path>
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'lembur',
+    label: 'Lembur',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="13" r="8"></circle>
+        <path d="M12 9v4l2.5 2.5"></path>
+        <path d="M9 2h6"></path>
+      </svg>
+    ),
+  },
 ];
-
-// Fitur-fitur ini masih dalam proses pengembangan — sidebar sudah
-// disiapkan sekarang supaya struktur navigasi final tidak perlu
-// dirombak lagi begitu kontennya siap dibangun.
-const Placeholder: React.FC<{ title: string }> = ({ title }) => (
-  <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 16, background: '#ffffff' }}>
-    Fitur {title} sedang dalam proses pengembangan.
-  </div>
-);
 
 type KepegawaianViewProps = {
   onBack?: () => void;
@@ -231,10 +261,13 @@ export const KepegawaianView: React.FC<KepegawaianViewProps> = ({ onBack }) => {
         >
           {activeTab === 'data-pegawai' && <PegawaiView />}
           {activeTab === 'petugas' && <PetugasView />}
-          {activeTab === 'dokter' && <Placeholder title="Dokter" />}
-          {activeTab === 'presensi' && <Placeholder title="Presensi" />}
-          {activeTab === 'rekap-kehadiran' && <Placeholder title="Rekap Kehadiran" />}
-          {activeTab === 'pengajuan-cuti' && <Placeholder title="Pengajuan Cuti" />}
+          {activeTab === 'dokter' && <DokterView />}
+          {activeTab === 'presensi' && <PresensiRekapView />}
+          {activeTab === 'jadwal-pegawai' && <JadwalPegawaiView />}
+          {activeTab === 'rekap-kehadiran' && <RekapKehadiranView />}
+          {activeTab === 'pengajuan-cuti' && <PengajuanCutiKepegawaianView />}
+          {activeTab === 'pengumuman' && <PengumumanKepegawaianView />}
+          {activeTab === 'lembur' && <LemburKepegawaianView />}
         </div>
       </div>
 

@@ -874,6 +874,17 @@ func main() {
 		log.Fatalf("gagal inisialisasi kolom petugas: %v", err)
 	}
 
+	if err := ensurePembelianExtTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel pembelian_ext: %v", err)
+	}
+
+	ensureRekapPresensiExtTable(db)
+	ensureShiftColumnsVarchar(db)
+	ensurePegawaiJadwalTetapTable(db)
+	ensurePengumumanTable(db)
+	ensurePengajuanLemburTable(db)
+	ensurePengajuanCutiExtTable(db)
+
 	r := gin.Default()
 
 	// CORS middleware untuk mengizinkan request dari frontend
@@ -1355,7 +1366,7 @@ func main() {
 			rows, err = db.Query(`
 				SELECT nip, nama
 				FROM petugas
-				WHERE nip LIKE ? OR nama LIKE ?
+				WHERE status = '1' AND (nip LIKE ? OR nama LIKE ?)
 				ORDER BY nama
 				LIMIT 100
 			`, "%"+search+"%", "%"+search+"%")
@@ -1363,6 +1374,7 @@ func main() {
 			rows, err = db.Query(`
 				SELECT nip, nama
 				FROM petugas
+				WHERE status = '1'
 				ORDER BY nama
 				LIMIT 100
 			`)
@@ -1394,7 +1406,73 @@ func main() {
 	r.POST("/api/petugas", tambahPetugas(db))
 	r.PUT("/api/petugas/:nip", editPetugas(db))
 	r.DELETE("/api/petugas/:nip", hapusPetugas(db))
+	r.PUT("/api/petugas/:nip/restore", restorePetugas(db))
+	r.DELETE("/api/petugas/:nip/permanent", hapusPetugasPermanen(db))
 	r.GET("/api/jabatan/opsi", getJabatanOpsi(db))
+
+	// Fitur Dokter (Kepegawaian) — list/tambah/edit/hapus lengkap,
+	// padanan DlgDokter.java, terpisah dari GET /api/dokter ringan
+	// di atas (yang cuma kd_dokter+nama utk typeahead).
+	r.GET("/api/dokter/list", getDokterList(db))
+	r.POST("/api/dokter", tambahDokter(db))
+	r.PUT("/api/dokter/:kd_dokter", editDokter(db))
+	r.DELETE("/api/dokter/:kd_dokter", hapusDokter(db))
+	r.PUT("/api/dokter/:kd_dokter/restore", restoreDokter(db))
+	r.DELETE("/api/dokter/:kd_dokter/permanent", hapusDokterPermanen(db))
+	r.GET("/api/spesialis/opsi", getSpesialisOpsi(db))
+
+	// Fitur Presensi Mandiri (Kepegawaian) — self check-in/out lewat HP
+	// (mobile) + rekap desktop utk HRD, lihat catatan lengkap di
+	// backend/presensi_handler.go.
+	r.GET("/api/presensi/me", getPresensiMe(db))
+	r.POST("/api/presensi/checkin", presensiCheckin(db))
+	r.POST("/api/presensi/checkout", presensiCheckout(db))
+	r.GET("/api/presensi/riwayat", getPresensiRiwayat(db))
+	r.GET("/api/presensi/rekap", getPresensiRekap(db))
+	r.GET("/api/presensi/jadwal", getPresensiJadwal(db))
+	r.GET("/api/presensi/profil", getPresensiProfil(db))
+	r.PUT("/api/presensi/profil/foto", updatePresensiProfilFoto(db))
+
+	// Fitur Jadwal Pegawai (Kepegawaian) — grid shift bulanan, padanan
+	// DlgJadwalPegawai.java. Sumber jadwal yang dipakai getShiftHariIni
+	// di atas (Presensi Mandiri).
+	r.GET("/api/jadwal-pegawai/list", getJadwalPegawaiList(db))
+	r.PUT("/api/jadwal-pegawai", saveJadwalPegawai(db))
+	r.DELETE("/api/jadwal-pegawai/:id", deleteJadwalPegawai(db))
+	r.GET("/api/jam-masuk/opsi", getJamMasukOpsi(db))
+	r.GET("/api/rekap-kehadiran/list", getRekapKehadiranList(db))
+
+	// Fitur Pengumuman (Kepegawaian) — fitur baru murni ERMApp, lihat
+	// backend/pengumuman_handler.go.
+	r.GET("/api/pengumuman", getPengumumanList(db))
+	r.POST("/api/pengumuman", tambahPengumuman(db))
+	r.PUT("/api/pengumuman/:id", editPengumuman(db))
+	r.PUT("/api/pengumuman/:id/toggle", toggleAktifPengumuman(db))
+	r.DELETE("/api/pengumuman/:id", hapusPengumuman(db))
+
+	// Fitur Pengajuan Lembur (Kepegawaian) — fitur baru murni ERMApp,
+	// lihat backend/lembur_handler.go.
+	r.POST("/api/lembur", submitLembur(db))
+	r.GET("/api/lembur/saya", getLemburSaya(db))
+	r.GET("/api/lembur/list", getLemburList(db))
+	r.PUT("/api/lembur/:id/approve", approveLembur(db))
+	r.PUT("/api/lembur/:id/reject", rejectLembur(db))
+	r.DELETE("/api/lembur/:id", hapusLembur(db))
+
+	// Fitur Pengajuan Cuti & Izin (Kepegawaian) — padanan
+	// PengajuanCutiPegawai.java/PengajuanCutiAdmin.java, lihat
+	// backend/cuti_izin_handler.go.
+	r.POST("/api/pengajuan-cuti", submitCutiIzin(db))
+	r.GET("/api/pengajuan-cuti/saya", getCutiIzinSaya(db))
+	r.GET("/api/pengajuan-cuti/list", getCutiIzinList(db))
+	r.PUT("/api/pengajuan-cuti/:no_pengajuan/approve", approveCutiIzin(db))
+	r.PUT("/api/pengajuan-cuti/:no_pengajuan/reject", rejectCutiIzin(db))
+	r.DELETE("/api/pengajuan-cuti/:no_pengajuan", hapusCutiIzin(db))
+	r.POST("/api/jam-masuk", tambahJamMasuk(db))
+	r.PUT("/api/jam-masuk/:shift", editJamMasuk(db))
+	r.DELETE("/api/jam-masuk/:shift", hapusJamMasuk(db))
+	r.PUT("/api/pegawai-jadwal-tetap", setPegawaiJadwalTetapBulk(db))
+	r.DELETE("/api/pegawai-jadwal-tetap/:id", deletePegawaiJadwalTetap(db))
 
 	// GET /api/pegawai - Mengambil semua pegawai
 	r.GET("/api/pegawai", func(c *gin.Context) {
@@ -1407,7 +1485,7 @@ func main() {
 			rows, err = db.Query(`
 				SELECT nik, nama, COALESCE(jbtn,'') as jbtn
 				FROM pegawai
-				WHERE nik LIKE ? OR nama LIKE ? OR jbtn LIKE ?
+				WHERE stts_aktif = 'AKTIF' AND (nik LIKE ? OR nama LIKE ? OR jbtn LIKE ?)
 				ORDER BY nama
 				LIMIT 100
 			`, "%"+search+"%", "%"+search+"%", "%"+search+"%")
@@ -1415,6 +1493,7 @@ func main() {
 			rows, err = db.Query(`
 				SELECT nik, nama, COALESCE(jbtn,'') as jbtn
 				FROM pegawai
+				WHERE stts_aktif = 'AKTIF'
 				ORDER BY nama
 				LIMIT 100
 			`)
@@ -1519,9 +1598,9 @@ func main() {
 		var err error
 
 		if search != "" {
-			rows, err = db.Query(`SELECT kd_dokter, nm_dokter FROM dokter WHERE kd_dokter LIKE ? OR nm_dokter LIKE ? ORDER BY nm_dokter LIMIT 50`, "%"+search+"%", "%"+search+"%")
+			rows, err = db.Query(`SELECT kd_dokter, nm_dokter FROM dokter WHERE status = '1' AND (kd_dokter LIKE ? OR nm_dokter LIKE ?) ORDER BY nm_dokter LIMIT 50`, "%"+search+"%", "%"+search+"%")
 		} else {
-			rows, err = db.Query(`SELECT kd_dokter, nm_dokter FROM dokter ORDER BY nm_dokter LIMIT 50`)
+			rows, err = db.Query(`SELECT kd_dokter, nm_dokter FROM dokter WHERE status = '1' ORDER BY nm_dokter LIMIT 50`)
 		}
 
 		if err != nil {
@@ -3306,6 +3385,7 @@ func main() {
 
 	// Apotek — Penerimaan Obat & BHP
 	r.GET("/api/apotek/penerimaan/barang-opsi", getPenerimaanBarangOpsi(db))
+	r.GET("/api/apotek/penerimaan/next-faktur", getPenerimaanNextFaktur(db))
 	r.POST("/api/apotek/penerimaan", submitPenerimaan(db))
 	r.GET("/api/apotek/penerimaan/riwayat", getPenerimaanRiwayat(db))
 	r.DELETE("/api/apotek/penerimaan/:no_faktur", deletePenerimaan(db))
