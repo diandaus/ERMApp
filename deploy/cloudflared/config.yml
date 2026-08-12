@@ -2,9 +2,12 @@
 # lalu ganti <TUNNEL-UUID> dan <TUNNEL-UUID>.json sesuai output dari:
 #   cloudflared tunnel create ermapp-izin
 #
-# Tunnel ini mengarah ke vhost Apache TERBATAS (ermapp-external.conf, port
-# 8082), BUKAN ke port 80 (vhost utama/full app) — supaya cuma endpoint
-# Cuti/Izin yang bisa dicapai dari internet.
+# Tunnel ini mengarah ke vhost Apache eksternal (ermapp-external.conf, port
+# 8082), BUKAN ke port 80 (vhost internal RS) — seluruh ERMApp bisa diakses
+# lewat tunnel ini KECUALI endpoint absen (checkin/checkout), yang diblokir
+# di level Apache (lihat komentar di ermapp-external.conf). WAJIB pasang
+# Cloudflare Access di depan hostname ini sebelum tunnel diaktifkan — lihat
+# peringatan keamanan di ermapp-external.conf.
 
 tunnel: <TUNNEL-UUID>
 credentials-file: /home/<user>/.cloudflared/<TUNNEL-UUID>.json
