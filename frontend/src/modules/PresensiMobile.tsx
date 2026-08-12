@@ -724,7 +724,13 @@ const HomeTab: React.FC<{
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: GRADIENT, padding: '20px 16px 56px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* marginTop negatif = header ini "narik diri" ke atas nutupin ruang
+          aman (paddingTop) yg direservasi wrapper induk, lalu paddingTop
+          ekstra sebesar ruang yg sama supaya avatar/teks di dalamnya tetap
+          di posisi visual semula — hasilnya gradien hijau kelihatan
+          nembus sampai ke belakang status bar, bukan cuma mulai di
+          bawahnya. */}
+      <div style={{ background: GRADIENT, marginTop: 'calc(-1 * env(safe-area-inset-top))', padding: 'calc(20px + env(safe-area-inset-top)) 16px 56px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
         <Avatar nama={me?.nama || user.full_name} photo={me?.photo} />
         <div>
           <div style={{ fontSize: 11, opacity: 0.85 }}>Assalamualaikum Wr. Wb.</div>
@@ -2416,7 +2422,12 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#f3f4f6', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 88 }}>
+      {/* paddingTop: status bar iOS sekarang transparan (black-translucent,
+          lihat index.html) — semua tab default direservasi ruang aman ini
+          supaya kontennya tidak ketiban ikon jam/baterai. HomeTab jadi
+          pengecualian (lihat marginTop negatif di header gradiennya) krn
+          dia justru mau warnanya "nembus" sampai ke belakang status bar. */}
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 88, paddingTop: 'env(safe-area-inset-top)' }}>
         {notFound ? (
           <div style={{ padding: 40, textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconAlertTriangle size={36} /></div>
