@@ -1,5 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
+import { mediaUrl } from '../utils/apiBase';
 
 // Ikon garis (feather-style) senada dengan ikon lain di aplikasi ini
 // (mis. Kepegawaian.tsx) — dipakai di sini menggantikan emoji supaya
@@ -319,7 +320,7 @@ const Avatar: React.FC<{ nama: string; photo?: string; size?: number }> = ({ nam
     overflow: 'hidden', border: '2px solid rgba(255,255,255,0.6)',
   };
   if (usable) {
-    return <img src={photo} alt={nama} style={{ ...base, objectFit: 'cover' }} />;
+    return <img src={mediaUrl(photo!)} alt={nama} style={{ ...base, objectFit: 'cover' }} />;
   }
   return <div style={base}>{initial}</div>;
 };
@@ -386,13 +387,34 @@ const AbsenTab: React.FC<{
   const sudahSelesaiHariIni = hariIni?.sudah_checkin && hariIni?.sudah_checkout;
 
   const startCamera = React.useCallback(() => {
-    navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+    // Browser HANYA mengizinkan kamera/GPS di secure context (HTTPS
+    // atau localhost) — di luar itu `navigator.mediaDevices` betulan
+    // `undefined` (bukan sekadar izin ditolak), jadi dicek eksplisit
+    // dulu di sini supaya pesannya jelas, bukan crash diam-diam kalau
+    // langsung dipanggil di atas undefined.
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setCamError('Kamera tidak bisa diakses krn koneksi ini bukan HTTPS. Buka aplikasi lewat alamat https:// atau hubungi admin IT.');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' },
+      audio: false,
+    })
       .then((stream) => {
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; }
         setReady(true);
       })
-      .catch(() => setCamError('Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan.'));
+      .catch((err: unknown) => {
+        const name = err instanceof Error ? err.name : '';
+        if (name === 'NotAllowedError') {
+          setCamError('Izin kamera ditolak. Aktifkan izin kamera utk browser ini lewat Pengaturan HP, lalu muat ulang halaman.');
+        } else if (name === 'NotFoundError') {
+          setCamError('Kamera tidak ditemukan di perangkat ini.');
+        } else {
+          setCamError('Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan.');
+        }
+      });
   }, []);
 
   React.useEffect(() => {
@@ -485,15 +507,27 @@ const AbsenTab: React.FC<{
         {aksi === 'checkin' ? 'Absen Check In' : 'Absen Check Out'}
       </div>
 
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', borderRadius: 16, overflow: 'hidden', background: '#111827' }}>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 5', borderRadius: 16, overflow: 'hidden', background: '#111827' }}>
         {camError ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, padding: 20, textAlign: 'center' }}>
             {camError}
           </div>
         ) : captured ? (
-          <img src={captured} alt="Hasil foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={captured} alt="Hasil foto" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+          // position:absolute + inset:0 (bukan width/height:100%) supaya
+          // ukurannya dihitung dari kotak parent langsung — di sebagian
+          // WebKit, height:100% pada elemen di dalam parent yg tingginya
+          // ditentukan lewat CSS aspect-ratio tidak selalu ke-resolve dgn
+          // benar, menyisakan celah kosong yg keliatan sbg bar hitam
+          // (warna background parent) di bawah video.
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+          />
         )}
         <canvas ref={canvasRef} style={{ display: 'none' }} />
       </div>
@@ -529,7 +563,10 @@ type LayananItem = { key: string; label: string; icon: React.ReactNode };
 // Kehadiran/Pengajuan Cuti di Kepegawaian.tsx sebelum dikembangkan).
 // Poli/IGD/Ranap cuma tampil kalau modul terkait diizinkan buat akun
 // yang login (lihat canAccessModule di atas).
-const LayananCard: React.FC<{ user: AppUserLite; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void }> = ({ user, onOpenLembur, onOpenCutiIzin }) => {
+const LayananCard: React.FC<{
+  user: AppUserLite; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
+  onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
+}> = ({ user, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
   const items: LayananItem[] = [
     { key: 'lembur', label: 'Lembur', icon: <IconOvertime size={22} color="#059669" /> },
     { key: 'cuti', label: 'Cuti', icon: <IconUmbrella size={22} color="#059669" /> },
@@ -548,6 +585,13 @@ const LayananCard: React.FC<{ user: AppUserLite; onOpenLembur: () => void; onOpe
   const handleClick = (key: string, label: string) => {
     if (key === 'lembur') { onOpenLembur(); return; }
     if (key === 'cuti' || key === 'izin') { onOpenCutiIzin(key); return; }
+    if (key === 'lapor-it') { onOpenLaporIt(); return; }
+    if (key === 'poli') { onOpenPoli(); return; }
+    if (key === 'igd') { onOpenIgd(); return; }
+    if (key === 'ranap') { onOpenRanap(); return; }
+    if (key === 'farmasi') { onOpenFarmasi(); return; }
+    if (key === 'lab') { onOpenLab(); return; }
+    if (key === 'radiologi') { onOpenRadiologi(); return; }
     Swal.fire({ icon: 'info', title: label, text: 'Fitur ini akan segera hadir.', confirmButtonColor: '#059669', timer: 1800, showConfirmButton: false });
   };
 
@@ -660,7 +704,10 @@ const PengumumanCard: React.FC = () => {
   );
 };
 
-const HomeTab: React.FC<{ user: AppUserLite; me: MeResponse | null; loading: boolean; onAbsen: () => void; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void }> = ({ user, me, loading, onAbsen, onOpenLembur, onOpenCutiIzin }) => {
+const HomeTab: React.FC<{
+  user: AppUserLite; me: MeResponse | null; loading: boolean; onAbsen: () => void; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
+  onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
+}> = ({ user, me, loading, onAbsen, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
   const hariIni = me?.hari_ini;
   const performa = me?.performa;
 
@@ -724,7 +771,11 @@ const HomeTab: React.FC<{ user: AppUserLite; me: MeResponse | null; loading: boo
         </div>
       </div>
 
-      <LayananCard user={user} onOpenLembur={onOpenLembur} onOpenCutiIzin={onOpenCutiIzin} />
+      <LayananCard
+        user={user} onOpenLembur={onOpenLembur} onOpenCutiIzin={onOpenCutiIzin} onOpenLaporIt={onOpenLaporIt}
+        onOpenPoli={onOpenPoli} onOpenIgd={onOpenIgd} onOpenRanap={onOpenRanap}
+        onOpenFarmasi={onOpenFarmasi} onOpenLab={onOpenLab} onOpenRadiologi={onOpenRadiologi}
+      />
       <PengumumanCard />
     </div>
   );
@@ -1156,6 +1207,14 @@ function formatJamMenit(menit: number): string {
   return j > 0 ? `${j}j ${m}m` : `${m}m`;
 }
 
+// iOS/WebKit menampilkan input type="time" kosong dengan jam saat ini sbg
+// "hantu" abu-abu yang mudah disalah-artikan sbg nilai terisi — supaya tidak
+// ambigu, field jam selalu diberi nilai default nyata (bisa diubah user).
+function jamOffsetSekarang(offsetMenit = 0): string {
+  const d = new Date(Date.now() + offsetMenit * 60000);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 const LemburView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack }) => {
   const [list, setList] = React.useState<LemburItem[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -1164,13 +1223,19 @@ const LemburView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
-  const [jamMulai, setJamMulai] = React.useState('');
-  const [jamSelesai, setJamSelesai] = React.useState('');
+  const [jamMulai, setJamMulai] = React.useState(() => jamOffsetSekarang());
+  const [jamSelesai, setJamSelesai] = React.useState(() => jamOffsetSekarang(60));
   const [keterangan, setKeterangan] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  // iOS merender widget date/time bawaan dgn lebar intrinsik yg lebih besar
+  // dari box-nya kalau padding kiri-kanan terlalu lebar — dipersempit +
+  // WebkitAppearance none supaya pas di kolom grid sempit tanpa meluber.
+  const dateTimeInputStyle: React.CSSProperties = {
+    ...inputStyle, padding: '9px 6px', WebkitAppearance: 'none',
   };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
 
@@ -1203,7 +1268,7 @@ const LemburView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack
       if (!res.ok) throw new Error(data.error || 'Gagal mengirim pengajuan');
       await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Pengajuan lembur terkirim, tunggu persetujuan HRD', confirmButtonColor: '#059669', timer: 2000, showConfirmButton: false });
       setShowForm(false);
-      setJamMulai(''); setJamSelesai(''); setKeterangan('');
+      setJamMulai(jamOffsetSekarang()); setJamSelesai(jamOffsetSekarang(60)); setKeterangan('');
       fetchList();
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
@@ -1229,19 +1294,19 @@ const LemburView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack
             <IconOvertime size={16} color="#fff" /> Ajukan Lembur Baru
           </button>
         ) : (
-          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden', boxSizing: 'border-box' }}>
             <div>
               <label style={labelStyle}>Tanggal</label>
-              <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} style={inputStyle} />
+              <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} style={dateTimeInputStyle} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Jam Mulai</label>
-                <input type="time" value={jamMulai} onChange={e => setJamMulai(e.target.value)} style={inputStyle} />
+                <input type="time" value={jamMulai} onChange={e => setJamMulai(e.target.value)} style={dateTimeInputStyle} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Jam Selesai</label>
-                <input type="time" value={jamSelesai} onChange={e => setJamSelesai(e.target.value)} style={inputStyle} />
+                <input type="time" value={jamSelesai} onChange={e => setJamSelesai(e.target.value)} style={dateTimeInputStyle} />
               </div>
             </div>
             <div>
@@ -1358,7 +1423,10 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   const jumlahHari = hitungJumlahHariFE(tanggalAwal, tanggalAkhir);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const dateTimeInputStyle: React.CSSProperties = {
+    ...inputStyle, padding: '9px 6px', WebkitAppearance: 'none',
   };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
 
@@ -1463,15 +1531,15 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
             Ajukan {judul} Baru
           </button>
         ) : (
-          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
+          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden', boxSizing: 'border-box' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Tanggal Awal</label>
-                <input type="date" value={tanggalAwal} onChange={e => setTanggalAwal(e.target.value)} style={inputStyle} />
+                <input type="date" value={tanggalAwal} onChange={e => setTanggalAwal(e.target.value)} style={dateTimeInputStyle} />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Tanggal Akhir</label>
-                <input type="date" value={tanggalAkhir} onChange={e => setTanggalAkhir(e.target.value)} style={inputStyle} />
+                <input type="date" value={tanggalAkhir} onChange={e => setTanggalAkhir(e.target.value)} style={dateTimeInputStyle} />
               </div>
             </div>
             {jumlahHari > 0 && (
@@ -1584,10 +1652,724 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
 };
 
 // ---------------------------------------------------------------------
+// Tab: Lapor IT
+// ---------------------------------------------------------------------
+
+type LaporItItem = {
+  id: number; kategori: string; lokasi: string; judul: string; deskripsi: string; foto: string;
+  status: 'menunggu' | 'diproses' | 'selesai' | 'ditolak'; catatan_penyelesaian: string; ditangani_oleh: string; created_at: string;
+};
+
+const KATEGORI_LAPOR_IT: { value: string; label: string }[] = [
+  { value: 'hardware', label: 'Hardware' },
+  { value: 'software', label: 'Software' },
+  { value: 'jaringan', label: 'Jaringan' },
+  { value: 'printer', label: 'Printer' },
+  { value: 'lainnya', label: 'Lainnya' },
+];
+
+const laporItStatusStyle = (s: string) => {
+  switch (s) {
+    case 'diproses': return { bg: '#dbeafe', color: '#1e40af', label: 'Diproses' };
+    case 'selesai':   return { bg: '#dcfce7', color: '#166534', label: 'Selesai' };
+    case 'ditolak':   return { bg: '#fee2e2', color: '#991b1b', label: 'Ditolak' };
+    default:          return { bg: '#fef9c3', color: '#854d0e', label: 'Menunggu' };
+  }
+};
+
+const LaporItView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack }) => {
+  const [list, setList] = React.useState<LaporItItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [kategori, setKategori] = React.useState('hardware');
+  const [lokasi, setLokasi] = React.useState('');
+  const [judul, setJudul] = React.useState('');
+  const [deskripsi, setDeskripsi] = React.useState('');
+  const [foto, setFoto] = React.useState('');
+  const [uploading, setUploading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
+
+  const fetchList = React.useCallback(() => {
+    if (!nik) return;
+    setLoading(true);
+    fetch(`/api/lapor-it/saya?nik=${encodeURIComponent(nik)}`)
+      .then(r => r.json())
+      .then(d => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  }, [nik]);
+
+  React.useEffect(() => { fetchList(); }, [fetchList]);
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Gagal mengunggah foto');
+      setFoto(uploadData.url || '');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const resetForm = () => {
+    setKategori('hardware'); setLokasi(''); setJudul(''); setDeskripsi(''); setFoto('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lokasi.trim() || !judul.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Lokasi & judul wajib diisi', confirmButtonColor: '#059669' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/lapor-it', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nik, kategori, lokasi, judul, deskripsi, foto }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim laporan');
+      await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Laporan terkirim ke tim IT', confirmButtonColor: '#059669', timer: 2000, showConfirmButton: false });
+      setShowForm(false);
+      resetForm();
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBatalkan = async (item: LaporItItem) => {
+    const result = await Swal.fire({
+      icon: 'warning', title: 'Batalkan laporan ini?', showCancelButton: true,
+      confirmButtonText: 'Ya, batalkan', cancelButtonText: 'Tidak', confirmButtonColor: '#dc2626',
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/lapor-it/${item.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal membatalkan laporan');
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    }
+  };
+
+  return (
+    <div>
+      <SubPageHeader title="Lapor IT" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        {!showForm ? (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            style={{
+              width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: GRADIENT,
+              color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            <IconMonitor size={16} color="#fff" /> Lapor Kendala Baru
+          </button>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden', boxSizing: 'border-box' }}>
+            <div>
+              <label style={labelStyle}>Kategori</label>
+              <select value={kategori} onChange={e => setKategori(e.target.value)} style={inputStyle}>
+                {KATEGORI_LAPOR_IT.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Lokasi/Ruangan</label>
+              <input value={lokasi} onChange={e => setLokasi(e.target.value)} placeholder="mis. Ruang Rekam Medis" maxLength={100} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Judul Singkat</label>
+              <input value={judul} onChange={e => setJudul(e.target.value)} placeholder="mis. Komputer tidak menyala" maxLength={150} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Deskripsi</label>
+              <textarea value={deskripsi} onChange={e => setDeskripsi(e.target.value)} placeholder="Jelaskan kendalanya lebih detail" rows={3} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+            <div>
+              <label style={labelStyle}>Foto (opsional)</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFotoChange}
+                style={{ display: 'none' }}
+                id="lapor-it-foto-input"
+              />
+              {foto ? (
+                <div style={{ position: 'relative', width: 100 }}>
+                  <img src={mediaUrl(foto)} alt="Foto kendala" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 10, border: '1px solid #d1d5db' }} />
+                  <button
+                    type="button"
+                    onClick={() => setFoto('')}
+                    style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#dc2626', color: '#fff', fontSize: 12, cursor: 'pointer', lineHeight: 1, padding: 0 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <label
+                  htmlFor="lapor-it-foto-input"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, width: 100, height: 100, borderRadius: 10, border: '1px dashed #d1d5db', color: '#9ca3af', fontSize: 10, cursor: 'pointer', flexDirection: 'column' }}
+                >
+                  <IconCamera size={20} color="#9ca3af" />
+                  {uploading ? 'Mengunggah...' : 'Tambah Foto'}
+                </label>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); resetForm(); }}
+                style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={saving || uploading}
+                style={{ flex: 2, padding: '10px', borderRadius: 10, border: 'none', background: GRADIENT, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving || uploading ? 'not-allowed' : 'pointer' }}
+              >
+                {saving ? 'Mengirim...' : 'Kirim Laporan'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div style={{ marginTop: 16, fontSize: 12, fontWeight: 600, color: '#111827' }}>Riwayat Laporan</div>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : list.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Belum ada laporan</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            {list.map((item) => {
+              const st = laporItStatusStyle(item.status);
+              const kategoriLabel = KATEGORI_LAPOR_IT.find((k) => k.value === item.kategori)?.label || item.kategori;
+              return (
+                <div key={item.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{item.judul}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{kategoriLabel} · {item.lokasi}</div>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </div>
+                  {item.deskripsi && <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{item.deskripsi}</div>}
+                  {item.foto && <img src={mediaUrl(item.foto)} alt="Foto kendala" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, marginTop: 6 }} />}
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{item.created_at}</div>
+                  {item.catatan_penyelesaian && (
+                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6, borderTop: '1px solid #f3f4f6', paddingTop: 6 }}>
+                      Catatan{item.ditangani_oleh ? ` (${item.ditangani_oleh})` : ''}: {item.catatan_penyelesaian}
+                    </div>
+                  )}
+                  {item.status === 'menunggu' && (
+                    <button
+                      type="button"
+                      onClick={() => handleBatalkan(item)}
+                      style={{ marginTop: 8, padding: '5px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Batalkan
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Poli (Daftar Pasien Kunjungan Poli hari ini)
+// ---------------------------------------------------------------------
+
+type PoliPasienItem = {
+  no_reg: string; no_rawat: string; tgl_registrasi: string; jam_reg: string;
+  kd_dokter: string; nm_dokter: string; no_rkm_medis: string; nm_pasien: string;
+  nm_poli: string; stts: string; status_bayar: string; umur: string; kd_poli: string;
+};
+
+const poliStatusStyle = (s: string) => {
+  switch (s) {
+    case 'Sudah':   return { bg: '#dcfce7', color: '#166534', label: 'Sudah' };
+    case 'Belum':   return { bg: '#fef9c3', color: '#854d0e', label: 'Belum' };
+    case 'Batal':   return { bg: '#fee2e2', color: '#991b1b', label: 'Batal' };
+    case 'Dirujuk': return { bg: '#dbeafe', color: '#1e40af', label: 'Dirujuk' };
+    case 'Dirawat': return { bg: '#f3e8ff', color: '#6b21a8', label: 'Dirawat' };
+    default:        return { bg: '#f3f4f6', color: '#374151', label: s || '-' };
+  }
+};
+
+// Padanan RawatJalanView (App.tsx) versi ringkas utk HP — cuma tab "Poli
+// Hari Ini", tanpa rentang tanggal/dropdown filter kompleks. Kunci akun
+// dokter ke pasiennya sendiri persis pola yg sama (App.tsx:366-373): kalau
+// akun dokter belum ditautkan ke kd_dokter, daftar SENGAJA dikosongkan
+// (bukan tampil semua) supaya kesalahan tautan ketahuan, bukan diam-diam
+// bocor ke pasien dokter lain. IGDK (kode unit IGD) sudah difilter di
+// backend (main.go, query poli-today) — bukan kunjungan poli terjadwal.
+const PoliMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = ({ user, onBack }) => {
+  const isDokterLocked = user.role === 'dokter';
+  const lockedKdDokter = user.kd_dokter || '';
+  const [list, setList] = React.useState<PoliPasienItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchText, setSearchText] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch('/api/rawat-jalan/poli-today')
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Gagal mengambil data pasien poli');
+        setList(Array.isArray(data) ? data : []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    let rows = list;
+    if (isDokterLocked) {
+      rows = lockedKdDokter ? rows.filter((p) => p.kd_dokter === lockedKdDokter) : [];
+    }
+    const q = searchText.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((p) => p.nm_pasien.toLowerCase().includes(q) || p.no_rkm_medis.toLowerCase().includes(q));
+    }
+    return rows;
+  }, [list, isDokterLocked, lockedKdDokter, searchText]);
+
+  return (
+    <div>
+      <SubPageHeader title="Daftar Pasien Poli" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Cari nama / no. RM..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+        />
+
+        {isDokterLocked && !lockedKdDokter && (
+          <div style={{ padding: 12, borderRadius: 10, background: '#fef3c7', color: '#92400e', fontSize: 11, marginBottom: 12 }}>
+            Akun ini belum ditautkan ke data dokter (kd_dokter). Hubungi admin agar daftar pasien poli bisa ditampilkan.
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 12 }}>{error}</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Belum ada pasien poli hari ini</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((p) => {
+              const st = poliStatusStyle(p.stts);
+              return (
+                <div key={p.no_reg} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{p.nm_pasien}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.no_rkm_medis} · {p.umur}</div>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{p.nm_poli} · {p.nm_dokter}</div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Jam daftar {p.jam_reg} · {p.status_bayar}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: IGD (Daftar Pasien IGD hari ini)
+// ---------------------------------------------------------------------
+
+// Kebalikan dari PoliMobileView: backend /api/igd/list HANYA mengembalikan
+// kunjungan dgn kd_poli='IGDK' (poli-today justru mengecualikannya). Tidak
+// dikunci ke kd_dokter seperti Poli — IGD sifatnya siapa saja petugas jaga
+// yg perlu lihat seluruh antrean, bukan pasien milik satu dokter tertentu.
+const IgdMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [list, setList] = React.useState<PoliPasienItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchText, setSearchText] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch('/api/igd/list')
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Gagal mengambil data pasien IGD');
+        setList(Array.isArray(data) ? data : []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) => p.nm_pasien.toLowerCase().includes(q) || p.no_rkm_medis.toLowerCase().includes(q));
+  }, [list, searchText]);
+
+  return (
+    <div>
+      <SubPageHeader title="Daftar Pasien IGD" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Cari nama / no. RM..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+        />
+
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 12 }}>{error}</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Belum ada pasien IGD hari ini</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((p) => {
+              const st = poliStatusStyle(p.stts);
+              return (
+                <div key={p.no_reg} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{p.nm_pasien}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.no_rkm_medis} · {p.umur}</div>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{p.nm_dokter}</div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Jam daftar {p.jam_reg} · {p.status_bayar}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Ranap (Daftar Pasien Rawat Inap yang belum pulang)
+// ---------------------------------------------------------------------
+
+type RanapPasienItem = {
+  no_rawat: string; no_rkm_medis: string; nm_pasien: string; umur: string;
+  kamar: string; tgl_masuk: string; jam_masuk: string; lama: string;
+  nm_dokter: string; kd_dokter: string; status_bayar: string; stts_pulang: string;
+};
+
+// Reuse endpoint yang sama dgn RawatInapView desktop (RawatInap.tsx) —
+// bukan bikin endpoint baru spt Poli/IGD, krn modul Ranap sudah lengkap di
+// desktop. Dokter-lock dilakukan lewat query param `kd_dokter` (backend
+// filter via tabel dpjp_ranap), persis pola RawatInapView: kalau akun
+// dokter belum ditautkan (kd_dokter kosong), filter itu SENGAJA tidak
+// dikirim sehingga daftar tampil semua pasien — ini beda dr Poli yg
+// sengaja mengosongkan daftar kalau belum ditautkan, tapi konsisten dgn
+// perilaku RawatInapView desktop yg sudah ada (tidak fail-closed).
+const RanapMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = ({ user, onBack }) => {
+  const [list, setList] = React.useState<RanapPasienItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchText, setSearchText] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setError(null);
+    let url = '/api/rawat-inap/list?status=belum-pulang';
+    if (user.role === 'dokter' && user.kd_dokter) {
+      url += `&kd_dokter=${encodeURIComponent(user.kd_dokter)}`;
+    }
+    fetch(url)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Gagal mengambil data pasien rawat inap');
+        setList(Array.isArray(data) ? data : []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
+      .finally(() => setLoading(false));
+  }, [user.role, user.kd_dokter]);
+
+  const filtered = React.useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) => p.nm_pasien.toLowerCase().includes(q) || p.no_rkm_medis.toLowerCase().includes(q));
+  }, [list, searchText]);
+
+  return (
+    <div>
+      <SubPageHeader title="Daftar Pasien Ranap" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Cari nama / no. RM..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+        />
+
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 12 }}>{error}</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Tidak ada pasien rawat inap</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((p) => (
+              <div key={p.no_rawat} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{p.nm_pasien}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.no_rkm_medis} · {p.umur}</div>
+                  </div>
+                  <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: '#f3e8ff', color: '#6b21a8', whiteSpace: 'nowrap' }}>
+                    {p.lama || '-'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{p.kamar} · {p.nm_dokter}</div>
+                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Masuk {p.tgl_masuk} {p.jam_masuk} · {p.status_bayar}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Tab: Farmasi, Lab, Radiologi (antrean permintaan lintas pasien)
+// ---------------------------------------------------------------------
+
+// Badge "Belum ..." (kuning, masih antre) vs "Sudah ..." (hijau, selesai) —
+// dipakai bersama oleh Farmasi/Lab/Radiologi, ketiganya pakai kosakata
+// status yg sama polanya (dihitung dari kolom tgl_* di backend).
+const queueStatusStyle = (s: string) => {
+  if (s.startsWith('Sudah')) return { bg: '#dcfce7', color: '#166534' };
+  if (s.startsWith('Belum')) return { bg: '#fef9c3', color: '#854d0e' };
+  return { bg: '#f3f4f6', color: '#374151' };
+};
+
+type FarmasiResepItem = {
+  no_resep: string; tgl_peresepan: string; jam_peresepan: string; no_rawat: string;
+  no_rkm_medis: string; nm_pasien: string; nm_dokter: string; status: string;
+  nm_poli: string; jenis_bayar: string;
+};
+
+// Reuse endpoint yg sama dgn dashboard "Permintaan Resep" desktop
+// (Apotek.tsx > PermintaanResepView) — /api/permintaan-resep/ralan. Cuma
+// antrean rawat jalan (ralan) yg diport dulu, sama pola inkremental fase-1
+// yg dipakai modul itu sendiri (ranap menyusul kalau dibutuhkan).
+const FarmasiMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [list, setList] = React.useState<FarmasiResepItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchText, setSearchText] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch('/api/permintaan-resep/ralan')
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Gagal mengambil data permintaan resep');
+        setList(Array.isArray(data) ? data : []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) => p.nm_pasien.toLowerCase().includes(q) || p.no_rkm_medis.toLowerCase().includes(q));
+  }, [list, searchText]);
+
+  return (
+    <div>
+      <SubPageHeader title="Permintaan Resep" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Cari nama / no. RM..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+        />
+
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 12 }}>{error}</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Belum ada permintaan resep hari ini</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((p) => {
+              const st = queueStatusStyle(p.status);
+              return (
+                <div key={p.no_resep} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{p.nm_pasien}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.no_rkm_medis}</div>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {p.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{p.nm_poli} · {p.nm_dokter}</div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Resep {p.jam_peresepan} · {p.jenis_bayar}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+type PermintaanQueueItem = {
+  noorder: string; tgl_permintaan: string; jam_permintaan: string; no_rawat: string;
+  no_rkm_medis: string; nm_pasien: string; nm_dokter: string; status: string; diagnosa_klinis: string;
+};
+
+// Komponen generik dipakai oleh Lab & Radiologi — bentuk datanya identik
+// (permintaan_lab & permintaan_radiologi punya kolom yg sama persis), cuma
+// beda endpoint & judul halaman.
+const PermintaanQueueMobileView: React.FC<{ title: string; endpoint: string; emptyText: string; onBack: () => void }> = ({ title, endpoint, emptyText, onBack }) => {
+  const [list, setList] = React.useState<PermintaanQueueItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchText, setSearchText] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(endpoint)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Gagal mengambil data');
+        setList(Array.isArray(data) ? data : []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
+      .finally(() => setLoading(false));
+  }, [endpoint]);
+
+  const filtered = React.useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((p) => p.nm_pasien.toLowerCase().includes(q) || p.no_rkm_medis.toLowerCase().includes(q));
+  }, [list, searchText]);
+
+  return (
+    <div>
+      <SubPageHeader title={title} onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Cari nama / no. RM..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+        />
+
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 12 }}>{error}</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>{emptyText}</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((p) => {
+              const st = queueStatusStyle(p.status);
+              return (
+                <div key={p.noorder} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{p.nm_pasien}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.no_rkm_medis}</div>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {p.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{p.nm_dokter}</div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Diminta {p.jam_permintaan}{p.diagnosa_klinis && p.diagnosa_klinis !== '-' ? ` · ${p.diagnosa_klinis}` : ''}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LabMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => (
+  <PermintaanQueueMobileView title="Permintaan Lab" endpoint="/api/lab/list" emptyText="Belum ada permintaan lab hari ini" onBack={onBack} />
+);
+
+const RadiologiMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => (
+  <PermintaanQueueMobileView title="Permintaan Radiologi" endpoint="/api/radiologi/list" emptyText="Belum ada permintaan radiologi hari ini" onBack={onBack} />
+);
+
+// ---------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------
 
-type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin';
+type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin' | 'lapor-it' | 'poli' | 'igd' | 'ranap' | 'farmasi' | 'lab' | 'radiologi';
 
 export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => void }> = ({ user, onLogout }) => {
   const nik = resolveNik(user);
@@ -1634,7 +2416,12 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
             </button>
           </div>
         ) : tab === 'home' ? (
-          <HomeTab user={user} me={me} loading={loading} onAbsen={() => setTab('absen')} onOpenLembur={() => setTab('lembur')} onOpenCutiIzin={(mode) => setTab(mode)} />
+          <HomeTab
+            user={user} me={me} loading={loading} onAbsen={() => setTab('absen')} onOpenLembur={() => setTab('lembur')}
+            onOpenCutiIzin={(mode) => setTab(mode)} onOpenLaporIt={() => setTab('lapor-it')}
+            onOpenPoli={() => setTab('poli')} onOpenIgd={() => setTab('igd')} onOpenRanap={() => setTab('ranap')}
+            onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
+          />
         ) : tab === 'absen' ? (
           <AbsenTab nik={nik} hariIni={me?.hari_ini || null} onSelesai={() => { fetchMe(); setTab('home'); }} />
         ) : tab === 'jadwal' ? (
@@ -1647,6 +2434,20 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
           <CutiIzinView nik={nik} mode="cuti" onBack={() => setTab('home')} />
         ) : tab === 'izin' ? (
           <CutiIzinView nik={nik} mode="izin" onBack={() => setTab('home')} />
+        ) : tab === 'lapor-it' ? (
+          <LaporItView nik={nik} onBack={() => setTab('home')} />
+        ) : tab === 'poli' ? (
+          <PoliMobileView user={user} onBack={() => setTab('home')} />
+        ) : tab === 'igd' ? (
+          <IgdMobileView onBack={() => setTab('home')} />
+        ) : tab === 'ranap' ? (
+          <RanapMobileView user={user} onBack={() => setTab('home')} />
+        ) : tab === 'farmasi' ? (
+          <FarmasiMobileView onBack={() => setTab('home')} />
+        ) : tab === 'lab' ? (
+          <LabMobileView onBack={() => setTab('home')} />
+        ) : tab === 'radiologi' ? (
+          <RadiologiMobileView onBack={() => setTab('home')} />
         ) : (
           <KehadiranTab nik={nik} />
         )}

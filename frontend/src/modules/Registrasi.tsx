@@ -1,6 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { ModalRegistrasi } from '../components/ModalRegistrasi';
+import { ModalPengajuanSEP, type SepItem } from '../components/ModalPengajuanSEP';
+import { HistoriPelayananBpjsModal } from '../components/HistoriPelayananBpjsModal';
 import { localDateStr } from '../utils/date';
 
 type Patient = {
@@ -28,6 +30,7 @@ type Patient = {
   kd_pj: string;
   status_bayar: string;
   no_sep: string | null;
+  no_kartu: string | null;
 };
 
 type Poli = {
@@ -66,6 +69,119 @@ export const RegistrasiView: React.FC = () => {
   const [hoveredNoRegIndex, setHoveredNoRegIndex] = React.useState<number | null>(null);
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Dropdown "[BPJS] > Cetak SEP / Riwayat Kunjungan" — pola persis dgn
+  // dropdown kolom Dokter di RawatJalanView (App.tsx): posisi dihitung dari
+  // getBoundingClientRect saat tombol diklik, tutup lewat listener
+  // mousedown di luar elemen dropdown-nya.
+  const [showBpjsDropdown, setShowBpjsDropdown] = React.useState<string | null>(null);
+  const [bpjsDropdownPos, setBpjsDropdownPos] = React.useState<{ top: number; left: number; alignBottom?: boolean } | null>(null);
+  const bpjsDropdownRef = React.useRef<HTMLDivElement>(null);
+  // historiPelayananPatient — "[BPJS] > Riwayat Kunjungan": histori
+  // pelayanan BPJS 90 hari terakhir (live VClaim by No. Kartu), BUKAN
+  // riwayat kunjungan pasien lokal.
+  const [historiPelayananPatient, setHistoriPelayananPatient] = React.useState<Patient | null>(null);
+  // sepModal — buka ModalPengajuanSEP (form Input/Update SEP yg sama dgn modul
+  // Bridging > SEP): mode 'edit' kalau kunjungan ini SUDAH punya SEP
+  // (patient.no_sep terisi, data lengkap di-fetch dulu by no_rawat), mode
+  // 'new' kalau belum, prefill dari data baris + mapping DPJP BPJS.
+  const [sepModal, setSepModal] = React.useState<{ mode: 'new'; initialData: Partial<SepItem> } | { mode: 'edit'; item: SepItem } | null>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (bpjsDropdownRef.current && !bpjsDropdownRef.current.contains(event.target as Node)) {
+        setShowBpjsDropdown(null);
+      }
+    };
+    if (showBpjsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showBpjsDropdown]);
+
+  // handleOpenSep — dipicu "[BPJS] > Cetak SEP". Kalau kunjungan ini sudah
+  // punya SEP (patient.no_sep terisi, dari join bridging_sep di
+  // /api/registrasi/list), buka ModalPengajuanSEP mode Update dgn data LENGKAP
+  // (di-fetch dulu by no_rawat, list utama cuma bawa no_sep-nya saja).
+  // Kalau belum, buka mode Input baru, prefill No.Rawat/RM/nama/poli/dokter
+  // dari baris + DPJP Layanan hasil lookup Mapping Dokter DPJP VCLAIM
+  // (Bridging > Pengaturan) — kalau dokternya belum di-mapping, dibiarkan
+  // kosong, staf isi manual (bukan error, mapping memang opsional per dokter).
+  const handleOpenSep = async (patient: Patient) => {
+    setShowBpjsDropdown(null);
+    Swal.fire({ title: 'Memuat data SEP...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      if (patient.no_sep) {
+        const res = await fetch(`/api/bridging/sep/by-no-rawat/${encodeURIComponent(patient.no_rawat)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal mengambil data SEP');
+        Swal.close();
+        setSepModal({ mode: 'edit', item: data });
+        return;
+      }
+
+      // Padanan persis setNoRm2() di BPJSDataSEP.java (dipanggil DlgReg.java
+      // MnSEPActionPerformed): Poli Tujuan & Dokter DPJP TIDAK diisi
+      // langsung dari kode/nama poli-dokter lokal, tapi selalu dicari lewat
+      // mapping BPJS (maping_poli_bpjs / maping_dokter_dpjpvclaim) — BPJS
+      // butuh kode versi BPJS-nya, bukan kode internal RS. Kalau dokter/poli
+      // itu belum di-mapping (Pengaturan > Bridging BPJS), dibiarkan kosong
+      // supaya staf sadar perlu mapping dulu, bukan diam-diam terisi kode
+      // lokal yang salah format buat BPJS.
+      let kdpolitujuan = '';
+      let nmpolitujuan = '';
+      try {
+        const mapPoliRes = await fetch(`/api/bpjs/mapping-poli?q=${encodeURIComponent(patient.kd_poli)}`);
+        if (mapPoliRes.ok) {
+          const mapPoliData = await mapPoliRes.json();
+          const match = (mapPoliData?.list || []).find((m: any) => m.kd_poli === patient.kd_poli);
+          if (match) {
+            kdpolitujuan = match.kd_poli_bpjs || '';
+            nmpolitujuan = match.nm_poli_bpjs || '';
+          }
+        }
+      } catch {
+        // Mapping opsional — kalau gagal diambil, staf tetap bisa isi manual.
+      }
+
+      let kddpjp = '';
+      let nmdpdjp = '';
+      try {
+        const mapDokterRes = await fetch(`/api/bpjs/mapping-dokter?q=${encodeURIComponent(patient.kd_dokter)}`);
+        if (mapDokterRes.ok) {
+          const mapDokterData = await mapDokterRes.json();
+          const match = (mapDokterData?.list || []).find((m: any) => m.kd_dokter === patient.kd_dokter);
+          if (match) {
+            kddpjp = match.kd_dokter_bpjs || '';
+            nmdpdjp = match.nm_dokter_bpjs || '';
+          }
+        }
+      } catch {
+        // Mapping opsional — kalau gagal diambil, staf tetap bisa isi manual.
+      }
+
+      Swal.close();
+      setSepModal({
+        mode: 'new',
+        initialData: {
+          no_rawat: patient.no_rawat,
+          nomr: patient.no_rkm_medis,
+          nama_pasien: patient.nm_pasien,
+          jkel: patient.jk,
+          // Pendaftaran = selalu kunjungan rawat jalan (Java kirim literal
+          // "2. Ralan" ke setNoRm2 dari MnSEPActionPerformed).
+          jnspelayanan: '2',
+          kdpolitujuan,
+          nmpolitujuan,
+          kddpjp,
+          nmdpdjp,
+        },
+      });
+    } catch (err) {
+      Swal.close();
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
 
   // Form input states
   const [noRkmMedis, setNoRkmMedis] = React.useState<string>('');
@@ -714,7 +830,80 @@ export const RegistrasiView: React.FC = () => {
                         {patient.nm_dokter}
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
-                        {patient.png_jawab || '-'}
+                        {patient.png_jawab === 'BPJS' ? (
+                          <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => {
+                                if (showBpjsDropdown === patient.no_rawat) {
+                                  setShowBpjsDropdown(null);
+                                  setBpjsDropdownPos(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const spaceBelow = window.innerHeight - rect.bottom;
+                                  if (spaceBelow < 150) {
+                                    setBpjsDropdownPos({ top: rect.top, left: rect.left, alignBottom: true });
+                                  } else {
+                                    setBpjsDropdownPos({ top: rect.bottom, left: rect.left, alignBottom: false });
+                                  }
+                                  setShowBpjsDropdown(patient.no_rawat);
+                                }
+                              }}
+                              style={{
+                                padding: '4px 8px', borderRadius: 2, border: '1px solid #2563eb',
+                                background: '#ffffff', color: '#2563eb', cursor: 'pointer',
+                                fontSize: 11, fontWeight: 600, transition: 'all 0.2s ease',
+                                display: 'flex', alignItems: 'center', gap: 4,
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.color = '#ffffff'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#2563eb'; }}
+                            >
+                              BPJS
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                              </svg>
+                            </button>
+                            {showBpjsDropdown === patient.no_rawat && bpjsDropdownPos && (
+                              <div
+                                ref={bpjsDropdownRef}
+                                style={{
+                                  position: 'fixed', top: bpjsDropdownPos.top, left: bpjsDropdownPos.left,
+                                  transform: bpjsDropdownPos.alignBottom ? 'translateY(-100%)' : 'none',
+                                  background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 6,
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 9999, minWidth: 180,
+                                }}
+                              >
+                                <button
+                                  onClick={() => handleOpenSep(patient)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', background: 'transparent', color: '#374151', fontSize: 12, textAlign: 'left', cursor: 'pointer' }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#2563eb'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151'; }}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M6 9V2h12v7"></path>
+                                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                    <rect x="6" y="14" width="12" height="8"></rect>
+                                  </svg>
+                                  <span>Cetak SEP</span>
+                                </button>
+                                <button
+                                  onClick={() => { setShowBpjsDropdown(null); setHistoriPelayananPatient(patient); }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', background: 'transparent', color: '#374151', fontSize: 12, textAlign: 'left', cursor: 'pointer' }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#2563eb'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151'; }}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                    <path d="M3 3v5h5"></path>
+                                    <path d="M12 7v5l4 2"></path>
+                                  </svg>
+                                  <span>Riwayat Kunjungan</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          patient.png_jawab || '-'
+                        )}
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
                         <span style={{ fontSize: 12, color: '#374151' }}>
@@ -729,6 +918,22 @@ export const RegistrasiView: React.FC = () => {
           </table>
         </div>
       </section>
+
+      {historiPelayananPatient && (
+        <HistoriPelayananBpjsModal
+          noKartu={historiPelayananPatient.no_kartu || ''}
+          namaPasien={historiPelayananPatient.nm_pasien}
+          onClose={() => setHistoriPelayananPatient(null)}
+        />
+      )}
+      {sepModal && (
+        <ModalPengajuanSEP
+          editingItem={sepModal.mode === 'edit' ? sepModal.item : null}
+          initialData={sepModal.mode === 'new' ? sepModal.initialData : undefined}
+          onClose={() => setSepModal(null)}
+          onSaved={fetchPatients}
+        />
+      )}
     </>
   );
 };

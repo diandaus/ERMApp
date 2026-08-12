@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Izinkan traffic HTTP biasa (cleartext) HANYA ke alamat server backend RS
+  (bukan app-wide) — backend saat ini masih HTTP, bukan HTTPS (lihat
+  VITE_API_BASE_URL di package.json). Kalau alamat server berubah, update
+  domain di sini juga.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.0.100</domain>
+    </domain-config>
+</network-security-config>

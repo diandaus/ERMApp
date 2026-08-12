@@ -122,6 +122,102 @@ func getSpriRanapList(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// SpriPasienRow — satu baris SPRI JOIN identitas pasien (lewat reg_periksa +
+// pasien LIVE, bukan bridging_sep — SPRI diterbitkan SEBELUM SEP RITL ada,
+// jadi belum tentu punya baris bridging_sep utk di-JOIN), kolomnya persis
+// tabMode di dialog "Pilih dari SPRI Rawat Inap" (Object[]{"No.Rawat",
+// "No.Kartu","No.RM","Nama Pasien","Tgl.Lahir","J.K.","Diagnosa","Tgl.Surat",
+// "No.Surat","Tgl.Kontrol","Kode Dokter","Nama Dokter/Sepesialis","Kode
+// Poli","Nama Poli/Unit"} + no_sep, dipakai R2 di Java tapi tidak dikasih
+// header — tetap disertakan di sini, tidak ada ruginya).
+type SpriPasienRow struct {
+	NoRawat      string `json:"no_rawat"`
+	NoKartu      string `json:"no_kartu"`
+	Nomr         string `json:"nomr"`
+	NamaPasien   string `json:"nama_pasien"`
+	TanggalLahir string `json:"tanggal_lahir"`
+	Jkel         string `json:"jkel"`
+	Diagnosa     string `json:"diagnosa"`
+	TglSurat     string `json:"tgl_surat"`
+	NoSurat      string `json:"no_surat"`
+	TglRencana   string `json:"tgl_rencana"`
+	KdDokterBpjs string `json:"kd_dokter_bpjs"`
+	NmDokterBpjs string `json:"nm_dokter_bpjs"`
+	KdPoliBpjs   string `json:"kd_poli_bpjs"`
+	NmPoliBpjs   string `json:"nm_poli_bpjs"`
+	NoSep        string `json:"no_sep"`
+}
+
+// getSpriPasienList — dipakai modal "Pilih dari SPRI Rawat Inap" di
+// ModalPengajuanSEP.tsx. mode="surat" (padanan radio R1 di Java) filter &
+// urut berdasar tgl_surat; mode="kontrol" (padanan R2) filter & urut
+// berdasar tgl_rencana — dateCol dipilih dari whitelist tetap di Go, bukan
+// diselipkan langsung dari query param, jadi aman dari SQL injection.
+// search (padanan TCari) mencocokkan no_rawat/no_kartu/no_rkm_medis/
+// nm_pasien/no_surat/nm_poli_bpjs/nm_dokter_bpjs, sama persis 7 kolom yg
+// dicek Java.
+func getSpriPasienList(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		mode := c.DefaultQuery("mode", "surat")
+		dateCol := "bridging_surat_pri_bpjs.tgl_surat"
+		if mode == "kontrol" {
+			dateCol = "bridging_surat_pri_bpjs.tgl_rencana"
+		}
+
+		tglDari := c.Query("tgl_dari")
+		if tglDari == "" {
+			tglDari = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+		}
+		tglSampai := c.Query("tgl_sampai")
+		if tglSampai == "" {
+			tglSampai = time.Now().Format("2006-01-02")
+		}
+		search := strings.TrimSpace(c.Query("search"))
+
+		query := `
+			SELECT bridging_surat_pri_bpjs.no_rawat, COALESCE(bridging_surat_pri_bpjs.no_kartu,''), COALESCE(reg_periksa.no_rkm_medis,''),
+				COALESCE(pasien.nm_pasien,''), COALESCE(pasien.tgl_lahir,'0000-00-00'), COALESCE(pasien.jk,''),
+				COALESCE(bridging_surat_pri_bpjs.diagnosa,''), COALESCE(bridging_surat_pri_bpjs.tgl_surat,'0000-00-00'),
+				bridging_surat_pri_bpjs.no_surat, COALESCE(bridging_surat_pri_bpjs.tgl_rencana,'0000-00-00'),
+				COALESCE(bridging_surat_pri_bpjs.kd_dokter_bpjs,''), COALESCE(bridging_surat_pri_bpjs.nm_dokter_bpjs,''),
+				COALESCE(bridging_surat_pri_bpjs.kd_poli_bpjs,''), COALESCE(bridging_surat_pri_bpjs.nm_poli_bpjs,''),
+				COALESCE(bridging_surat_pri_bpjs.no_sep,'')
+			FROM reg_periksa
+			INNER JOIN bridging_surat_pri_bpjs ON bridging_surat_pri_bpjs.no_rawat = reg_periksa.no_rawat
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			WHERE ` + dateCol + ` BETWEEN ? AND ?
+		`
+		args := []interface{}{tglDari, tglSampai}
+		if search != "" {
+			query += ` AND (bridging_surat_pri_bpjs.no_rawat LIKE ? OR bridging_surat_pri_bpjs.no_kartu LIKE ? OR reg_periksa.no_rkm_medis LIKE ?
+				OR pasien.nm_pasien LIKE ? OR bridging_surat_pri_bpjs.no_surat LIKE ? OR bridging_surat_pri_bpjs.nm_poli_bpjs LIKE ?
+				OR bridging_surat_pri_bpjs.nm_dokter_bpjs LIKE ?)`
+			pattern := "%" + search + "%"
+			args = append(args, pattern, pattern, pattern, pattern, pattern, pattern, pattern)
+		}
+		query += " ORDER BY " + dateCol
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		items := []SpriPasienRow{}
+		for rows.Next() {
+			var r SpriPasienRow
+			if err := rows.Scan(
+				&r.NoRawat, &r.NoKartu, &r.Nomr, &r.NamaPasien, &r.TanggalLahir, &r.Jkel, &r.Diagnosa,
+				&r.TglSurat, &r.NoSurat, &r.TglRencana, &r.KdDokterBpjs, &r.NmDokterBpjs, &r.KdPoliBpjs, &r.NmPoliBpjs, &r.NoSep,
+			); err == nil {
+				items = append(items, r)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": items})
+	}
+}
+
 // createSpriRanap menangani 18.1 Insert Rencana Rawat Inap.
 func createSpriRanap(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

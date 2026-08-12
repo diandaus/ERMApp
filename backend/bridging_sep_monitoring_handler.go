@@ -122,6 +122,100 @@ func getMonitoringKlaim(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// HistoriPelayananRow — satu baris histori pelayanan VClaim, kolomnya
+// persis tabMode di dialog Histori Pelayanan BPJS (Object[] row={"No.",
+// "Diagnosa","Jenis Pelayanan","Kelas Rawat","Nama Peserta","No.Kartu",
+// "No.SEP","No.Rujukan","Poli","PPK Pelayanan","Pulang SEP","Tgl.SEP"}).
+// "No." (nomor urut) tidak disertakan di sini — itu murni index tampilan,
+// diberi frontend saat render tabel.
+type HistoriPelayananRow struct {
+	Diagnosa       string `json:"diagnosa"`
+	JenisPelayanan string `json:"jenis_pelayanan"`
+	KelasRawat     string `json:"kelas_rawat"`
+	NamaPeserta    string `json:"nama_peserta"`
+	NoKartu        string `json:"no_kartu"`
+	NoSep          string `json:"no_sep"`
+	NoRujukan      string `json:"no_rujukan"`
+	Poli           string `json:"poli"`
+	PpkPelayanan   string `json:"ppk_pelayanan"`
+	TglPulangSep   string `json:"tgl_pulang_sep"`
+	TglSep         string `json:"tgl_sep"`
+}
+
+func jenisPelayananEnumText(v string) string {
+	switch v {
+	case "1":
+		return "Rawat Inap"
+	case "2":
+		return "Rawat Jalan"
+	default:
+		return v
+	}
+}
+
+// getHistoriPelayananVclaim — padanan persis method tampil(nomorrujukan) di
+// dialog Histori Pelayanan BPJS: GET monitoring/HistoriPelayanan/NoKartu/
+// {noKartu}/tglMulai/{tglMulai}/tglAkhir/{tglAkhir} (parameter Java bernama
+// "nomorrujukan" tapi isinya sebenarnya No. Kartu peserta, sesuai path
+// URL-nya — bukan No. Rujukan).
+func getHistoriPelayananVclaim(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noKartu := strings.TrimSpace(c.Param("no_kartu"))
+		if len(noKartu) > 0 && noKartu[0] == '/' {
+			noKartu = noKartu[1:]
+		}
+		if noKartu == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No. Kartu wajib diisi"})
+			return
+		}
+		tglMulai := strings.TrimSpace(c.Query("tgl_mulai"))
+		if tglMulai == "" {
+			tglMulai = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+		}
+		tglAkhir := strings.TrimSpace(c.Query("tgl_akhir"))
+		if tglAkhir == "" {
+			tglAkhir = time.Now().Format("2006-01-02")
+		}
+
+		cfg, err := getVclaimConfig(db)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		path := "monitoring/HistoriPelayanan/NoKartu/" + noKartu + "/tglMulai/" + tglMulai + "/tglAkhir/" + tglAkhir
+		result, err := vclaimRequest(cfg, http.MethodGet, path, nil)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+
+		rows := []HistoriPelayananRow{}
+		list, _ := result["histori"].([]interface{})
+		for _, item := range list {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			rows = append(rows, HistoriPelayananRow{
+				Diagnosa:       vclaimStr(m, "diagnosa"),
+				JenisPelayanan: jenisPelayananEnumText(vclaimStr(m, "jnsPelayanan")),
+				KelasRawat:     vclaimStr(m, "kelasRawat"),
+				NamaPeserta:    vclaimStr(m, "namaPeserta"),
+				NoKartu:        vclaimStr(m, "noKartu"),
+				NoSep:          vclaimStr(m, "noSep"),
+				NoRujukan:      vclaimStr(m, "noRujukan"),
+				Poli:           vclaimStr(m, "poli"),
+				PpkPelayanan:   vclaimStr(m, "ppkPelayanan"),
+				TglPulangSep:   vclaimStr(m, "tglPlgSep"),
+				TglSep:         vclaimStr(m, "tglSep"),
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{"list": rows})
+	}
+}
+
 // getKlaimCountToday menghitung jumlah klaim berstatus "Klaim" (3 — sudah
 // difinalisasi) dengan tglPulang hari ini, gabungan Rawat Inap + Rawat
 // Jalan — dipakai kartu "Klaim Terkirim" di Overview Bridging BPJS. Beda

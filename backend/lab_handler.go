@@ -556,6 +556,80 @@ func simpanPermintaanLabPA(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+type permintaanLabQueueRow struct {
+	NoOrder         string `json:"noorder"`
+	TglPermintaan   string `json:"tgl_permintaan"`
+	JamPermintaan   string `json:"jam_permintaan"`
+	NoRawat         string `json:"no_rawat"`
+	NoRkmMedis      string `json:"no_rkm_medis"`
+	NmPasien        string `json:"nm_pasien"`
+	KdDokter        string `json:"kd_dokter"`
+	NmDokter        string `json:"nm_dokter"`
+	Status          string `json:"status"`
+	DiagnosisKlinis string `json:"diagnosa_klinis"`
+}
+
+// getPermintaanLabList — antrean permintaan lab PK lintas pasien (padanan
+// getPermintaanResepRalan di permintaan_resep_handler.go, dipakai utk
+// tampilan mobile "Lab" quick-view). Cuma kategori PK (permintaan_lab) yg
+// diport dulu — PA (permintaan_labpa) tabelnya terpisah, menyusul kalau
+// dibutuhkan, sama pola inkremental "Fase 1" yg dipakai Permintaan Resep.
+// "Belum Diperiksa"/"Sudah Diperiksa" dihitung dari tgl_hasil='0000-00-00',
+// persis pola tgl_perawatan resep_obat.
+func getPermintaanLabList(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tgl1 := c.Query("tgl1")
+		tgl2 := c.Query("tgl2")
+		if tgl2 == "" {
+			tgl2 = time.Now().Format("2006-01-02")
+		}
+		if tgl1 == "" {
+			tgl1 = time.Now().Format("2006-01-02")
+		}
+		status := c.Query("status")
+		search := c.Query("search")
+
+		query := `
+			SELECT pl.noorder, pl.tgl_permintaan, pl.jam_permintaan,
+				pl.no_rawat, pasien.no_rkm_medis, pasien.nm_pasien,
+				pl.dokter_perujuk, IFNULL(dokter.nm_dokter,'-'),
+				IF(pl.tgl_hasil='0000-00-00','Belum Diperiksa','Sudah Diperiksa') AS status,
+				IFNULL(pl.diagnosa_klinis,'')
+			FROM permintaan_lab pl
+			INNER JOIN reg_periksa ON pl.no_rawat = reg_periksa.no_rawat
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			LEFT JOIN dokter ON pl.dokter_perujuk = dokter.kd_dokter
+			WHERE pl.tgl_permintaan BETWEEN ? AND ?
+		`
+		args := []interface{}{tgl1, tgl2}
+		if search != "" {
+			query += ` AND (pl.noorder LIKE ? OR pl.no_rawat LIKE ? OR pasien.no_rkm_medis LIKE ?
+				OR pasien.nm_pasien LIKE ? OR dokter.nm_dokter LIKE ?)`
+			pattern := "%" + search + "%"
+			args = append(args, pattern, pattern, pattern, pattern, pattern)
+		}
+		query += " ORDER BY pl.tgl_permintaan DESC, pl.jam_permintaan DESC"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+		list := []permintaanLabQueueRow{}
+		for rows.Next() {
+			var r permintaanLabQueueRow
+			if rows.Scan(&r.NoOrder, &r.TglPermintaan, &r.JamPermintaan, &r.NoRawat, &r.NoRkmMedis, &r.NmPasien,
+				&r.KdDokter, &r.NmDokter, &r.Status, &r.DiagnosisKlinis) == nil {
+				if status == "" || status == r.Status {
+					list = append(list, r)
+				}
+			}
+		}
+		c.JSON(http.StatusOK, list)
+	}
+}
+
 // Get riwayat permintaan lab PK berdasarkan no_rawat
 func getRiwayatLabPK(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

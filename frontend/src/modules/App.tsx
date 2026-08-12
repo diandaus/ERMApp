@@ -18,6 +18,7 @@ import { ModalGantiPassword } from '../components/ModalGantiPassword';
 import { SatuSehatView } from './SatuSehat';
 import { MappingSatuSehatView } from './MappingSatuSehat';
 import { KepegawaianView } from './Kepegawaian';
+import { ItSupportView } from './ItSupport';
 import { AdminView } from './Admin';
 import { PresensiMobileView } from './PresensiMobile';
 import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
@@ -36,6 +37,7 @@ type MenuKey =
   | 'casemix'
   | 'bridging'
   | 'kepegawaian'
+  | 'it-support'
   | 'anjungan-antrian'
   | 'rekam-medis'
   | 'berkas-digital'
@@ -128,7 +130,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        // 100dvh (bukan 100vh) — di iOS, 100vh TIDAK mengecil saat
+        // keyboard muncul (tetap ukuran layar penuh), jadi konten yang
+        // di-center vertikal ketutup keyboard tanpa bisa discroll.
+        // dvh ikut ukuran viewport visual yang sebenarnya (menyempit
+        // saat keyboard aktif), + overflowY auto sbg jaga-jaga kalau
+        // konten masih lebih tinggi dari sisa ruang yang ada.
+        minHeight: '100dvh',
+        overflowY: 'auto',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1958,7 +1967,8 @@ export const App: React.FC = () => {
     'laboratorium',
     'jadwal-operasi',
     'casemix',
-    'bridging'
+    'bridging',
+    'it-support'
   ];
 
   const menuItems: { key: MenuKey; label: string; icon: string | React.ReactNode }[] = [
@@ -2034,6 +2044,17 @@ export const App: React.FC = () => {
     },
     { key: 'kasir', label: 'Kasir', icon: '💳' },
     { key: 'kepegawaian', label: 'Kepegawaian', icon: '👥' },
+    {
+      key: 'it-support',
+      label: 'IT Support',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+      )
+    },
     { key: 'anjungan-antrian', label: 'Anjungan & Antrian', icon: '🎫' },
     { key: 'rekam-medis', label: 'Rekam Medis', icon: '📁' },
     { key: 'berkas-digital', label: 'Berkas Digital', icon: '📄' },
@@ -2274,6 +2295,8 @@ export const App: React.FC = () => {
             <KepegawaianView onBack={() => setActiveMenu('menu-utama')} />
           </div>
         );
+      case 'it-support':
+        return <ItSupportView />;
       case 'anjungan-antrian':
         return <AntrianDashboardView />;
       case 'rekam-medis':

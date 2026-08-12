@@ -5,11 +5,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:capacitor": "VITE_API_BASE_URL=http://192.168.0.100:8080 vite build",
     "preview": "vite preview",
     "lint": "echo \"no linter configured yet\""
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.1",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "antd": "^6.3.6",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -20,6 +24,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
     "@vitejs/plugin-react-swc": "^3.7.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.0"

@@ -1,0 +1,15 @@
+# Template config cloudflared. Salin ke ~/.cloudflared/config.yml di server,
+# lalu ganti <TUNNEL-UUID> dan <TUNNEL-UUID>.json sesuai output dari:
+#   cloudflared tunnel create ermapp-izin
+#
+# Tunnel ini mengarah ke vhost Apache TERBATAS (ermapp-external.conf, port
+# 8082), BUKAN ke port 80 (vhost utama/full app) — supaya cuma endpoint
+# Cuti/Izin yang bisa dicapai dari internet.
+
+tunnel: <TUNNEL-UUID>
+credentials-file: /home/<user>/.cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: presensi.rsislamibnusinasigli.com
+    service: http://127.0.0.1:8082
+  - service: http_status:404

@@ -479,7 +479,8 @@ type RegistrasiPatient struct {
 	KdPoli        string  `json:"kd_poli"`
 	KdPj          string  `json:"kd_pj"`
 	StatusBayar   string  `json:"status_bayar"`
-	NoSep         *string `json:"no_sep"` // nullable
+	NoSep         *string `json:"no_sep"`   // nullable
+	NoKartu       *string `json:"no_kartu"` // nullable — No. Kartu BPJS, cuma terisi kalau SEP kunjungan ini sudah pernah dibuat
 }
 
 // Handler untuk mendapatkan daftar registrasi
@@ -533,7 +534,8 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 					IFNULL(rujukan_internal_poli.kd_poli, ''),
 					IFNULL(reg_periksa.kd_pj, ''),
 					'' as status_bayar,
-					NULL as no_sep
+					NULL as no_sep,
+					NULL as no_kartu
 				FROM reg_periksa
 				INNER JOIN rujukan_internal_poli ON rujukan_internal_poli.no_rawat = reg_periksa.no_rawat
 				INNER JOIN dokter ON rujukan_internal_poli.kd_dokter = dokter.kd_dokter
@@ -591,7 +593,8 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 					IFNULL(reg_periksa.kd_poli, ''),
 					IFNULL(reg_periksa.kd_pj, ''),
 					IFNULL(reg_periksa.status_bayar, ''),
-					bridging_sep.no_sep
+					bridging_sep.no_sep,
+					bridging_sep.no_kartu
 				FROM reg_periksa
 				INNER JOIN dokter ON reg_periksa.kd_dokter = dokter.kd_dokter
 				INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -645,7 +648,7 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 				&p.PngJawab, &p.NoTlp,
 				&p.Stts, &p.StatusPoli,
 				&p.KdPoli, &p.KdPj, &p.StatusBayar,
-				&p.NoSep,
+				&p.NoSep, &p.NoKartu,
 			)
 			if err != nil {
 				log.Printf("Error scan row registrasi: %v", err)
@@ -884,6 +887,7 @@ func main() {
 	ensurePengumumanTable(db)
 	ensurePengajuanLemburTable(db)
 	ensurePengajuanCutiExtTable(db)
+	ensureLaporItTable(db)
 
 	r := gin.Default()
 
@@ -1468,6 +1472,16 @@ func main() {
 	r.PUT("/api/pengajuan-cuti/:no_pengajuan/approve", approveCutiIzin(db))
 	r.PUT("/api/pengajuan-cuti/:no_pengajuan/reject", rejectCutiIzin(db))
 	r.DELETE("/api/pengajuan-cuti/:no_pengajuan", hapusCutiIzin(db))
+
+	// Fitur Lapor IT — fitur baru murni ERMApp, lihat backend/lapor_it_handler.go.
+	r.POST("/api/lapor-it", submitLaporIt(db))
+	r.GET("/api/lapor-it/saya", getLaporItSaya(db))
+	r.GET("/api/lapor-it/list", getLaporItList(db))
+	r.PUT("/api/lapor-it/:id/proses", prosesLaporIt(db))
+	r.PUT("/api/lapor-it/:id/selesai", selesaiLaporIt(db))
+	r.PUT("/api/lapor-it/:id/tolak", tolakLaporIt(db))
+	r.DELETE("/api/lapor-it/:id", hapusLaporIt(db))
+
 	r.POST("/api/jam-masuk", tambahJamMasuk(db))
 	r.PUT("/api/jam-masuk/:shift", editJamMasuk(db))
 	r.DELETE("/api/jam-masuk/:shift", hapusJamMasuk(db))
@@ -2270,6 +2284,7 @@ func main() {
 			INNER JOIN penjab ON reg_periksa.kd_pj=penjab.kd_pj
 			WHERE reg_periksa.tgl_registrasi BETWEEN ? AND ?
 			  AND reg_periksa.status_lanjut='Ralan'
+			  AND poliklinik.kd_poli <> 'IGDK'
 			ORDER BY reg_periksa.tgl_registrasi DESC, reg_periksa.jam_reg DESC
 		`
 
@@ -2363,6 +2378,7 @@ func main() {
 			INNER JOIN penjab ON reg_periksa.kd_pj=penjab.kd_pj
 			WHERE reg_periksa.status_lanjut='Ralan'
 			  AND reg_periksa.tgl_registrasi BETWEEN ? AND ?
+			  AND poliklinik.kd_poli <> 'IGDK'
 			ORDER BY reg_periksa.tgl_registrasi DESC, reg_periksa.jam_reg DESC
 		`
 
@@ -2414,6 +2430,104 @@ func main() {
 				"no_tlp":         noTlp.String,
 				"status_bayar":   statusBayar,
 				"status_poli":    statusPoli,
+			})
+		}
+
+		c.JSON(http.StatusOK, items)
+	})
+
+	// Daftar Pasien IGD — kebalikan dari poli-today di atas: HANYA
+	// kunjungan dgn kd_poli='IGDK' (poli-today justru mengecualikannya).
+	// status_lanjut tetap 'Ralan' krn kolom itu cuma enum('Ralan','Ranap'),
+	// IGD bukan nilai tersendiri — dibedakan murni lewat kd_poli.
+	r.GET("/api/igd/list", func(c *gin.Context) {
+		tglDari := c.DefaultQuery("tgl_dari", time.Now().Format("2006-01-02"))
+		tglSampai := c.DefaultQuery("tgl_sampai", time.Now().Format("2006-01-02"))
+
+		const q = `
+			SELECT
+				reg_periksa.no_reg,
+				reg_periksa.no_rawat,
+				DATE_FORMAT(reg_periksa.tgl_registrasi, '%d/%m/%Y') AS tgl_registrasi,
+				reg_periksa.jam_reg,
+				reg_periksa.kd_dokter,
+				dokter.nm_dokter,
+				reg_periksa.no_rkm_medis,
+				pasien.nm_pasien,
+				poliklinik.nm_poli,
+				reg_periksa.p_jawab,
+				reg_periksa.almt_pj,
+				reg_periksa.hubunganpj,
+				reg_periksa.biaya_reg,
+				reg_periksa.stts,
+				penjab.png_jawab,
+				CONCAT(reg_periksa.umurdaftar,' ',reg_periksa.sttsumur) AS umur,
+				reg_periksa.status_bayar,
+				reg_periksa.status_poli,
+				reg_periksa.kd_pj,
+				reg_periksa.kd_poli,
+				pasien.no_tlp
+			FROM reg_periksa
+			INNER JOIN dokter ON reg_periksa.kd_dokter=dokter.kd_dokter
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis=pasien.no_rkm_medis
+			INNER JOIN poliklinik ON reg_periksa.kd_poli=poliklinik.kd_poli
+			INNER JOIN penjab ON reg_periksa.kd_pj=penjab.kd_pj
+			WHERE reg_periksa.tgl_registrasi BETWEEN ? AND ?
+			  AND reg_periksa.status_lanjut='Ralan'
+			  AND poliklinik.kd_poli = 'IGDK'
+			ORDER BY reg_periksa.tgl_registrasi DESC, reg_periksa.jam_reg DESC
+		`
+
+		rows, err := db.Query(q, tglDari, tglSampai)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var items []map[string]interface{}
+		for rows.Next() {
+			var noReg, noRawat, tglReg, jamReg, kdDokter, nmDokter string
+			var noRkm, nmPasien, nmPoli string
+			var pjawab, almtPj, hubunganPj sql.NullString
+			var biayaReg sql.NullFloat64
+			var stts, pngJawab, statusBayar, statusPoli string
+			var umur sql.NullString
+			var kdPj, kdPoli string
+			var noTlp sql.NullString
+
+			if err := rows.Scan(
+				&noReg, &noRawat, &tglReg, &jamReg, &kdDokter, &nmDokter,
+				&noRkm, &nmPasien, &nmPoli, &pjawab, &almtPj, &hubunganPj,
+				&biayaReg, &stts, &pngJawab, &umur, &statusBayar, &statusPoli,
+				&kdPj, &kdPoli, &noTlp,
+			); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			items = append(items, map[string]interface{}{
+				"no_reg":         noReg,
+				"no_rawat":       noRawat,
+				"tgl_registrasi": tglReg,
+				"jam_reg":        jamReg,
+				"kd_dokter":      kdDokter,
+				"nm_dokter":      nmDokter,
+				"no_rkm_medis":   noRkm,
+				"nm_pasien":      nmPasien,
+				"nm_poli":        nmPoli,
+				"p_jawab":        pjawab.String,
+				"almt_pj":        almtPj.String,
+				"hubunganpj":     hubunganPj.String,
+				"biaya_reg":      biayaReg.Float64,
+				"stts":           stts,
+				"png_jawab":      pngJawab,
+				"umur":           umur.String,
+				"status_bayar":   statusBayar,
+				"status_poli":    statusPoli,
+				"kd_pj":          kdPj,
+				"kd_poli":        kdPoli,
+				"no_tlp":         noTlp.String,
 			})
 		}
 
@@ -3044,6 +3158,9 @@ func main() {
 	// Get hasil lab detail lengkap
 	r.GET("/api/lab/hasil-detail", getHasilLabDetail(db))
 
+	// Antrean permintaan lab (PK) lintas pasien — dipakai mobile quick-view.
+	r.GET("/api/lab/list", getPermintaanLabList(db))
+
 	// ============================================================================
 	// RADIOLOGI ENDPOINTS
 	// ============================================================================
@@ -3059,6 +3176,9 @@ func main() {
 
 	// Get riwayat permintaan radiologi (gunakan wildcard untuk handle slash di no_rawat)
 	r.GET("/api/radiologi/riwayat/*no_rawat", getRiwayatRadiologi(db))
+
+	// Antrean permintaan radiologi lintas pasien — dipakai mobile quick-view.
+	r.GET("/api/radiologi/list", getPermintaanRadiologiList(db))
 
 	// Riwayat Perawatan endpoint
 	r.GET("/api/riwayat-perawatan/:no_rkm_medis", getRiwayatPerawatan(db))
@@ -3161,6 +3281,7 @@ func main() {
 
 	// Bridging SEP (BPJS VClaim) endpoints
 	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
+	r.GET("/api/bridging/sep/by-no-rawat/*no_rawat", getBridgingSepByNoRawat(db))
 	r.GET("/api/bridging/sep/count-today", getBridgingSepCountToday(db))
 	r.POST("/api/bridging/sep", saveBridgingSepLocal(db))
 	r.POST("/api/bridging/sep/insert", insertSepToBpjs(db))
@@ -3187,6 +3308,8 @@ func main() {
 
 	// Bridging Rujukan Online (BPJS VClaim)
 	r.GET("/api/bridging/rujukan/*id", searchRujukan(db))
+	r.GET("/api/bridging/rujukan-riwayat/*no_kartu", getRiwayatRujukanVclaim(db))
+	r.GET("/api/bridging/histori-pelayanan/*no_kartu", getHistoriPelayananVclaim(db))
 
 	// Bridging Pengajuan & Aproval Penjaminan (BPJS VClaim)
 	r.GET("/api/bridging/pengajuan-penjaminan/list", getPengajuanPenjaminanList(db))
@@ -3203,6 +3326,7 @@ func main() {
 
 	// Bridging Surat Kontrol / SPRI (BPJS VClaim)
 	r.GET("/api/bridging/surat-kontrol/list", getSuratKontrolList(db))
+	r.GET("/api/bridging/surat-kontrol/list-pasien", getSuratKontrolPasienList(db))
 	r.POST("/api/bridging/surat-kontrol", createRencanaKontrol(db))
 	r.PUT("/api/bridging/surat-kontrol", updateRencanaKontrol(db))
 	r.DELETE("/api/bridging/surat-kontrol/*no_surat", deleteRencanaKontrol(db))
@@ -3213,6 +3337,7 @@ func main() {
 
 	// Bridging SPRI Rawat Inap (BPJS VClaim)
 	r.GET("/api/bridging/spri-ranap/list", getSpriRanapList(db))
+	r.GET("/api/bridging/spri-ranap/list-pasien", getSpriPasienList(db))
 	r.POST("/api/bridging/spri-ranap", createSpriRanap(db))
 	r.PUT("/api/bridging/spri-ranap", updateSpriRanap(db))
 

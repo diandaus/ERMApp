@@ -137,6 +137,88 @@ func getSuratKontrolList(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// SuratKontrolPasienRow — satu baris Surat Kontrol JOIN identitas pasien &
+// SEP-nya, kolomnya persis tabMode di dialog "Pilih dari Surat Kontrol"
+// (Object[]{"No.Rawat","No.SEP","No.Kartu","No.RM","Nama Pasien","Tgl.Lahir",
+// "J.K.","Diagnosa","Tgl.Surat","No.Surat","Tgl.Kontrol","Kode Dokter",
+// "Nama Dokter/Sepesialis","Kode Poli","Nama Poli/Unit"}). Beda dari
+// getSuratKontrolList di atas (yg cuma baca bridging_surat_kontrol_bpjs
+// sendirian, dipakai modul Bridging > Surat Kontrol) — ini JOIN ke
+// bridging_sep supaya staf yang lagi isi form SEP baru tahu surat kontrol
+// itu milik pasien/kunjungan yang mana sebelum memilihnya.
+type SuratKontrolPasienRow struct {
+	NoRawat        string `json:"no_rawat"`
+	NoSep          string `json:"no_sep"`
+	NoKartu        string `json:"no_kartu"`
+	Nomr           string `json:"nomr"`
+	NamaPasien     string `json:"nama_pasien"`
+	TanggalLahir   string `json:"tanggal_lahir"`
+	Jkel           string `json:"jkel"`
+	Diagawal       string `json:"diagawal"`
+	NmDiagnosaAwal string `json:"nmdiagnosaawal"`
+	TglSurat       string `json:"tgl_surat"`
+	NoSurat        string `json:"no_surat"`
+	TglRencana     string `json:"tgl_rencana"`
+	KdDokterBpjs   string `json:"kd_dokter_bpjs"`
+	NmDokterBpjs   string `json:"nm_dokter_bpjs"`
+	KdPoliBpjs     string `json:"kd_poli_bpjs"`
+	NmPoliBpjs     string `json:"nm_poli_bpjs"`
+}
+
+// getSuratKontrolPasienList — dipakai modal "Pilih dari Surat Kontrol" di
+// ModalPengajuanSEP.tsx. Difilter opsional lewat no_kartu/no_rawat (kalau
+// dikirim, cuma tampilkan surat kontrol pasien itu — sesuai konteks form
+// SEP yang lagi dibuka; kosongkan keduanya utk lihat semua).
+func getSuratKontrolPasienList(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noKartu := strings.TrimSpace(c.Query("no_kartu"))
+		noRawat := strings.TrimSpace(c.Query("no_rawat"))
+
+		query := `
+			SELECT bridging_sep.no_rawat, bridging_sep.no_sep, COALESCE(bridging_sep.no_kartu,''), COALESCE(bridging_sep.nomr,''),
+				COALESCE(bridging_sep.nama_pasien,''), COALESCE(bridging_sep.tanggal_lahir,'0000-00-00'), COALESCE(bridging_sep.jkel,''),
+				COALESCE(bridging_sep.diagawal,''), COALESCE(bridging_sep.nmdiagnosaawal,''),
+				COALESCE(bridging_surat_kontrol_bpjs.tgl_surat,'0000-00-00'), bridging_surat_kontrol_bpjs.no_surat,
+				COALESCE(bridging_surat_kontrol_bpjs.tgl_rencana,'0000-00-00'), COALESCE(bridging_surat_kontrol_bpjs.kd_dokter_bpjs,''),
+				COALESCE(bridging_surat_kontrol_bpjs.nm_dokter_bpjs,''), COALESCE(bridging_surat_kontrol_bpjs.kd_poli_bpjs,''),
+				COALESCE(bridging_surat_kontrol_bpjs.nm_poli_bpjs,'')
+			FROM bridging_surat_kontrol_bpjs
+			INNER JOIN bridging_sep ON bridging_surat_kontrol_bpjs.no_sep = bridging_sep.no_sep
+			WHERE 1=1
+		`
+		args := []interface{}{}
+		if noKartu != "" {
+			query += " AND bridging_sep.no_kartu = ?"
+			args = append(args, noKartu)
+		}
+		if noRawat != "" {
+			query += " AND bridging_sep.no_rawat = ?"
+			args = append(args, noRawat)
+		}
+		query += " ORDER BY bridging_surat_kontrol_bpjs.tgl_rencana DESC LIMIT 500"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		items := []SuratKontrolPasienRow{}
+		for rows.Next() {
+			var r SuratKontrolPasienRow
+			if err := rows.Scan(
+				&r.NoRawat, &r.NoSep, &r.NoKartu, &r.Nomr, &r.NamaPasien, &r.TanggalLahir, &r.Jkel,
+				&r.Diagawal, &r.NmDiagnosaAwal, &r.TglSurat, &r.NoSurat, &r.TglRencana,
+				&r.KdDokterBpjs, &r.NmDokterBpjs, &r.KdPoliBpjs, &r.NmPoliBpjs,
+			); err == nil {
+				items = append(items, r)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": items})
+	}
+}
+
 // createRencanaKontrol menangani 17.1 Insert Rencana Kontrol.
 func createRencanaKontrol(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

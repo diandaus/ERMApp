@@ -190,6 +190,32 @@ func getBridgingSepList(db *sql.DB) gin.HandlerFunc {
 	return getBridgingSepListFromTable(db, "bridging_sep")
 }
 
+// getBridgingSepByNoRawat — ambil SATU SEP lokal persis berdasarkan
+// no_rawat (exact match, beda dari getBridgingSepList yang search-nya LIKE
+// dan bisa multi-hasil). Dipakai tombol "[BPJS] > Cetak SEP" di Pendaftaran
+// — kalau kunjungan ini belum pernah diinput SEP-nya, 404 (staf diarahkan
+// input SEP dulu lewat modul Bridging > SEP, bukan langsung dikosongkan).
+func getBridgingSepByNoRawat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+			return
+		}
+		row := db.QueryRow(`SELECT `+bridgingSepSelectCols+` FROM bridging_sep WHERE no_rawat = ? LIMIT 1`, noRawat)
+		var s BridgingSep
+		if err := scanBridgingSepRow(row, &s); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "SEP belum diterbitkan untuk kunjungan ini"})
+			return
+		}
+		s.SudahDikirim = true
+		c.JSON(http.StatusOK, s)
+	}
+}
+
 // getBridgingSepCountToday menghitung jumlah SEP yang tglsep-nya hari ini —
 // dipakai kartu "SEP Terbit Hari Ini" di Overview Bridging BPJS. Query
 // ringan (COUNT saja), sengaja terpisah dari getBridgingSepList supaya

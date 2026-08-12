@@ -241,6 +241,77 @@ func createPermintaanRadiologi(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+type permintaanRadiologiQueueRow struct {
+	NoOrder         string `json:"noorder"`
+	TglPermintaan   string `json:"tgl_permintaan"`
+	JamPermintaan   string `json:"jam_permintaan"`
+	NoRawat         string `json:"no_rawat"`
+	NoRkmMedis      string `json:"no_rkm_medis"`
+	NmPasien        string `json:"nm_pasien"`
+	KdDokter        string `json:"kd_dokter"`
+	NmDokter        string `json:"nm_dokter"`
+	Status          string `json:"status"`
+	DiagnosisKlinis string `json:"diagnosa_klinis"`
+}
+
+// getPermintaanRadiologiList — antrean permintaan radiologi lintas pasien
+// (padanan getPermintaanResepRalan/getPermintaanLabList, dipakai utk
+// tampilan mobile "Radiologi" quick-view). "Belum Diperiksa"/"Sudah
+// Diperiksa" dihitung dari tgl_hasil='0000-00-00', persis pola Lab/Resep.
+func getPermintaanRadiologiList(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tgl1 := c.Query("tgl1")
+		tgl2 := c.Query("tgl2")
+		if tgl2 == "" {
+			tgl2 = time.Now().Format("2006-01-02")
+		}
+		if tgl1 == "" {
+			tgl1 = time.Now().Format("2006-01-02")
+		}
+		status := c.Query("status")
+		search := c.Query("search")
+
+		query := `
+			SELECT pr.noorder, pr.tgl_permintaan, IF(pr.jam_permintaan='00:00:00','',pr.jam_permintaan),
+				pr.no_rawat, pasien.no_rkm_medis, pasien.nm_pasien,
+				pr.dokter_perujuk, IFNULL(dokter.nm_dokter,'-'),
+				IF(pr.tgl_hasil='0000-00-00','Belum Diperiksa','Sudah Diperiksa') AS status,
+				IFNULL(pr.diagnosa_klinis,'')
+			FROM permintaan_radiologi pr
+			INNER JOIN reg_periksa ON pr.no_rawat = reg_periksa.no_rawat
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			LEFT JOIN dokter ON pr.dokter_perujuk = dokter.kd_dokter
+			WHERE pr.tgl_permintaan BETWEEN ? AND ?
+		`
+		args := []interface{}{tgl1, tgl2}
+		if search != "" {
+			query += ` AND (pr.noorder LIKE ? OR pr.no_rawat LIKE ? OR pasien.no_rkm_medis LIKE ?
+				OR pasien.nm_pasien LIKE ? OR dokter.nm_dokter LIKE ?)`
+			pattern := "%" + search + "%"
+			args = append(args, pattern, pattern, pattern, pattern, pattern)
+		}
+		query += " ORDER BY pr.tgl_permintaan DESC, pr.jam_permintaan DESC"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+		list := []permintaanRadiologiQueueRow{}
+		for rows.Next() {
+			var r permintaanRadiologiQueueRow
+			if rows.Scan(&r.NoOrder, &r.TglPermintaan, &r.JamPermintaan, &r.NoRawat, &r.NoRkmMedis, &r.NmPasien,
+				&r.KdDokter, &r.NmDokter, &r.Status, &r.DiagnosisKlinis) == nil {
+				if status == "" || status == r.Status {
+					list = append(list, r)
+				}
+			}
+		}
+		c.JSON(http.StatusOK, list)
+	}
+}
+
 // Get riwayat permintaan radiologi berdasarkan no_rawat
 func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -281,16 +352,16 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer rows.Close()
 
 		type RiwayatRadiologi struct {
-			NoOrder           string                        `json:"noorder"`
-			NoRawat           string                        `json:"no_rawat"`
-			TglPermintaan     string                        `json:"tgl_permintaan"`
-			JamPermintaan     string                        `json:"jam_permintaan"`
-			KdDokter          string                        `json:"kd_dokter"`
-			NmDokter          string                        `json:"nm_dokter"`
-			Status            string                        `json:"status"`
-			InformasiTambahan string                        `json:"informasi_tambahan"`
-			DiagnosisKlinis   string                        `json:"diagnosa_klinis"`
-			DetailPemeriksaan []map[string]interface{}      `json:"detail_pemeriksaan"`
+			NoOrder           string                   `json:"noorder"`
+			NoRawat           string                   `json:"no_rawat"`
+			TglPermintaan     string                   `json:"tgl_permintaan"`
+			JamPermintaan     string                   `json:"jam_permintaan"`
+			KdDokter          string                   `json:"kd_dokter"`
+			NmDokter          string                   `json:"nm_dokter"`
+			Status            string                   `json:"status"`
+			InformasiTambahan string                   `json:"informasi_tambahan"`
+			DiagnosisKlinis   string                   `json:"diagnosa_klinis"`
+			DetailPemeriksaan []map[string]interface{} `json:"detail_pemeriksaan"`
 		}
 
 		var results []RiwayatRadiologi
