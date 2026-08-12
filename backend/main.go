@@ -67,7 +67,7 @@ type NewRegistration struct {
 	HubunganPj string `json:"hubunganpj"`
 	AlmtPj     string `json:"almt_pj"`
 	SttsDaftar string `json:"stts_daftar"`
-	NoReg      string `json:"no_reg"` // opsional: dari frontend via generate-noreg
+	NoReg      string `json:"no_reg"`   // opsional: dari frontend via generate-noreg
 	NoKartu    string `json:"no_kartu"` // opsional: No. Kartu BPJS, disimpan ke pasien.no_peserta (master pasien, bukan per-kunjungan)
 }
 
@@ -229,6 +229,16 @@ func ensureAppUsersTable(db *sql.DB) error {
 	// Migrasi role dari ENUM lama ke VARCHAR agar bisa diisi role custom
 	if _, err := db.Exec(
 		`ALTER TABLE app_users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'pendaftaran'`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi kolom departemen — "Asal Unit" yang dipilih pegawai sendiri
+	// waktu mendaftar akun mandiri lewat halaman "Daftar" (LoginView),
+	// lihat auth_register_handler.go. Cuma dicatat, tidak dipakai buat
+	// pembatasan akses apapun.
+	if _, err := db.Exec(
+		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS departemen VARCHAR(100) NOT NULL DEFAULT ''`,
 	); err != nil {
 		return err
 	}
@@ -492,6 +502,15 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 		tglDari := c.Query("tgl_dari")
 		tglSampai := c.Query("tgl_sampai")
 		searchText := c.Query("search")
+		// igd=1 -> dipakai menu IGD (App.tsx), reuse RegistrasiView yang
+		// sama persis dengan Pendaftaran, cuma daftarnya dibalik: HANYA
+		// kunjungan kd_poli='IGDK' (Pendaftaran biasa justru
+		// mengecualikannya). Whitelist dari boolean Go, bukan string
+		// mentah dari request, jadi aman diselipkan langsung ke SQL.
+		kdPoliCond := "poliklinik.kd_poli <> 'IGDK'"
+		if c.Query("igd") == "1" {
+			kdPoliCond = "poliklinik.kd_poli = 'IGDK'"
+		}
 
 		// Set default dates if not provided
 		if tglDari == "" {
@@ -602,7 +621,7 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 				INNER JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
 				INNER JOIN penjab ON reg_periksa.kd_pj = penjab.kd_pj
 				LEFT JOIN bridging_sep ON bridging_sep.no_rawat = reg_periksa.no_rawat
-				WHERE poliklinik.kd_poli <> 'IGDK'
+				WHERE ` + kdPoliCond + `
 				AND reg_periksa.tgl_registrasi BETWEEN ? AND ?
 			`
 			args = append(args, tglDari, tglSampai)
@@ -944,6 +963,9 @@ func main() {
 	})
 
 	// === Auth sederhana untuk aplikasi web ===
+	r.GET("/api/auth/cari-pegawai", cariPegawaiRegistrasi(db))
+	r.POST("/api/auth/register", registerAkunMandiri(db))
+
 	r.POST("/api/auth/login", func(c *gin.Context) {
 		var req LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {

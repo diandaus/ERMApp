@@ -567,6 +567,15 @@ const LayananCard: React.FC<{
   user: AppUserLite; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
 }> = ({ user, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
+  // role 'pegawai' = akun hasil Daftar mandiri di halaman login (lihat
+  // registerAkunMandiri, backend/auth_register_handler.go) — belum
+  // diverifikasi/di-approve admin, jadi Menu Utama-nya sengaja dibatasi
+  // ke fitur non-klinis (Lembur/Cuti/Izin/Tugas/Lapor IT) saja. Poli/IGD/
+  // Ranap sudah otomatis ketutup lewat canAccessModule (allowed_modules
+  // akun ini cuma 'menu-utama,kepegawaian'); Farmasi/Lab/Radiologi/Operasi
+  // butuh guard eksplisit krn item-item itu selalu tampil tanpa
+  // canAccessModule.
+  const isAkunMandiriBelumDiapprove = user.role === 'pegawai';
   const items: LayananItem[] = [
     { key: 'lembur', label: 'Lembur', icon: <IconOvertime size={22} color="#059669" /> },
     { key: 'cuti', label: 'Cuti', icon: <IconUmbrella size={22} color="#059669" /> },
@@ -576,10 +585,12 @@ const LayananCard: React.FC<{
     ...(canAccessModule(user, 'rawat-jalan') ? [{ key: 'poli', label: 'Poli', icon: <IconStethoscope size={22} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'igd') ? [{ key: 'igd', label: 'IGD', icon: <IconSiren size={22} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'rawat-inap') ? [{ key: 'ranap', label: 'Ranap', icon: <IconBed size={22} color="#059669" /> }] : []),
-    { key: 'farmasi', label: 'Farmasi', icon: <IconPill size={22} color="#059669" /> },
-    { key: 'lab', label: 'Lab', icon: <IconFlask size={22} color="#059669" /> },
-    { key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={22} color="#059669" /> },
-    { key: 'operasi', label: 'Operasi', icon: <IconScalpel size={22} color="#059669" /> },
+    ...(isAkunMandiriBelumDiapprove ? [] : [
+      { key: 'farmasi', label: 'Farmasi', icon: <IconPill size={22} color="#059669" /> },
+      { key: 'lab', label: 'Lab', icon: <IconFlask size={22} color="#059669" /> },
+      { key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={22} color="#059669" /> },
+      { key: 'operasi', label: 'Operasi', icon: <IconScalpel size={22} color="#059669" /> },
+    ]),
   ];
 
   const handleClick = (key: string, label: string) => {
