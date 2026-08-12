@@ -2477,7 +2477,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
       {!notFound && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', padding: '8px 0' }}>
+          <div style={{ display: 'flex', padding: '6px 0 4px' }}>
             {navItems.slice(0, 2).map((item) => {
               const active = tab === item.key;
               return (
@@ -2532,7 +2532,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
           <div style={{
             position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-            paddingBottom: 8,
+            paddingBottom: 4,
           }}>
             <button
               type="button"
@@ -2540,7 +2540,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
               style={{
                 width: 60, height: 60, marginTop: -42, borderRadius: '50%', border: '4px solid #f3f4f6',
                 background: GRADIENT, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 8px 20px rgba(5,150,105,0.45)', cursor: 'pointer', padding: 0,
+                cursor: 'pointer', padding: 0,
               }}
             >
               <IconFaceScan size={28} color="#fff" />
