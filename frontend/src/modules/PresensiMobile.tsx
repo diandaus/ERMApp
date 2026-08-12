@@ -2477,7 +2477,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
       {!notFound && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', padding: '8px 0' }}>
             {navItems.slice(0, 2).map((item) => {
               const active = tab === item.key;
               return (
@@ -2523,12 +2523,16 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
               wajah sesuai alur AbsenTab (kamera depan + GPS). FAB + label
               digabung jadi satu kolom flex dgn padding-bottom yang SAMA
               persis dengan baris nav lain, supaya label "Absen" sejajar
-              dengan label Home/Jadwal/dst apa pun nilai safe-area-inset
-              perangkatnya (bukan dihitung manual pakai `bottom` terpisah). */}
+              dengan label Home/Jadwal/dst. Sengaja TIDAK pakai
+              env(safe-area-inset-bottom) — bar-nya dibikin serapat
+              mungkin ke tepi bawah layar (permintaan eksplisit, sadar
+              trade-off-nya: tombol paling bawah bisa lebih gampang
+              ketekan tidak sengaja pas gesture swipe-up keluar app di
+              iPhone tanpa tombol Home). */}
           <div style={{
             position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-            paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
+            paddingBottom: 8,
           }}>
             <button
               type="button"
