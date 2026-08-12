@@ -168,6 +168,9 @@ export const RegistrasiView: React.FC = () => {
           nomr: patient.no_rkm_medis,
           nama_pasien: patient.nm_pasien,
           jkel: patient.jk,
+          // No. Kartu BPJS dari master pasien (pasien.no_peserta, diisi staf
+          // saat Pendaftaran) — supaya tidak perlu ketik ulang di form SEP.
+          no_kartu: patient.no_kartu || '',
           // Pendaftaran = selalu kunjungan rawat jalan (Java kirim literal
           // "2. Ralan" ke setNoRm2 dari MnSEPActionPerformed).
           jnspelayanan: '2',

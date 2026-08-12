@@ -68,6 +68,7 @@ type NewRegistration struct {
 	AlmtPj     string `json:"almt_pj"`
 	SttsDaftar string `json:"stts_daftar"`
 	NoReg      string `json:"no_reg"` // opsional: dari frontend via generate-noreg
+	NoKartu    string `json:"no_kartu"` // opsional: No. Kartu BPJS, disimpan ke pasien.no_peserta (master pasien, bukan per-kunjungan)
 }
 
 // Informasi singkat pasien untuk ditampilkan di form pendaftaran.
@@ -535,7 +536,7 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 					IFNULL(reg_periksa.kd_pj, ''),
 					'' as status_bayar,
 					NULL as no_sep,
-					NULL as no_kartu
+					NULLIF(pasien.no_peserta, '') as no_kartu
 				FROM reg_periksa
 				INNER JOIN rujukan_internal_poli ON rujukan_internal_poli.no_rawat = reg_periksa.no_rawat
 				INNER JOIN dokter ON rujukan_internal_poli.kd_dokter = dokter.kd_dokter
@@ -594,7 +595,7 @@ func getRegistrasiList(db *sql.DB) gin.HandlerFunc {
 					IFNULL(reg_periksa.kd_pj, ''),
 					IFNULL(reg_periksa.status_bayar, ''),
 					bridging_sep.no_sep,
-					bridging_sep.no_kartu
+					COALESCE(NULLIF(bridging_sep.no_kartu, ''), NULLIF(pasien.no_peserta, '')) as no_kartu
 				FROM reg_periksa
 				INNER JOIN dokter ON reg_periksa.kd_dokter = dokter.kd_dokter
 				INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -2159,6 +2160,16 @@ func main() {
 		); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+
+		// No. Kartu BPJS disimpan di master pasien (pasien.no_peserta), bukan
+		// per-kunjungan — supaya kunjungan berikutnya & fitur Pengajuan
+		// SEP/Histori Pelayanan bisa auto-fill tanpa staf ketik ulang tiap
+		// kali. Opsional: kalau kosong (pasien umum/non-BPJS), tidak diubah.
+		if noKartu := strings.TrimSpace(payload.NoKartu); noKartu != "" {
+			if _, err := db.Exec(`UPDATE pasien SET no_peserta = ? WHERE no_rkm_medis = ?`, noKartu, payload.NoRkmMedis); err != nil {
+				log.Printf("Gagal menyimpan no_peserta pasien %s: %v", payload.NoRkmMedis, err)
+			}
 		}
 
 		c.JSON(http.StatusCreated, gin.H{
