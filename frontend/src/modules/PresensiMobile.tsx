@@ -2477,7 +2477,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
       {!notFound && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', padding: '4px 0 0' }}>
+          <div style={{ display: 'flex', padding: '8px 0 0' }}>
             {navItems.slice(0, 2).map((item) => {
               const active = tab === item.key;
               return (
