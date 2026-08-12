@@ -2414,10 +2414,10 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
   React.useEffect(() => { fetchMe(); }, [fetchMe]);
 
   const navItems: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: 'home', label: 'Home', icon: <IconHome size={18} /> },
-    { key: 'jadwal', label: 'Jadwal', icon: <IconClipboard size={18} /> },
-    { key: 'kehadiran', label: 'Kehadiran', icon: <IconCalendar size={18} /> },
-    { key: 'saya', label: 'Saya', icon: <IconUser size={18} /> },
+    { key: 'home', label: 'Home', icon: <IconHome size={16} /> },
+    { key: 'jadwal', label: 'Jadwal', icon: <IconClipboard size={16} /> },
+    { key: 'kehadiran', label: 'Kehadiran', icon: <IconCalendar size={16} /> },
+    { key: 'saya', label: 'Saya', icon: <IconUser size={16} /> },
   ];
 
   return (
@@ -2487,8 +2487,8 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
                   onClick={() => setTab(item.key)}
                   style={{
                     flex: 1, background: 'none', border: 'none', cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                    color: active ? '#059669' : '#9ca3af', fontSize: 10, fontWeight: active ? 600 : 400,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                    color: active ? '#059669' : '#9ca3af', fontSize: 9, fontWeight: active ? 600 : 400,
                   }}
                 >
                   {item.icon}
@@ -2507,8 +2507,8 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
                   onClick={() => setTab(item.key)}
                   style={{
                     flex: 1, background: 'none', border: 'none', cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                    color: active ? '#059669' : '#9ca3af', fontSize: 10, fontWeight: active ? 600 : 400,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                    color: active ? '#059669' : '#9ca3af', fontSize: 9, fontWeight: active ? 600 : 400,
                   }}
                 >
                   {item.icon}
@@ -2546,7 +2546,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
               <IconFaceScan size={28} color="#fff" />
             </button>
             <span style={{
-              fontSize: 10, fontWeight: tab === 'absen' ? 600 : 400, color: tab === 'absen' ? '#059669' : '#9ca3af',
+              fontSize: 9, fontWeight: tab === 'absen' ? 600 : 400, color: tab === 'absen' ? '#059669' : '#9ca3af',
             }}>
               Absen
             </span>
