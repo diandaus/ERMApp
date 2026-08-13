@@ -4,14 +4,7 @@
 html, body {
   overscroll-behavior: none;
   overflow: hidden;
-  /* 100dvh, bukan 100% — rantai tinggi persentase (html -> body -> #root)
-     di iOS Safari standalone PWA kadang tidak menghitung penuh sampai
-     batas bawah layar (area aman/home-indicator), beda dgn 100dvh yang
-     memang didesain akurat mengikuti viewport asli termasuk safe-area.
-     Tanpa ini, elemen position:fixed di dalamnya (mis. bottom nav
-     PresensiMobileView) ikut kepotong sedikit di bawah walau padding-nya
-     sendiri sudah 0. */
-  height: 100dvh;
+  height: 100%;
   position: fixed;
   width: 100%;
   margin: 0;
