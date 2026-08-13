@@ -10,7 +10,14 @@
          app native walau sebenarnya cuma bookmark web biasa. -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- black-translucent = status bar iOS jadi transparan, nunjukin
+         warna latar konten di baliknya (bukan putih polos) — dipasangkan
+         dgn padding env(safe-area-inset-top) di PresensiMobile.tsx supaya
+         konten tidak ketiban ikon jam/baterai. Footer/bottom nav SENGAJA
+         tidak ikut baca env(safe-area-inset-bottom) (lihat komentar di
+         PresensiMobile.tsx) — supaya cuma header yang "fullscreen",
+         footer tetap ukuran kompak seperti sebelumnya. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ERM Presensi" />
 
     <!-- Web app manifest — dukungan serupa di Android Chrome ("Tambahkan ke
