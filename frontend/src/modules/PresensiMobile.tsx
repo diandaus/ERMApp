@@ -2525,7 +2525,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
               style={{
                 width: 60, height: 60, marginTop: -42, borderRadius: '50%', border: '4px solid #f3f4f6',
                 background: GRADIENT, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 8px 20px rgba(5,150,105,0.45)', cursor: 'pointer', padding: 0,
+                cursor: 'pointer', padding: 0,
               }}
             >
               <IconFaceScan size={28} color="#fff" />
