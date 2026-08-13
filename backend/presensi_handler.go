@@ -154,13 +154,15 @@ func hitungTerlambat(jadwalMasuk time.Time, actual time.Time) (status string, ke
 // ---------------------------------------------------------------------
 
 type PresensiHariIni struct {
-	SudahCheckin  bool   `json:"sudah_checkin"`
-	SudahCheckout bool   `json:"sudah_checkout"`
-	JamDatang     string `json:"jam_datang"`
-	JamPulang     string `json:"jam_pulang"`
-	Status        string `json:"status"`
-	Keterlambatan string `json:"keterlambatan"`
-	Shift         string `json:"shift"`
+	SudahCheckin    bool   `json:"sudah_checkin"`
+	SudahCheckout   bool   `json:"sudah_checkout"`
+	JamDatang       string `json:"jam_datang"`
+	JamPulang       string `json:"jam_pulang"`
+	Status          string `json:"status"`
+	Keterlambatan   string `json:"keterlambatan"`
+	Shift           string `json:"shift"`
+	JamMasukJadwal  string `json:"jam_masuk_jadwal"`  // "HH:MM" — kosong kalau pegawai belum dijadwalkan shift hari ini
+	JamPulangJadwal string `json:"jam_pulang_jadwal"` // "HH:MM"
 }
 
 type PerformaBulanIni struct {
@@ -185,6 +187,15 @@ func getPresensiMe(db *sql.DB) gin.HandlerFunc {
 
 		today := time.Now()
 		hariIni := PresensiHariIni{Shift: getShiftHariIni(db, id, today)}
+		if js, ok := getJamShift(db, hariIni.Shift); ok {
+			// jamShift.masuk/pulang format "HH:MM:SS" — potong ke "HH:MM" saja utk tampilan.
+			if len(js.masuk) >= 5 {
+				hariIni.JamMasukJadwal = js.masuk[:5]
+			}
+			if len(js.pulang) >= 5 {
+				hariIni.JamPulangJadwal = js.pulang[:5]
+			}
+		}
 		var jamDatang time.Time
 		var jamPulang sql.NullTime
 		var status, keterlambatan string

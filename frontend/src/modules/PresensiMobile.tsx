@@ -54,6 +54,14 @@ const IconLogOut: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) 
   </svg>
 );
 
+// Ikon panah masuk pintu — dipakai di panel jadwal HomeTab (masuk & keluar).
+const IconArrowDoor: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 499.1 499.1" fill={color}>
+    <path d="M0,249.6c0,9.5,7.7,17.2,17.2,17.2h327.6l-63.9,63.8c-6.7,6.7-6.7,17.6,0,24.3c3.3,3.3,7.7,5,12.1,5s8.8-1.7,12.1-5 l93.1-93.1c6.7-6.7,6.7-17.6,0-24.3l-93.1-93.1c-6.7-6.7-17.6-6.7-24.3,0c-6.7,6.7-6.7,17.6,0,24.3l63.8,63.8H17.2 C7.7,232.5,0,240.1,0,249.6z" />
+    <path d="M396.4,494.2c56.7,0,102.7-46.1,102.7-102.8V107.7C499.1,51,453,4.9,396.4,4.9H112.7C56,4.9,10,51,10,107.7V166 c0,9.5,7.7,17.1,17.1,17.1c9.5,0,17.2-7.7,17.2-17.1v-58.3c0-37.7,30.7-68.5,68.4-68.5h283.7c37.7,0,68.4,30.7,68.4,68.5v283.7 c0,37.7-30.7,68.5-68.4,68.5H112.7c-37.7,0-68.4-30.7-68.4-68.5v-57.6c0-9.5-7.7-17.2-17.2-17.2S10,324.3,10,333.8v57.6 c0,56.7,46.1,102.8,102.7,102.8H396.4L396.4,494.2z" />
+  </svg>
+);
+
 const IconUser: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="8" r="4" />
@@ -273,6 +281,8 @@ type PresensiHariIni = {
   status: string;
   keterlambatan: string;
   shift: string;
+  jam_masuk_jadwal: string;
+  jam_pulang_jadwal: string;
 };
 
 type PerformaBulanIni = {
@@ -595,7 +605,7 @@ const LayananCard: React.FC<{
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Menu Utama</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}></div>
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
           {items.map((item) => (
@@ -703,9 +713,9 @@ const PengumumanCard: React.FC = () => {
 };
 
 const HomeTab: React.FC<{
-  user: AppUserLite; me: MeResponse | null; loading: boolean; onAbsen: () => void; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
+  user: AppUserLite; me: MeResponse | null; loading: boolean; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
-}> = ({ user, me, loading, onAbsen, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
+}> = ({ user, me, loading, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
   const hariIni = me?.hari_ini;
 
   return (
@@ -735,16 +745,31 @@ const HomeTab: React.FC<{
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onAbsen}
-          style={{
-            width: '100%', marginTop: 16, padding: '12px', borderRadius: 12, border: 'none',
-            background: GRADIENT, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          {!hariIni?.sudah_checkin ? 'Absen Masuk' : !hariIni?.sudah_checkout ? 'Absen Pulang' : 'Presensi Hari Ini Selesai'}
-        </button>
+        {/* Ganti tombol Absen Masuk/Pulang di sini — sudah ada tombol FAB
+            khusus di bottom nav (scan wajah), jadi tombol ini cuma
+            duplikat. Diganti info jadwal shift hari ini + status telat
+            (kalau sudah check-in & terlambat) supaya lebih berguna. */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: '#059669', fontWeight: 700, letterSpacing: 0.5 }}>Jadwal Saya Hari Ini</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#111827', marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {hariIni?.jam_masuk_jadwal && hariIni?.jam_pulang_jadwal ? (
+              <>
+                <IconArrowDoor size={20} color="#111827" />
+                <span>{hariIni.jam_masuk_jadwal}</span>
+                <span style={{ color: '#9ca3af', fontWeight: 400 }}>---</span>
+                <IconArrowDoor size={20} color="#111827" />
+                <span>{hariIni.jam_pulang_jadwal}</span>
+              </>
+            ) : (
+              'Belum ada jadwal shift'
+            )}
+          </div>
+          {hariIni?.keterlambatan && hariIni.keterlambatan !== '-' && (
+            <div style={{ fontSize: 12, color: '#dc2626', marginTop: 6, fontWeight: 600 }}>
+              Anda telat {hariIni.keterlambatan}
+            </div>
+          )}
+        </div>
       </div>
 
       <LayananCard
@@ -2393,7 +2418,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
           </div>
         ) : tab === 'home' ? (
           <HomeTab
-            user={user} me={me} loading={loading} onAbsen={() => setTab('absen')} onOpenLembur={() => setTab('lembur')}
+            user={user} me={me} loading={loading} onOpenLembur={() => setTab('lembur')}
             onOpenCutiIzin={(mode) => setTab(mode)} onOpenLaporIt={() => setTab('lapor-it')}
             onOpenPoli={() => setTab('poli')} onOpenIgd={() => setTab('igd')} onOpenRanap={() => setTab('ranap')}
             onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
@@ -2431,7 +2456,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
       {!notFound && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', padding: '8px 0 max(8px, env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', padding: '18px 0 max(8px, env(safe-area-inset-bottom))' }}>
             {navItems.slice(0, 2).map((item) => {
               const active = tab === item.key;
               return (
@@ -2482,18 +2507,18 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
           <div style={{
             position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-            paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
+            paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
           }}>
             <button
               type="button"
               onClick={() => setTab('absen')}
               style={{
-                width: 60, height: 60, marginTop: -42, borderRadius: '50%', border: '4px solid #f3f4f6',
+                width: 76, height: 76, marginTop: -52, borderRadius: '50%', border: '4px solid #f3f4f6',
                 background: GRADIENT, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', padding: 0,
               }}
             >
-              <IconFaceScan size={28} color="#fff" />
+              <IconFaceScan size={34} color="#fff" />
             </button>
             <span style={{
               fontSize: 10, fontWeight: tab === 'absen' ? 600 : 400, color: tab === 'absen' ? '#059669' : '#9ca3af',
