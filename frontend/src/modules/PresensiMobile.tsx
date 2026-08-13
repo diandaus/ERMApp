@@ -75,19 +75,6 @@ const IconCheckCircle: React.FC<IconProps> = ({ size = 36, color = '#16a34a' }) 
   </svg>
 );
 
-const IconClock: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-  </svg>
-);
-
-const IconPercent: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="19" y1="5" x2="5" y2="19" />
-    <circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
-  </svg>
-);
-
 // Ikon menu kartu "Layanan Lainnya" (Lembur/Cuti/Izin/Poli/IGD/Ranap/
 // Jadwal Obat/Permintaan Obat) — lihat LayananCard di bawah.
 const IconOvertime: React.FC<IconProps> = ({ size = 22, color = 'currentColor' }) => (
@@ -331,6 +318,12 @@ type RiwayatRow = {
 };
 
 const GRADIENT = 'linear-gradient(135deg, #34d399 0%, #059669 100%)';
+// Khusus header Home + blok transisi di bawahnya — gradasi VERTIKAL
+// (bukan diagonal spt GRADIENT), warnanya cuma bergantung posisi Y, jadi
+// dua box terpisah dgn lebar sama tapi tinggi beda tetap nyambung PERSIS
+// di garis batasnya (diagonal 135deg tidak bisa begitu — sudutnya beda
+// tergantung rasio lebar:tinggi tiap box, makanya keliatan garis).
+const HEADER_GRADIENT = 'linear-gradient(180deg, #34d399 0%, #059669 100%)';
 
 const getStatusStyle = (status: string) => {
   const base = status.replace(' & PSW', '');
@@ -720,7 +713,6 @@ const HomeTab: React.FC<{
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
 }> = ({ user, me, loading, onAbsen, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
   const hariIni = me?.hari_ini;
-  const performa = me?.performa;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -729,8 +721,11 @@ const HomeTab: React.FC<{
           ekstra sebesar ruang yg sama supaya avatar/teks di dalamnya tetap
           di posisi visual semula — hasilnya gradien hijau kelihatan
           nembus sampai ke belakang status bar, bukan cuma mulai di
-          bawahnya. */}
-      <div style={{ background: GRADIENT, marginTop: 'calc(-1 * env(safe-area-inset-top))', padding: 'calc(20px + env(safe-area-inset-top)) 16px 56px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
+          bawahnya. position:sticky + top:0 supaya avatar/nama tetap
+          nempel di atas & selalu kelihatan walau tab Home di-scroll ke
+          bawah — zIndex diberi supaya tetap di atas card putih Masuk/
+          Pulang yang scroll normal di baliknya. */}
+      <div style={{ background: HEADER_GRADIENT, marginTop: 'calc(-1 * env(safe-area-inset-top))', padding: 'calc(20px + env(safe-area-inset-top)) 16px 20px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 5 }}>
         <Avatar nama={me?.nama || user.full_name} photo={me?.photo} />
         <div>
           <div style={{ fontSize: 11, opacity: 0.85 }}>Assalamualaikum Wr. Wb.</div>
@@ -739,7 +734,28 @@ const HomeTab: React.FC<{
         </div>
       </div>
 
-      <div style={{ margin: '-40px 16px 0', background: '#fff', borderRadius: 16, boxShadow: '0 10px 30px rgba(15,23,42,0.12)', padding: 16 }}>
+      {/* Blok transisi hijau/abu TERPISAH dari header (bukan bagian dari
+          header yg sticky) — separuh atas hijau (nyambung visual dgn
+          header), separuh bawah abu (background halaman). Card putihnya
+          menumpuk -20px ke blok ini (bukan ke header itu sendiri), jadi
+          ikut discroll bareng blok ini sebagai satu kesatuan — label
+          MASUK/PULANG tidak akan ketutup header krn header tidak pernah
+          disentuh overlap-nya sama sekali. */}
+      {/* Warna solid (bukan GRADIENT diagonal) di bagian atas — GRADIENT
+          itu 135deg, jadi walau dipakai persis sama di header & blok ini,
+          box dgn tinggi beda bikin sudutnya tidak nyambung persis di
+          garis batas (keliatan sbg garis). Warna solid #059669 (ujung
+          GRADIENT) jauh lebih mulus nyambung ke bawah header drpd
+          diagonal ketemu diagonal lagi. */}
+      {/* Solid (bukan gradasi lagi) — HEADER_GRADIENT di header sekarang
+          vertikal (bukan diagonal), jadi warna di baris paling bawah
+          header itu SERAGAM di seluruh lebar (persis #059669). Blok ini
+          disamakan solid #059669 juga (bukan mulai dari terang lagi spt
+          kalau dipasangi HEADER_GRADIENT dari 0%) — itu yg bikin nyambung
+          persis di garis batasnya, bukan diagonal ketemu diagonal lagi. */}
+      <div style={{ height: 100, background: '#059669' }} />
+      <div style={{ height: 60, background: '#f3f4f6' }} />
+      <div style={{ margin: '-120px 16px 0', background: '#fff', borderRadius: 16, boxShadow: '0 10px 30px rgba(15,23,42,0.12)', padding: 16 }}>
         <div style={{ display: 'flex' }}>
           <div style={{ flex: 1, textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
             <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, letterSpacing: 0.5 }}>MASUK</div>
@@ -765,27 +781,6 @@ const HomeTab: React.FC<{
         >
           {!hariIni?.sudah_checkin ? 'Absen Masuk' : !hariIni?.sudah_checkout ? 'Absen Pulang' : 'Presensi Hari Ini Selesai'}
         </button>
-      </div>
-
-      <div style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}>Performa Kehadiran Bulan Ini</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: 8 }}><IconPercent size={14} /></div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{performa ? Math.round(performa.persentase_kehadiran) : 0}%</div>
-            <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Kehadiran</div>
-          </div>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: 8 }}><IconCalendar size={14} /></div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{performa?.total_hari_kerja ?? 0}/{performa?.total_hari_terjadwal ?? 0}</div>
-            <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Hari Kerja</div>
-          </div>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', marginBottom: 8 }}><IconClock size={14} /></div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{performa ? performa.rata_rata_jam_kerja.toFixed(1) : '0.0'}</div>
-            <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Jam/Hari</div>
-          </div>
-        </div>
       </div>
 
       <LayananCard
