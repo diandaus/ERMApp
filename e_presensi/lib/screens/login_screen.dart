@@ -20,7 +20,18 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
+  bool _rememberMe = true;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    AuthService.getRememberedUsername().then((u) {
+      if (mounted && u != null && u.isNotEmpty) {
+        setState(() => _usernameCtrl.text = u);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -41,13 +52,15 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final user = await AuthService.login(username, password);
+      final user =
+          await AuthService.login(username, password, rememberMe: _rememberMe);
       if (!mounted) return;
       widget.onLoggedIn(user);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Tidak bisa terhubung ke server. Cek koneksi internet/wifi RS.');
+      setState(() => _error =
+          'Tidak bisa terhubung ke server. Cek koneksi internet/wifi RS.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -61,105 +74,174 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(maxWidth: 380),
-              padding: const EdgeInsets.fromLTRB(28, 40, 28, 28),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 30, offset: const Offset(0, 12)),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(colors: [_kGreenLight, _kGreenDark], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                    ),
-                    child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 30),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('E-Presensi', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
-                  const SizedBox(height: 4),
-                  const Text('RS Islam Ibnu Sina Gli', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-                  const SizedBox(height: 28),
-                  TextField(
-                    controller: _usernameCtrl,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Username / NIP',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _passwordCtrl,
-                    obscureText: _obscure,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _submit(),
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(8)),
-                      child: Text(_error!, style: const TextStyle(color: Color(0xFF991B1B), fontSize: 12.5)),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _kGreenDark,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: _loading
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                          : const Text('Masuk', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Belum punya akun?', style: TextStyle(fontSize: 12.5, color: Color(0xFF374151))),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                          );
-                        },
-                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                        child: const Text('Daftar', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _kGreenDark, decoration: TextDecoration.underline)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildCard(context),
+                const SizedBox(height: 20),
+                const Text('© 2026 Firdaus | All Rights Reserved',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 380),
+      padding: const EdgeInsets.fromLTRB(28, 40, 28, 28),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 30,
+              offset: const Offset(0, 12)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                  colors: [_kGreenLight, _kGreenDark],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight),
+            ),
+            child: const Icon(Icons.qr_code_scanner_rounded,
+                color: Colors.white, size: 30),
+          ),
+          const SizedBox(height: 16),
+          const Text('E-Presensi',
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111827))),
+          const SizedBox(height: 4),
+          const Text('RUMAH SAKIT ISLAM IBNU SINA SIGLI',
+              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+          const SizedBox(height: 28),
+          TextField(
+            controller: _usernameCtrl,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              labelText: 'Username / NIP',
+              prefixIcon: Icon(Icons.person_outline),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10))),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _passwordCtrl,
+            obscureText: _obscure,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              prefixIcon: const Icon(Icons.lock_outline),
+              border: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10))),
+              suffixIcon: IconButton(
+                icon: Icon(_obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Checkbox(
+                  value: _rememberMe,
+                  activeColor: _kGreenDark,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onChanged: (v) => setState(() => _rememberMe = v ?? true),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _rememberMe = !_rememberMe),
+                child: const Text('Ingat Saya',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFF374151))),
+              ),
+            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Text(_error!,
+                  style: const TextStyle(
+                      color: Color(0xFF991B1B), fontSize: 12.5)),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: _loading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kGreenDark,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: _loading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.4, color: Colors.white))
+                  : const Text('Masuk',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Belum punya akun?',
+                  style: TextStyle(fontSize: 12.5, color: Color(0xFF374151))),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                  );
+                },
+                style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                child: const Text('Daftar',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: _kGreenDark,
+                        decoration: TextDecoration.underline)),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

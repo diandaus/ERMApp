@@ -8,20 +8,28 @@ import 'api_client.dart';
 /// endpoint baru.
 class AuthService {
   static const _prefsKey = 'e_presensi_user';
+  static const _rememberedUsernameKey = 'e_presensi_remembered_username';
 
-  static Future<AppUser> login(String username, String password) async {
+  /// Padanan "Ingat Saya" (localStorage) vs tidak (sessionStorage) di
+  /// App.tsx (web) — di Flutter tak ada bedanya localStorage/session
+  /// dalam satu proses, jadi bedanya cuma: dicentang -> sesi & username
+  /// disimpan (auto-login lain kali app dibuka); tidak dicentang -> sesi
+  /// tak disimpan sama sekali (wajib login ulang tiap buka app).
+  static Future<AppUser> login(String username, String password, {required bool rememberMe}) async {
     final data = await ApiClient.postJson('/api/auth/login', {
       'username': username,
       'password': password,
     });
     final user = AppUser.fromJson(data['user'] as Map<String, dynamic>);
-    await _saveSession(user);
-    return user;
-  }
-
-  static Future<void> _saveSession(AppUser user) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(user.toJson()));
+    if (rememberMe) {
+      await prefs.setString(_prefsKey, jsonEncode(user.toJson()));
+      await prefs.setString(_rememberedUsernameKey, username);
+    } else {
+      await prefs.remove(_prefsKey);
+      await prefs.remove(_rememberedUsernameKey);
+    }
+    return user;
   }
 
   static Future<AppUser?> getSavedUser() async {
@@ -34,6 +42,11 @@ class AuthService {
       await prefs.remove(_prefsKey);
       return null;
     }
+  }
+
+  static Future<String?> getRememberedUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_rememberedUsernameKey);
   }
 
   static Future<void> logout() async {
