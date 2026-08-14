@@ -1102,7 +1102,7 @@ const PengaturanAkunView: React.FC<{ userId: number; onBack: () => void }> = ({ 
   const [saving, setSaving] = React.useState(false);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box',
   };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
 
@@ -1266,7 +1266,7 @@ const LemburView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBack
   const [saving, setSaving] = React.useState(false);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box',
   };
   // iOS merender widget date/time bawaan dgn lebar intrinsik yg lebih besar
   // dari box-nya kalau padding kiri-kanan terlalu lebar — dipersempit +
@@ -1460,7 +1460,7 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   const jumlahHari = hitungJumlahHariFE(tanggalAwal, tanggalAkhir);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box',
   };
   const dateTimeInputStyle: React.CSSProperties = {
     ...inputStyle, padding: '9px 6px', WebkitAppearance: 'none',
@@ -1728,7 +1728,7 @@ const LaporItView: React.FC<{ nik: string; onBack: () => void }> = ({ nik, onBac
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    width: '100%', minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box',
   };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 };
 
@@ -2014,7 +2014,7 @@ const PoliMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = ({ u
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           placeholder="Cari nama / no. RM..."
-          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
         />
 
         {isDokterLocked && !lockedKdDokter && (
@@ -2098,7 +2098,7 @@ const IgdMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           placeholder="Cari nama / no. RM..."
-          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
         />
 
         {loading ? (
@@ -2190,7 +2190,7 @@ const RanapMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = ({ 
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           placeholder="Cari nama / no. RM..."
-          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
         />
 
         {loading ? (
@@ -2280,7 +2280,7 @@ const FarmasiMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           placeholder="Cari nama / no. RM..."
-          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
         />
 
         {loading ? (
@@ -2358,7 +2358,7 @@ const PermintaanQueueMobileView: React.FC<{ title: string; endpoint: string; emp
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           placeholder="Cari nama / no. RM..."
-          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
         />
 
         {loading ? (
