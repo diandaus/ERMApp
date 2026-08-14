@@ -371,7 +371,8 @@ const AbsenTab: React.FC<{
   nik: string;
   hariIni: PresensiHariIni | null;
   onSelesai: () => void;
-}> = ({ nik, hariIni, onSelesai }) => {
+  onBack: () => void;
+}> = ({ nik, hariIni, onSelesai, onBack }) => {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -379,6 +380,33 @@ const AbsenTab: React.FC<{
   const [camError, setCamError] = React.useState<string | null>(null);
   const [captured, setCaptured] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+
+  // Swipe-kanan-dari-tepi-kiri buat kembali (pola iOS "swipe back") —
+  // touch cuma mulai dilacak kalau dimulai dekat tepi kiri layar (<=24px),
+  // supaya tidak bentrok dgn tap/scroll biasa di tengah layar.
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (t.clientX <= 24) {
+      touchStartX.current = t.clientX;
+      touchStartY.current = t.clientY;
+    } else {
+      touchStartX.current = null;
+      touchStartY.current = null;
+    }
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const t = e.changedTouches[0];
+    const deltaX = t.clientX - touchStartX.current;
+    const deltaY = Math.abs(t.clientY - touchStartY.current);
+    if (deltaX > 80 && deltaY < 60) {
+      onBack();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
 
   const aksi: 'checkin' | 'checkout' = hariIni?.sudah_checkin && !hariIni?.sudah_checkout ? 'checkout' : 'checkin';
   const sudahSelesaiHariIni = hariIni?.sudah_checkin && hariIni?.sudah_checkout;
@@ -490,59 +518,71 @@ const AbsenTab: React.FC<{
 
   if (sudahSelesaiHariIni) {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconCheckCircle size={40} /></div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Presensi hari ini sudah lengkap</div>
-        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Check-in {hariIni?.jam_datang} · Check-out {hariIni?.jam_pulang}</div>
+      <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+        <SubPageHeader title="Absen" onBack={onBack} />
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconCheckCircle size={40} /></div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Presensi hari ini sudah lengkap</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Check-in {hariIni?.jam_datang} · Check-out {hariIni?.jam_pulang}</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#111827' }}>
-        {aksi === 'checkin' ? 'Absen Check In' : 'Absen Check Out'}
+    <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <SubPageHeader title="Absen" onBack={onBack} />
+      {/* paddingBottom ekstra — nyisain ruang di bawah supaya konten
+          (preview kamera) tidak ketutup tombol fixed di bawah. */}
+      <div style={{ padding: '0 16px 130px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#111827' }}>
+          {aksi === 'checkin' ? 'Absen Masuk' : 'Absen Pulang'}
+        </div>
+
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 5', borderRadius: 16, overflow: 'hidden', background: '#111827' }}>
+          {camError ? (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, padding: 20, textAlign: 'center' }}>
+              {camError}
+            </div>
+          ) : captured ? (
+            <img src={captured} alt="Hasil foto" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            // position:absolute + inset:0 (bukan width/height:100%) supaya
+            // ukurannya dihitung dari kotak parent langsung — di sebagian
+            // WebKit, height:100% pada elemen di dalam parent yg tingginya
+            // ditentukan lewat CSS aspect-ratio tidak selalu ke-resolve dgn
+            // benar, menyisakan celah kosong yg keliatan sbg bar hitam
+            // (warna background parent) di bawah video.
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+            />
+          )}
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </div>
       </div>
 
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 5', borderRadius: 16, overflow: 'hidden', background: '#111827' }}>
-        {camError ? (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, padding: 20, textAlign: 'center' }}>
-            {camError}
-          </div>
-        ) : captured ? (
-          <img src={captured} alt="Hasil foto" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          // position:absolute + inset:0 (bukan width/height:100%) supaya
-          // ukurannya dihitung dari kotak parent langsung — di sebagian
-          // WebKit, height:100% pada elemen di dalam parent yg tingginya
-          // ditentukan lewat CSS aspect-ratio tidak selalu ke-resolve dgn
-          // benar, menyisakan celah kosong yg keliatan sbg bar hitam
-          // (warna background parent) di bawah video.
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-          />
-        )}
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
-      </div>
-
-      <button
-        type="button"
-        onClick={handleCaptureAndSubmit}
-        disabled={!ready || submitting}
-        style={{
-          padding: '12px', borderRadius: 12, border: 'none', background: ready && !submitting ? GRADIENT : '#d1d5db',
-          color: '#fff', fontSize: 14, fontWeight: 600, cursor: ready && !submitting ? 'pointer' : 'not-allowed',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        }}
-      >
-        {submitting ? 'Menyimpan...' : <><IconCamera size={18} /> Absen — {aksi === 'checkin' ? 'Masuk' : 'Pulang'}</>}
-      </button>
-      <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'center' }}>
-        Foto & lokasi GPS langsung tersimpan begitu foto diambil.
+      {/* Tombol dipindah ke bawah (fixed) — lebih gampang dijangkau ibu
+          jari drpd nempel langsung di bawah preview kamera. */}
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb', padding: '16px 16px max(16px, env(safe-area-inset-bottom))' }}>
+        <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'center', marginBottom: 8 }}>
+          Foto & lokasi GPS langsung tersimpan begitu foto diambil.
+        </div>
+        <button
+          type="button"
+          onClick={handleCaptureAndSubmit}
+          disabled={!ready || submitting}
+          style={{
+            width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: ready && !submitting ? GRADIENT : '#d1d5db',
+            color: '#fff', fontSize: 14, fontWeight: 600, cursor: ready && !submitting ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          {submitting ? 'Menyimpan...' : <><IconCamera size={18} /> Absen — {aksi === 'checkin' ? 'Masuk' : 'Pulang'}</>}
+        </button>
       </div>
     </div>
   );
@@ -2406,7 +2446,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#f3f4f6', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 88 }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: tab === 'absen' ? 0 : 88 }}>
         {notFound ? (
           <div style={{ padding: 40, textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconAlertTriangle size={36} /></div>
@@ -2424,7 +2464,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
             onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
           />
         ) : tab === 'absen' ? (
-          <AbsenTab nik={nik} hariIni={me?.hari_ini || null} onSelesai={() => { fetchMe(); setTab('home'); }} />
+          <AbsenTab nik={nik} hariIni={me?.hari_ini || null} onSelesai={() => { fetchMe(); setTab('home'); }} onBack={() => setTab('home')} />
         ) : tab === 'jadwal' ? (
           <JadwalTab nik={nik} />
         ) : tab === 'saya' ? (
@@ -2454,7 +2494,9 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
         )}
       </div>
 
-      {!notFound && (
+      {/* Footer disembunyikan di tab Absen — layar itu cuma butuh fokus ke
+          tombol Absen Masuk/Keluar (scan wajah), tanpa distraksi nav bar. */}
+      {!notFound && tab !== 'absen' && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
           <div style={{ display: 'flex', padding: '18px 0 max(8px, env(safe-area-inset-bottom))' }}>
             {navItems.slice(0, 2).map((item) => {
@@ -2520,9 +2562,10 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
             >
               <IconFaceScan size={34} color="#fff" />
             </button>
-            <span style={{
-              fontSize: 10, fontWeight: tab === 'absen' ? 600 : 400, color: tab === 'absen' ? '#059669' : '#9ca3af',
-            }}>
+            {/* Label ini selalu tampil inactive — footer (termasuk label
+                ini) disembunyikan total begitu tab='absen' aktif, jadi
+                state "active"-nya tidak akan pernah kelihatan. */}
+            <span style={{ fontSize: 10, fontWeight: 400, color: '#9ca3af' }}>
               Absen
             </span>
           </div>
