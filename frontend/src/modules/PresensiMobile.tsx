@@ -519,7 +519,7 @@ const AbsenTab: React.FC<{
   if (sudahSelesaiHariIni) {
     return (
       <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        <SubPageHeader title="Absen" onBack={onBack} />
+        <SubPageHeader title="Absen" onBack={onBack} iconSize={28} fontSize={20} />
         <div style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconCheckCircle size={40} /></div>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Presensi hari ini sudah lengkap</div>
@@ -531,14 +531,10 @@ const AbsenTab: React.FC<{
 
   return (
     <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      <SubPageHeader title="Absen" onBack={onBack} />
+      <SubPageHeader title="Absen" onBack={onBack} iconSize={28} fontSize={20} />
       {/* paddingBottom ekstra — nyisain ruang di bawah supaya konten
           (preview kamera) tidak ketutup tombol fixed di bawah. */}
-      <div style={{ padding: '0 16px 130px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#111827' }}>
-          {aksi === 'checkin' ? 'Absen Masuk' : 'Absen Pulang'}
-        </div>
-
+      <div style={{ padding: '24px 16px 130px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 5', borderRadius: 16, overflow: 'hidden', background: '#111827' }}>
           {camError ? (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, padding: 20, textAlign: 'center' }}>
@@ -959,12 +955,12 @@ type PresensiProfilResp = {
   nik: string; nama: string; no_telp: string; email: string; departemen: string; photo: string;
 };
 
-const SubPageHeader: React.FC<{ title: string; onBack: () => void }> = ({ title, onBack }) => (
+const SubPageHeader: React.FC<{ title: string; onBack: () => void; iconSize?: number; fontSize?: number }> = ({ title, onBack, iconSize = 20, fontSize = 14 }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 16px 8px' }}>
     <button type="button" onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', color: '#111827' }}>
-      <IconArrowLeft size={20} />
+      <IconArrowLeft size={iconSize} />
     </button>
-    <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</span>
+    <span style={{ fontSize, fontWeight: 700, color: '#111827' }}>{title}</span>
   </div>
 );
 
