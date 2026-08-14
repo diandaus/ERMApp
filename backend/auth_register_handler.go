@@ -18,15 +18,16 @@ type CariPegawaiRegistrasiResult struct {
 	SudahTerdaftar bool   `json:"sudah_terdaftar"`
 }
 
-// GET /api/auth/cari-pegawai?q=<NIP atau No. HP> — dipanggil dari
+// GET /api/auth/cari-pegawai?q=<NIP atau NIK KTP> — dipanggil dari
 // halaman pendaftaran akun mandiri. Cocokkan PERSIS (bukan LIKE) ke
-// petugas.nip ATAU petugas.no_telp — NIP/No.HP dipakai sbg identitas
-// unik pencarian di sini, beda dari pencarian bebas di /api/petugas/list.
+// petugas.nip ATAU pegawai.no_ktp (JOIN nik=nip) — NIP/NIK KTP dipakai
+// sbg identitas unik pencarian di sini, beda dari pencarian bebas di
+// /api/petugas/list.
 func cariPegawaiRegistrasi(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		q := strings.TrimSpace(c.Query("q"))
 		if q == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "NIP atau No. HP wajib diisi"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "NIP atau NIK KTP wajib diisi"})
 			return
 		}
 
@@ -34,13 +35,14 @@ func cariPegawaiRegistrasi(db *sql.DB) gin.HandlerFunc {
 		err := db.QueryRow(
 			`SELECT petugas.nip, petugas.nama
 			 FROM petugas
-			 WHERE petugas.status = '1' AND (petugas.nip = ? OR petugas.no_telp = ?)
+			 LEFT JOIN pegawai ON pegawai.nik = petugas.nip
+			 WHERE petugas.status = '1' AND (petugas.nip = ? OR pegawai.no_ktp = ?)
 			 LIMIT 1`,
 			q, q,
 		).Scan(&result.NIP, &result.Nama)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Data pegawai tidak ditemukan. Periksa kembali NIP atau No. HP, atau hubungi bagian Umum/Kepegawaian."})
+				c.JSON(http.StatusNotFound, gin.H{"error": "Data pegawai tidak ditemukan. Periksa kembali NIP atau NIK KTP, atau hubungi bagian Umum/Kepegawaian."})
 				return
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

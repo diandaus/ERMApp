@@ -394,7 +394,7 @@ type RegisterViewProps = {
 };
 
 // RegisterView — "Belum punya akun? Daftar" di LoginView. Alur: pegawai
-// masukin NIP/No.HP -> dicocokkan ke tabel petugas (GET
+// masukin NIP/NIK KTP -> dicocokkan ke tabel petugas (GET
 // /api/auth/cari-pegawai) -> kalau ketemu & belum ada akun, baru
 // tampilkan sisa form (Asal Unit + kata sandi). NIP dipakai langsung
 // sbg username (staf sudah pasti hafal NIP-nya sendiri), dan akun yang
@@ -435,7 +435,7 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => {
     e.preventDefault();
     const query = q.trim();
     if (!query) {
-      setSearchError('Isi NIP atau No. HP dulu.');
+      setSearchError('Isi NIP atau NIK dulu.');
       return;
     }
     setSearching(true);
@@ -543,12 +543,12 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => {
           <form onSubmit={handleCari}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12.5, color: '#374151', marginBottom: 6 }}>
-                NIP Pegawai / No. HP
+                NIP Pegawai / NIK
               </label>
               <input
                 type="text"
                 autoFocus
-                placeholder="Masukkan NIP atau No. HP"
+                placeholder="Masukan NIP pegawai atau NIK KTP"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 style={registerInputStyle}

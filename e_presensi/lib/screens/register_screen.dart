@@ -6,7 +6,7 @@ const _kGreenDark = Color(0xFF059669);
 // Padanan persis RegisterView di frontend/src/modules/App.tsx (versi
 // web) — endpoint backend yg dipakai SAMA PERSIS, tidak ada endpoint
 // baru:
-//   GET  /api/auth/cari-pegawai?q= (NIP atau No.HP)
+//   GET  /api/auth/cari-pegawai?q= (NIP atau NIK KTP)
 //   GET  /api/pegawai/departemen
 //   POST /api/auth/register {nip, departemen, password}
 class RegisterScreen extends StatefulWidget {
@@ -63,7 +63,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _cari() async {
     final q = _queryCtrl.text.trim();
     if (q.isEmpty) {
-      setState(() => _searchError = 'Isi NIP atau No. HP dulu.');
+      setState(() => _searchError = 'Isi NIP atau NIK dulu.');
       return;
     }
     setState(() {
@@ -184,7 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (_foundNip == null) ...[
-                    const Text('NIP Pegawai / No. HP', style: TextStyle(fontSize: 12.5, color: Color(0xFF374151))),
+                    const Text('NIP Pegawai / NIK', style: TextStyle(fontSize: 12.5, color: Color(0xFF374151))),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _queryCtrl,
@@ -192,7 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _cari(),
                       decoration: const InputDecoration(
-                        hintText: 'Masukkan NIP atau No. HP',
+                        hintText: 'Masukan NIP pegawai atau NIK KTP',
                         border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
                       ),
                     ),
