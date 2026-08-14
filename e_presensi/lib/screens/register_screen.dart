@@ -26,7 +26,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _foundNip;
   String? _foundNama;
 
-  List<String> _departemenList = [];
+  List<({String kode, String nama})> _departemenList = [];
   String? _departemen;
   bool _submitting = false;
   String? _submitError;
@@ -47,10 +47,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _loadDepartemen() async {
     try {
-      // Endpoint ini balikin array JSON polos (bukan {"...": [...]}),
-      // jadi lewat getJsonList (bukan getJson yg mengasumsikan object).
-      final res = await ApiClient.getJsonList('/api/pegawai/departemen');
-      if (mounted) setState(() => _departemenList = res);
+      // Endpoint balikin [{"kode": "IGD", "nama": "UNIT GAWAT DARURAT"}, ...]
+      // — kode dikirim ke /api/auth/register (cocok dgn pegawai.departemen),
+      // nama cuma buat ditampilkan di dropdown.
+      final res = await ApiClient.getJsonArray('/api/pegawai/departemen');
+      if (mounted) {
+        setState(() => _departemenList = res.map((d) => (kode: d['kode'] as String? ?? '', nama: d['nama'] as String? ?? '')).toList());
+      }
     } catch (_) {
       // Opsional — kalau gagal diambil, dropdown cuma kosong, staf tetap
       // bisa lanjut cuma tanpa pilihan (jarang terjadi, endpoint ringan).
@@ -238,7 +241,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       value: _departemen,
                       decoration: const InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10)))),
                       hint: const Text('Pilih unit/departemen'),
-                      items: _departemenList.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                      items: _departemenList.map((d) => DropdownMenuItem(value: d.kode, child: Text(d.nama))).toList(),
                       onChanged: (v) => setState(() => _departemen = v),
                     ),
                     const SizedBox(height: 16),

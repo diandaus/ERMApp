@@ -423,21 +423,33 @@ func updatePegawaiStatus(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+type DepartemenOpsi struct {
+	Kode string `json:"kode"`
+	Nama string `json:"nama"`
+}
+
+// kode dipakai spt sebelumnya (filter/simpan, cocok dgn kolom pegawai.departemen),
+// nama ditambahkan (JOIN ke tabel departemen) supaya UI bisa tampilkan yg
+// gampang dibaca ("UNIT GAWAT DARURAT") drpd kode mentah ("IGD").
 func getPegawaiDepartemen(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		rows, err := db.Query(`SELECT DISTINCT COALESCE(departemen,'') AS departemen FROM pegawai WHERE departemen != '' AND departemen != '-' ORDER BY departemen`)
+		rows, err := db.Query(`
+			SELECT DISTINCT pegawai.departemen, COALESCE(departemen.nama, pegawai.departemen)
+			FROM pegawai
+			LEFT JOIN departemen ON departemen.dep_id = pegawai.departemen
+			WHERE pegawai.departemen != '' AND pegawai.departemen != '-'
+			ORDER BY COALESCE(departemen.nama, pegawai.departemen)`)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		defer rows.Close()
-		var list []string
+		list := []DepartemenOpsi{}
 		for rows.Next() {
-			var d string
-			if err := rows.Scan(&d); err != nil { continue }
+			var d DepartemenOpsi
+			if err := rows.Scan(&d.Kode, &d.Nama); err != nil { continue }
 			list = append(list, d)
 		}
-		if list == nil { list = []string{} }
 		c.JSON(http.StatusOK, list)
 	}
 }

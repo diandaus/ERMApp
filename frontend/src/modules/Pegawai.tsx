@@ -44,7 +44,7 @@ export const PegawaiView: React.FC = () => {
   const [sttsAktif, setSttsAktif]               = React.useState('AKTIF');
   const [departemen, setDepartemen]             = React.useState('');
   const [pegawaiList, setPegawaiList]           = React.useState<Pegawai[]>([]);
-  const [departemenList, setDepartemenList]     = React.useState<string[]>([]);
+  const [departemenList, setDepartemenList]     = React.useState<{ kode: string; nama: string }[]>([]);
   const [loading, setLoading]                   = React.useState(false);
   const [error, setError]                       = React.useState<string | null>(null);
   const [selectedPegawai, setSelectedPegawai]   = React.useState<Pegawai | null>(null);
@@ -262,18 +262,18 @@ export const PegawaiView: React.FC = () => {
                   background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, minWidth: 160, padding: 4
                 }}>
-                  {['', ...departemenList].map(d => (
+                  {[{ kode: '', nama: 'Semua Departemen' }, ...departemenList].map(d => (
                     <div
-                      key={d}
-                      onClick={() => { setDepartemen(d); setShowFilterDropdown(false); }}
+                      key={d.kode}
+                      onClick={() => { setDepartemen(d.kode); setShowFilterDropdown(false); }}
                       style={{
                         padding: '7px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 6,
-                        background: departemen === d ? '#dbeafe' : 'transparent',
-                        color: departemen === d ? '#1d4ed8' : '#374151',
-                        fontWeight: departemen === d ? 500 : 400
+                        background: departemen === d.kode ? '#dbeafe' : 'transparent',
+                        color: departemen === d.kode ? '#1d4ed8' : '#374151',
+                        fontWeight: departemen === d.kode ? 500 : 400
                       }}
                     >
-                      {d === '' ? 'Semua Departemen' : d}
+                      {d.nama}
                     </div>
                   ))}
                 </div>

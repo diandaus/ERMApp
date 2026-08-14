@@ -407,7 +407,7 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => {
   const [searchError, setSearchError] = React.useState<string | null>(null);
   const [found, setFound] = React.useState<{ nip: string; nama: string } | null>(null);
 
-  const [departemenList, setDepartemenList] = React.useState<string[]>([]);
+  const [departemenList, setDepartemenList] = React.useState<{ kode: string; nama: string }[]>([]);
   const [departemen, setDepartemen] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
@@ -594,7 +594,7 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => {
               >
                 <option value="">Pilih unit/departemen</option>
                 {departemenList.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d.kode} value={d.kode}>{d.nama}</option>
                 ))}
               </select>
             </div>

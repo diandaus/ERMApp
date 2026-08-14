@@ -56,7 +56,7 @@ export const RekapKehadiranView: React.FC = () => {
   const [tahun, setTahun] = React.useState(String(now.getFullYear()));
   const [bulan, setBulan] = React.useState(String(now.getMonth() + 1).padStart(2, '0'));
   const [departemen, setDepartemen] = React.useState('');
-  const [departemenList, setDepartemenList] = React.useState<string[]>([]);
+  const [departemenList, setDepartemenList] = React.useState<{ kode: string; nama: string }[]>([]);
   const [sttsKerja, setSttsKerja] = React.useState('');
   const [sttsKerjaList, setSttsKerjaList] = React.useState<SttsKerjaOpsi[]>([]);
   const [searchText, setSearchText] = React.useState('');
@@ -112,7 +112,7 @@ export const RekapKehadiranView: React.FC = () => {
         <div style={{ position: 'relative', display: 'inline-flex' }}>
           <select value={departemen} onChange={e => setDepartemen(e.target.value)} style={filterSelectStyle}>
             <option value="">Semua Departemen</option>
-            {departemenList.map(d => <option key={d} value={d}>{d}</option>)}
+            {departemenList.map(d => <option key={d.kode} value={d.kode}>{d.nama}</option>)}
           </select>
           <StepperIcon />
         </div>
