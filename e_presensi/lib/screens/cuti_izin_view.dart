@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/cuti_izin_item.dart';
 import '../models/pegawai_opsi.dart';
 import '../services/cuti_izin_service.dart';
+import '../services/jadwal_pegawai_service.dart';
 import '../services/pegawai_service.dart';
 
 const _kGreenDark = Color(0xFF059669);
@@ -34,8 +35,9 @@ int _hitungJumlahHari(DateTime awal, DateTime akhir) {
 
 /// Padanan CutiIzinView di PresensiMobile.tsx — satu komponen dipakai utk
 /// Cuti maupun Izin lewat parameter `mode`, form rentang tanggal + jenis +
-/// alamat + kepentingan + cari PJ pengganti, + riwayat pengajuan (dgn
-/// tombol Batalkan utk yg masih "Proses Pengajuan").
+/// alamat + kepentingan + pilih PJ pengganti (dari departemen sendiri
+/// lewat modal), + riwayat pengajuan (dgn tombol Batalkan utk yg masih
+/// "Proses Pengajuan").
 class CutiIzinView extends StatefulWidget {
   final String nik;
   final String mode; // 'cuti' | 'izin'
@@ -57,11 +59,17 @@ class _CutiIzinViewState extends State<CutiIzinView> {
   final _alamatCtrl = TextEditingController();
   final _kepentinganCtrl = TextEditingController();
 
-  final _pjCtrl = TextEditingController();
-  List<PegawaiOpsi> _pjResults = [];
   PegawaiOpsi? _pjTerpilih;
-  Timer? _pjDebounce;
-  bool _pjSearching = false;
+
+  // Departemen & shift tetap pemohon sendiri (dicari dari data pegawai
+  // lewat nik) — dipakai buat (1) batasi modal pilih PJ pengganti cuma
+  // ke anggota departemen sendiri, (2) shift Reguler tak wajib punya
+  // pengganti (lihat _submit & backend cuti_izin_handler.go
+  // submitCutiIzin). _isRegulerShift default false (dianggap wajib)
+  // sampai kebukti sebaliknya dari data server, spy gagal-aman kalau
+  // _loadProfilInfo gagal diambil.
+  String? _myDepartemen;
+  bool _isRegulerShift = false;
 
   String get _judul => widget.mode == 'cuti' ? 'Cuti' : 'Izin';
   List<String> get _urgensiOpsi => widget.mode == 'cuti' ? _kUrgensiCuti : _kUrgensiIzin;
@@ -71,14 +79,30 @@ class _CutiIzinViewState extends State<CutiIzinView> {
     super.initState();
     _urgensi = _urgensiOpsi.first;
     _loadList();
+    _loadProfilInfo();
+  }
+
+  Future<void> _loadProfilInfo() async {
+    try {
+      final now = DateTime.now();
+      final list = await JadwalPegawaiService.getList(tahun: now.year, bulan: now.month, search: widget.nik);
+      final match = list.where((p) => p.nik == widget.nik);
+      if (match.isNotEmpty && mounted) {
+        setState(() {
+          _myDepartemen = match.first.departemen;
+          _isRegulerShift = match.first.jadwalTetapShift.trim().toLowerCase() == 'reguler';
+        });
+      }
+    } catch (_) {
+      // Opsional — gagal diambil ya tetap anggap wajib PJ (aman); modal
+      // pilih PJ akan kasih tau kalau departemen belum kedeteksi.
+    }
   }
 
   @override
   void dispose() {
     _alamatCtrl.dispose();
     _kepentinganCtrl.dispose();
-    _pjCtrl.dispose();
-    _pjDebounce?.cancel();
     super.dispose();
   }
 
@@ -116,26 +140,21 @@ class _CutiIzinViewState extends State<CutiIzinView> {
     });
   }
 
-  void _onPjChanged(String q) {
-    _pjDebounce?.cancel();
-    if (q.trim().length < 2) {
-      setState(() => _pjResults = []);
+  Future<void> _openPjPicker() async {
+    if (_myDepartemen == null || _myDepartemen!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Departemen Anda belum terdeteksi, coba lagi sebentar.'), backgroundColor: Color(0xFFDC2626)),
+      );
       return;
     }
-    _pjDebounce = Timer(const Duration(milliseconds: 300), () async {
-      setState(() => _pjSearching = true);
-      try {
-        final results = await PegawaiService.search(q.trim());
-        if (!mounted) return;
-        setState(() {
-          _pjResults = results;
-          _pjSearching = false;
-        });
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _pjSearching = false);
-      }
-    });
+    final result = await showModalBottomSheet<PegawaiOpsi>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _PjPickerSheet(departemen: _myDepartemen!, excludeNik: widget.nik),
+    );
+    if (result != null && mounted) setState(() => _pjTerpilih = result);
   }
 
   Future<void> _submit() async {
@@ -145,7 +164,7 @@ class _CutiIzinViewState extends State<CutiIzinView> {
       );
       return;
     }
-    if (_pjTerpilih == null) {
+    if (_pjTerpilih == null && !_isRegulerShift) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pilih penanggung jawab pengganti dulu.'), backgroundColor: Color(0xFFDC2626)),
       );
@@ -166,16 +185,14 @@ class _CutiIzinViewState extends State<CutiIzinView> {
         urgensi: _urgensi,
         alamat: _alamatCtrl.text.trim(),
         kepentingan: _kepentinganCtrl.text.trim(),
-        nikPj: _pjTerpilih!.nik,
+        nikPj: _pjTerpilih?.nik ?? '',
       );
       if (!mounted) return;
       _alamatCtrl.clear();
       _kepentinganCtrl.clear();
-      _pjCtrl.clear();
       setState(() {
         _showForm = false;
         _pjTerpilih = null;
-        _pjResults = [];
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Pengajuan $_judul terkirim.'), backgroundColor: _kGreenDark),
@@ -350,7 +367,15 @@ class _CutiIzinViewState extends State<CutiIzinView> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Penanggung Jawab Pengganti', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+          Text(
+            _isRegulerShift ? 'Penanggung Jawab Pengganti (opsional)' : 'Penanggung Jawab Pengganti',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151)),
+          ),
+          if (_isRegulerShift)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Text('Shift Reguler tidak wajib punya pengganti.', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+            ),
           const SizedBox(height: 6),
           if (_pjTerpilih != null)
             Container(
@@ -360,49 +385,18 @@ class _CutiIzinViewState extends State<CutiIzinView> {
                 children: [
                   Expanded(child: Text(_pjTerpilih!.nama, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF047857)))),
                   TextButton(
-                    onPressed: () => setState(() {
-                      _pjTerpilih = null;
-                      _pjCtrl.clear();
-                    }),
+                    onPressed: () => setState(() => _pjTerpilih = null),
                     child: const Text('Ganti'),
                   ),
                 ],
               ),
             )
           else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _pjCtrl,
-                  onChanged: _onPjChanged,
-                  decoration: InputDecoration(
-                    hintText: 'Cari nama pegawai...',
-                    suffixIcon: _pjSearching ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : const Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
-                    contentPadding: const EdgeInsets.all(12),
-                  ),
-                ),
-                if (_pjResults.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    decoration: BoxDecoration(border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(10)),
-                    child: Column(
-                      children: _pjResults
-                          .map((p) => ListTile(
-                                dense: true,
-                                title: Text(p.nama, style: const TextStyle(fontSize: 13)),
-                                subtitle: Text(p.nik, style: const TextStyle(fontSize: 11)),
-                                onTap: () => setState(() {
-                                  _pjTerpilih = p;
-                                  _pjResults = [];
-                                }),
-                              ))
-                          .toList(),
-                    ),
-                  ),
-              ],
-            ),
+            // Bukan text field cari-langsung lagi — tap buka modal yg
+            // cuma nampilin anggota departemen sendiri (lihat
+            // _openPjPicker & _PjPickerSheet), supaya user tak salah
+            // pilih pengganti dari departemen lain.
+            _FieldButton(text: 'Pilih penanggung jawab pengganti', icon: Icons.person_search_outlined, onTap: _openPjPicker),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -448,6 +442,117 @@ class _FieldButton extends StatelessWidget {
             Icon(icon, size: 16, color: const Color(0xFF6B7280)),
             const SizedBox(width: 8),
             Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF111827)))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Modal pilih PJ pengganti — cuma nampilin pegawai AKTIF satu
+/// departemen dgn pemohon (bukan cari lintas departemen), diri sendiri
+/// dikecualikan. Ada search box buat filter nama di dalam daftar itu.
+class _PjPickerSheet extends StatefulWidget {
+  final String departemen;
+  final String excludeNik;
+  const _PjPickerSheet({required this.departemen, required this.excludeNik});
+
+  @override
+  State<_PjPickerSheet> createState() => _PjPickerSheetState();
+}
+
+class _PjPickerSheetState extends State<_PjPickerSheet> {
+  final _searchCtrl = TextEditingController();
+  List<PegawaiOpsi> _list = [];
+  bool _loading = true;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _load('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load(String q) async {
+    setState(() => _loading = true);
+    try {
+      final list = await PegawaiService.searchDepartemen(departemen: widget.departemen, query: q);
+      if (!mounted) return;
+      setState(() {
+        _list = list.where((p) => p.nik != widget.excludeNik).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  void _onSearchChanged(String q) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () => _load(q.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (context, scrollController) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(width: 36, height: 4, decoration: BoxDecoration(color: _kBorder, borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 16),
+            const Text('Pilih Penanggung Jawab Pengganti', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
+            const SizedBox(height: 2),
+            const Text('Anggota departemen Anda sendiri', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _searchCtrl,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Cari nama...',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kBorder)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(child: Text('Memuat...', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))))
+                  : _list.isEmpty
+                      ? const Center(child: Text('Tidak ada pegawai ditemukan', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))))
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemCount: _list.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1, color: _kBorder),
+                          itemBuilder: (context, i) {
+                            final p = _list[i];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(p.nama, style: const TextStyle(fontSize: 13, color: Color(0xFF111827))),
+                              subtitle: Text(p.nik, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                              onTap: () => Navigator.of(context).pop(p),
+                            );
+                          },
+                        ),
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),

@@ -2,10 +2,16 @@ import '../models/pegawai_opsi.dart';
 import 'api_client.dart';
 
 class PegawaiService {
-  // stts_aktif=AKTIF — dipakai pencarian PJ pengganti di form Izin/Cuti,
-  // jangan sampai muncul pegawai yg sudah KELUAR.
-  static Future<List<PegawaiOpsi>> search(String query) async {
-    final list = await ApiClient.getJsonArray('/api/pegawai/list', query: {'search': query, 'stts_aktif': 'AKTIF'});
-    return list.map(PegawaiOpsi.fromJson).take(8).toList();
+  // Daftar pegawai AKTIF satu departemen (buat modal pilih PJ pengganti
+  // di form Izin/Cuti — cuma boleh dari departemen sendiri, bukan cari
+  // lintas departemen). `query` opsional buat filter nama di dalam
+  // modal.
+  static Future<List<PegawaiOpsi>> searchDepartemen({required String departemen, String query = ''}) async {
+    final list = await ApiClient.getJsonArray('/api/pegawai/list', query: {
+      'departemen': departemen,
+      'stts_aktif': 'AKTIF',
+      if (query.isNotEmpty) 'search': query,
+    });
+    return list.map(PegawaiOpsi.fromJson).toList();
   }
 }
