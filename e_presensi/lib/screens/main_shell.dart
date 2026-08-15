@@ -36,7 +36,11 @@ class _MainShellState extends State<MainShell> {
       case _Tab.jadwal:
         return JadwalTab(nik: widget.user.nik);
       case _Tab.absen:
-        return AbsenTab(nik: widget.user.nik, onSelesai: () => setState(() => _tab = _Tab.home));
+        return AbsenTab(
+          nik: widget.user.nik,
+          onSelesai: () => setState(() => _tab = _Tab.home),
+          onBack: () => setState(() => _tab = _Tab.home),
+        );
       case _Tab.kehadiran:
         return KehadiranTab(nik: widget.user.nik);
       case _Tab.saya:
@@ -50,6 +54,7 @@ class _MainShellState extends State<MainShell> {
     // banner-nya tembus sampai ke atas layar. Tab lain: status bar tetap
     // solid dgn ikon gelap spt biasa (background putih/abu).
     final isHome = _tab == _Tab.home;
+    final isAbsen = _tab == _Tab.absen;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: isHome
           ? const SystemUiOverlayStyle(
@@ -64,8 +69,11 @@ class _MainShellState extends State<MainShell> {
             ),
       child: Scaffold(
         backgroundColor: const Color(0xFFF3F4F6),
-        body: SafeArea(top: !isHome, bottom: false, child: _body()),
-        bottomNavigationBar: _BottomNav(active: _tab, onTap: (t) => setState(() => _tab = t)),
+        body: SafeArea(top: !isHome, bottom: isAbsen, child: _body()),
+        // Tab Absen: sembunyikan bottom nav sepenuhnya — cuma tombol
+        // Absen Masuk/Pulang di dalam AbsenTab sendiri yg tampil, spy
+        // fokus & tak ada gangguan navigasi lain saat proses absen.
+        bottomNavigationBar: isAbsen ? null : _BottomNav(active: _tab, onTap: (t) => setState(() => _tab = t)),
       ),
     );
   }

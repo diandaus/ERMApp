@@ -18,7 +18,8 @@ const _kGreenDark = Color(0xFF059669);
 class AbsenTab extends StatefulWidget {
   final String nik;
   final VoidCallback onSelesai;
-  const AbsenTab({super.key, required this.nik, required this.onSelesai});
+  final VoidCallback onBack;
+  const AbsenTab({super.key, required this.nik, required this.onSelesai, required this.onBack});
 
   @override
   State<AbsenTab> createState() => _AbsenTabState();
@@ -185,8 +186,33 @@ class _AbsenTabState extends State<AbsenTab> {
     if (mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 16, 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, size: 28, color: Color(0xFF111827)),
+            onPressed: widget.onBack,
+          ),
+          const SizedBox(width: 4),
+          const Text('Absen', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _buildHeader(),
+        Expanded(child: _buildContent()),
+      ],
+    );
+  }
+
+  Widget _buildContent() {
     if (_loadingHariIni) {
       return const Center(child: CircularProgressIndicator());
     }
