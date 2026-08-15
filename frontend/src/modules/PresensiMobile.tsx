@@ -218,6 +218,24 @@ const IconChevronRight: React.FC<IconProps> = ({ size = 16, color = 'currentColo
   </svg>
 );
 
+const IconChevronLeft: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
+const IconChevronUp: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+);
+
+const IconChevronDown: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
 const IconArrowLeft: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
@@ -1578,6 +1596,68 @@ function hitungJumlahHariFE(awal: string, akhir: string): number {
 
 type PegawaiOpsi = { nik: string; nama: string; jbtn: string };
 
+// Modal pilih PJ pengganti — cuma nampilin pegawai AKTIF satu
+// departemen dgn pemohon (bukan cari lintas departemen), diri sendiri
+// dikecualikan. Ada search box buat filter nama di dalam daftar itu.
+// Padanan _PjPickerSheet di cuti_izin_view.dart (Flutter).
+const PjPickerModal: React.FC<{ departemen: string; excludeNik: string; onClose: () => void; onSelect: (p: PegawaiOpsi) => void }> = ({ departemen, excludeNik, onClose, onSelect }) => {
+  const [query, setQuery] = React.useState('');
+  const [list, setList] = React.useState<PegawaiOpsi[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setLoading(true);
+    const timeout = setTimeout(() => {
+      const params = new URLSearchParams({ departemen, stts_aktif: 'AKTIF' });
+      if (query.trim()) params.set('search', query.trim());
+      fetch(`/api/pegawai/list?${params.toString()}`)
+        .then(r => r.json())
+        .then((d: PegawaiOpsi[]) => setList(Array.isArray(d) ? d.filter((p) => p.nik !== excludeNik) : []))
+        .catch(() => setList([]))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [departemen, excludeNik, query]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div style={{ position: 'relative', width: '100%', height: '80vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Pilih Penanggung Jawab Pengganti</div>
+        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, marginBottom: 12 }}>Anggota departemen Anda sendiri</div>
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Cari nama..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
+        />
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
+          ) : list.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Tidak ada pegawai ditemukan</div>
+          ) : (
+            list.map((p) => (
+              <div
+                key={p.nik}
+                onClick={() => onSelect(p)}
+                style={{ padding: '10px 4px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+              >
+                <div style={{ fontWeight: 500, color: '#111827' }}>{p.nama}</div>
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>{p.nik}{p.jbtn ? ` · ${p.jbtn}` : ''}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () => void }> = ({ nik, mode, onBack }) => {
   const judul = mode === 'cuti' ? 'Cuti' : 'Izin';
   const urgensiOpsi = mode === 'cuti' ? URGENSI_CUTI : URGENSI_IZIN;
@@ -1590,11 +1670,16 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   const [urgensi, setUrgensi] = React.useState(urgensiOpsi[0]);
   const [alamat, setAlamat] = React.useState('');
   const [kepentingan, setKepentingan] = React.useState('');
-  const [pjSearch, setPjSearch] = React.useState('');
-  const [pjOpsi, setPjOpsi] = React.useState<PegawaiOpsi[]>([]);
   const [pjTerpilih, setPjTerpilih] = React.useState<PegawaiOpsi | null>(null);
-  const [showPjList, setShowPjList] = React.useState(false);
+  const [showPjModal, setShowPjModal] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  // Pegawai shift Reguler beneran tidak punya rekan sif buat gantian —
+  // PJ pengganti jadi opsional khusus utk mereka (lihat backend
+  // cuti_izin_handler.go submitCutiIzin). Default false (dianggap
+  // wajib) sampai kebukti sebaliknya dari data server. myDepartemen
+  // dipakai buat batasi modal pilih PJ cuma ke departemen sendiri.
+  const [isRegulerShift, setIsRegulerShift] = React.useState(false);
+  const [myDepartemen, setMyDepartemen] = React.useState<string | null>(null);
 
   const jumlahHari = hitungJumlahHariFE(tanggalAwal, tanggalAkhir);
 
@@ -1619,25 +1704,31 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   React.useEffect(() => { fetchList(); }, [fetchList]);
 
   React.useEffect(() => {
-    if (pjSearch.trim().length < 2) { setPjOpsi([]); return; }
-    const timeout = setTimeout(() => {
-      fetch(`/api/pegawai/list?search=${encodeURIComponent(pjSearch)}&stts_aktif=AKTIF`)
-        .then(r => r.json())
-        .then(d => setPjOpsi(Array.isArray(d) ? d.slice(0, 8) : []))
-        .catch(() => setPjOpsi([]));
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, [pjSearch]);
+    if (!nik) return;
+    const now = new Date();
+    const params = new URLSearchParams({ tahun: String(now.getFullYear()), bulan: pad2(now.getMonth() + 1), search: nik });
+    fetch(`/api/jadwal-pegawai/list?${params.toString()}`)
+      .then(r => r.json())
+      .then((d: JadwalPegawaiRow[]) => {
+        const match = Array.isArray(d) ? d.find((p) => p.nik === nik) : null;
+        if (match) {
+          setIsRegulerShift(match.jadwal_tetap_shift.trim().toLowerCase() === 'reguler');
+          setMyDepartemen(match.departemen);
+        }
+      })
+      .catch(() => {});
+  }, [nik]);
 
   const resetForm = () => {
     setTanggalAwal(todayDateStr()); setTanggalAkhir(todayDateStr()); setUrgensi(urgensiOpsi[0]);
-    setAlamat(''); setKepentingan(''); setPjSearch(''); setPjTerpilih(null);
+    setAlamat(''); setKepentingan(''); setPjTerpilih(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tanggalAwal || !tanggalAkhir || !alamat.trim() || !kepentingan.trim() || !pjTerpilih) {
-      Swal.fire({ icon: 'warning', title: 'Semua field wajib diisi', text: !pjTerpilih ? 'Pilih penanggung jawab pengganti dulu' : undefined, confirmButtonColor: '#059669' });
+    const pjWajibTapiKosong = !isRegulerShift && !pjTerpilih;
+    if (!tanggalAwal || !tanggalAkhir || !alamat.trim() || !kepentingan.trim() || pjWajibTapiKosong) {
+      Swal.fire({ icon: 'warning', title: 'Semua field wajib diisi', text: pjWajibTapiKosong ? 'Pilih penanggung jawab pengganti dulu' : undefined, confirmButtonColor: '#059669' });
       return;
     }
     if (tanggalAkhir < tanggalAwal) {
@@ -1650,7 +1741,7 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nik, tanggal_awal: tanggalAwal, tanggal_akhir: tanggalAkhir, urgensi, alamat, kepentingan, nik_pj: pjTerpilih.nik,
+          nik, tanggal_awal: tanggalAwal, tanggal_akhir: tanggalAkhir, urgensi, alamat, kepentingan, nik_pj: pjTerpilih?.nik ?? '',
         }),
       });
       const data = await res.json();
@@ -1736,38 +1827,40 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
               <textarea value={kepentingan} onChange={e => setKepentingan(e.target.value)} placeholder="Alasan pengajuan" rows={2} maxLength={70} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
             <div style={{ position: 'relative' }}>
-              <label style={labelStyle}>Penanggung Jawab Pengganti</label>
+              <label style={labelStyle}>Penanggung Jawab Pengganti{isRegulerShift ? ' (opsional)' : ''}</label>
+              {isRegulerShift && !pjTerpilih && (
+                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>Shift Reguler tidak wajib punya pengganti.</div>
+              )}
               {pjTerpilih ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: 10, border: '1px solid #a7f3d0', background: '#f0fdf4' }}>
                   <span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{pjTerpilih.nama}</span>
-                  <button type="button" onClick={() => { setPjTerpilih(null); setPjSearch(''); }} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Ganti</button>
+                  <button type="button" onClick={() => setPjTerpilih(null)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, cursor: 'pointer' }}>Ganti</button>
                 </div>
               ) : (
-                <>
-                  <input
-                    value={pjSearch}
-                    onChange={e => { setPjSearch(e.target.value); setShowPjList(true); }}
-                    onFocus={() => setShowPjList(true)}
-                    placeholder="Cari nama pegawai pengganti..."
-                    style={inputStyle}
-                  />
-                  {showPjList && pjOpsi.length > 0 && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 20px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: 180, overflowY: 'auto' }}>
-                      {pjOpsi.map(p => (
-                        <div
-                          key={p.nik}
-                          onClick={() => { setPjTerpilih(p); setShowPjList(false); }}
-                          style={{ padding: '9px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
-                        >
-                          <div style={{ fontWeight: 500, color: '#111827' }}>{p.nama}</div>
-                          <div style={{ fontSize: 10, color: '#9ca3af' }}>{p.nik}{p.jbtn ? ` · ${p.jbtn}` : ''}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
+                // Bukan cari-langsung lintas departemen lagi — tap buka
+                // modal yg cuma nampilin anggota departemen sendiri
+                // (lihat PjPickerModal), supaya user tak salah pilih
+                // pengganti dari departemen lain.
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!myDepartemen) { Swal.fire({ icon: 'warning', title: 'Departemen Anda belum terdeteksi', text: 'Coba lagi sebentar.', confirmButtonColor: '#059669' }); return; }
+                    setShowPjModal(true);
+                  }}
+                  style={{ ...inputStyle, textAlign: 'left', background: '#fff', color: '#9ca3af', cursor: 'pointer' }}
+                >
+                  Pilih penanggung jawab pengganti
+                </button>
               )}
             </div>
+            {showPjModal && myDepartemen && (
+              <PjPickerModal
+                departemen={myDepartemen}
+                excludeNik={nik}
+                onClose={() => setShowPjModal(false)}
+                onSelect={(p) => { setPjTerpilih(p); setShowPjModal(false); }}
+              />
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" onClick={() => { setShowForm(false); resetForm(); }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 Batal
@@ -2571,15 +2664,76 @@ const BULAN_INDO = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 // Modal kalender — pilih tanggal2 spesifik (jadi biru), tanggal yg
-// sudah "kepakai" (tanggalTerisi) ditandai merah sbg referensi. Padanan
-// tanggal_picker_modal.dart.
+// sudah "kepakai" ditandai merah sbg referensi. Bisa digeser/swipe
+// (touch) ke atas (bulan berikutnya) atau bawah (bulan sebelumnya),
+// atau tombol panah — pindah bulan reset tanggal yg lagi dipilih &
+// muat ulang tanda merah (h1..h31 beda tiap bulan) utk pegawaiIds yg
+// sama. Padanan tanggal_picker_modal.dart (Flutter).
 const TanggalPickerModal: React.FC<{
-  tahun: number; bulan: number; tanggalTerisi: Set<number>;
-  onCancel: () => void; onConfirm: (selected: Set<number>) => void;
-}> = ({ tahun, bulan, tanggalTerisi, onCancel, onConfirm }) => {
+  tahun: number; bulan: number; pegawaiIds: number[]; departemen: string | null;
+  pendingTanggalAwal: Set<number>;
+  onCancel: () => void; onConfirm: (result: { tahun: number; bulan: number; tanggal: Set<number> }) => void;
+}> = ({ tahun: tahunAwal, bulan: bulanAwal, pegawaiIds, departemen, pendingTanggalAwal, onCancel, onConfirm }) => {
+  const [tahun, setTahun] = React.useState(tahunAwal);
+  const [bulan, setBulan] = React.useState(bulanAwal);
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
+  const [terisi, setTerisi] = React.useState<Set<number>>(new Set());
+  const [loadingTerisi, setLoadingTerisi] = React.useState(true);
+  const touchStartY = React.useRef<number | null>(null);
+
   const daysInMonth = new Date(tahun, bulan, 0).getDate();
   const firstWeekday = new Date(tahun, bulan - 1, 1).getDay(); // 0=Min..6=Sab, cocok kolom Min-first
+
+  // Tanda merah "sudah kepakai" itu spesifik per bulan — wajib fetch
+  // ulang tiap pindah bulan, bukan cuma dihitung sekali di awal.
+  const loadTerisi = React.useCallback(async (y: number, m: number) => {
+    setLoadingTerisi(true);
+    try {
+      const params = new URLSearchParams({ tahun: String(y), bulan: pad2(m) });
+      if (departemen) params.set('departemen', departemen);
+      const res = await fetch(`/api/jadwal-pegawai/list?${params.toString()}`);
+      const data: JadwalPegawaiRow[] = await res.json();
+      const rows = (Array.isArray(data) ? data : []).filter((p) => pegawaiIds.includes(p.id));
+      const result = new Set<number>();
+      if (rows.length > 0) {
+        for (let day = 1; day <= 31; day++) {
+          const idx = day - 1;
+          const first = rows[0].h[idx] || '';
+          if (!first) continue;
+          const sama = rows.every((p) => (p.h[idx] || '') === first);
+          if (sama) result.add(day);
+        }
+      }
+      // Tanggal pending sesi ini (blue di Riwayat Tanggal) HANYA
+      // relevan kalau modal masih di bulan awal — ikut ditandai merah
+      // sbg referensi "sudah kepakai".
+      if (y === tahunAwal && m === bulanAwal) {
+        pendingTanggalAwal.forEach((d) => result.add(d));
+      }
+      setTerisi(result);
+    } catch {
+      setTerisi(new Set());
+    } finally {
+      setLoadingTerisi(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pegawaiIds, departemen]);
+
+  React.useEffect(() => {
+    loadTerisi(tahunAwal, bulanAwal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const gantiBulan = (delta: number) => {
+    let m = bulan + delta;
+    let y = tahun;
+    if (m < 1) { m = 12; y -= 1; }
+    else if (m > 12) { m = 1; y += 1; }
+    setTahun(y);
+    setBulan(m);
+    setSelected(new Set());
+    loadTerisi(y, m);
+  };
 
   const toggle = (day: number) => {
     setSelected((prev) => {
@@ -2589,6 +2743,17 @@ const TanggalPickerModal: React.FC<{
     });
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartY.current = null;
+    if (Math.abs(deltaY) < 40) return;
+    // Geser ke atas (jari dari bawah ke atas, deltaY negatif) = bulan
+    // berikutnya; ke bawah = bulan sebelumnya.
+    gantiBulan(deltaY < 0 ? 1 : -1);
+  };
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onCancel} />
@@ -2596,47 +2761,59 @@ const TanggalPickerModal: React.FC<{
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
         </div>
-        <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</div>
-        <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: selected.size === 0 ? '#9ca3af' : '#2563eb', marginTop: 4 }}>
-          {selected.size === 0 ? 'Ketuk tanggal untuk memilih' : `${selected.size} tanggal dipilih`}
-        </div>
-        {tanggalTerisi.size > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 6 }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#fee2e2', border: '1px solid #dc2626' }} />
-            <span style={{ fontSize: 11, color: '#9ca3af' }}>= sudah ada shift lain</span>
+        <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <button type="button" onClick={() => gantiBulan(-1)} style={{ display: 'flex', margin: '0 auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
+            <IconChevronUp size={18} />
+          </button>
+          <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</div>
+          <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: selected.size === 0 ? '#9ca3af' : '#2563eb', marginTop: 4 }}>
+            {selected.size === 0 ? 'Ketuk tanggal · geser utk ganti bulan' : `${selected.size} tanggal dipilih`}
           </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
-          {HARI_MIN_FIRST.map((h) => (
-            <div key={h} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{h}</div>
-          ))}
-          {Array.from({ length: firstWeekday }).map((_, i) => <div key={`blank-${i}`} />)}
-          {Array.from({ length: daysInMonth }).map((_, i) => {
-            const day = i + 1;
-            const active = selected.has(day);
-            const terisi = !active && tanggalTerisi.has(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggle(day)}
-                style={{
-                  aspectRatio: '1', margin: 2, borderRadius: '50%', border: terisi ? '1px solid #dc2626' : 'none',
-                  background: active ? '#2563eb' : terisi ? '#fee2e2' : 'transparent',
-                  color: active ? '#fff' : terisi ? '#dc2626' : '#111827',
-                  fontWeight: active || terisi ? 700 : 400, fontSize: 13, cursor: 'pointer',
-                }}
-              >
-                {day}
-              </button>
-            );
-          })}
+          {terisi.size > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#fee2e2', border: '1px solid #dc2626' }} />
+              <span style={{ fontSize: 11, color: '#9ca3af' }}>= sudah ada shift lain</span>
+            </div>
+          )}
+          {loadingTerisi ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
+              {HARI_MIN_FIRST.map((h) => (
+                <div key={h} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{h}</div>
+              ))}
+              {Array.from({ length: firstWeekday }).map((_, i) => <div key={`blank-${i}`} />)}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const active = selected.has(day);
+                const isTerisi = !active && terisi.has(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggle(day)}
+                    style={{
+                      aspectRatio: '1', margin: 2, borderRadius: '50%', border: isTerisi ? '1px solid #dc2626' : 'none',
+                      background: active ? '#2563eb' : isTerisi ? '#fee2e2' : 'transparent',
+                      color: active ? '#fff' : isTerisi ? '#dc2626' : '#111827',
+                      fontWeight: active || isTerisi ? 700 : 400, fontSize: 13, cursor: 'pointer',
+                    }}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button type="button" onClick={() => gantiBulan(1)} style={{ display: 'flex', margin: '4px auto 0', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
+            <IconChevronDown size={18} />
+          </button>
         </div>
-        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
           <button type="button" onClick={onCancel} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             Batal
           </button>
-          <button type="button" onClick={() => onConfirm(selected)} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          <button type="button" onClick={() => onConfirm({ tahun, bulan, tanggal: selected })} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
             Simpan
           </button>
         </div>
@@ -2649,8 +2826,13 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
   const isAdmin = user.role === 'admin';
   const nik = resolveNik(user);
   const now = new Date();
-  const tahun = now.getFullYear();
-  const bulan = now.getMonth() + 1;
+
+  // Bulan/tahun BISA diganti (bukan cuma bulan berjalan) — jadwal
+  // (grid h1..h31) spesifik per bulan, jadi user perlu bisa geser ke
+  // bulan depan/sebelumnya lewat gantiBulan di bawah. Padanan dropdown
+  // Bulan/Tahun di JadwalPegawai.tsx (desktop).
+  const [tahun, setTahun] = React.useState(now.getFullYear());
+  const [bulan, setBulan] = React.useState(now.getMonth() + 1);
 
   const [departemenList, setDepartemenList] = React.useState<{ kode: string; nama: string }[]>([]);
   const [departemen, setDepartemen] = React.useState<string | null>(null);
@@ -2681,6 +2863,29 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
     } finally {
       setLoadingPegawai(false);
     }
+  }, [tahun, bulan]);
+
+  // Pindah bulan (mis. atur jadwal utk bulan depan) — reset tanggal yg
+  // baru dipilih & belum disimpan (spesifik ke bulan yg lama, gak
+  // relevan lagi). Pegawai yg dicentang & hari aktif (Reguler) TETAP,
+  // krn keduanya gak terikat bulan tertentu. Grid h1..h31 dimuat ulang
+  // lewat effect di bawah (nunggu tahun/bulan kebaru dulu spy
+  // loadPegawai gak pakai closure lama).
+  const gantiBulan = (delta: number) => {
+    setSelectedTanggal(new Set());
+    setBulan((prevBulan) => {
+      let m = prevBulan + delta;
+      if (m < 1) { m = 12; setTahun((y) => y - 1); }
+      else if (m > 12) { m = 1; setTahun((y) => y + 1); }
+      return m;
+    });
+  };
+
+  const isFirstMount = React.useRef(true);
+  React.useEffect(() => {
+    if (isFirstMount.current) { isFirstMount.current = false; return; }
+    loadPegawai(departemen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tahun, bulan]);
 
   // Init: muat opsi departemen/shift + pegawai (tanpa filter) sekaligus,
@@ -2809,6 +3014,15 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
     <div style={{ paddingBottom: 100 }}>
       <SubPageHeader title="Atur Jadwal Tetap" onBack={onBack} />
       <div style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button type="button" onClick={() => gantiBulan(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', color: '#6b7280' }}>
+            <IconChevronLeft size={20} />
+          </button>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</span>
+          <button type="button" onClick={() => gantiBulan(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', color: '#6b7280' }}>
+            <IconChevronRight size={20} />
+          </button>
+        </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Departemen</div>
@@ -2960,11 +3174,22 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
       {showTanggalModal && (
         <TanggalPickerModal
           tahun={tahun} bulan={bulan}
-          tanggalTerisi={new Set([...tanggalTerisiSama, ...selectedTanggal])}
+          pegawaiIds={[...selectedIds]}
+          departemen={departemen}
+          pendingTanggalAwal={selectedTanggal}
           onCancel={() => setShowTanggalModal(false)}
           onConfirm={(result) => {
-            setSelectedTanggal((prev) => new Set([...prev, ...result]));
             setShowTanggalModal(false);
+            if (result.tahun !== tahun || result.bulan !== bulan) {
+              // User geser ke bulan lain di dalam modal — samakan
+              // konteks bulan Atur Jadwal ke situ juga (tanggal pending
+              // bulan LAMA dibuang, gak relevan lagi ke bulan baru).
+              setTahun(result.tahun);
+              setBulan(result.bulan);
+              setSelectedTanggal(result.tanggal);
+            } else {
+              setSelectedTanggal((prev) => new Set([...prev, ...result.tanggal]));
+            }
           }}
         />
       )}
