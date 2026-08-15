@@ -47,6 +47,23 @@ const IconClipboard: React.FC<IconProps> = ({ size = 18, color = 'currentColor' 
   </svg>
 );
 
+const IconCalendarCheck: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" />
+    <path d="M9 16l2 2 4-4" />
+  </svg>
+);
+
+// Tombol "Lihat Semua" di grid Home — cuma titik tiga polos (tanpa
+// lingkaran), warna sama dgn ikon menu lain. Padanan Icons.more_horiz
+// di Flutter.
+const IconDots: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+  </svg>
+);
+
 const IconLogOut: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -254,18 +271,23 @@ type AppUserLite = {
 };
 
 // Padanan canAccessMenu di modules/App.tsx (shell desktop) — Poli/IGD/
-// Ranap di kartu Layanan Lainnya cuma tampil kalau modul terkait
-// ('rawat-jalan'/'igd'/'rawat-inap') diizinkan buat akun yang login,
-// entah lewat allowed_modules (diatur admin) atau fallback per role.
-// Sengaja disamakan persis (termasuk "celah" IGD yang cuma masuk fallback
-// admin) supaya konsisten dgn kontrol akses shell utama.
-function canAccessModule(user: AppUserLite, moduleKey: 'rawat-jalan' | 'igd' | 'rawat-inap'): boolean {
+// Ranap/Farmasi/Lab/Radiologi/Operasi di kartu Layanan Lainnya cuma
+// tampil kalau modul terkait diizinkan buat akun yang login, entah lewat
+// allowed_modules (diatur admin) atau fallback per role. Sengaja
+// disamakan persis (termasuk "celah" IGD yang cuma masuk fallback admin)
+// supaya konsisten dgn kontrol akses shell utama. Kunci modul HARUS sama
+// persis dgn App.tsx: 'laboratorium' (bukan 'lab'), 'jadwal-operasi'
+// (bukan 'operasi').
+type ModuleKey = 'rawat-jalan' | 'igd' | 'rawat-inap' | 'farmasi' | 'laboratorium' | 'radiologi' | 'jadwal-operasi';
+function canAccessModule(user: AppUserLite, moduleKey: ModuleKey): boolean {
   if (user.allowed_modules) {
     return user.allowed_modules.split(',').filter(Boolean).includes(moduleKey);
   }
   switch (user.role) {
     case 'dokter':
       return moduleKey === 'rawat-jalan' || moduleKey === 'rawat-inap';
+    case 'farmasi':
+      return moduleKey === 'farmasi';
     case 'admin':
       return true;
     default:
@@ -347,6 +369,13 @@ const getStatusStyle = (status: string) => {
 function resolveNik(user: AppUserLite): string {
   if (user.role === 'dokter' && user.kd_dokter) return user.kd_dokter;
   return user.nip || '';
+}
+
+// Format YYYY-MM-DD sesuai yg dibutuhkan <input type="date"> — dipakai
+// buat default tanggal hari ini (bukan kosong) di form Cuti/Izin.
+function todayDateStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 async function getGeolocation(): Promise<{ lat: number; lng: number } | null> {
@@ -596,67 +625,124 @@ type LayananItem = { key: string; label: string; icon: React.ReactNode };
 // Kehadiran/Pengajuan Cuti di Kepegawaian.tsx sebelum dikembangkan).
 // Poli/IGD/Ranap cuma tampil kalau modul terkait diizinkan buat akun
 // yang login (lihat canAccessModule di atas).
-const LayananCard: React.FC<{
-  user: AppUserLite; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
+type LayananHandlers = {
+  onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
-}> = ({ user, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
-  // role 'pegawai' = akun hasil Daftar mandiri di halaman login (lihat
-  // registerAkunMandiri, backend/auth_register_handler.go) — belum
-  // diverifikasi/di-approve admin, jadi Menu Utama-nya sengaja dibatasi
-  // ke fitur non-klinis (Lembur/Cuti/Izin/Tugas/Lapor IT) saja. Poli/IGD/
-  // Ranap sudah otomatis ketutup lewat canAccessModule (allowed_modules
-  // akun ini cuma 'menu-utama,kepegawaian'); Farmasi/Lab/Radiologi/Operasi
-  // butuh guard eksplisit krn item-item itu selalu tampil tanpa
-  // canAccessModule.
-  const isAkunMandiriBelumDiapprove = user.role === 'pegawai';
-  const items: LayananItem[] = [
+  onOpenAturJadwal: () => void;
+};
+
+// Poli/IGD/Ranap/Farmasi/Lab/Radiologi/Operasi semuanya di-gate lewat
+// canAccessModule (allowed_modules diatur admin, atau fallback per role
+// kalau kosong) — konsisten dgn kontrol akses shell desktop (App.tsx
+// canAccessMenu), bukan blanket "role bukan pegawai". Atur Jadwal
+// sengaja TIDAK digating (menu default spt Cuti/Izin) — yg batasi
+// cakupan aksesnya adalah dropdown Departemen di dalam
+// AturJadwalMobileView sendiri (auto-isi departemen user login).
+function buildLayananItems(user: AppUserLite): LayananItem[] {
+  return [
     { key: 'lembur', label: 'Lembur', icon: <IconOvertime size={26} color="#059669" /> },
     { key: 'cuti', label: 'Cuti', icon: <IconUmbrella size={26} color="#059669" /> },
     { key: 'izin', label: 'Izin', icon: <IconFileText size={26} color="#059669" /> },
     { key: 'tugas', label: 'Tugas', icon: <IconTaskCheck size={26} color="#059669" /> },
     { key: 'lapor-it', label: 'Lapor IT', icon: <IconMonitor size={26} color="#059669" /> },
+    { key: 'atur-jadwal', label: 'Atur Jadwal', icon: <IconCalendarCheck size={26} color="#059669" /> },
     ...(canAccessModule(user, 'rawat-jalan') ? [{ key: 'poli', label: 'Poli', icon: <IconStethoscope size={26} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'igd') ? [{ key: 'igd', label: 'IGD', icon: <IconSiren size={26} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'rawat-inap') ? [{ key: 'ranap', label: 'Ranap', icon: <IconBed size={26} color="#059669" /> }] : []),
-    ...(isAkunMandiriBelumDiapprove ? [] : [
-      { key: 'farmasi', label: 'Farmasi', icon: <IconPill size={26} color="#059669" /> },
-      { key: 'lab', label: 'Lab', icon: <IconFlask size={26} color="#059669" /> },
-      { key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={26} color="#059669" /> },
-      { key: 'operasi', label: 'Operasi', icon: <IconScalpel size={26} color="#059669" /> },
-    ]),
+    ...(canAccessModule(user, 'farmasi') ? [{ key: 'farmasi', label: 'Farmasi', icon: <IconPill size={26} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'laboratorium') ? [{ key: 'lab', label: 'Lab', icon: <IconFlask size={26} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'radiologi') ? [{ key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={26} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'jadwal-operasi') ? [{ key: 'operasi', label: 'Operasi', icon: <IconScalpel size={26} color="#059669" /> }] : []),
   ];
+}
 
-  const handleClick = (key: string, label: string) => {
-    if (key === 'lembur') { onOpenLembur(); return; }
-    if (key === 'cuti' || key === 'izin') { onOpenCutiIzin(key); return; }
-    if (key === 'lapor-it') { onOpenLaporIt(); return; }
-    if (key === 'poli') { onOpenPoli(); return; }
-    if (key === 'igd') { onOpenIgd(); return; }
-    if (key === 'ranap') { onOpenRanap(); return; }
-    if (key === 'farmasi') { onOpenFarmasi(); return; }
-    if (key === 'lab') { onOpenLab(); return; }
-    if (key === 'radiologi') { onOpenRadiologi(); return; }
+function makeLayananClickHandler(h: LayananHandlers) {
+  return (key: string, label: string) => {
+    if (key === 'lembur') { h.onOpenLembur(); return; }
+    if (key === 'cuti' || key === 'izin') { h.onOpenCutiIzin(key); return; }
+    if (key === 'lapor-it') { h.onOpenLaporIt(); return; }
+    if (key === 'atur-jadwal') { h.onOpenAturJadwal(); return; }
+    if (key === 'poli') { h.onOpenPoli(); return; }
+    if (key === 'igd') { h.onOpenIgd(); return; }
+    if (key === 'ranap') { h.onOpenRanap(); return; }
+    if (key === 'farmasi') { h.onOpenFarmasi(); return; }
+    if (key === 'lab') { h.onOpenLab(); return; }
+    if (key === 'radiologi') { h.onOpenRadiologi(); return; }
     Swal.fire({ icon: 'info', title: label, text: 'Fitur ini akan segera hadir.', confirmButtonColor: '#059669', timer: 1800, showConfirmButton: false });
   };
+}
+
+const LayananItemButton: React.FC<{ item: LayananItem; onClick: () => void }> = ({ item, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: 0 }}
+  >
+    <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {item.icon}
+    </div>
+    <span style={{ fontSize: 10, color: '#374151', textAlign: 'center', lineHeight: 1.2 }}>{item.label}</span>
+  </button>
+);
+
+// 3 baris x 4 kolom = 12 slot langsung tampil di Home; kalau menu yg
+// diizinkan buat user > 12, slot terakhir diganti tombol "..." yg buka
+// SemuaMenuMobileView (bukan expand di tempat) spy card Home tetap
+// ringkas — padanan _LayananGrid + SemuaMenuView di home_tab.dart
+// (Flutter).
+const LAYANAN_GRID_SLOTS = 12;
+
+const LayananCard: React.FC<LayananHandlers & { user: AppUserLite; onOpenSemuaMenu: () => void }> = (props) => {
+  const { user, onOpenSemuaMenu } = props;
+  const items = buildLayananItems(user);
+  const hasMore = items.length > LAYANAN_GRID_SLOTS;
+  const visibleItems = hasMore ? items.slice(0, LAYANAN_GRID_SLOTS - 1) : items;
+  const handleClick = makeLayananClickHandler(props);
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 10 }}></div>
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-          {items.map((item) => (
+          {visibleItems.map((item) => (
+            <LayananItemButton key={item.key} item={item} onClick={() => handleClick(item.key, item.label)} />
+          ))}
+          {hasMore && (
             <button
-              key={item.key}
               type="button"
-              onClick={() => handleClick(item.key, item.label)}
+              onClick={onOpenSemuaMenu}
               style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: 0 }}
             >
               <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {item.icon}
+                <IconDots size={26} color="#059669" />
               </div>
-              <span style={{ fontSize: 10, color: '#374151', textAlign: 'center', lineHeight: 1.2 }}>{item.label}</span>
+              <span style={{ fontSize: 10, color: '#374151', textAlign: 'center', lineHeight: 1.2 }}>Lihat Semua</span>
             </button>
-          ))}
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Layar "Semua Menu" — dibuka dari tombol "Lihat Semua" di grid Home
+// kalau menu yg diizinkan buat user > 12 (tidak muat di grid ringkas
+// Home).
+const SemuaMenuMobileView: React.FC<LayananHandlers & { user: AppUserLite; onBack: () => void }> = (props) => {
+  const { user, onBack } = props;
+  const items = buildLayananItems(user);
+  const handleClick = makeLayananClickHandler(props);
+
+  return (
+    <div>
+      <SubPageHeader title="Semua Menu" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            {items.map((item) => (
+              <LayananItemButton key={item.key} item={item} onClick={() => handleClick(item.key, item.label)} />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -686,10 +772,64 @@ const pengumumanPrioritasStyle = (p: string) => {
   }
 };
 
+const PENGUMUMAN_CARD_HEIGHT = 96;
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const bukaDetailPengumuman = (item: PengumumanItem) => {
+  Swal.fire({
+    title: item.judul,
+    html: `<div style="text-align:left"><div style="font-size:11px;color:#9ca3af;margin-bottom:8px">${escapeHtml(item.tanggal)}</div><div style="font-size:13px;color:#374151;white-space:pre-line;line-height:1.6">${escapeHtml(item.isi)}</div></div>`,
+    confirmButtonColor: '#059669',
+    confirmButtonText: 'Tutup',
+  });
+};
+
+// Satu kartu pengumuman, tinggi TETAP (PENGUMUMAN_CARD_HEIGHT) — wajib
+// sama tiap slide spy carousel bisa di-scroll-snap mulus. Tap kartu buka
+// detail lengkap lewat SweetAlert (bukan expand di tempat, krn tinggi
+// kartu fixed).
+const PengumumanSlide: React.FC<{ item: PengumumanItem }> = ({ item }) => {
+  const st = pengumumanPrioritasStyle(item.prioritas);
+  return (
+    <div
+      onClick={() => bukaDetailPengumuman(item)}
+      style={{
+        height: PENGUMUMAN_CARD_HEIGHT, boxSizing: 'border-box', display: 'flex', gap: 10,
+        background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+      }}
+    >
+      <div style={{ width: 30, height: 30, borderRadius: 10, background: st.badgeBg, color: st.border, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <IconMegaphone size={15} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.judul}</div>
+          <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 700, background: st.badgeBg, color: st.badgeColor, whiteSpace: 'nowrap' }}>
+            {st.label}
+          </span>
+        </div>
+        <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>{item.tanggal}</div>
+        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, whiteSpace: 'pre-line', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+          {item.isi}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Carousel pengumuman — bisa di-swipe sendiri (spt banner iklan/info di
+// DANA/ShopeePay, pakai scroll-snap horizontal) DAN otomatis
+// gonta-ganti tiap 5 detik lewat scrollTo. onScroll jadi satu2nya
+// sumber currentIndex, jadi auto-advance & swipe manual otomatis
+// singkron. Padanan pengumuman_card.dart (Flutter, pakai PageView).
 const PengumumanCard: React.FC = () => {
   const [list, setList] = React.useState<PengumumanItem[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [expandedId, setExpandedId] = React.useState<number | null>(null);
+  const [currentIndex, setCurrentIndex] = React.useState(0);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const currentIndexRef = React.useRef(0);
+  currentIndexRef.current = currentIndex;
 
   React.useEffect(() => {
     fetch('/api/pengumuman?aktif=1')
@@ -699,51 +839,48 @@ const PengumumanCard: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  const scrollToIndex = (i: number, smooth = true) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ left: i * el.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  };
+
+  React.useEffect(() => {
+    if (list.length <= 1) return;
+    const timer = setInterval(() => {
+      scrollToIndex((currentIndexRef.current + 1) % list.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [list.length]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el || !el.clientWidth) return;
+    const i = Math.round(el.scrollLeft / el.clientWidth);
+    if (i !== currentIndexRef.current) setCurrentIndex(i);
+  };
+
   if (!loading && list.length === 0) return null;
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {loading ? (
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
-        ) : (
-          list.map((item) => {
-            const st = pengumumanPrioritasStyle(item.prioritas);
-            const expanded = expandedId === item.id;
-            return (
-              <div
-                key={item.id}
-                onClick={() => setExpandedId(expanded ? null : item.id)}
-                style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, cursor: 'pointer', display: 'flex', gap: 10 }}
-              >
-                <div style={{ width: 30, height: 30, borderRadius: 10, background: st.badgeBg, color: st.border, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <IconMegaphone size={15} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', flex: 1 }}>{item.judul}</div>
-                    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 700, background: st.badgeBg, color: st.badgeColor, whiteSpace: 'nowrap' }}>
-                      {st.label}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>{item.tanggal}</div>
-                  <div
-                    style={{
-                      fontSize: 11, color: '#6b7280', marginTop: 4,
-                      ...(expanded ? {} : {
-                        overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box',
-                        WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                      }),
-                    }}
-                  >
-                    {item.isi}
-                  </div>
-                </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '8px 0' }}>Memuat...</div>
+      ) : (
+        <>
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+          >
+            {list.map((item) => (
+              <div key={item.id} style={{ flex: '0 0 100%', scrollSnapAlign: 'start', minWidth: 0 }}>
+                <PengumumanSlide item={item} />
               </div>
-            );
-          })
-        )}
-      </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -751,7 +888,8 @@ const PengumumanCard: React.FC = () => {
 const HomeTab: React.FC<{
   user: AppUserLite; me: MeResponse | null; loading: boolean; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
-}> = ({ user, me, loading, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi }) => {
+  onOpenAturJadwal: () => void; onOpenSemuaMenu: () => void;
+}> = ({ user, me, loading, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi, onOpenAturJadwal, onOpenSemuaMenu }) => {
   const hariIni = me?.hari_ini;
 
   return (
@@ -797,7 +935,7 @@ const HomeTab: React.FC<{
                 <span>{hariIni.jam_pulang_jadwal}</span>
               </>
             ) : (
-              'Tidak ada jadwal/libur'
+              <span style={{ fontSize: 15, fontWeight: 400, color: '#9ca3af' }}>Tidak ada jadwal/libur</span>
             )}
           </div>
           {hariIni?.keterlambatan && hariIni.keterlambatan !== '-' && (
@@ -812,6 +950,7 @@ const HomeTab: React.FC<{
         user={user} onOpenLembur={onOpenLembur} onOpenCutiIzin={onOpenCutiIzin} onOpenLaporIt={onOpenLaporIt}
         onOpenPoli={onOpenPoli} onOpenIgd={onOpenIgd} onOpenRanap={onOpenRanap}
         onOpenFarmasi={onOpenFarmasi} onOpenLab={onOpenLab} onOpenRadiologi={onOpenRadiologi}
+        onOpenAturJadwal={onOpenAturJadwal} onOpenSemuaMenu={onOpenSemuaMenu}
       />
       <PengumumanCard />
     </div>
@@ -1446,8 +1585,8 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   const [list, setList] = React.useState<CutiIzinItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
-  const [tanggalAwal, setTanggalAwal] = React.useState('');
-  const [tanggalAkhir, setTanggalAkhir] = React.useState('');
+  const [tanggalAwal, setTanggalAwal] = React.useState(todayDateStr());
+  const [tanggalAkhir, setTanggalAkhir] = React.useState(todayDateStr());
   const [urgensi, setUrgensi] = React.useState(urgensiOpsi[0]);
   const [alamat, setAlamat] = React.useState('');
   const [kepentingan, setKepentingan] = React.useState('');
@@ -1482,7 +1621,7 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   React.useEffect(() => {
     if (pjSearch.trim().length < 2) { setPjOpsi([]); return; }
     const timeout = setTimeout(() => {
-      fetch(`/api/pegawai/list?search=${encodeURIComponent(pjSearch)}`)
+      fetch(`/api/pegawai/list?search=${encodeURIComponent(pjSearch)}&stts_aktif=AKTIF`)
         .then(r => r.json())
         .then(d => setPjOpsi(Array.isArray(d) ? d.slice(0, 8) : []))
         .catch(() => setPjOpsi([]));
@@ -1491,7 +1630,7 @@ const CutiIzinView: React.FC<{ nik: string; mode: 'cuti' | 'izin'; onBack: () =>
   }, [pjSearch]);
 
   const resetForm = () => {
-    setTanggalAwal(''); setTanggalAkhir(''); setUrgensi(urgensiOpsi[0]);
+    setTanggalAwal(todayDateStr()); setTanggalAkhir(todayDateStr()); setUrgensi(urgensiOpsi[0]);
     setAlamat(''); setKepentingan(''); setPjSearch(''); setPjTerpilih(null);
   };
 
@@ -2403,10 +2542,441 @@ const RadiologiMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => (
 );
 
 // ---------------------------------------------------------------------
+// Tab: Atur Jadwal — padanan AturJadwalView.dart (Flutter). Pilih
+// departemen, centang pegawai, pilih shift. Shift "Reguler" pakai hari
+// berulang tiap minggu (pegawai_jadwal_tetap); shift lain (rotasi/
+// malam/dll) pakai tanggal kalender spesifik (grid jadwal_pegawai,
+// kolom h1..h31) krn shift rotasi biasanya beda2 tiap orang tiap
+// tanggal, bukan pola mingguan tetap.
+// ---------------------------------------------------------------------
+
+type JadwalPegawaiRow = {
+  id: number; nik: string; nama: string; departemen: string;
+  jadwal_tetap_shift: string; jadwal_tetap_hari: string; h: string[];
+};
+
+type JamMasukOpsi = { shift: string; jam_masuk: string; jam_pulang: string };
+
+const HARI_OPSI = [
+  { iso: 1, label: 'Sen' }, { iso: 2, label: 'Sel' }, { iso: 3, label: 'Rab' },
+  { iso: 4, label: 'Kam' }, { iso: 5, label: 'Jum' }, { iso: 6, label: 'Sab' }, { iso: 7, label: 'Min' },
+];
+
+const HARI_MIN_FIRST = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const BULAN_INDO = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+// Kolom `bulan` di tabel jadwal_pegawai adalah ENUM string 2-digit
+// ('01'..'12', sama spt yg dipakai JadwalPegawai.tsx desktop) — kirim
+// "8" tanpa padding bikin MySQL diam2 nyimpen di baris/slot yg salah.
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// Modal kalender — pilih tanggal2 spesifik (jadi biru), tanggal yg
+// sudah "kepakai" (tanggalTerisi) ditandai merah sbg referensi. Padanan
+// tanggal_picker_modal.dart.
+const TanggalPickerModal: React.FC<{
+  tahun: number; bulan: number; tanggalTerisi: Set<number>;
+  onCancel: () => void; onConfirm: (selected: Set<number>) => void;
+}> = ({ tahun, bulan, tanggalTerisi, onCancel, onConfirm }) => {
+  const [selected, setSelected] = React.useState<Set<number>>(new Set());
+  const daysInMonth = new Date(tahun, bulan, 0).getDate();
+  const firstWeekday = new Date(tahun, bulan - 1, 1).getDay(); // 0=Min..6=Sab, cocok kolom Min-first
+
+  const toggle = (day: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day); else next.add(day);
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onCancel} />
+      <div style={{ position: 'relative', width: '100%', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</div>
+        <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: selected.size === 0 ? '#9ca3af' : '#2563eb', marginTop: 4 }}>
+          {selected.size === 0 ? 'Ketuk tanggal untuk memilih' : `${selected.size} tanggal dipilih`}
+        </div>
+        {tanggalTerisi.size > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#fee2e2', border: '1px solid #dc2626' }} />
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>= sudah ada shift lain</span>
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
+          {HARI_MIN_FIRST.map((h) => (
+            <div key={h} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{h}</div>
+          ))}
+          {Array.from({ length: firstWeekday }).map((_, i) => <div key={`blank-${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const active = selected.has(day);
+            const terisi = !active && tanggalTerisi.has(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => toggle(day)}
+                style={{
+                  aspectRatio: '1', margin: 2, borderRadius: '50%', border: terisi ? '1px solid #dc2626' : 'none',
+                  background: active ? '#2563eb' : terisi ? '#fee2e2' : 'transparent',
+                  color: active ? '#fff' : terisi ? '#dc2626' : '#111827',
+                  fontWeight: active || terisi ? 700 : 400, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+          <button type="button" onClick={onCancel} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+            Batal
+          </button>
+          <button type="button" onClick={() => onConfirm(selected)} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            Simpan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = ({ user, onBack }) => {
+  const isAdmin = user.role === 'admin';
+  const nik = resolveNik(user);
+  const now = new Date();
+  const tahun = now.getFullYear();
+  const bulan = now.getMonth() + 1;
+
+  const [departemenList, setDepartemenList] = React.useState<{ kode: string; nama: string }[]>([]);
+  const [departemen, setDepartemen] = React.useState<string | null>(null);
+  const [shiftList, setShiftList] = React.useState<JamMasukOpsi[]>([]);
+  const [shift, setShift] = React.useState<string>('');
+  const [pegawaiList, setPegawaiList] = React.useState<JadwalPegawaiRow[]>([]);
+  const [loadingPegawai, setLoadingPegawai] = React.useState(true);
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
+  const [hariAktif, setHariAktif] = React.useState<Set<number>>(new Set([1, 2, 3, 4, 5, 6, 7]));
+  const [selectedTanggal, setSelectedTanggal] = React.useState<Set<number>>(new Set());
+  const [saving, setSaving] = React.useState(false);
+  const [showTanggalModal, setShowTanggalModal] = React.useState(false);
+
+  const isReguler = shift.trim().toLowerCase() === 'reguler';
+
+  const loadPegawai = React.useCallback(async (dept: string | null) => {
+    setLoadingPegawai(true);
+    try {
+      const params = new URLSearchParams({ tahun: String(tahun), bulan: pad2(bulan) });
+      if (dept) params.set('departemen', dept);
+      const res = await fetch(`/api/jadwal-pegawai/list?${params.toString()}`);
+      const data = await res.json();
+      const list: JadwalPegawaiRow[] = Array.isArray(data) ? data : [];
+      setPegawaiList(list);
+      setSelectedIds((prev) => new Set([...prev].filter((id) => list.some((p) => p.id === id))));
+    } catch {
+      setPegawaiList([]);
+    } finally {
+      setLoadingPegawai(false);
+    }
+  }, [tahun, bulan]);
+
+  // Init: muat opsi departemen/shift + pegawai (tanpa filter) sekaligus,
+  // lalu utk non-admin cari departemen pegawai yg login dari hasilnya &
+  // auto-isi dropdown Departemen (TETAP bisa diganti, gak dikunci).
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [depRes, shiftRes] = await Promise.all([
+        fetch('/api/pegawai/departemen').then((r) => r.json()).catch(() => []),
+        fetch('/api/jam-masuk/opsi').then((r) => r.json()).catch(() => []),
+      ]);
+      if (cancelled) return;
+      setDepartemenList(Array.isArray(depRes) ? depRes : []);
+      setShiftList(Array.isArray(shiftRes) ? shiftRes : []);
+
+      setLoadingPegawai(true);
+      const params = new URLSearchParams({ tahun: String(tahun), bulan: pad2(bulan) });
+      const res = await fetch(`/api/jadwal-pegawai/list?${params.toString()}`);
+      const data = await res.json();
+      const list: JadwalPegawaiRow[] = Array.isArray(data) ? data : [];
+      if (cancelled) return;
+      setPegawaiList(list);
+      setLoadingPegawai(false);
+
+      if (!isAdmin) {
+        const diriSendiri = list.find((p) => p.nik === nik);
+        if (diriSendiri && diriSendiri.departemen && diriSendiri.departemen !== '-') {
+          setDepartemen(diriSendiri.departemen);
+          loadPegawai(diriSendiri.departemen);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selectedRows = React.useMemo(() => pegawaiList.filter((p) => selectedIds.has(p.id)), [pegawaiList, selectedIds]);
+
+  // Tanggal (1-31) yg ditandai merah — cuma kalau jadwal SEBELUMNYA sama
+  // persis di semua pegawai yg dicentang & tidak kosong.
+  const tanggalTerisiSama = React.useMemo(() => {
+    const result = new Set<number>();
+    if (selectedRows.length === 0) return result;
+    for (let day = 1; day <= 31; day++) {
+      const idx = day - 1;
+      const first = selectedRows[0].h[idx] || '';
+      if (!first) continue;
+      const sama = selectedRows.every((p) => (p.h[idx] || '') === first);
+      if (sama) result.add(day);
+    }
+    return result;
+  }, [selectedRows]);
+
+  const shiftUntukTanggal = (day: number): string | null => {
+    if (selectedRows.length === 0) return null;
+    const value = selectedRows[0].h[day - 1] || '';
+    return value || null;
+  };
+
+  const canSave = selectedIds.size > 0 && shift !== '' && !saving && (isReguler ? hariAktif.size > 0 : selectedTanggal.size > 0);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === pegawaiList.length && pegawaiList.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pegawaiList.map((p) => p.id)));
+    }
+    setSelectedTanggal(new Set());
+  };
+
+  const toggleHari = (iso: number) => {
+    setHariAktif((prev) => {
+      const next = new Set(prev);
+      if (next.has(iso)) next.delete(iso); else next.add(iso);
+      return next;
+    });
+  };
+
+  const handleSimpan = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      let message: string;
+      if (isReguler) {
+        const res = await fetch('/api/pegawai-jadwal-tetap', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [...selectedIds], shift, hari_aktif: [...hariAktif].sort((a, b) => a - b) }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jadwal');
+        message = data.message || 'Jadwal tetap berhasil diterapkan';
+      } else {
+        const res = await fetch('/api/pegawai-jadwal-tanggal', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ids: [...selectedIds], tahun: String(tahun), bulan: pad2(bulan),
+            tanggal: [...selectedTanggal].sort((a, b) => a - b), shift,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jadwal');
+        message = data.message || 'Jadwal tanggal berhasil diterapkan';
+      }
+      await Swal.fire({ icon: 'success', title: message, confirmButtonColor: '#059669', timer: 2000, showConfirmButton: false });
+      // Pegawai TETAP dicentang (bukan direset) — begitu loadPegawai
+      // selesai refresh data h dari server, tanggal yg baru disimpan
+      // langsung kebaca tanggalTerisiSama & tampil merah kalau modal
+      // dibuka lagi, dan user bisa langsung lanjut atur shift
+      // berikutnya utk pegawai yg sama tanpa centang ulang.
+      setSelectedTanggal(new Set());
+      await loadPegawai(departemen);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const allSelected = pegawaiList.length > 0 && selectedIds.size === pegawaiList.length;
+  const biru = [...selectedTanggal].sort((a, b) => a - b);
+  const merah = [...tanggalTerisiSama].filter((d) => !selectedTanggal.has(d)).sort((a, b) => a - b);
+  const riwayatKosong = biru.length === 0 && merah.length === 0;
+
+  return (
+    <div style={{ paddingBottom: 100 }}>
+      <SubPageHeader title="Atur Jadwal Tetap" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Departemen</div>
+            <select
+              value={departemen || ''}
+              onChange={(e) => { const v = e.target.value || null; setDepartemen(v); loadPegawai(v); }}
+              style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: 12, boxSizing: 'border-box' }}
+            >
+              <option value="">Semua Departemen</option>
+              {departemenList.map((d) => <option key={d.kode} value={d.kode}>{d.nama}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Shift</div>
+            <select
+              value={shift}
+              onChange={(e) => { setShift(e.target.value); setSelectedTanggal(new Set()); }}
+              style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: 12, boxSizing: 'border-box' }}
+            >
+              <option value="">Pilih Shift</option>
+              {shiftList.map((s) => (
+                <option key={s.shift} value={s.shift}>
+                  {s.shift} ({(s.jam_masuk || '').slice(0, 5)}–{(s.jam_pulang || '').slice(0, 5)})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: pegawaiList.length ? 'pointer' : 'default' }}>
+            <input type="checkbox" checked={allSelected} disabled={!pegawaiList.length} onChange={toggleSelectAll} style={{ width: 18, height: 18, accentColor: '#059669' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: selectedIds.size ? '#059669' : '#6b7280' }}>
+              {selectedIds.size === 0 ? 'Centang pegawai untuk atur jadwal' : `${selectedIds.size} pegawai dipilih`}
+            </span>
+          </label>
+          <div style={{ borderTop: '1px solid #e5e7eb' }} />
+          <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            {loadingPegawai ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+            ) : pegawaiList.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Tidak ada pegawai</div>
+            ) : (
+              pegawaiList.map((p) => {
+                const checked = selectedIds.has(p.id);
+                return (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox" checked={checked} style={{ width: 18, height: 18, accentColor: '#059669', flexShrink: 0 }}
+                      onChange={(e) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(p.id); else next.delete(p.id);
+                          return next;
+                        });
+                        setSelectedTanggal(new Set());
+                      }}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: '#111827' }}>{p.nama}</div>
+                      {p.jadwal_tetap_shift && <div style={{ fontSize: 11, color: '#9ca3af' }}>Saat ini: {p.jadwal_tetap_shift}</div>}
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {shift !== '' && (isReguler ? (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Hari Berlaku</div>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Shift ini berulang tiap minggu pada hari yg dipilih.</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              {HARI_OPSI.map((h) => {
+                const active = hariAktif.has(h.iso);
+                return (
+                  <button
+                    key={h.iso} type="button" onClick={() => toggleHari(h.iso)}
+                    style={{
+                      width: 44, height: 36, borderRadius: 8, cursor: 'pointer',
+                      background: active ? '#059669' : '#fff', border: `1px solid ${active ? '#059669' : '#e5e7eb'}`,
+                      color: active ? '#fff' : '#9ca3af', fontSize: 12, fontWeight: 600,
+                    }}
+                  >
+                    {h.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
+              <button type="button" onClick={() => setHariAktif(new Set([1, 2, 3, 4, 5]))} style={{ background: 'none', border: 'none', color: '#059669', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 8px' }}>Sen–Jum</button>
+              <button type="button" onClick={() => setHariAktif(new Set([1, 2, 3, 4, 5, 6, 7]))} style={{ background: 'none', border: 'none', color: '#059669', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 8px' }}>7 Hari</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
+            <button
+              type="button" onClick={() => setShowTanggalModal(true)}
+              style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <IconCalendar size={18} color="#2563eb" />
+              Atur Tanggal Masuk
+            </button>
+          </div>
+        ))}
+
+        {shift !== '' && !isReguler && (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Riwayat Tanggal</div>
+            {selectedRows.length === 0 && (
+              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Centang pegawai dulu utk lihat jadwal yg sudah ada.</div>
+            )}
+            <div style={{ marginTop: 10 }}>
+              {riwayatKosong ? (
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>Belum ada jadwal.</span>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {merah.map((d) => (
+                    <span key={`m-${d}`} style={{ padding: '6px 10px', borderRadius: 10, background: '#fee2e2', color: '#dc2626', fontSize: 11, fontWeight: 600 }}>
+                      {d} — {shiftUntukTanggal(d) || '-'}
+                    </span>
+                  ))}
+                  {biru.map((d) => (
+                    <span key={`b-${d}`} style={{ padding: '6px 10px', borderRadius: 10, background: '#dbeafe', color: '#2563eb', fontSize: 11, fontWeight: 600 }}>
+                      {d} — {shift || '-'}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 16, background: '#fff', borderTop: '1px solid #e5e7eb', paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+        <button
+          type="button" onClick={handleSimpan} disabled={!canSave}
+          style={{
+            width: '100%', padding: '13px 0', borderRadius: 12, border: 'none',
+            background: canSave ? '#059669' : '#d1d5db', color: '#fff', fontSize: 15, fontWeight: 700,
+            cursor: canSave ? 'pointer' : 'default',
+          }}
+        >
+          {saving ? 'Menyimpan...' : 'Simpan'}
+        </button>
+      </div>
+
+      {showTanggalModal && (
+        <TanggalPickerModal
+          tahun={tahun} bulan={bulan}
+          tanggalTerisi={new Set([...tanggalTerisiSama, ...selectedTanggal])}
+          onCancel={() => setShowTanggalModal(false)}
+          onConfirm={(result) => {
+            setSelectedTanggal((prev) => new Set([...prev, ...result]));
+            setShowTanggalModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------
 
-type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin' | 'lapor-it' | 'poli' | 'igd' | 'ranap' | 'farmasi' | 'lab' | 'radiologi';
+type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin' | 'lapor-it' | 'poli' | 'igd' | 'ranap' | 'farmasi' | 'lab' | 'radiologi' | 'atur-jadwal' | 'semua-menu';
 
 export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => void }> = ({ user, onLogout }) => {
   const nik = resolveNik(user);
@@ -2442,7 +3012,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#f3f4f6', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: tab === 'absen' ? 0 : 88 }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: (tab === 'absen' || tab === 'atur-jadwal' || tab === 'semua-menu') ? 0 : 88 }}>
         {notFound ? (
           <div style={{ padding: 40, textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><IconAlertTriangle size={36} /></div>
@@ -2458,6 +3028,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
             onOpenCutiIzin={(mode) => setTab(mode)} onOpenLaporIt={() => setTab('lapor-it')}
             onOpenPoli={() => setTab('poli')} onOpenIgd={() => setTab('igd')} onOpenRanap={() => setTab('ranap')}
             onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
+            onOpenAturJadwal={() => setTab('atur-jadwal')} onOpenSemuaMenu={() => setTab('semua-menu')}
           />
         ) : tab === 'absen' ? (
           <AbsenTab nik={nik} hariIni={me?.hari_ini || null} onSelesai={() => { fetchMe(); setTab('home'); }} onBack={() => setTab('home')} />
@@ -2485,14 +3056,27 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
           <LabMobileView onBack={() => setTab('home')} />
         ) : tab === 'radiologi' ? (
           <RadiologiMobileView onBack={() => setTab('home')} />
+        ) : tab === 'atur-jadwal' ? (
+          <AturJadwalMobileView user={user} onBack={() => setTab('home')} />
+        ) : tab === 'semua-menu' ? (
+          <SemuaMenuMobileView
+            user={user} onBack={() => setTab('home')} onOpenLembur={() => setTab('lembur')}
+            onOpenCutiIzin={(mode) => setTab(mode)} onOpenLaporIt={() => setTab('lapor-it')}
+            onOpenPoli={() => setTab('poli')} onOpenIgd={() => setTab('igd')} onOpenRanap={() => setTab('ranap')}
+            onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
+            onOpenAturJadwal={() => setTab('atur-jadwal')}
+          />
         ) : (
           <KehadiranTab nik={nik} />
         )}
       </div>
 
-      {/* Footer disembunyikan di tab Absen — layar itu cuma butuh fokus ke
-          tombol Absen Masuk/Keluar (scan wajah), tanpa distraksi nav bar. */}
-      {!notFound && tab !== 'absen' && (
+      {/* Footer disembunyikan di tab Absen (fokus ke tombol Absen Masuk/
+          Keluar, tanpa distraksi nav bar) dan di Atur Jadwal/Semua Menu
+          (padanan Flutter: keduanya route terpisah yg di-push di atas
+          MainShell, jadi bottom nav utama otomatis ketutup — di web yg
+          strukturnya flat lewat satu shell, disembunyikan manual). */}
+      {!notFound && tab !== 'absen' && tab !== 'atur-jadwal' && tab !== 'semua-menu' && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #e5e7eb' }}>
           <div style={{ display: 'flex', padding: '18px 0 max(8px, env(safe-area-inset-bottom))' }}>
             {navItems.slice(0, 2).map((item) => {
