@@ -132,6 +132,7 @@ class _HeaderBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusBarHeight = MediaQuery.of(context).padding.top;
+    final resolvedPhotoUrl = resolvePhotoUrl(photoUrl);
     return Container(
       padding: EdgeInsets.fromLTRB(16, statusBarHeight + 20, 16, 56),
       decoration: const BoxDecoration(
@@ -145,8 +146,8 @@ class _HeaderBanner extends StatelessWidget {
           CircleAvatar(
             radius: 24,
             backgroundColor: Colors.white.withValues(alpha: 0.25),
-            backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage('$kApiBaseUrl$photoUrl') : null,
-            child: (photoUrl != null && photoUrl!.isNotEmpty)
+            backgroundImage: resolvedPhotoUrl != null ? NetworkImage(resolvedPhotoUrl) : null,
+            child: resolvedPhotoUrl != null
                 ? null
                 : Text(_initials,
                     style: const TextStyle(
@@ -335,6 +336,11 @@ const _kLayananItemsInti = [
   _LayananItem('Izin', Icons.description_outlined),
   _LayananItem('Tugas', Icons.task_alt_outlined),
   _LayananItem('Lapor IT', Icons.desktop_windows_outlined),
+  // Menu default spt Cuti/Izin (tampil ke semua user, gak digating
+  // allowed_modules) — yg batasi cakupan aksesnya adalah dropdown
+  // Departemen di dalam AturJadwalView sendiri: non-admin otomatis
+  // terkunci ke departemen dia sendiri, admin bebas pilih semua.
+  _LayananItem('Atur Jadwal', Icons.event_available_outlined),
 ];
 
 const _kLayananItemsKlinis = [
@@ -347,12 +353,14 @@ const _kLayananItemsKlinis = [
   _LayananItem('Operasi', Icons.content_cut_outlined),
 ];
 
-const _kLayananItemAturJadwal = _LayananItem('Atur Jadwal', Icons.event_available_outlined);
-
-/// Padanan canAccessModule di PresensiMobile.tsx (versi web) — Poli/IGD/
-/// Ranap di grid menu cuma tampil kalau modul terkait diizinkan buat
-/// akun yg login, lewat allowed_modules (diatur admin) atau fallback per
-/// role kalau allowed_modules kosong.
+/// Padanan canAccessModule/canAccessMenu di PresensiMobile.tsx & App.tsx
+/// (versi web) — Poli/IGD/Ranap/Farmasi/Lab/Radiologi/Operasi di grid menu
+/// cuma tampil kalau modul terkait diizinkan buat akun yg login, lewat
+/// allowed_modules (diatur admin) atau fallback per role kalau
+/// allowed_modules kosong. Kunci modul HARUS sama persis dgn yg dipakai
+/// shell desktop (App.tsx canAccessMenu): 'rawat-jalan', 'igd',
+/// 'rawat-inap', 'farmasi', 'laboratorium' (bukan 'lab'), 'radiologi',
+/// 'jadwal-operasi' (bukan 'operasi').
 bool _canAccessModule(AppUser user, String moduleKey) {
   if (user.allowedModules.isNotEmpty) {
     return user.allowedModules
@@ -363,6 +371,8 @@ bool _canAccessModule(AppUser user, String moduleKey) {
   switch (user.role) {
     case 'dokter':
       return moduleKey == 'rawat-jalan' || moduleKey == 'rawat-inap';
+    case 'farmasi':
+      return moduleKey == 'farmasi';
     case 'admin':
       return true;
     default:
@@ -370,101 +380,121 @@ bool _canAccessModule(AppUser user, String moduleKey) {
   }
 }
 
-/// "Atur Jadwal" (bulk-assign shift, fitur baru) — admin SELALU boleh
-/// (di luar allowed_modules, krn kunci ini belum ada di data manapun),
-/// role lain (mis. kepala bagian) baru bisa kalau admin nanti explicitly
-/// kasih 'jadwal-pegawai' di allowed_modules-nya.
-bool _canAturJadwal(AppUser user) {
-  if (user.role == 'admin') return true;
-  return user.allowedModules.split(',').where((s) => s.isNotEmpty).contains('jadwal-pegawai');
+/// Daftar menu lengkap sesuai hak akses `user` — dipakai bareng oleh grid
+/// Home (yg cuma nampilin sebagian) dan SemuaMenuView (nampilin semua).
+List<_LayananItem> _layananItemsUntuk(AppUser user) {
+  return [
+    ..._kLayananItemsInti,
+    if (_canAccessModule(user, 'rawat-jalan')) _kLayananItemsKlinis[0], // Poli
+    if (_canAccessModule(user, 'igd')) _kLayananItemsKlinis[1], // IGD
+    if (_canAccessModule(user, 'rawat-inap')) _kLayananItemsKlinis[2], // Ranap
+    if (_canAccessModule(user, 'farmasi')) _kLayananItemsKlinis[3], // Farmasi
+    if (_canAccessModule(user, 'laboratorium')) _kLayananItemsKlinis[4], // Lab
+    if (_canAccessModule(user, 'radiologi')) _kLayananItemsKlinis[5], // Radiologi
+    if (_canAccessModule(user, 'jadwal-operasi')) _kLayananItemsKlinis[6], // Operasi
+  ];
 }
+
+void _onLayananTap(BuildContext context, AppUser user, String label) {
+  final nik = user.nik;
+  switch (label) {
+    case 'Lembur':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => LemburView(nik: nik)));
+      return;
+    case 'Cuti':
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CutiIzinView(nik: nik, mode: 'cuti')));
+      return;
+    case 'Izin':
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CutiIzinView(nik: nik, mode: 'izin')));
+      return;
+    case 'Lapor IT':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => LaporItView(nik: nik)));
+      return;
+    case 'Poli':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => PoliView(user: user)));
+      return;
+    case 'IGD':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const IgdView()));
+      return;
+    case 'Ranap':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => RanapView(user: user)));
+      return;
+    case 'Farmasi':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const FarmasiView()));
+      return;
+    case 'Lab':
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PermintaanQueueView(
+              title: 'Permintaan Lab',
+              emptyText: 'Belum ada permintaan lab hari ini',
+              fetcher: KlinisService.getLabList)));
+      return;
+    case 'Radiologi':
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PermintaanQueueView(
+              title: 'Permintaan Radiologi',
+              emptyText: 'Belum ada permintaan radiologi hari ini',
+              fetcher: KlinisService.getRadiologiList)));
+      return;
+    case 'Atur Jadwal':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => AturJadwalView(user: user)));
+      return;
+    default:
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('$label — fitur ini akan segera hadir.'),
+            backgroundColor: _kGreenDark),
+      );
+  }
+}
+
+Widget _layananItemTile(BuildContext context, AppUser user, _LayananItem item) {
+  return SizedBox(
+    width: 68,
+    child: GestureDetector(
+      onTap: () => _onLayananTap(context, user, item.label),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(item.icon, color: _kGreenDark, size: 26),
+          ),
+          const SizedBox(height: 0),
+          Text(item.label,
+              style: const TextStyle(fontSize: 10, color: Color(0xFF374151)),
+              textAlign: TextAlign.center),
+        ],
+      ),
+    ),
+  );
+}
+
+// 3 baris x 4 kolom = 12 slot; kalau menu lebih dari itu, slot terakhir
+// diganti tombol "•••" yg buka SemuaMenuView (bukan expand di tempat)
+// spy card Home tetap ringkas.
+const int _kLayananGridSlots = 12;
 
 class _LayananGrid extends StatelessWidget {
   final AppUser user;
   const _LayananGrid({required this.user});
 
-  String get _nik => user.nik;
-
-  List<_LayananItem> get _items {
-    // role 'pegawai' = akun hasil Daftar mandiri, belum di-approve admin —
-    // Menu Utama-nya sengaja dibatasi ke fitur non-klinis saja (padanan
-    // isAkunMandiriBelumDiapprove di versi web).
-    final isAkunMandiriBelumDiapprove = user.role == 'pegawai';
-    return [
-      ..._kLayananItemsInti,
-      if (_canAccessModule(user, 'rawat-jalan'))
-        _kLayananItemsKlinis[0], // Poli
-      if (_canAccessModule(user, 'igd')) _kLayananItemsKlinis[1], // IGD
-      if (_canAccessModule(user, 'rawat-inap'))
-        _kLayananItemsKlinis[2], // Ranap
-      if (!isAkunMandiriBelumDiapprove)
-        ..._kLayananItemsKlinis.sublist(3), // Farmasi/Lab/Radiologi/Operasi
-      if (_canAturJadwal(user)) _kLayananItemAturJadwal,
-    ];
-  }
-
-  void _onTap(BuildContext context, String label) {
-    switch (label) {
-      case 'Lembur':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => LemburView(nik: _nik)));
-        return;
-      case 'Cuti':
-        Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => CutiIzinView(nik: _nik, mode: 'cuti')));
-        return;
-      case 'Izin':
-        Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => CutiIzinView(nik: _nik, mode: 'izin')));
-        return;
-      case 'Lapor IT':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => LaporItView(nik: _nik)));
-        return;
-      case 'Poli':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => PoliView(user: user)));
-        return;
-      case 'IGD':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const IgdView()));
-        return;
-      case 'Ranap':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => RanapView(user: user)));
-        return;
-      case 'Farmasi':
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const FarmasiView()));
-        return;
-      case 'Lab':
-        Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => PermintaanQueueView(
-                title: 'Permintaan Lab',
-                emptyText: 'Belum ada permintaan lab hari ini',
-                fetcher: KlinisService.getLabList)));
-        return;
-      case 'Radiologi':
-        Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => PermintaanQueueView(
-                title: 'Permintaan Radiologi',
-                emptyText: 'Belum ada permintaan radiologi hari ini',
-                fetcher: KlinisService.getRadiologiList)));
-        return;
-      case 'Atur Jadwal':
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AturJadwalView()));
-        return;
-      default:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('$label — fitur ini akan segera hadir.'),
-              backgroundColor: _kGreenDark),
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final items = _layananItemsUntuk(user);
+    final hasMore = items.length > _kLayananGridSlots;
+    final visibleItems =
+        hasMore ? items.take(_kLayananGridSlots - 1).toList() : items;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(16),
@@ -479,32 +509,78 @@ class _LayananGrid extends StatelessWidget {
       // TETAP (bukan ikut melebar) bikin spacing benar-benar jadi jarak
       // visual antar ikon, bukan cuma dipakai buat itung ulang lebar sel.
       child: Wrap(
-        alignment: WrapAlignment.center,
+        alignment: WrapAlignment.start,
         spacing: 16,
         runSpacing: 6,
-        children: _items.map((item) {
-          return SizedBox(
-            width: 68,
-            child: GestureDetector(
-              onTap: () => _onTap(context, item.label),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(item.icon, color: _kGreenDark, size: 26),
-                  ),
-                  const SizedBox(height: 0),
-                  Text(item.label,
-                      style: const TextStyle(
-                          fontSize: 10, color: Color(0xFF374151)),
-                      textAlign: TextAlign.center),
-                ],
+        children: [
+          ...visibleItems.map((item) => _layananItemTile(context, user, item)),
+          if (hasMore)
+            SizedBox(
+              width: 68,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => SemuaMenuView(user: user))),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Icon(Icons.more_horiz, color: _kGreenDark, size: 26),
+                    ),
+                    const SizedBox(height: 0),
+                    const Text('Lihat Semua',
+                        style:
+                            TextStyle(fontSize: 10, color: Color(0xFF374151)),
+                        textAlign: TextAlign.center),
+                  ],
+                ),
               ),
             ),
-          );
-        }).toList(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Layar "Semua Menu" — dibuka dari tombol "•••" di grid Home kalau menu
+/// yg diizinkan buat user > 12 (tidak muat di grid ringkas Home).
+class SemuaMenuView extends StatelessWidget {
+  final AppUser user;
+  const SemuaMenuView({super.key, required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _layananItemsUntuk(user);
+    return Scaffold(
+      backgroundColor: const Color(0xFFF3F4F6),
+      appBar: AppBar(
+        title: const Text('Semua Menu',
+            style: TextStyle(
+                color: Color(0xFF111827),
+                fontWeight: FontWeight.w700,
+                fontSize: 16)),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF111827),
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _kBorder),
+              borderRadius: BorderRadius.circular(16)),
+          child: Wrap(
+            alignment: WrapAlignment.start,
+            spacing: 16,
+            runSpacing: 16,
+            children: items
+                .map((item) => _layananItemTile(context, user, item))
+                .toList(),
+          ),
+        ),
       ),
     );
   }

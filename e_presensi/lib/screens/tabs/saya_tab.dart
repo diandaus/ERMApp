@@ -48,7 +48,7 @@ class _SayaTabState extends State<SayaTab> {
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = _photo != null && _photo!.isNotEmpty;
+    final resolvedPhotoUrl = resolvePhotoUrl(_photo);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -62,8 +62,10 @@ class _SayaTabState extends State<SayaTab> {
               CircleAvatar(
                 radius: 26,
                 backgroundColor: _kGreenDark,
-                backgroundImage: hasPhoto ? NetworkImage('$kApiBaseUrl$_photo') : null,
-                child: hasPhoto ? null : Text(_initials, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                backgroundImage: resolvedPhotoUrl != null ? NetworkImage(resolvedPhotoUrl) : null,
+                child: resolvedPhotoUrl != null
+                    ? null
+                    : Text(_initials, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 12),
               Expanded(

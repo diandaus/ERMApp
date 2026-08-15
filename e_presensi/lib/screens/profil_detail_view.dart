@@ -110,6 +110,7 @@ class _ProfilDetailViewState extends State<ProfilDetailView> {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedPhotoUrl = resolvePhotoUrl(_profil?.photo);
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
@@ -133,8 +134,8 @@ class _ProfilDetailViewState extends State<ProfilDetailView> {
                               CircleAvatar(
                                 radius: 40,
                                 backgroundColor: const Color(0xFFD1FAE5),
-                                backgroundImage: _profil!.photo.isNotEmpty ? NetworkImage('$kApiBaseUrl${_profil!.photo}') : null,
-                                child: _profil!.photo.isEmpty
+                                backgroundImage: resolvedPhotoUrl != null ? NetworkImage(resolvedPhotoUrl) : null,
+                                child: resolvedPhotoUrl == null
                                     ? Text(_initials, style: const TextStyle(color: _kGreenDark, fontWeight: FontWeight.w700, fontSize: 24))
                                     : null,
                               ),
