@@ -6,7 +6,7 @@ import '../models/pengumuman.dart';
 import '../services/pengumuman_service.dart';
 
 const _kBorder = Color(0xFFE5E7EB);
-const _kCardHeight = 96.0;
+const _kCardHeight = 108.0;
 
 const _kBulanId = [
   '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
@@ -208,8 +208,6 @@ class _PengumumanCardState extends State<PengumumanCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Pengumuman & Informasi Penting', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
-          const SizedBox(height: 10),
           SizedBox(
             height: _kCardHeight,
             child: PageView.builder(
