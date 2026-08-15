@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/app_user.dart';
 import '../models/jadwal_pegawai_row.dart';
 import '../models/jam_masuk_opsi.dart';
 import '../services/api_client.dart';
@@ -26,13 +27,16 @@ const _kHariOpsi = [
 /// jadwal shift beda per kelompok pegawai diatur dgn mengulang alur ini
 /// per kelompok, mis. 4 orang Shift Pagi lalu 2 orang lain Shift Malam).
 class AturJadwalView extends StatefulWidget {
-  const AturJadwalView({super.key});
+  final AppUser user;
+  const AturJadwalView({super.key, required this.user});
 
   @override
   State<AturJadwalView> createState() => _AturJadwalViewState();
 }
 
 class _AturJadwalViewState extends State<AturJadwalView> {
+  bool get _isAdmin => widget.user.role == 'admin';
+
   List<({String kode, String nama})> _departemenList = [];
   String? _departemen;
 
@@ -55,22 +59,53 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   /// biasa); shift lain (rotasi/malam/dll) pakai tanggal kalender
   /// spesifik — krn shift rotasi biasanya beda2 tiap orang tiap tanggal,
   /// bukan pola mingguan tetap.
-  bool get _isReguler => _shift != null && _shift!.trim().toLowerCase() == 'reguler';
+  bool get _isReguler =>
+      _shift != null && _shift!.trim().toLowerCase() == 'reguler';
 
   @override
   void initState() {
     super.initState();
-    _loadOpsi();
-    _loadPegawai();
+    _initPegawai();
+  }
+
+  Future<void> _initPegawai() async {
+    // Tunggu _loadOpsi (isi _departemenList) SEBELUM set _departemen non-
+    // admin — kalau _departemen di-set duluan sementara _departemenList
+    // masih kosong, DropdownButton bisa assert-error krn value-nya gak
+    // cocok item manapun.
+    await Future.wait([_loadOpsi(), _loadPegawai()]);
+    if (!mounted || _isAdmin) return;
+    JadwalPegawaiRow? diriSendiri;
+    for (final p in _pegawaiList) {
+      if (p.nik == widget.user.nik) {
+        diriSendiri = p;
+        break;
+      }
+    }
+    // Cuma auto-isi departemen sesuai profil pegawai yg login — dropdown
+    // TETAP bisa diganti (mis. kepala bagian yg juga bantu atur jadwal
+    // departemen lain), bukan dikunci.
+    if (diriSendiri != null &&
+        diriSendiri.departemen.isNotEmpty &&
+        diriSendiri.departemen != '-') {
+      setState(() => _departemen = diriSendiri!.departemen);
+      await _loadPegawai();
+    }
   }
 
   Future<void> _loadOpsi() async {
     try {
-      final departemen = await ApiClient.getJsonArray('/api/pegawai/departemen');
+      final departemen =
+          await ApiClient.getJsonArray('/api/pegawai/departemen');
       final shift = await JadwalPegawaiService.getJamMasukOpsi();
       if (!mounted) return;
       setState(() {
-        _departemenList = departemen.map((d) => (kode: d['kode'] as String? ?? '', nama: d['nama'] as String? ?? '')).toList();
+        _departemenList = departemen
+            .map((d) => (
+                  kode: d['kode'] as String? ?? '',
+                  nama: d['nama'] as String? ?? ''
+                ))
+            .toList();
         _shiftList = shift;
       });
     } catch (_) {
@@ -81,7 +116,8 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   Future<void> _loadPegawai() async {
     setState(() => _loadingPegawai = true);
     try {
-      final list = await JadwalPegawaiService.getList(tahun: _tahun, bulan: _bulan, departemen: _departemen);
+      final list = await JadwalPegawaiService.getList(
+          tahun: _tahun, bulan: _bulan, departemen: _departemen);
       if (!mounted) return;
       setState(() {
         _pegawaiList = list;
@@ -99,7 +135,8 @@ class _AturJadwalViewState extends State<AturJadwalView> {
 
   void _toggleSelectAll() {
     setState(() {
-      if (_selectedIds.length == _pegawaiList.length && _pegawaiList.isNotEmpty) {
+      if (_selectedIds.length == _pegawaiList.length &&
+          _pegawaiList.isNotEmpty) {
         _selectedIds.clear();
       } else {
         _selectedIds
@@ -121,11 +158,13 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   }
 
   bool get _canSave {
-    if (_selectedIds.isEmpty || _shift == null || _shift!.isEmpty || _saving) return false;
+    if (_selectedIds.isEmpty || _shift == null || _shift!.isEmpty || _saving)
+      return false;
     return _isReguler ? _hariAktif.isNotEmpty : _selectedTanggal.isNotEmpty;
   }
 
-  List<JadwalPegawaiRow> get _selectedRows => _pegawaiList.where((p) => _selectedIds.contains(p.id)).toList();
+  List<JadwalPegawaiRow> get _selectedRows =>
+      _pegawaiList.where((p) => _selectedIds.contains(p.id)).toList();
 
   // Tanggal (1-31) yg ditandai merah — cuma kalau jadwal SEBELUMNYA (nilai
   // kolom h di tanggal itu) SAMA PERSIS di semua pegawai yg dicentang &
@@ -140,7 +179,8 @@ class _AturJadwalViewState extends State<AturJadwalView> {
       final idx = day - 1;
       final first = idx < rows.first.h.length ? rows.first.h[idx] : '';
       if (first.isEmpty) continue;
-      final sama = rows.every((p) => (idx < p.h.length ? p.h[idx] : '') == first);
+      final sama =
+          rows.every((p) => (idx < p.h.length ? p.h[idx] : '') == first);
       if (sama) result.add(day);
     }
     return result;
@@ -182,7 +222,8 @@ class _AturJadwalViewState extends State<AturJadwalView> {
       final String message;
       if (_isReguler) {
         final sortedHari = _hariAktif.toList()..sort();
-        message = await JadwalPegawaiService.terapkanBulk(ids: _selectedIds.toList(), shift: _shift!, hariAktif: sortedHari);
+        message = await JadwalPegawaiService.terapkanBulk(
+            ids: _selectedIds.toList(), shift: _shift!, hariAktif: sortedHari);
       } else {
         final sortedTanggal = _selectedTanggal.toList()..sort();
         message = await JadwalPegawaiService.terapkanTanggal(
@@ -194,16 +235,20 @@ class _AturJadwalViewState extends State<AturJadwalView> {
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: _kGreenDark));
-      setState(() {
-        _selectedIds.clear();
-        _selectedTanggal.clear();
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: _kGreenDark));
+      // Pegawai TETAP dicentang (bukan di-clear) — supaya begitu
+      // _loadPegawai selesai refresh data h dari server, tanggal yg
+      // baru saja disimpan langsung kebaca _tanggalTerisiSama & tampil
+      // merah kalau modal dibuka lagi, dan user bisa langsung lanjut
+      // atur shift berikutnya utk pegawai yg sama tanpa centang ulang.
+      setState(() => _selectedTanggal.clear());
       await _loadPegawai();
     } catch (e) {
       if (!mounted) return;
       final msg = e is ApiException ? e.message : 'Gagal menyimpan jadwal.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: const Color(0xFFDC2626)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg), backgroundColor: const Color(0xFFDC2626)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -214,7 +259,11 @@ class _AturJadwalViewState extends State<AturJadwalView> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
-        title: const Text('Atur Jadwal Tetap', style: TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w700, fontSize: 16)),
+        title: const Text('Atur Jadwal Tetap',
+            style: TextStyle(
+                color: Color(0xFF111827),
+                fontWeight: FontWeight.w700,
+                fontSize: 16)),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF111827),
         elevation: 0,
@@ -235,7 +284,8 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                 const SizedBox(height: 16),
                 _buildPegawaiSection(),
                 const SizedBox(height: 16),
-                if (_shift != null) (_isReguler ? _buildHariSection() : _buildTanggalSection()),
+                if (_shift != null)
+                  (_isReguler ? _buildHariSection() : _buildTanggalSection()),
                 if (_shift != null && !_isReguler) ...[
                   const SizedBox(height: 16),
                   _buildRiwayatTanggalSection(),
@@ -257,11 +307,15 @@ class _AturJadwalViewState extends State<AturJadwalView> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: _kGreenDark,
                 disabledBackgroundColor: Colors.grey.shade300,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: Text(
                 _saving ? 'Menyimpan...' : 'Simpan',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15),
               ),
             ),
           ),
@@ -274,20 +328,35 @@ class _AturJadwalViewState extends State<AturJadwalView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Departemen', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+        const Text('Departemen',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF374151))),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _kBorder),
+              borderRadius: BorderRadius.circular(10)),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String?>(
               value: _departemen,
               isExpanded: true,
               hint: const Text('Semua', style: TextStyle(fontSize: 12)),
               items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Semua Departemen', style: TextStyle(fontSize: 12))),
-                ..._departemenList.map((d) => DropdownMenuItem<String?>(value: d.kode, child: Text(d.nama, style: const TextStyle(fontSize: 12)))),
+                const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Semua Departemen',
+                        style: TextStyle(fontSize: 12))),
+                ..._departemenList.map((d) => DropdownMenuItem<String?>(
+                    value: d.kode,
+                    child: Text(d.nama, style: const TextStyle(fontSize: 12)))),
               ],
+              // Non-admin: departemen sudah otomatis terisi departemen
+              // dia sendiri (lihat _initPegawai), tapi tetap bisa
+              // diganti kalau perlu — gak dikunci.
               onChanged: (v) {
                 setState(() => _departemen = v);
                 _loadPegawai();
@@ -303,17 +372,29 @@ class _AturJadwalViewState extends State<AturJadwalView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Shift', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+        const Text('Shift',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF374151))),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _kBorder),
+              borderRadius: BorderRadius.circular(10)),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _shift,
               isExpanded: true,
               hint: const Text('Pilih Shift', style: TextStyle(fontSize: 12)),
-              items: _shiftList.map((s) => DropdownMenuItem(value: s.shift, child: Text(s.label, style: const TextStyle(fontSize: 12)))).toList(),
+              items: _shiftList
+                  .map((s) => DropdownMenuItem(
+                      value: s.shift,
+                      child:
+                          Text(s.label, style: const TextStyle(fontSize: 12))))
+                  .toList(),
               onChanged: (v) => setState(() {
                 _shift = v;
                 _selectedTanggal.clear();
@@ -326,9 +407,13 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   }
 
   Widget _buildPegawaiSection() {
-    final allSelected = _pegawaiList.isNotEmpty && _selectedIds.length == _pegawaiList.length;
+    final allSelected =
+        _pegawaiList.isNotEmpty && _selectedIds.length == _pegawaiList.length;
     return Container(
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _kBorder),
+          borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -339,12 +424,20 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                 Checkbox(
                   value: allSelected,
                   activeColor: _kGreenDark,
-                  onChanged: _pegawaiList.isEmpty ? null : (_) => _toggleSelectAll(),
+                  onChanged:
+                      _pegawaiList.isEmpty ? null : (_) => _toggleSelectAll(),
                 ),
                 Expanded(
                   child: Text(
-                    _selectedIds.isEmpty ? 'Centang pegawai untuk atur jadwal' : '${_selectedIds.length} pegawai dipilih',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _selectedIds.isEmpty ? const Color(0xFF6B7280) : _kGreenDark),
+                    _selectedIds.isEmpty
+                        ? 'Centang pegawai untuk atur jadwal'
+                        : '${_selectedIds.length} pegawai dipilih',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _selectedIds.isEmpty
+                            ? const Color(0xFF6B7280)
+                            : _kGreenDark),
                   ),
                 ),
               ],
@@ -359,12 +452,18 @@ class _AturJadwalViewState extends State<AturJadwalView> {
             child: _loadingPegawai
                 ? const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: Text('Memuat...', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))),
+                    child: Center(
+                        child: Text('Memuat...',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF9CA3AF)))),
                   )
                 : _pegawaiList.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(24),
-                        child: Center(child: Text('Tidak ada pegawai', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))),
+                        child: Center(
+                            child: Text('Tidak ada pegawai',
+                                style: TextStyle(
+                                    fontSize: 12, color: Color(0xFF9CA3AF)))),
                       )
                     : ListView.builder(
                         shrinkWrap: true,
@@ -378,7 +477,8 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                             activeColor: _kGreenDark,
                             dense: true,
                             visualDensity: const VisualDensity(vertical: -4),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 4),
                             controlAffinity: ListTileControlAffinity.leading,
                             onChanged: (v) => setState(() {
                               if (v == true) {
@@ -388,10 +488,15 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                               }
                               _selectedTanggal.clear();
                             }),
-                            title: Text(p.nama, style: const TextStyle(fontSize: 13, color: Color(0xFF111827))),
+                            title: Text(p.nama,
+                                style: const TextStyle(
+                                    fontSize: 13, color: Color(0xFF111827))),
                             subtitle: p.jadwalTetapShift.isEmpty
                                 ? null
-                                : Text('Saat ini: ${p.jadwalTetapShift}', style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                                : Text('Saat ini: ${p.jadwalTetapShift}',
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF9CA3AF))),
                           );
                         },
                       ),
@@ -404,13 +509,21 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   Widget _buildHariSection() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _kBorder),
+          borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Hari Berlaku', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+          const Text('Hari Berlaku',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151))),
           const SizedBox(height: 2),
-          const Text('Shift ini berulang tiap minggu pada hari yg dipilih.', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+          const Text('Shift ini berulang tiap minggu pada hari yg dipilih.',
+              style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -428,7 +541,12 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                     border: Border.all(color: active ? _kGreenDark : _kBorder),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(h.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: active ? Colors.white : const Color(0xFF9CA3AF))),
+                  child: Text(h.label,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              active ? Colors.white : const Color(0xFF9CA3AF))),
                 ),
               );
             }).toList(),
@@ -436,8 +554,13 @@ class _AturJadwalViewState extends State<AturJadwalView> {
           const SizedBox(height: 10),
           Row(
             children: [
-              TextButton(onPressed: () => setState(() => _hariAktif = {1, 2, 3, 4, 5}), child: const Text('Sen–Jum')),
-              TextButton(onPressed: () => setState(() => _hariAktif = {1, 2, 3, 4, 5, 6, 7}), child: const Text('7 Hari')),
+              TextButton(
+                  onPressed: () => setState(() => _hariAktif = {1, 2, 3, 4, 5}),
+                  child: const Text('Sen–Jum')),
+              TextButton(
+                  onPressed: () =>
+                      setState(() => _hariAktif = {1, 2, 3, 4, 5, 6, 7}),
+                  child: const Text('7 Hari')),
             ],
           ),
         ],
@@ -448,13 +571,13 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   Widget _buildTanggalSection() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _kBorder),
+          borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Tanggal Masuk', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-          const SizedBox(height: 2),
-          const Text('Shift ini berlaku cuma pada tanggal yg dipilih (bukan berulang).', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -464,6 +587,7 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                 foregroundColor: _kBlue,
                 side: const BorderSide(color: _kBlue),
                 padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               icon: const Icon(Icons.calendar_month_outlined, size: 18),
               // Tombol selalu "Atur Tanggal Masuk" — jumlah tanggal yg
@@ -485,25 +609,32 @@ class _AturJadwalViewState extends State<AturJadwalView> {
     // tanggal yg sama dipilih ulang (mau ditimpa), tampil biru (rencana
     // baru menang drpd data lama).
     final biru = _selectedTanggal.toList()..sort();
-    final merah = _tanggalTerisiSama.difference(_selectedTanggal).toList()..sort();
+    final merah = _tanggalTerisiSama.difference(_selectedTanggal).toList()
+      ..sort();
     final kosong = biru.isEmpty && merah.isEmpty;
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: _kBorder),
+          borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Riwayat Tanggal', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-          const SizedBox(height: 2),
-          Text(
-            _selectedRows.isEmpty
-                ? 'Centang pegawai dulu utk lihat jadwal yg sudah ada.'
-                : 'Merah = sudah tersimpan. Biru = baru dipilih, belum disimpan.',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-          ),
+          const Text('Riwayat Tanggal',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151))),
+          if (_selectedRows.isEmpty) ...[
+            const SizedBox(height: 2),
+            const Text('Centang pegawai dulu utk lihat jadwal yg sudah ada.',
+                style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+          ],
           const SizedBox(height: 10),
           if (kosong)
-            const Text('Belum ada jadwal.', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))
+            const Text('Belum ada jadwal.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))
           else
             Wrap(
               spacing: 6,
@@ -512,16 +643,30 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                 ...merah.map((d) {
                   final shift = _shiftUntukTanggal(d) ?? '-';
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(10)),
-                    child: Text('$d — $shift', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(10)),
+                    child: Text('$d — $shift',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFDC2626))),
                   );
                 }),
                 ...biru.map((d) {
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: const Color(0xFFDBEAFE), borderRadius: BorderRadius.circular(10)),
-                    child: Text('$d — ${_shift ?? '-'}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _kBlue)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFFDBEAFE),
+                        borderRadius: BorderRadius.circular(10)),
+                    child: Text('$d — ${_shift ?? '-'}',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _kBlue)),
                   );
                 }),
               ],

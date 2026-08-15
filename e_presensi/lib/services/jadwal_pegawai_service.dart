@@ -14,12 +14,18 @@ class JadwalPegawaiService {
   }) async {
     final list = await ApiClient.getJsonArray('/api/jadwal-pegawai/list', query: {
       'tahun': '$tahun',
-      'bulan': '$bulan',
+      'bulan': _pad2(bulan),
       if (departemen != null && departemen.isNotEmpty) 'departemen': departemen,
       if (search != null && search.isNotEmpty) 'search': search,
     });
     return list.map(JadwalPegawaiRow.fromJson).toList();
   }
+
+  // Kolom `bulan` di tabel jadwal_pegawai adalah ENUM string 2-digit
+  // ('01'..'12', sama spt yg dikirim versi web) — kirim "8" tanpa
+  // padding bikin MySQL diam2 nyimpen di baris/slot yg salah (tak
+  // pernah ketemu lagi pas dibaca), padahal API balas sukses.
+  static String _pad2(int n) => n.toString().padLeft(2, '0');
 
   static Future<List<JamMasukOpsi>> getJamMasukOpsi() async {
     final list = await ApiClient.getJsonArray('/api/jam-masuk/opsi');
@@ -51,7 +57,7 @@ class JadwalPegawaiService {
     final data = await ApiClient.putJson('/api/pegawai-jadwal-tanggal', {
       'ids': ids,
       'tahun': '$tahun',
-      'bulan': '$bulan',
+      'bulan': _pad2(bulan),
       'tanggal': tanggal,
       'shift': shift,
     });
