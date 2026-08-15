@@ -563,6 +563,72 @@ func setPegawaiJadwalTetapBulk(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+type PegawaiJadwalTanggalPayload struct {
+	IDs     []int  `json:"ids" binding:"required"`
+	Tahun   string `json:"tahun" binding:"required"`
+	Bulan   string `json:"bulan" binding:"required"`
+	Tanggal []int  `json:"tanggal" binding:"required"` // hari dlm bulan, 1-31
+	Shift   string `json:"shift" binding:"required"`
+}
+
+// PUT /api/pegawai-jadwal-tanggal — set shift ke TANGGAL KALENDER
+// spesifik (bukan hari berulang spt pegawai_jadwal_tetap) utk banyak
+// pegawai sekaligus — dipakai staf shift rotasi (mis. jaga malam
+// tanggal 15 & 22 doang, bukan tiap minggu). Nulis ke jadwal_pegawai
+// (grid h1..h31 yang sama dgn saveJadwalPegawai di atas), TAPI cuma
+// UPDATE kolom h<tanggal> yang dipilih per query (bukan upsert 31 kolom
+// sekaligus) — supaya tanggal lain yang sudah keisi di bulan yg sama
+// (dari sesi bulk-assign lain, atau grid manual) TIDAK ikut tertimpa
+// kosong.
+func setJadwalPegawaiTanggalBulk(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var p PegawaiJadwalTanggalPayload
+		if err := c.ShouldBindJSON(&p); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(p.IDs) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Tidak ada pegawai yang dipilih"})
+			return
+		}
+		if len(p.Tanggal) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Pilih minimal satu tanggal"})
+			return
+		}
+		for _, d := range p.Tanggal {
+			if d < 1 || d > 31 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Tanggal harus antara 1-31"})
+				return
+			}
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, id := range p.IDs {
+			for _, d := range p.Tanggal {
+				kolom := jadwalHariKolom[d-1]
+				query := fmt.Sprintf(
+					`INSERT INTO jadwal_pegawai (id, tahun, bulan, %s) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE %s=VALUES(%s)`,
+					kolom, kolom, kolom,
+				)
+				if _, err := tx.Exec(query, id, p.Tahun, p.Bulan, p.Shift); err != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Jadwal tanggal berhasil diterapkan ke %d pegawai", len(p.IDs))})
+	}
+}
+
 // DELETE /api/pegawai-jadwal-tetap/:id — hapus jadwal tetap (pegawai
 // kembali tidak punya jadwal otomatis, harus diisi manual per hari lewat
 // grid kalau perlu).

@@ -754,9 +754,9 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				kamar_inap.trf_kamar,
 				kamar_inap.diagnosa_awal,
 				kamar_inap.diagnosa_akhir,
-				kamar_inap.tgl_masuk,
+				DATE_FORMAT(kamar_inap.tgl_masuk, '%Y-%m-%d') AS tgl_masuk,
 				kamar_inap.jam_masuk,
-				IF(kamar_inap.tgl_keluar='0000-00-00', '', kamar_inap.tgl_keluar) AS tgl_keluar,
+				IF(kamar_inap.tgl_keluar='0000-00-00', '', DATE_FORMAT(kamar_inap.tgl_keluar, '%Y-%m-%d')) AS tgl_keluar,
 				IF(kamar_inap.jam_keluar='00:00:00', '', kamar_inap.jam_keluar) AS jam_keluar,
 				kamar_inap.ttl_biaya,
 				kamar_inap.stts_pulang,
@@ -1510,6 +1510,7 @@ func main() {
 	r.DELETE("/api/jam-masuk/:shift", hapusJamMasuk(db))
 	r.PUT("/api/pegawai-jadwal-tetap", setPegawaiJadwalTetapBulk(db))
 	r.DELETE("/api/pegawai-jadwal-tetap/:id", deletePegawaiJadwalTetap(db))
+	r.PUT("/api/pegawai-jadwal-tanggal", setJadwalPegawaiTanggalBulk(db))
 
 	// GET /api/pegawai - Mengambil semua pegawai
 	r.GET("/api/pegawai", func(c *gin.Context) {
