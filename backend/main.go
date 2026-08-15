@@ -907,6 +907,7 @@ func main() {
 	ensurePengumumanTable(db)
 	ensurePengajuanLemburTable(db)
 	ensurePengajuanCutiExtTable(db)
+	ensureNikPjNullable(db)
 	ensureLaporItTable(db)
 
 	r := gin.Default()

@@ -39,6 +39,24 @@ import (
 // ditambal (beda dgn kasus wajibmasuk=0 di Rekap Kehadiran).
 // ============================================================================
 
+// ensureNikPjNullable — nik_pj awalnya NOT NULL (warisan skema Java,
+// yg UI-nya emang selalu wajib isi PJ). Pegawai shift Reguler beneran
+// tidak punya rekan sif buat gantian, jadi PJ pengganti perlu bisa
+// dikosongkan (NULL) khusus utk mereka — lihat submitCutiIzin. MODIFY
+// COLUMN doang (bukan tambah kolom), FK & tipe tetap sama, jadi aman
+// utk insert positional Java yg selalu ngisi PJ non-NULL.
+func ensureNikPjNullable(db *sql.DB) {
+	var nullable string
+	err := db.QueryRow(`
+		SELECT IS_NULLABLE FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pengajuan_cuti' AND COLUMN_NAME = 'nik_pj'
+	`).Scan(&nullable)
+	if err != nil || nullable == "YES" {
+		return
+	}
+	db.Exec(`ALTER TABLE pengajuan_cuti MODIFY COLUMN nik_pj VARCHAR(20) NULL`)
+}
+
 func ensurePengajuanCutiExtTable(db *sql.DB) {
 	db.Exec(`
 		CREATE TABLE IF NOT EXISTS pengajuan_cuti_ext (
@@ -113,7 +131,11 @@ type CutiIzinSubmitPayload struct {
 	Urgensi      string `json:"urgensi" binding:"required"`
 	Alamat       string `json:"alamat" binding:"required"`
 	Kepentingan  string `json:"kepentingan" binding:"required"`
-	NikPJ        string `json:"nik_pj" binding:"required"`
+	// NikPJ sengaja TIDAK required di sini — pegawai shift Reguler
+	// beneran tidak punya rekan sif buat gantian, jadi boleh kosong
+	// utk mereka. Divalidasi kondisional di bawah (wajib kalau shift
+	// tetapnya BUKAN Reguler).
+	NikPJ string `json:"nik_pj"`
 }
 
 // POST /api/pengajuan-cuti — pegawai ajukan cuti/izin dari HP.
@@ -129,9 +151,25 @@ func submitCutiIzin(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Akun ini belum terhubung ke data Pegawai"})
 			return
 		}
-		if err := db.QueryRow(`SELECT nik FROM pegawai WHERE nik = ?`, p.NikPJ).Scan(&cekNik); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Penanggung jawab pengganti tidak ditemukan"})
+
+		// PJ pengganti wajib diisi KECUALI shift tetap pemohon
+		// 'Reguler' (tidak punya rekan sif buat gantian).
+		var shiftTetap string
+		db.QueryRow(`SELECT shift FROM pegawai_jadwal_tetap WHERE id = (SELECT id FROM pegawai WHERE nik = ?)`, p.NIK).Scan(&shiftTetap)
+		isReguler := strings.EqualFold(strings.TrimSpace(shiftTetap), "reguler")
+		p.NikPJ = strings.TrimSpace(p.NikPJ)
+		if p.NikPJ == "" && !isReguler {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Penanggung jawab pengganti wajib diisi"})
 			return
+		}
+
+		var nikPJValue interface{}
+		if p.NikPJ != "" {
+			if err := db.QueryRow(`SELECT nik FROM pegawai WHERE nik = ?`, p.NikPJ).Scan(&cekNik); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Penanggung jawab pengganti tidak ditemukan"})
+				return
+			}
+			nikPJValue = p.NikPJ
 		}
 
 		now := time.Now()
@@ -145,7 +183,7 @@ func submitCutiIzin(db *sql.DB) gin.HandlerFunc {
 		_, err = db.Exec(`
 			INSERT INTO pengajuan_cuti (no_pengajuan, tanggal, tanggal_awal, tanggal_akhir, nik, urgensi, alamat, jumlah, kepentingan, nik_pj, status)
 			VALUES (?,?,?,?,?,?,?,?,?,?,'Proses Pengajuan')`,
-			noPengajuan, now.Format("2006-01-02"), p.TanggalAwal, p.TanggalAkhir, p.NIK, p.Urgensi, p.Alamat, jumlah, p.Kepentingan, p.NikPJ,
+			noPengajuan, now.Format("2006-01-02"), p.TanggalAwal, p.TanggalAkhir, p.NIK, p.Urgensi, p.Alamat, jumlah, p.Kepentingan, nikPJValue,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -160,7 +198,7 @@ const cutiIzinSelectBase = `
 		DATE_FORMAT(pengajuan_cuti.tanggal_awal,'%Y-%m-%d'), DATE_FORMAT(pengajuan_cuti.tanggal_akhir,'%Y-%m-%d'),
 		pengajuan_cuti.nik, peg1.nama, COALESCE(dep.nama, peg1.departemen, ''),
 		pengajuan_cuti.urgensi, pengajuan_cuti.alamat, pengajuan_cuti.jumlah, pengajuan_cuti.kepentingan,
-		pengajuan_cuti.nik_pj, COALESCE(peg2.nama,''), pengajuan_cuti.status,
+		COALESCE(pengajuan_cuti.nik_pj,''), COALESCE(peg2.nama,''), pengajuan_cuti.status,
 		COALESCE(pengajuan_cuti_ext.catatan_approval,''), COALESCE(pengajuan_cuti_ext.disetujui_oleh,'')
 	FROM pengajuan_cuti
 	INNER JOIN pegawai peg1 ON peg1.nik = pengajuan_cuti.nik
