@@ -610,19 +610,19 @@ const LayananCard: React.FC<{
   // canAccessModule.
   const isAkunMandiriBelumDiapprove = user.role === 'pegawai';
   const items: LayananItem[] = [
-    { key: 'lembur', label: 'Lembur', icon: <IconOvertime size={22} color="#059669" /> },
-    { key: 'cuti', label: 'Cuti', icon: <IconUmbrella size={22} color="#059669" /> },
-    { key: 'izin', label: 'Izin', icon: <IconFileText size={22} color="#059669" /> },
-    { key: 'tugas', label: 'Tugas', icon: <IconTaskCheck size={22} color="#059669" /> },
-    { key: 'lapor-it', label: 'Lapor IT', icon: <IconMonitor size={22} color="#059669" /> },
-    ...(canAccessModule(user, 'rawat-jalan') ? [{ key: 'poli', label: 'Poli', icon: <IconStethoscope size={22} color="#059669" /> }] : []),
-    ...(canAccessModule(user, 'igd') ? [{ key: 'igd', label: 'IGD', icon: <IconSiren size={22} color="#059669" /> }] : []),
-    ...(canAccessModule(user, 'rawat-inap') ? [{ key: 'ranap', label: 'Ranap', icon: <IconBed size={22} color="#059669" /> }] : []),
+    { key: 'lembur', label: 'Lembur', icon: <IconOvertime size={26} color="#059669" /> },
+    { key: 'cuti', label: 'Cuti', icon: <IconUmbrella size={26} color="#059669" /> },
+    { key: 'izin', label: 'Izin', icon: <IconFileText size={26} color="#059669" /> },
+    { key: 'tugas', label: 'Tugas', icon: <IconTaskCheck size={26} color="#059669" /> },
+    { key: 'lapor-it', label: 'Lapor IT', icon: <IconMonitor size={26} color="#059669" /> },
+    ...(canAccessModule(user, 'rawat-jalan') ? [{ key: 'poli', label: 'Poli', icon: <IconStethoscope size={26} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'igd') ? [{ key: 'igd', label: 'IGD', icon: <IconSiren size={26} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'rawat-inap') ? [{ key: 'ranap', label: 'Ranap', icon: <IconBed size={26} color="#059669" /> }] : []),
     ...(isAkunMandiriBelumDiapprove ? [] : [
-      { key: 'farmasi', label: 'Farmasi', icon: <IconPill size={22} color="#059669" /> },
-      { key: 'lab', label: 'Lab', icon: <IconFlask size={22} color="#059669" /> },
-      { key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={22} color="#059669" /> },
-      { key: 'operasi', label: 'Operasi', icon: <IconScalpel size={22} color="#059669" /> },
+      { key: 'farmasi', label: 'Farmasi', icon: <IconPill size={26} color="#059669" /> },
+      { key: 'lab', label: 'Lab', icon: <IconFlask size={26} color="#059669" /> },
+      { key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={26} color="#059669" /> },
+      { key: 'operasi', label: 'Operasi', icon: <IconScalpel size={26} color="#059669" /> },
     ]),
   ];
 
@@ -649,9 +649,9 @@ const LayananCard: React.FC<{
               key={item.key}
               type="button"
               onClick={() => handleClick(item.key, item.label)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 0 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: 0 }}
             >
-              <div style={{ width: 44, height: 44, borderRadius: 14, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {item.icon}
               </div>
               <span style={{ fontSize: 10, color: '#374151', textAlign: 'center', lineHeight: 1.2 }}>{item.label}</span>
@@ -797,7 +797,7 @@ const HomeTab: React.FC<{
                 <span>{hariIni.jam_pulang_jadwal}</span>
               </>
             ) : (
-              'Belum ada jadwal shift'
+              'Tidak ada jadwal/libur'
             )}
           </div>
           {hariIni?.keterlambatan && hariIni.keterlambatan !== '-' && (
