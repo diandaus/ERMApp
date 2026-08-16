@@ -218,24 +218,6 @@ const IconChevronRight: React.FC<IconProps> = ({ size = 16, color = 'currentColo
   </svg>
 );
 
-const IconChevronLeft: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-);
-
-const IconChevronUp: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="18 15 12 9 6 15" />
-  </svg>
-);
-
-const IconChevronDown: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-);
-
 const IconArrowLeft: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
@@ -2663,157 +2645,196 @@ const BULAN_INDO = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
 // "8" tanpa padding bikin MySQL diam2 nyimpen di baris/slot yg salah.
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-// Modal kalender — pilih tanggal2 spesifik (jadi biru), tanggal yg
-// sudah "kepakai" ditandai merah sbg referensi. Bisa digeser/swipe
-// (touch) ke atas (bulan berikutnya) atau bawah (bulan sebelumnya),
-// atau tombol panah — pindah bulan reset tanggal yg lagi dipilih &
-// muat ulang tanda merah (h1..h31 beda tiap bulan) utk pegawaiIds yg
-// sama. Padanan tanggal_picker_modal.dart (Flutter).
-const TanggalPickerModal: React.FC<{
+// Jendela bulan yg ditampilkan di scroll menerus — 1 bulan ke belakang
+// (koreksi tanggal baru lewat) s/d 11 bulan ke depan (setahun
+// perencanaan shift ke depan), relatif ke bulan modal dibuka.
+const BULAN_SEBELUM = 1;
+const BULAN_SESUDAH = 11;
+
+const tglKey = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
+
+// Satu bagian bulan di dalam scroll menerus — header nama bulan + grid
+// tanggalnya. Muat tanda merah sendiri (lazy, pas widget ini pertama
+// kali dirender), dicache di parent spy scroll bolak-balik gak fetch
+// ulang. Padanan _BulanSection di tanggal_picker_modal.dart (Flutter).
+const BulanSection: React.FC<{
   tahun: number; bulan: number; pegawaiIds: number[]; departemen: string | null;
-  pendingTanggalAwal: Set<number>;
-  onCancel: () => void; onConfirm: (result: { tahun: number; bulan: number; tanggal: Set<number> }) => void;
-}> = ({ tahun: tahunAwal, bulan: bulanAwal, pegawaiIds, departemen, pendingTanggalAwal, onCancel, onConfirm }) => {
-  const [tahun, setTahun] = React.useState(tahunAwal);
-  const [bulan, setBulan] = React.useState(bulanAwal);
-  const [selected, setSelected] = React.useState<Set<number>>(new Set());
-  const [terisi, setTerisi] = React.useState<Set<number>>(new Set());
-  const [loadingTerisi, setLoadingTerisi] = React.useState(true);
-  const touchStartY = React.useRef<number | null>(null);
-
-  const daysInMonth = new Date(tahun, bulan, 0).getDate();
-  const firstWeekday = new Date(tahun, bulan - 1, 1).getDay(); // 0=Min..6=Sab, cocok kolom Min-first
-
-  // Tanda merah "sudah kepakai" itu spesifik per bulan — wajib fetch
-  // ulang tiap pindah bulan, bukan cuma dihitung sekali di awal.
-  const loadTerisi = React.useCallback(async (y: number, m: number) => {
-    setLoadingTerisi(true);
-    try {
-      const params = new URLSearchParams({ tahun: String(y), bulan: pad2(m) });
-      if (departemen) params.set('departemen', departemen);
-      const res = await fetch(`/api/jadwal-pegawai/list?${params.toString()}`);
-      const data: JadwalPegawaiRow[] = await res.json();
-      const rows = (Array.isArray(data) ? data : []).filter((p) => pegawaiIds.includes(p.id));
-      const result = new Set<number>();
-      if (rows.length > 0) {
-        for (let day = 1; day <= 31; day++) {
-          const idx = day - 1;
-          const first = rows[0].h[idx] || '';
-          if (!first) continue;
-          const sama = rows.every((p) => (p.h[idx] || '') === first);
-          if (sama) result.add(day);
-        }
-      }
-      // Tanggal pending sesi ini (blue di Riwayat Tanggal) HANYA
-      // relevan kalau modal masih di bulan awal — ikut ditandai merah
-      // sbg referensi "sudah kepakai".
-      if (y === tahunAwal && m === bulanAwal) {
-        pendingTanggalAwal.forEach((d) => result.add(d));
-      }
-      setTerisi(result);
-    } catch {
-      setTerisi(new Set());
-    } finally {
-      setLoadingTerisi(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pegawaiIds, departemen]);
+  selected: Set<string>; onToggle: (key: string) => void;
+  pendingTanggalBulanIni: Set<string>;
+  terisiCache: React.MutableRefObject<Map<string, Set<number>>>;
+  sectionRef?: (el: HTMLDivElement | null) => void;
+}> = ({ tahun, bulan, pegawaiIds, departemen, selected, onToggle, pendingTanggalBulanIni, terisiCache, sectionRef }) => {
+  const cacheKey = `${tahun}-${bulan}`;
+  const [terisi, setTerisi] = React.useState<Set<number>>(terisiCache.current.get(cacheKey) ?? new Set());
+  const [loading, setLoading] = React.useState(!terisiCache.current.has(cacheKey));
 
   React.useEffect(() => {
-    loadTerisi(tahunAwal, bulanAwal);
+    if (terisiCache.current.has(cacheKey)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({ tahun: String(tahun), bulan: pad2(bulan) });
+        if (departemen) params.set('departemen', departemen);
+        const res = await fetch(`/api/jadwal-pegawai/list?${params.toString()}`);
+        const data: JadwalPegawaiRow[] = await res.json();
+        const rows = (Array.isArray(data) ? data : []).filter((p) => pegawaiIds.includes(p.id));
+        const result = new Set<number>();
+        if (rows.length > 0) {
+          for (let day = 1; day <= 31; day++) {
+            const idx = day - 1;
+            const first = rows[0].h[idx] || '';
+            if (!first) continue;
+            const sama = rows.every((p) => (p.h[idx] || '') === first);
+            if (sama) result.add(day);
+          }
+        }
+        if (cancelled) return;
+        terisiCache.current.set(cacheKey, result);
+        setTerisi(result);
+      } catch {
+        if (cancelled) return;
+        terisiCache.current.set(cacheKey, new Set());
+        setTerisi(new Set());
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const gantiBulan = (delta: number) => {
-    let m = bulan + delta;
-    let y = tahun;
-    if (m < 1) { m = 12; y -= 1; }
-    else if (m > 12) { m = 1; y += 1; }
-    setTahun(y);
-    setBulan(m);
-    setSelected(new Set());
-    loadTerisi(y, m);
+  const daysInMonth = new Date(tahun, bulan, 0).getDate();
+  const firstWeekday = new Date(tahun, bulan - 1, 1).getDay(); // 0=Min..6=Sab, cocok kolom Min-first
+  const now = new Date();
+  const isBulanIni = tahun === now.getFullYear() && bulan === now.getMonth() + 1;
+
+  return (
+    <div ref={sectionRef} style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 8 }}>
+          {Array.from({ length: firstWeekday }).map((_, i) => <div key={`blank-${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const key = tglKey(tahun, bulan, day);
+            const active = selected.has(key);
+            const isTerisi = !active && (terisi.has(day) || pendingTanggalBulanIni.has(key));
+            // Hari ini — merah solid + font putih, spt app Kalender
+            // bawaan HP, biar user langsung ngeh tanggal berapa
+            // sekarang. Kalah prioritas dari active (biru, lagi
+            // dipilih), tapi menang dari terisi (merah tipis).
+            const isHariIni = !active && isBulanIni && day === now.getDate();
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onToggle(key)}
+                style={{
+                  aspectRatio: '1', margin: 2, borderRadius: '50%', border: isTerisi && !isHariIni ? '1px solid #dc2626' : 'none',
+                  background: active ? '#2563eb' : isHariIni ? '#dc2626' : isTerisi ? '#fee2e2' : 'transparent',
+                  color: active || isHariIni ? '#fff' : isTerisi ? '#dc2626' : '#111827',
+                  fontWeight: active || isTerisi || isHariIni ? 700 : 400, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Modal kalender scroll-menerus (spt app Kalender bawaan HP — bulan
+// berikutnya udah keliatan dikit di bawah pas scroll) — user tap
+// tanggal2 spesifik (jadi biru), boleh nyebar di beberapa bulan
+// sekaligus, lalu Simpan. Dipakai utk "Atur Tanggal Masuk" pd shift
+// selain Reguler. Padanan tanggal_picker_modal.dart (Flutter).
+const TanggalPickerModal: React.FC<{
+  tahun: number; bulan: number; pegawaiIds: number[]; departemen: string | null;
+  pendingTanggal: Set<string>;
+  onCancel: () => void; onConfirm: (tanggal: Set<string>) => void;
+}> = ({ tahun: tahunAwal, bulan: bulanAwal, pegawaiIds, departemen, pendingTanggal, onCancel, onConfirm }) => {
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const terisiCache = React.useRef<Map<string, Set<number>>>(new Map());
+  const todayRef = React.useRef<HTMLDivElement | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+
+  const bulanList = React.useMemo(() => {
+    const list: { tahun: number; bulan: number }[] = [];
+    for (let i = -BULAN_SEBELUM; i <= BULAN_SESUDAH; i++) {
+      let m = bulanAwal + i;
+      let y = tahunAwal;
+      while (m < 1) { m += 12; y -= 1; }
+      while (m > 12) { m -= 12; y += 1; }
+      list.push({ tahun: y, bulan: m });
+    }
+    return list;
+  }, [tahunAwal, bulanAwal]);
+
+  const scrollKeBulanAwal = (smooth: boolean) => {
+    todayRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
   };
 
-  const toggle = (day: number) => {
+  React.useEffect(() => { scrollKeBulanAwal(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (key: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(day)) next.delete(day); else next.add(day);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY; };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartY.current = null;
-    if (Math.abs(deltaY) < 40) return;
-    // Geser ke atas (jari dari bawah ke atas, deltaY negatif) = bulan
-    // berikutnya; ke bawah = bulan sebelumnya.
-    gantiBulan(deltaY < 0 ? 1 : -1);
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onCancel} />
-      <div style={{ position: 'relative', width: '100%', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+      <div style={{ position: 'relative', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
         </div>
-        <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-          <button type="button" onClick={() => gantiBulan(-1)} style={{ display: 'flex', margin: '0 auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
-            <IconChevronUp size={18} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: selected.size === 0 ? '#9ca3af' : '#2563eb' }}>
+            {selected.size === 0 ? 'Ketuk tanggal untuk memilih' : `${selected.size} tanggal dipilih`}
+          </span>
+          <button type="button" onClick={() => scrollKeBulanAwal(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: 12, fontWeight: 600, padding: '4px 10px' }}>
+            Hari ini
           </button>
-          <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</div>
-          <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: selected.size === 0 ? '#9ca3af' : '#2563eb', marginTop: 4 }}>
-            {selected.size === 0 ? 'Ketuk tanggal · geser utk ganti bulan' : `${selected.size} tanggal dipilih`}
-          </div>
-          {terisi.size > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#fee2e2', border: '1px solid #dc2626' }} />
-              <span style={{ fontSize: 11, color: '#9ca3af' }}>= sudah ada shift lain</span>
-            </div>
-          )}
-          {loadingTerisi ? (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginTop: 12 }}>
-              {HARI_MIN_FIRST.map((h) => (
-                <div key={h} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{h}</div>
-              ))}
-              {Array.from({ length: firstWeekday }).map((_, i) => <div key={`blank-${i}`} />)}
-              {Array.from({ length: daysInMonth }).map((_, i) => {
-                const day = i + 1;
-                const active = selected.has(day);
-                const isTerisi = !active && terisi.has(day);
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => toggle(day)}
-                    style={{
-                      aspectRatio: '1', margin: 2, borderRadius: '50%', border: isTerisi ? '1px solid #dc2626' : 'none',
-                      background: active ? '#2563eb' : isTerisi ? '#fee2e2' : 'transparent',
-                      color: active ? '#fff' : isTerisi ? '#dc2626' : '#111827',
-                      fontWeight: active || isTerisi ? 700 : 400, fontSize: 13, cursor: 'pointer',
-                    }}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <button type="button" onClick={() => gantiBulan(1)} style={{ display: 'flex', margin: '4px auto 0', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 4 }}>
-            <IconChevronDown size={18} />
-          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginTop: 4 }}>
+          {HARI_MIN_FIRST.map((h) => (
+            <div key={h} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{h}</div>
+          ))}
+        </div>
+        <div style={{ borderBottom: '1px solid #e5e7eb', margin: '8px 0' }} />
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }}>
+          {bulanList.map(({ tahun, bulan }) => {
+            const isBulanAwal = tahun === tahunAwal && bulan === bulanAwal;
+            const pendingBulanIni = new Set([...pendingTanggal].filter((k) => k.startsWith(`${tahun}-${pad2(bulan)}-`)));
+            return (
+              <BulanSection
+                key={`${tahun}-${bulan}`}
+                tahun={tahun}
+                bulan={bulan}
+                pegawaiIds={pegawaiIds}
+                departemen={departemen}
+                selected={selected}
+                onToggle={toggle}
+                pendingTanggalBulanIni={pendingBulanIni}
+                terisiCache={terisiCache}
+                sectionRef={isBulanAwal ? (el) => { todayRef.current = el; } : undefined}
+              />
+            );
+          })}
         </div>
         <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
           <button type="button" onClick={onCancel} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
             Batal
           </button>
-          <button type="button" onClick={() => onConfirm({ tahun, bulan, tanggal: selected })} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          <button type="button" onClick={() => onConfirm(selected)} style={{ flex: 1, padding: '12px 0', borderRadius: 10, border: 'none', background: '#2563eb', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
             Simpan
           </button>
         </div>
@@ -2827,12 +2848,14 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
   const nik = resolveNik(user);
   const now = new Date();
 
-  // Bulan/tahun BISA diganti (bukan cuma bulan berjalan) — jadwal
-  // (grid h1..h31) spesifik per bulan, jadi user perlu bisa geser ke
-  // bulan depan/sebelumnya lewat gantiBulan di bawah. Padanan dropdown
-  // Bulan/Tahun di JadwalPegawai.tsx (desktop).
-  const [tahun, setTahun] = React.useState(now.getFullYear());
-  const [bulan, setBulan] = React.useState(now.getMonth() + 1);
+  // tahun/bulan = bulan "acuan" (bulan berjalan) — dipakai buat muat
+  // daftar pegawai (subtitle "Saat ini: X" & tanda merah Riwayat
+  // Tanggal), sekaligus titik awal scroll pas modal kalender dibuka.
+  // TIDAK berubah walau user pilih tanggal di bulan lain di dalam
+  // modal (itu udah aman krn modal sendiri yg validasi tanda merah
+  // per-bulan saat milih — lihat TanggalPickerModal).
+  const tahun = now.getFullYear();
+  const bulan = now.getMonth() + 1;
 
   const [departemenList, setDepartemenList] = React.useState<{ kode: string; nama: string }[]>([]);
   const [departemen, setDepartemen] = React.useState<string | null>(null);
@@ -2842,7 +2865,9 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
   const [loadingPegawai, setLoadingPegawai] = React.useState(true);
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
   const [hariAktif, setHariAktif] = React.useState<Set<number>>(new Set([1, 2, 3, 4, 5, 6, 7]));
-  const [selectedTanggal, setSelectedTanggal] = React.useState<Set<number>>(new Set());
+  // Kunci "YYYY-MM-DD" — bisa nyebar di beberapa bulan sekaligus, krn
+  // modal kalendernya scroll menerus (spt app Kalender bawaan HP).
+  const [selectedTanggal, setSelectedTanggal] = React.useState<Set<string>>(new Set());
   const [saving, setSaving] = React.useState(false);
   const [showTanggalModal, setShowTanggalModal] = React.useState(false);
 
@@ -2863,29 +2888,6 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
     } finally {
       setLoadingPegawai(false);
     }
-  }, [tahun, bulan]);
-
-  // Pindah bulan (mis. atur jadwal utk bulan depan) — reset tanggal yg
-  // baru dipilih & belum disimpan (spesifik ke bulan yg lama, gak
-  // relevan lagi). Pegawai yg dicentang & hari aktif (Reguler) TETAP,
-  // krn keduanya gak terikat bulan tertentu. Grid h1..h31 dimuat ulang
-  // lewat effect di bawah (nunggu tahun/bulan kebaru dulu spy
-  // loadPegawai gak pakai closure lama).
-  const gantiBulan = (delta: number) => {
-    setSelectedTanggal(new Set());
-    setBulan((prevBulan) => {
-      let m = prevBulan + delta;
-      if (m < 1) { m = 12; setTahun((y) => y - 1); }
-      else if (m > 12) { m = 1; setTahun((y) => y + 1); }
-      return m;
-    });
-  };
-
-  const isFirstMount = React.useRef(true);
-  React.useEffect(() => {
-    if (isFirstMount.current) { isFirstMount.current = false; return; }
-    loadPegawai(departemen);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tahun, bulan]);
 
   // Init: muat opsi departemen/shift + pegawai (tanpa filter) sekaligus,
@@ -2925,25 +2927,38 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
 
   const selectedRows = React.useMemo(() => pegawaiList.filter((p) => selectedIds.has(p.id)), [pegawaiList, selectedIds]);
 
-  // Tanggal (1-31) yg ditandai merah — cuma kalau jadwal SEBELUMNYA sama
-  // persis di semua pegawai yg dicentang & tidak kosong.
+  // Tanggal (di bulan acuan tahun/bulan) yg ditandai merah — cuma kalau
+  // jadwal SEBELUMNYA sama persis di semua pegawai yg dicentang & tidak
+  // kosong.
   const tanggalTerisiSama = React.useMemo(() => {
-    const result = new Set<number>();
+    const result = new Set<string>();
     if (selectedRows.length === 0) return result;
     for (let day = 1; day <= 31; day++) {
       const idx = day - 1;
       const first = selectedRows[0].h[idx] || '';
       if (!first) continue;
       const sama = selectedRows.every((p) => (p.h[idx] || '') === first);
-      if (sama) result.add(day);
+      if (sama) result.add(tglKey(tahun, bulan, day));
     }
     return result;
-  }, [selectedRows]);
+  }, [selectedRows, tahun, bulan]);
 
-  const shiftUntukTanggal = (day: number): string | null => {
-    if (selectedRows.length === 0) return null;
+  // Nama shift yg sudah terisi (dipakai riwayat) — null kalau key
+  // bukan bagian dari tanggalTerisiSama (di luar bulan acuan).
+  const shiftUntukTanggal = (key: string): string | null => {
+    if (selectedRows.length === 0 || !key.startsWith(`${tahun}-${pad2(bulan)}-`)) return null;
+    const day = Number(key.slice(-2));
     const value = selectedRows[0].h[day - 1] || '';
     return value || null;
+  };
+
+  // Label ringkas tanggal di chip Riwayat — polos "5" kalau di bulan
+  // acuan (kasus umum), "5/9" kalau di bulan lain (user sempat scroll
+  // ke bulan lain di modal) spy gak ambigu.
+  const labelTanggal = (key: string): string => {
+    const [y, m, d] = key.split('-').map(Number);
+    if (y === tahun && m === bulan) return String(d);
+    return `${d}/${m}`;
   };
 
   const canSave = selectedIds.size > 0 && shift !== '' && !saving && (isReguler ? hariAktif.size > 0 : selectedTanggal.size > 0);
@@ -2979,16 +2994,30 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
         if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jadwal');
         message = data.message || 'Jadwal tetap berhasil diterapkan';
       } else {
-        const res = await fetch('/api/pegawai-jadwal-tanggal', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ids: [...selectedIds], tahun: String(tahun), bulan: pad2(bulan),
-            tanggal: [...selectedTanggal].sort((a, b) => a - b), shift,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jadwal');
-        message = data.message || 'Jadwal tanggal berhasil diterapkan';
+        // Tanggal terpilih bisa nyebar di beberapa bulan (modal
+        // kalendernya scroll menerus) — kelompokkan per (tahun, bulan)
+        // dulu, krn API-nya nerima satu bulan per panggilan.
+        const byBulan = new Map<string, number[]>();
+        for (const key of selectedTanggal) {
+          const [y, m, d] = key.split('-');
+          const groupKey = `${y}-${m}`;
+          const arr = byBulan.get(groupKey) || [];
+          arr.push(Number(d));
+          byBulan.set(groupKey, arr);
+        }
+        for (const [groupKey, hariList] of byBulan) {
+          const [y, m] = groupKey.split('-');
+          const res = await fetch('/api/pegawai-jadwal-tanggal', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ids: [...selectedIds], tahun: y, bulan: m,
+              tanggal: hariList.sort((a, b) => a - b), shift,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Gagal menyimpan jadwal');
+        }
+        message = `Jadwal tanggal berhasil diterapkan ke ${selectedIds.size} pegawai`;
       }
       await Swal.fire({ icon: 'success', title: message, confirmButtonColor: '#059669', timer: 2000, showConfirmButton: false });
       // Pegawai TETAP dicentang (bukan direset) — begitu loadPegawai
@@ -3006,23 +3035,16 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
   };
 
   const allSelected = pegawaiList.length > 0 && selectedIds.size === pegawaiList.length;
-  const biru = [...selectedTanggal].sort((a, b) => a - b);
-  const merah = [...tanggalTerisiSama].filter((d) => !selectedTanggal.has(d)).sort((a, b) => a - b);
+  // Kunci "YYYY-MM-DD" — sort string biasa udah otomatis urut
+  // kronologis.
+  const biru = [...selectedTanggal].sort();
+  const merah = [...tanggalTerisiSama].filter((d) => !selectedTanggal.has(d)).sort();
   const riwayatKosong = biru.length === 0 && merah.length === 0;
 
   return (
     <div style={{ paddingBottom: 100 }}>
       <SubPageHeader title="Atur Jadwal Tetap" onBack={onBack} />
       <div style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button type="button" onClick={() => gantiBulan(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', color: '#6b7280' }}>
-            <IconChevronLeft size={20} />
-          </button>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{BULAN_INDO[bulan]} {tahun}</span>
-          <button type="button" onClick={() => gantiBulan(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', color: '#6b7280' }}>
-            <IconChevronRight size={20} />
-          </button>
-        </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Departemen</div>
@@ -3143,12 +3165,12 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {merah.map((d) => (
                     <span key={`m-${d}`} style={{ padding: '6px 10px', borderRadius: 10, background: '#fee2e2', color: '#dc2626', fontSize: 11, fontWeight: 600 }}>
-                      {d} — {shiftUntukTanggal(d) || '-'}
+                      {labelTanggal(d)} — {shiftUntukTanggal(d) || '-'}
                     </span>
                   ))}
                   {biru.map((d) => (
                     <span key={`b-${d}`} style={{ padding: '6px 10px', borderRadius: 10, background: '#dbeafe', color: '#2563eb', fontSize: 11, fontWeight: 600 }}>
-                      {d} — {shift || '-'}
+                      {labelTanggal(d)} — {shift || '-'}
                     </span>
                   ))}
                 </div>
@@ -3176,20 +3198,11 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
           tahun={tahun} bulan={bulan}
           pegawaiIds={[...selectedIds]}
           departemen={departemen}
-          pendingTanggalAwal={selectedTanggal}
+          pendingTanggal={selectedTanggal}
           onCancel={() => setShowTanggalModal(false)}
-          onConfirm={(result) => {
+          onConfirm={(tanggal) => {
             setShowTanggalModal(false);
-            if (result.tahun !== tahun || result.bulan !== bulan) {
-              // User geser ke bulan lain di dalam modal — samakan
-              // konteks bulan Atur Jadwal ke situ juga (tanggal pending
-              // bulan LAMA dibuang, gak relevan lagi ke bulan baru).
-              setTahun(result.tahun);
-              setBulan(result.bulan);
-              setSelectedTanggal(result.tanggal);
-            } else {
-              setSelectedTanggal((prev) => new Set([...prev, ...result.tanggal]));
-            }
+            setSelectedTanggal((prev) => new Set([...prev, ...tanggal]));
           }}
         />
       )}
