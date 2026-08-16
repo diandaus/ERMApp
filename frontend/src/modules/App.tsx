@@ -384,7 +384,11 @@ const registerInputStyle: React.CSSProperties = {
   padding: '9px 12px',
   borderRadius: 4,
   border: '1px solid #d1d5db',
-  fontSize: 14,
+  // 16px, bukan di bawahnya — di bawah 16px iOS Safari otomatis zoom
+  // in tiap field ini fokus (sama spt fix di PresensiMobile.tsx utk
+  // halaman Masuk; RegisterView beda file jadi gak ikut ke-cover
+  // waktu itu).
+  fontSize: 16,
   boxSizing: 'border-box',
   outline: 'none',
 };
@@ -450,6 +454,13 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => {
         throw new Error('NIP ini sudah terdaftar. Silakan masuk, atau hubungi bagian Umum/Kepegawaian kalau lupa kata sandi.');
       }
       setFound({ nip: (data as any).nip, nama: (data as any).nama });
+      // Auto-isi Asal Unit dari data kepegawaian yg ketemu — dropdown-nya
+      // tetap bisa diganti manual (mis. staf pindah unit tapi data
+      // pegawai belum diupdate admin), bukan dikunci. '-' bukan kode
+      // departemen valid (gak ada di daftar /api/pegawai/departemen),
+      // jadi dianggap sama spt kosong.
+      const departemenAwal = (data as any).departemen || '';
+      setDepartemen(departemenAwal === '-' ? '' : departemenAwal);
     } catch (err) {
       setFound(null);
       setSearchError(err instanceof Error ? err.message : 'Terjadi kesalahan');
