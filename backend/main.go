@@ -3731,6 +3731,10 @@ func main() {
 	r.POST("/api/upload", uploadFile)
 	r.DELETE("/api/upload/:filename", deleteUploadedFile)
 
+	// === Kamar Operasi (OK) — Jadwal Operasi ===
+	r.GET("/api/booking-operasi/list", getBookingOperasiList(db))
+	r.PUT("/api/booking-operasi/update", updateBookingOperasi(db))
+
 	addr := getEnv("APP_ADDR", ":8080")
 	log.Printf("Server berjalan di %s", addr)
 	if err := r.Run(addr); err != nil {
