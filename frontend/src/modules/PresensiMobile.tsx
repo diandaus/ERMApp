@@ -628,6 +628,7 @@ type LayananItem = { key: string; label: string; icon: React.ReactNode };
 type LayananHandlers = {
   onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
+  onOpenOperasi: () => void;
   onOpenAturJadwal: () => void;
 };
 
@@ -668,6 +669,7 @@ function makeLayananClickHandler(h: LayananHandlers) {
     if (key === 'farmasi') { h.onOpenFarmasi(); return; }
     if (key === 'lab') { h.onOpenLab(); return; }
     if (key === 'radiologi') { h.onOpenRadiologi(); return; }
+    if (key === 'operasi') { h.onOpenOperasi(); return; }
     Swal.fire({ icon: 'info', title: label, text: 'Fitur ini akan segera hadir.', confirmButtonColor: '#059669', timer: 1800, showConfirmButton: false });
   };
 }
@@ -888,8 +890,9 @@ const PengumumanCard: React.FC = () => {
 const HomeTab: React.FC<{
   user: AppUserLite; me: MeResponse | null; loading: boolean; onOpenLembur: () => void; onOpenCutiIzin: (mode: 'cuti' | 'izin') => void; onOpenLaporIt: () => void;
   onOpenPoli: () => void; onOpenIgd: () => void; onOpenRanap: () => void; onOpenFarmasi: () => void; onOpenLab: () => void; onOpenRadiologi: () => void;
+  onOpenOperasi: () => void;
   onOpenAturJadwal: () => void; onOpenSemuaMenu: () => void;
-}> = ({ user, me, loading, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi, onOpenAturJadwal, onOpenSemuaMenu }) => {
+}> = ({ user, me, loading, onOpenLembur, onOpenCutiIzin, onOpenLaporIt, onOpenPoli, onOpenIgd, onOpenRanap, onOpenFarmasi, onOpenLab, onOpenRadiologi, onOpenOperasi, onOpenAturJadwal, onOpenSemuaMenu }) => {
   const hariIni = me?.hari_ini;
 
   return (
@@ -950,6 +953,7 @@ const HomeTab: React.FC<{
         user={user} onOpenLembur={onOpenLembur} onOpenCutiIzin={onOpenCutiIzin} onOpenLaporIt={onOpenLaporIt}
         onOpenPoli={onOpenPoli} onOpenIgd={onOpenIgd} onOpenRanap={onOpenRanap}
         onOpenFarmasi={onOpenFarmasi} onOpenLab={onOpenLab} onOpenRadiologi={onOpenRadiologi}
+        onOpenOperasi={onOpenOperasi}
         onOpenAturJadwal={onOpenAturJadwal} onOpenSemuaMenu={onOpenSemuaMenu}
       />
       <PengumumanCard />
@@ -2617,6 +2621,117 @@ const RadiologiMobileView: React.FC<{ onBack: () => void }> = ({ onBack }) => (
 );
 
 // ---------------------------------------------------------------------
+// Tab: Operasi (Jadwal Operasi hari ini, padanan JadwalOperasi.tsx
+// desktop — reuse endpoint /api/booking-operasi/list yang sama, filter
+// rentang tanggal = hari ini saja). Dokter dikunci ke operasi miliknya
+// sendiri (kode_operator === kd_dokter), sama persis pola PoliMobileView
+// (fail-closed: kalau akun dokter belum ditautkan kd_dokter, daftar
+// dikosongkan + banner peringatan, bukan tampil semua).
+// ---------------------------------------------------------------------
+
+type OperasiItem = {
+  no_rawat: string; no_rkm_medis: string; nama_pasien: string; umur: string; jk: string;
+  tanggal: string; jam_mulai: string; jam_selesai: string; status: string;
+  rujukan_dari: string; diagnosa: string; kode_operasi: string; operasi: string;
+  kode_operator: string; operator: string; order: string; kode_ok: string; nama_ruang_operasi: string;
+};
+
+const operasiStatusStyle = (status: string) => {
+  if (status === 'Menunggu') return { bg: '#f97316', color: '#ffffff' };
+  if (status === 'Proses Operasi') return { bg: '#2563eb', color: '#ffffff' };
+  if (status === 'Selesai') return { bg: '#059669', color: '#ffffff' };
+  return { bg: '#f3f4f6', color: '#374151' };
+};
+
+const OperasiMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = ({ user, onBack }) => {
+  const isDokterLocked = user.role === 'dokter';
+  const lockedKdDokter = user.kd_dokter || '';
+  const [list, setList] = React.useState<OperasiItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [searchText, setSearchText] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const today = new Date().toISOString().slice(0, 10);
+    fetch(`/api/booking-operasi/list?filter=tanggal&tanggal_awal=${today}&tanggal_akhir=${today}`)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Gagal mengambil jadwal operasi');
+        setList(Array.isArray(data.list) ? data.list : []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    let rows = list;
+    if (isDokterLocked) {
+      rows = lockedKdDokter ? rows.filter((p) => p.kode_operator === lockedKdDokter) : [];
+    }
+    const q = searchText.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((p) => p.nama_pasien.toLowerCase().includes(q) || p.no_rawat.toLowerCase().includes(q));
+    }
+    return rows;
+  }, [list, isDokterLocked, lockedKdDokter, searchText]);
+
+  return (
+    <div>
+      <SubPageHeader title="Jadwal Operasi Hari Ini" onBack={onBack} />
+      <div style={{ padding: '8px 16px 16px' }}>
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Cari nama pasien / no. rawat..."
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #d1d5db', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+        />
+
+        {isDokterLocked && !lockedKdDokter && (
+          <div style={{ padding: 12, borderRadius: 10, background: '#fef3c7', color: '#92400e', fontSize: 11, marginBottom: 12 }}>
+            Akun ini belum ditautkan ke data dokter (kd_dokter). Hubungi admin agar jadwal operasi bisa ditampilkan.
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#dc2626', fontSize: 12 }}>{error}</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Belum ada jadwal operasi hari ini</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map((p) => {
+              const st = operasiStatusStyle(p.status);
+              return (
+                <div key={`${p.no_rawat}-${p.kode_operasi}-${p.tanggal}`} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{p.nama_pasien}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.no_rawat} · {p.umur}</div>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>
+                      {p.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#374151', marginTop: 6 }}>{p.operasi}</div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+                    {p.jam_mulai.slice(0, 5)}{p.jam_selesai && p.jam_selesai !== '00:00:00' ? ` - ${p.jam_selesai.slice(0, 5)}` : ''} · {p.operator}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{p.kode_ok} · {p.nama_ruang_operasi}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
 // Tab: Atur Jadwal — padanan AturJadwalView.dart (Flutter). Pilih
 // departemen, centang pegawai, pilih shift. Shift "Reguler" pakai hari
 // berulang tiap minggu (pegawai_jadwal_tetap); shift lain (rotasi/
@@ -3214,7 +3329,7 @@ const AturJadwalMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> 
 // Shell
 // ---------------------------------------------------------------------
 
-type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin' | 'lapor-it' | 'poli' | 'igd' | 'ranap' | 'farmasi' | 'lab' | 'radiologi' | 'atur-jadwal' | 'semua-menu';
+type TabKey = 'home' | 'absen' | 'kehadiran' | 'jadwal' | 'saya' | 'lembur' | 'cuti' | 'izin' | 'lapor-it' | 'poli' | 'igd' | 'ranap' | 'farmasi' | 'lab' | 'radiologi' | 'operasi' | 'atur-jadwal' | 'semua-menu';
 
 export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => void }> = ({ user, onLogout }) => {
   const nik = resolveNik(user);
@@ -3266,6 +3381,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
             onOpenCutiIzin={(mode) => setTab(mode)} onOpenLaporIt={() => setTab('lapor-it')}
             onOpenPoli={() => setTab('poli')} onOpenIgd={() => setTab('igd')} onOpenRanap={() => setTab('ranap')}
             onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
+            onOpenOperasi={() => setTab('operasi')}
             onOpenAturJadwal={() => setTab('atur-jadwal')} onOpenSemuaMenu={() => setTab('semua-menu')}
           />
         ) : tab === 'absen' ? (
@@ -3294,6 +3410,8 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
           <LabMobileView onBack={() => setTab('home')} />
         ) : tab === 'radiologi' ? (
           <RadiologiMobileView onBack={() => setTab('home')} />
+        ) : tab === 'operasi' ? (
+          <OperasiMobileView user={user} onBack={() => setTab('home')} />
         ) : tab === 'atur-jadwal' ? (
           <AturJadwalMobileView user={user} onBack={() => setTab('home')} />
         ) : tab === 'semua-menu' ? (
@@ -3302,6 +3420,7 @@ export const PresensiMobileView: React.FC<{ user: AppUserLite; onLogout: () => v
             onOpenCutiIzin={(mode) => setTab(mode)} onOpenLaporIt={() => setTab('lapor-it')}
             onOpenPoli={() => setTab('poli')} onOpenIgd={() => setTab('igd')} onOpenRanap={() => setTab('ranap')}
             onOpenFarmasi={() => setTab('farmasi')} onOpenLab={() => setTab('lab')} onOpenRadiologi={() => setTab('radiologi')}
+            onOpenOperasi={() => setTab('operasi')}
             onOpenAturJadwal={() => setTab('atur-jadwal')}
           />
         ) : (
