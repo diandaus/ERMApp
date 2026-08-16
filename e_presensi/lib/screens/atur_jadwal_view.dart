@@ -21,11 +21,6 @@ const _kHariOpsi = [
   (iso: 7, label: 'Min'),
 ];
 
-const _kBulanIndo = [
-  '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli',
-  'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
-
 /// Padanan fitur "Jadwal Tetap" (bulk-assign) di JadwalPegawai.tsx (versi
 /// web, admin desktop) — pilih departemen, centang pegawai, pilih shift +
 /// hari berlaku (berulang tiap minggu, BUKAN tanggal kalender spesifik —
@@ -53,12 +48,21 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   final Set<int> _selectedIds = {};
 
   Set<int> _hariAktif = {1, 2, 3, 4, 5, 6, 7};
-  Set<int> _selectedTanggal = {};
+  // Bisa nyebar di beberapa bulan sekaligus — modal kalendernya scroll
+  // menerus (spt app Kalender bawaan HP), jadi user bebas pilih tanggal
+  // di bulan manapun yg keliatan sebelum tekan Simpan.
+  Set<DateTime> _selectedTanggal = {};
 
   bool _saving = false;
 
-  int _tahun = DateTime.now().year;
-  int _bulan = DateTime.now().month;
+  // _tahun/_bulan = bulan "acuan" (bulan berjalan) — dipakai buat muat
+  // daftar pegawai (subtitle "Saat ini: X" & tanda merah Riwayat
+  // Tanggal), sekaligus titik awal scroll pas modal kalender dibuka.
+  // TIDAK berubah walau user pilih tanggal di bulan lain di dalam
+  // modal (itu udah aman krn modal sendiri yg validasi tanda merah
+  // per-bulan saat milih).
+  final int _tahun = DateTime.now().year;
+  final int _bulan = DateTime.now().month;
 
   /// Shift "Reguler" (08:00-17:00) pakai jadwal berulang per hari (spt
   /// biasa); shift lain (rotasi/malam/dll) pakai tanggal kalender
@@ -138,29 +142,6 @@ class _AturJadwalViewState extends State<AturJadwalView> {
     }
   }
 
-  // Pindah bulan (mis. atur jadwal utk bulan depan) — reset tanggal
-  // yg baru dipilih & belum disimpan (spesifik ke bulan yg lama, gak
-  // relevan lagi), lalu muat ulang grid h1..h31 utk bulan yg baru.
-  // Pegawai yg dicentang & hari aktif (Reguler) TETAP, krn keduanya
-  // gak terikat bulan tertentu.
-  void _gantiBulan(int delta) {
-    setState(() {
-      var m = _bulan + delta;
-      var y = _tahun;
-      if (m < 1) {
-        m = 12;
-        y -= 1;
-      } else if (m > 12) {
-        m = 1;
-        y += 1;
-      }
-      _bulan = m;
-      _tahun = y;
-      _selectedTanggal = {};
-    });
-    _loadPegawai();
-  }
-
   void _toggleSelectAll() {
     setState(() {
       if (_selectedIds.length == _pegawaiList.length &&
@@ -194,41 +175,51 @@ class _AturJadwalViewState extends State<AturJadwalView> {
   List<JadwalPegawaiRow> get _selectedRows =>
       _pegawaiList.where((p) => _selectedIds.contains(p.id)).toList();
 
-  // Tanggal (1-31) yg ditandai merah — cuma kalau jadwal SEBELUMNYA (nilai
-  // kolom h di tanggal itu) SAMA PERSIS di semua pegawai yg dicentang &
-  // tidak kosong. Kalau ada satu saja yg beda (atau kosong sementara yg
-  // lain terisi), tanggal itu TIDAK ditandai merah — krn tak ada satu
-  // jawaban yg mewakili semua pegawai terpilih.
-  Set<int> get _tanggalTerisiSama {
+  // Tanggal (di bulan acuan _tahun/_bulan) yg ditandai merah — cuma
+  // kalau jadwal SEBELUMNYA (nilai kolom h di tanggal itu) SAMA PERSIS
+  // di semua pegawai yg dicentang & tidak kosong. Kalau ada satu saja
+  // yg beda (atau kosong sementara yg lain terisi), tanggal itu TIDAK
+  // ditandai merah — krn tak ada satu jawaban yg mewakili semua
+  // pegawai terpilih.
+  Set<DateTime> get _tanggalTerisiSama {
     final rows = _selectedRows;
     if (rows.isEmpty) return {};
-    final result = <int>{};
+    final result = <DateTime>{};
     for (var day = 1; day <= 31; day++) {
       final idx = day - 1;
       final first = idx < rows.first.h.length ? rows.first.h[idx] : '';
       if (first.isEmpty) continue;
       final sama =
           rows.every((p) => (idx < p.h.length ? p.h[idx] : '') == first);
-      if (sama) result.add(day);
+      if (sama) result.add(DateTime(_tahun, _bulan, day));
     }
     return result;
   }
 
   /// Nama shift yg sudah terisi (dipakai riwayat) — null kalau tanggal
   /// itu bukan bagian dari _tanggalTerisiSama.
-  String? _shiftUntukTanggal(int day) {
+  String? _shiftUntukTanggal(DateTime tgl) {
     final rows = _selectedRows;
-    if (rows.isEmpty) return null;
-    final idx = day - 1;
+    if (rows.isEmpty || tgl.year != _tahun || tgl.month != _bulan) return null;
+    final idx = tgl.day - 1;
     final value = idx < rows.first.h.length ? rows.first.h[idx] : '';
     return value.isEmpty ? null : value;
   }
 
+  /// Label ringkas tanggal di chip Riwayat — polos "5" kalau di bulan
+  /// acuan (kasus umum), "5/9" kalau di bulan lain (user sempat scroll
+  /// ke bulan lain di modal) spy gak ambigu.
+  String _labelTanggal(DateTime tgl) {
+    if (tgl.year == _tahun && tgl.month == _bulan) return '${tgl.day}';
+    return '${tgl.day}/${tgl.month}';
+  }
+
   Future<void> _pilihTanggal() async {
-    // Modal-nya sendiri yg urus tanda merah "sudah kepakai" (fetch data
-    // sendiri, ikut update kalau digeser/swipe ke bulan lain) — di sini
-    // cuma kasih tanggal pending sesi ini (blue di Riwayat Tanggal)
-    // sbg referensi tambahan KHUSUS kalau modal masih di bulan yg sama.
+    // Modal-nya sendiri yg urus tanda merah "sudah kepakai" per bulan
+    // (fetch data sendiri per bagian scroll) — di sini cuma kasih
+    // tanggal pending sesi ini (blue di Riwayat Tanggal) sbg referensi
+    // tambahan, spy dpt ditandai merah juga kalau kebetulan kebuka
+    // lagi.
     final result = await showTanggalPickerModal(
       context,
       tahun: _tahun,
@@ -238,19 +229,7 @@ class _AturJadwalViewState extends State<AturJadwalView> {
       pendingTanggal: _selectedTanggal,
     );
     if (result == null || !mounted) return;
-    if (result.tahun != _tahun || result.bulan != _bulan) {
-      // User geser ke bulan lain di dalam modal — samakan konteks
-      // bulan Atur Jadwal ke situ juga (tanggal pending bulan LAMA
-      // dibuang, gak relevan lagi ke bulan baru).
-      setState(() {
-        _tahun = result.tahun;
-        _bulan = result.bulan;
-        _selectedTanggal = result.tanggal;
-      });
-      await _loadPegawai();
-    } else {
-      setState(() => _selectedTanggal = {..._selectedTanggal, ...result.tanggal});
-    }
+    setState(() => _selectedTanggal = {..._selectedTanggal, ...result});
   }
 
   Future<void> _simpan() async {
@@ -263,14 +242,27 @@ class _AturJadwalViewState extends State<AturJadwalView> {
         message = await JadwalPegawaiService.terapkanBulk(
             ids: _selectedIds.toList(), shift: _shift!, hariAktif: sortedHari);
       } else {
-        final sortedTanggal = _selectedTanggal.toList()..sort();
-        message = await JadwalPegawaiService.terapkanTanggal(
-          ids: _selectedIds.toList(),
-          tahun: _tahun,
-          bulan: _bulan,
-          tanggal: sortedTanggal,
-          shift: _shift!,
-        );
+        // Tanggal terpilih bisa nyebar di beberapa bulan (modal
+        // kalendernya scroll menerus) — kelompokkan per (tahun, bulan)
+        // dulu, krn API-nya nerima satu bulan per panggilan.
+        final byBulan = <(int, int), List<int>>{};
+        for (final tgl in _selectedTanggal) {
+          final key = (tgl.year, tgl.month);
+          (byBulan[key] ??= []).add(tgl.day);
+        }
+        var totalPegawai = 0;
+        for (final entry in byBulan.entries) {
+          final sortedTanggal = entry.value..sort();
+          await JadwalPegawaiService.terapkanTanggal(
+            ids: _selectedIds.toList(),
+            tahun: entry.key.$1,
+            bulan: entry.key.$2,
+            tanggal: sortedTanggal,
+            shift: _shift!,
+          );
+          totalPegawai = _selectedIds.length;
+        }
+        message = 'Jadwal tanggal berhasil diterapkan ke $totalPegawai pegawai';
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -312,8 +304,6 @@ class _AturJadwalViewState extends State<AturJadwalView> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _buildBulanNav(),
-                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(child: _buildDepartemenDropdown()),
@@ -360,39 +350,6 @@ class _AturJadwalViewState extends State<AturJadwalView> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // Navigasi bulan — jadwal (grid h1..h31, dipakai buat Riwayat Tanggal
-  // & tanda merah "sudah kepakai") itu spesifik per bulan, jadi user
-  // perlu bisa geser ke bulan depan/sebelumnya, bukan kekunci ke bulan
-  // berjalan doang. Padanan dropdown Bulan/Tahun di JadwalPegawai.tsx
-  // (desktop), tapi bentuknya prev/next spy hemat tempat di HP.
-  Widget _buildBulanNav() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: _kBorder),
-          borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            onPressed: () => _gantiBulan(-1),
-            icon: const Icon(Icons.chevron_left, color: Color(0xFF6B7280)),
-          ),
-          Text('${_kBulanIndo[_bulan]} $_tahun',
-              style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF111827))),
-          IconButton(
-            onPressed: () => _gantiBulan(1),
-            icon: const Icon(Icons.chevron_right, color: Color(0xFF6B7280)),
-          ),
-        ],
       ),
     );
   }
@@ -721,7 +678,7 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                     decoration: BoxDecoration(
                         color: const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(10)),
-                    child: Text('$d — $shift',
+                    child: Text('${_labelTanggal(d)} — $shift',
                         style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -735,7 +692,7 @@ class _AturJadwalViewState extends State<AturJadwalView> {
                     decoration: BoxDecoration(
                         color: const Color(0xFFDBEAFE),
                         borderRadius: BorderRadius.circular(10)),
-                    child: Text('$d — ${_shift ?? '-'}',
+                    child: Text('${_labelTanggal(d)} — ${_shift ?? '-'}',
                         style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,

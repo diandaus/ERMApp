@@ -11,27 +11,28 @@ const _kBulanIndo = [
   '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-/// Hasil modal — bulan/tahun BISA beda dari yg dibuka (kalau user geser
-/// ke bulan lain), jadi si pemanggil perlu tahu tanggal2 ini utk bulan
-/// yg mana.
-typedef TanggalPickerResult = ({int tahun, int bulan, Set<int> tanggal});
+// Jendela bulan yg ditampilkan di scroll menerus — 1 bulan ke belakang
+// (koreksi tanggal baru lewat) s/d 11 bulan ke depan (setahun
+// perencanaan shift ke depan), relatif ke bulan modal dibuka.
+const _kBulanSebelum = 1;
+const _kBulanSesudah = 11;
 
-/// Modal kalender — user tap tanggal2 spesifik (jadi biru kalau
-/// terpilih), lalu Simpan. Dipakai utk "Atur Tanggal Masuk" pd shift
-/// selain Reguler (bukan hari berulang spt Jadwal Tetap). Bisa
-/// digeser/swipe ke atas (bulan berikutnya) atau bawah (bulan
-/// sebelumnya) — pindah bulan otomatis reset tanggal yg lagi dipilih &
-/// muat ulang tanda merah "sudah kepakai" (h1..h31 beda tiap bulan)
-/// utk [pegawaiIds] yg sama.
-Future<TanggalPickerResult?> showTanggalPickerModal(
+DateTime _tglOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// Modal kalender scroll-menerus (spt app Kalender bawaan HP — bulan
+/// berikutnya udah keliatan dikit di bawah pas scroll) — user tap
+/// tanggal2 spesifik (jadi biru), boleh nyebar di beberapa bulan
+/// sekaligus, lalu Simpan. Dipakai utk "Atur Tanggal Masuk" pd shift
+/// selain Reguler (bukan hari berulang spt Jadwal Tetap).
+Future<Set<DateTime>?> showTanggalPickerModal(
   BuildContext context, {
   required int tahun,
   required int bulan,
   required List<int> pegawaiIds,
   String? departemen,
-  Set<int> pendingTanggal = const {},
+  Set<DateTime> pendingTanggal = const {},
 }) {
-  return showModalBottomSheet<TanggalPickerResult>(
+  return showModalBottomSheet<Set<DateTime>>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.white,
@@ -41,7 +42,7 @@ Future<TanggalPickerResult?> showTanggalPickerModal(
       bulanAwal: bulan,
       pegawaiIds: pegawaiIds,
       departemen: departemen,
-      pendingTanggalAwal: pendingTanggal,
+      pendingTanggalAwal: pendingTanggal.map(_tglOnly).toSet(),
     ),
   );
 }
@@ -51,12 +52,7 @@ class _TanggalPickerSheet extends StatefulWidget {
   final int bulanAwal;
   final List<int> pegawaiIds;
   final String? departemen;
-  // Tanggal yg sudah dipilih user sesi ini tapi belum disimpan ke
-  // server (blue chip di Riwayat Tanggal outer view) — HANYA relevan
-  // kalau modal masih di bulan awal (tahunAwal/bulanAwal), krn pending
-  // itu spesifik ke bulan itu. Ikut ditandai merah sbg referensi
-  // "sudah kepakai" (lihat _loadTerisi).
-  final Set<int> pendingTanggalAwal;
+  final Set<DateTime> pendingTanggalAwal;
   const _TanggalPickerSheet({
     required this.tahunAwal,
     required this.bulanAwal,
@@ -70,27 +66,65 @@ class _TanggalPickerSheet extends StatefulWidget {
 }
 
 class _TanggalPickerSheetState extends State<_TanggalPickerSheet> {
-  late int _tahun;
-  late int _bulan;
-  final Set<int> _selected = {};
-  Set<int> _terisi = {};
-  bool _loadingTerisi = true;
+  final Set<DateTime> _selected = {};
+  // Cache tanda merah per bulan (kunci "tahun-bulan") — supaya scroll
+  // bolak-balik gak fetch ulang bulan yg sudah dimuat.
+  final Map<String, Set<int>> _terisiCache = {};
+  late final List<({int tahun, int bulan})> _bulanList;
+  final _scrollController = ScrollController();
+  final _todayKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _tahun = widget.tahunAwal;
-    _bulan = widget.bulanAwal;
-    _loadTerisi();
+    _bulanList = List.generate(_kBulanSebelum + _kBulanSesudah + 1, (i) {
+      final offset = i - _kBulanSebelum;
+      var m = widget.bulanAwal + offset;
+      var y = widget.tahunAwal;
+      // Normalisasi manual (bukan DateTime(y, m).month) spy gak kena
+      // pergeseran zona waktu/DST — bulan cuma butuh rollover sederhana.
+      while (m < 1) {
+        m += 12;
+        y -= 1;
+      }
+      while (m > 12) {
+        m -= 12;
+        y += 1;
+      }
+      return (tahun: y, bulan: m);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollKeBulanAwal(animate: false));
   }
 
-  // Tanda merah "sudah kepakai" itu spesifik per bulan (kolom h1..h31
-  // beda tiap bulan) — jadi tiap pindah bulan wajib difetch ulang,
-  // bukan cuma dihitung sekali di awal spt sebelumnya.
-  Future<void> _loadTerisi() async {
-    setState(() => _loadingTerisi = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollKeBulanAwal({bool animate = true}) {
+    final ctx = _todayKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      alignment: 0,
+      duration: animate ? const Duration(milliseconds: 400) : Duration.zero,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  // Tanda merah "sudah kepakai" spesifik per bulan — dimuat lazy pas
+  // bagian bulan itu mau dirender (bukan semua 13 bulan sekaligus di
+  // awal), dicache spy scroll bolak-balik gak fetch ulang. Tiap bulan
+  // di [_bulanList] cuma muncul sekali & di-load sekali oleh
+  // _BulanSection-nya sendiri, jadi gak ada race condition antar
+  // pemanggil.
+  Future<Set<int>> _loadTerisi(int tahun, int bulan) async {
+    final key = '$tahun-$bulan';
+    final cached = _terisiCache[key];
+    if (cached != null) return cached;
     try {
-      final list = await JadwalPegawaiService.getList(tahun: _tahun, bulan: _bulan, departemen: widget.departemen);
+      final list = await JadwalPegawaiService.getList(tahun: tahun, bulan: bulan, departemen: widget.departemen);
       final rows = list.where((p) => widget.pegawaiIds.contains(p.id)).toList();
       final result = <int>{};
       if (rows.isNotEmpty) {
@@ -102,158 +136,91 @@ class _TanggalPickerSheetState extends State<_TanggalPickerSheet> {
           if (sama) result.add(day);
         }
       }
-      if (_tahun == widget.tahunAwal && _bulan == widget.bulanAwal) {
-        result.addAll(widget.pendingTanggalAwal);
-      }
-      if (!mounted) return;
-      setState(() {
-        _terisi = result;
-        _loadingTerisi = false;
-      });
+      _terisiCache[key] = result;
+      return result;
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadingTerisi = false);
+      _terisiCache[key] = {};
+      return {};
     }
   }
 
-  // Ganti bulan (geser/swipe atau tombol panah) — tanggal yg lagi
-  // dipilih direset (spesifik ke bulan lama, gak nyambung ke bulan
-  // baru), lalu muat ulang tanda merah utk bulan barunya.
-  void _gantiBulan(int delta) {
+  void _toggle(DateTime tgl) {
     setState(() {
-      var m = _bulan + delta;
-      var y = _tahun;
-      if (m < 1) {
-        m = 12;
-        y -= 1;
-      } else if (m > 12) {
-        m = 1;
-        y += 1;
+      if (_selected.contains(tgl)) {
+        _selected.remove(tgl);
+      } else {
+        _selected.add(tgl);
       }
-      _bulan = m;
-      _tahun = y;
-      _selected.clear();
     });
-    _loadTerisi();
-  }
-
-  void _onVerticalSwipe(DragEndDetails details) {
-    final v = details.primaryVelocity ?? 0;
-    if (v.abs() < 200) return; // geseran terlalu pelan, abaikan
-    // Geser ke atas (jari dari bawah ke atas, velocity negatif) =
-    // bulan berikutnya; ke bawah = bulan sebelumnya.
-    _gantiBulan(v < 0 ? 1 : -1);
   }
 
   @override
   Widget build(BuildContext context) {
-    final daysInMonth = DateTime(_tahun, _bulan + 1, 0).day;
-    final firstWeekday = DateTime(_tahun, _bulan, 1).weekday; // 1=Sen..7=Min
-    final leadingBlanks = firstWeekday % 7; // 0=Min..6=Sab, cocok kolom Min-first
-
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 36, height: 4, decoration: BoxDecoration(color: _kBorder, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onVerticalDragEnd: _onVerticalSwipe,
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          onPressed: () => _gantiBulan(-1),
-                          icon: const Icon(Icons.keyboard_arrow_up, color: Color(0xFF9CA3AF)),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(width: 36, height: 4, decoration: BoxDecoration(color: _kBorder, borderRadius: BorderRadius.circular(2))),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selected.isEmpty ? 'Ketuk tanggal untuk memilih' : '${_selected.length} tanggal dipilih',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _selected.isEmpty ? const Color(0xFF9CA3AF) : _kBlue),
                     ),
-                    Text('${_kBulanIndo[_bulan]} $_tahun', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
-                    const SizedBox(height: 4),
-                    Text(
-                      _selected.isEmpty ? 'Ketuk tanggal untuk memilih · geser utk ganti bulan' : '${_selected.length} tanggal dipilih',
-                      style: TextStyle(fontSize: 12, color: _selected.isEmpty ? const Color(0xFF9CA3AF) : _kBlue, fontWeight: FontWeight.w600),
-                      textAlign: TextAlign.center,
-                    ),
-                    if (_terisi.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(width: 10, height: 10, decoration: const BoxDecoration(color: _kRedBg, shape: BoxShape.circle, border: Border.fromBorderSide(BorderSide(color: _kRed)))),
-                          const SizedBox(width: 6),
-                          const Text('= sudah ada shift lain', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (_loadingTerisi)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    else
-                      GridView.count(
-                        crossAxisCount: 7,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 4,
-                        crossAxisSpacing: 4,
-                        children: [
-                          ..._kHariMinFirst.map((h) => Center(child: Text(h, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF9CA3AF))))),
-                          ...List.generate(leadingBlanks, (_) => const SizedBox.shrink()),
-                          ...List.generate(daysInMonth, (i) {
-                            final day = i + 1;
-                            final active = _selected.contains(day);
-                            final terisi = !active && _terisi.contains(day);
-                            return GestureDetector(
-                              onTap: () => setState(() {
-                                if (active) {
-                                  _selected.remove(day);
-                                } else {
-                                  _selected.add(day);
-                                }
-                              }),
-                              child: Container(
-                                margin: const EdgeInsets.all(2),
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: active ? _kBlue : (terisi ? _kRedBg : Colors.transparent),
-                                  shape: BoxShape.circle,
-                                  border: terisi ? Border.all(color: _kRed) : null,
-                                ),
-                                child: Text(
-                                  '$day',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: active ? Colors.white : (terisi ? _kRed : const Color(0xFF111827)),
-                                    fontWeight: active || terisi ? FontWeight.w700 : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    IconButton(
-                      onPressed: () => _gantiBulan(1),
-                      icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF9CA3AF)),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
+                  ),
+                  TextButton(
+                    onPressed: () => _scrollKeBulanAwal(),
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), minimumSize: Size.zero),
+                    child: const Text('Hari ini', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Row(
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: _kHariMinFirst
+                    .map((h) => Expanded(child: Center(child: Text(h, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF9CA3AF))))))
+                    .toList(),
+              ),
+            ),
+            const Divider(height: 12, color: _kBorder),
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.55,
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                itemCount: _bulanList.length,
+                itemBuilder: (context, i) {
+                  final b = _bulanList[i];
+                  final isBulanAwal = b.tahun == widget.tahunAwal && b.bulan == widget.bulanAwal;
+                  final pendingBulanIni = widget.pendingTanggalAwal
+                      .where((d) => d.year == b.tahun && d.month == b.bulan)
+                      .toSet();
+                  return _BulanSection(
+                    key: isBulanAwal ? _todayKey : null,
+                    tahun: b.tahun,
+                    bulan: b.bulan,
+                    selected: _selected,
+                    onToggle: _toggle,
+                    loadTerisi: () => _loadTerisi(b.tahun, b.bulan),
+                    pendingTanggalBulanIni: pendingBulanIni,
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
@@ -265,17 +232,118 @@ class _TanggalPickerSheetState extends State<_TanggalPickerSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop((tahun: _tahun, bulan: _bulan, tanggal: _selected)),
+                      onPressed: () => Navigator.of(context).pop(_selected),
                       style: ElevatedButton.styleFrom(backgroundColor: _kBlue, padding: const EdgeInsets.symmetric(vertical: 12)),
                       child: const Text('Simpan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// Satu bagian bulan di dalam scroll menerus — header nama bulan + grid
+/// tanggalnya. Muat tanda merah sendiri (lazy, lewat [loadTerisi]) pas
+/// widget ini pertama kali dirender.
+class _BulanSection extends StatefulWidget {
+  final int tahun;
+  final int bulan;
+  final Set<DateTime> selected;
+  final void Function(DateTime) onToggle;
+  final Future<Set<int>> Function() loadTerisi;
+  final Set<DateTime> pendingTanggalBulanIni;
+  const _BulanSection({
+    super.key,
+    required this.tahun,
+    required this.bulan,
+    required this.selected,
+    required this.onToggle,
+    required this.loadTerisi,
+    required this.pendingTanggalBulanIni,
+  });
+
+  @override
+  State<_BulanSection> createState() => _BulanSectionState();
+}
+
+class _BulanSectionState extends State<_BulanSection> {
+  late Future<Set<int>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.loadTerisi();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final daysInMonth = DateTime(widget.tahun, widget.bulan + 1, 0).day;
+    final firstWeekday = DateTime(widget.tahun, widget.bulan, 1).weekday; // 1=Sen..7=Min
+    final leadingBlanks = firstWeekday % 7; // 0=Min..6=Sab, cocok kolom Min-first
+    final now = DateTime.now();
+    final isBulanIni = widget.tahun == now.year && widget.bulan == now.month;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text('${_kBulanIndo[widget.bulan]} ${widget.tahun}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
+        const SizedBox(height: 8),
+        FutureBuilder<Set<int>>(
+          future: _future,
+          builder: (context, snapshot) {
+            final terisiHari = snapshot.data ?? {};
+            return GridView.count(
+              crossAxisCount: 7,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+              children: [
+                ...List.generate(leadingBlanks, (_) => const SizedBox.shrink()),
+                ...List.generate(daysInMonth, (i) {
+                  final day = i + 1;
+                  final tgl = DateTime(widget.tahun, widget.bulan, day);
+                  final active = widget.selected.contains(tgl);
+                  final terisi = !active && (terisiHari.contains(day) || widget.pendingTanggalBulanIni.contains(tgl));
+                  // Hari ini — merah solid + font putih, spt app Kalender
+                  // bawaan HP, biar user langsung ngeh tanggal berapa
+                  // sekarang. Kalah prioritas dari active (biru, lagi
+                  // dipilih), tapi menang dari terisi (merah tipis).
+                  final isHariIni = !active && isBulanIni && day == now.day;
+                  return GestureDetector(
+                    onTap: () => widget.onToggle(tgl),
+                    child: Container(
+                      margin: const EdgeInsets.all(2),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? _kBlue
+                            : (isHariIni ? _kRed : (terisi ? _kRedBg : Colors.transparent)),
+                        shape: BoxShape.circle,
+                        border: (terisi && !isHariIni) ? Border.all(color: _kRed) : null,
+                      ),
+                      child: Text(
+                        '$day',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: (active || isHariIni) ? Colors.white : (terisi ? _kRed : const Color(0xFF111827)),
+                          fontWeight: active || terisi || isHariIni ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }
