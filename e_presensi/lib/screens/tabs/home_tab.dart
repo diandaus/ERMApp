@@ -12,6 +12,7 @@ import '../farmasi_view.dart';
 import '../igd_view.dart';
 import '../lapor_it_view.dart';
 import '../lembur_view.dart';
+import '../operasi_view.dart';
 import '../permintaan_queue_view.dart';
 import '../poli_view.dart';
 import '../ranap_view.dart';
@@ -443,6 +444,10 @@ void _onLayananTap(BuildContext context, AppUser user, String label) {
               title: 'Permintaan Radiologi',
               emptyText: 'Belum ada permintaan radiologi hari ini',
               fetcher: KlinisService.getRadiologiList)));
+      return;
+    case 'Operasi':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => OperasiView(user: user)));
       return;
     case 'Atur Jadwal':
       Navigator.of(context)
