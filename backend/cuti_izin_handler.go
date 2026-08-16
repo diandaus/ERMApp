@@ -337,11 +337,70 @@ func putusCutiIzin(db *sql.DB, statusBaru string) gin.HandlerFunc {
 			 ON DUPLICATE KEY UPDATE catatan_approval=VALUES(catatan_approval), disetujui_oleh=VALUES(disetujui_oleh)`,
 			noPengajuan, p.Catatan, p.DisetujuiOleh,
 		)
+		if statusBaru == "Disetujui" {
+			terapkanJadwalPJPengganti(db, noPengajuan)
+		}
 		pesan := "Pengajuan disetujui"
 		if statusBaru == "Ditolak" {
 			pesan = "Pengajuan ditolak"
 		}
 		c.JSON(http.StatusOK, gin.H{"message": pesan})
+	}
+}
+
+// terapkanJadwalPJPengganti — dipicu HANYA saat pengajuan cuti/izin
+// disetujui (bukan saat submit, krn pengajuan yg masih "Proses
+// Pengajuan" bisa saja berakhir ditolak): salin shift pemohon per
+// tanggal cuti (getShiftHariIni, prioritas sama dgn Presensi Mandiri:
+// override jadwal_pegawai baru fallback jadwal tetap) ke jadwal PJ
+// pengganti utk tanggal yg sama, pakai pola upsert 1-kolom yg sama dgn
+// setJadwalPegawaiTanggalBulk (jadwal_pegawai.h<tgl>) supaya tanggal
+// lain milik PJ yg sudah keisi TIDAK ikut tertimpa kosong.
+//
+// Sengaja MENIMPA (overwrite) shift PJ yg sudah ada persis di
+// tanggal2 cuti itu — itu memang tujuan fiturnya ("pindahkan jadwal
+// pemohon ke PJ", supaya HRD tidak perlu atur jadwal manual lagi
+// lewat menu Atur Jadwal). Tanggal yg pemohon sendiri kosong/libur
+// (getShiftHariIni == "") dilewati apa adanya, tidak ada yg perlu
+// dipindahkan. Best-effort: kalau nik/nik_pj tidak ketemu di tabel
+// pegawai, batal senyap (approve status tetap sukses — jangan sampai
+// approval gagal gara2 sinkronisasi jadwal ini).
+func terapkanJadwalPJPengganti(db *sql.DB, noPengajuan string) {
+	var nik, nikPJ, tglAwalStr, tglAkhirStr string
+	err := db.QueryRow(`
+		SELECT nik, COALESCE(nik_pj,''), DATE_FORMAT(tanggal_awal,'%Y-%m-%d'), DATE_FORMAT(tanggal_akhir,'%Y-%m-%d')
+		FROM pengajuan_cuti WHERE no_pengajuan = ?`, noPengajuan,
+	).Scan(&nik, &nikPJ, &tglAwalStr, &tglAkhirStr)
+	if err != nil || nikPJ == "" {
+		return
+	}
+
+	pemohonID, _, _, errPemohon := resolvePegawaiID(db, nik)
+	pjID, _, _, errPJ := resolvePegawaiID(db, nikPJ)
+	if errPemohon != nil || errPJ != nil {
+		return
+	}
+
+	layout := "2006-01-02"
+	tAwal, errAwal := time.Parse(layout, tglAwalStr)
+	tAkhir, errAkhir := time.Parse(layout, tglAkhirStr)
+	if errAwal != nil || errAkhir != nil {
+		return
+	}
+
+	for d := tAwal; !d.After(tAkhir); d = d.AddDate(0, 0, 1) {
+		shift := getShiftHariIni(db, pemohonID, d)
+		if shift == "" {
+			continue
+		}
+		kolom := jadwalHariKolom[d.Day()-1]
+		tahun := fmt.Sprintf("%d", d.Year())
+		bulan := fmt.Sprintf("%02d", int(d.Month()))
+		query := fmt.Sprintf(
+			`INSERT INTO jadwal_pegawai (id, tahun, bulan, %s) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE %s=VALUES(%s)`,
+			kolom, kolom, kolom,
+		)
+		db.Exec(query, pjID, tahun, bulan, shift)
 	}
 }
 
