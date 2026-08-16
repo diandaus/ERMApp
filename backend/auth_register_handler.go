@@ -15,6 +15,7 @@ import (
 type CariPegawaiRegistrasiResult struct {
 	NIP            string `json:"nip"`
 	Nama           string `json:"nama"`
+	Departemen     string `json:"departemen"`
 	SudahTerdaftar bool   `json:"sudah_terdaftar"`
 }
 
@@ -33,13 +34,13 @@ func cariPegawaiRegistrasi(db *sql.DB) gin.HandlerFunc {
 
 		var result CariPegawaiRegistrasiResult
 		err := db.QueryRow(
-			`SELECT petugas.nip, petugas.nama
+			`SELECT petugas.nip, petugas.nama, COALESCE(pegawai.departemen, '')
 			 FROM petugas
 			 LEFT JOIN pegawai ON pegawai.nik = petugas.nip
 			 WHERE petugas.status = '1' AND (petugas.nip = ? OR pegawai.no_ktp = ?)
 			 LIMIT 1`,
 			q, q,
-		).Scan(&result.NIP, &result.Nama)
+		).Scan(&result.NIP, &result.Nama, &result.Departemen)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Data pegawai tidak ditemukan. Periksa kembali NIP atau NIK KTP, atau hubungi bagian Umum/Kepegawaian."})
