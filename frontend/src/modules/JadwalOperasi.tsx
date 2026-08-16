@@ -71,7 +71,14 @@ const statusBadge = (status: string): { bg: string; fg: string; border: string }
 // tidak ada langkah lanjutan lagi).
 const isStatusEditable = (status: string) => status === 'Menunggu' || status === 'Proses Operasi';
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// new Date().toISOString() memakai UTC, BUKAN tanggal lokal — bug nyata
+// yang bikin "hari ini" salah selisih 1 hari untuk WIB (UTC+7) tiap
+// dini hari sebelum jam 07:00 pagi. Ambil komponen tanggal lokal
+// (getFullYear/getMonth/getDate) langsung, bukan lewat toISOString().
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const tanggalIndo = (isoTanggal: string) => {

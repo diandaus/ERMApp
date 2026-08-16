@@ -2654,7 +2654,7 @@ const OperasiMobileView: React.FC<{ user: AppUserLite; onBack: () => void }> = (
   React.useEffect(() => {
     setLoading(true);
     setError(null);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayDateStr();
     fetch(`/api/booking-operasi/list?filter=tanggal&tanggal_awal=${today}&tanggal_akhir=${today}`)
       .then(async (r) => {
         const data = await r.json();
