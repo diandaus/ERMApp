@@ -512,27 +512,53 @@ const AbsenTab: React.FC<{
       // canvas.toBlob() langsung, BUKAN fetch(dataUrl).then(r => r.blob())
       // — Safari/WebKit (iOS) melempar "TypeError: The string did not
       // match the expected pattern." saat fetch() dikasih data: URI (bug
-      // WebKit yg cukup terkenal), jadi absen selalu gagal di iPhone.
-      // toBlob didukung semua browser modern & tidak lewat parsing URL
-      // sama sekali.
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-      if (!blob) throw new Error('Gagal memproses foto, coba lagi');
+      // WebKit yg cukup terkenal). toBlob didukung semua browser modern
+      // & tidak lewat parsing URL sama sekali.
+      //
+      // Tiap langkah async di bawah SENGAJA dibungkus try/catch sendiri
+      // dan pesan error-nya diberi label — error generik/tidak terduga
+      // (mis. exception WebKit lain yg belum ketemu) jadi kelihatan
+      // persis di langkah mana munculnya, bukan cuma "Gagal" polos.
+      let blob: Blob | null;
+      try {
+        blob = await new Promise<Blob | null>((resolve, reject) => {
+          try {
+            canvas.toBlob(resolve, 'image/jpeg', 0.85);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      } catch (err) {
+        throw new Error(`Konversi foto: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (!blob) throw new Error('Konversi foto: hasil kosong, coba lagi');
+
       const formData = new FormData();
       formData.append('file', blob, `presensi-${Date.now()}.jpg`);
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadData.error || 'Gagal mengunggah foto');
-      const photoUrl: string = uploadData.url || uploadData.path || uploadData.filename || '';
+      let photoUrl: string;
+      try {
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || 'Gagal mengunggah foto');
+        photoUrl = uploadData.url || uploadData.path || uploadData.filename || '';
+      } catch (err) {
+        throw new Error(`Upload foto: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       const alamat = `${lokasi.lat.toFixed(5)}, ${lokasi.lng.toFixed(5)}`;
       const endpoint = aksi === 'checkin' ? '/api/presensi/checkin' : '/api/presensi/checkout';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nik, lat: lokasi.lat, lng: lokasi.lng, alamat, photo: photoUrl }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan presensi');
+      let data: any;
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nik, lat: lokasi.lat, lng: lokasi.lng, alamat, photo: photoUrl }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal menyimpan presensi');
+      } catch (err) {
+        throw new Error(`Simpan presensi: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       await Swal.fire({
         icon: 'success',
