@@ -554,10 +554,22 @@ const AbsenTab: React.FC<{
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nik, lat: lokasi.lat, lng: lokasi.lng, alamat, photo: photoUrl }),
         });
+        // Endpoint checkin/checkout SENGAJA diblokir Apache (403 HTML,
+        // bukan JSON) kalau diakses dari luar jaringan RS lewat vhost
+        // eksternal — lihat deploy/ermapp-external.conf: verifikasi
+        // kamera+GPS cuma berarti kalau staf benar-benar di lokasi RS.
+        // res.json() gagal parse HTML itu jadi SyntaxError generik yang
+        // membingungkan ("Unexpected token '<'...") — dideteksi lewat
+        // Content-Type di sini supaya pesannya jelas ke user, bukan
+        // dibiarkan lolos sbg parse error mentah.
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Absen cuma bisa dilakukan lewat jaringan Rumah Sakit. Sambungkan HP ke wifi RS lalu coba lagi.');
+        }
         data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal menyimpan presensi');
       } catch (err) {
-        throw new Error(`Simpan presensi: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(err instanceof Error ? err.message : `Simpan presensi: ${String(err)}`);
       }
 
       await Swal.fire({
