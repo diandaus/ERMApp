@@ -509,7 +509,14 @@ const AbsenTab: React.FC<{
         return;
       }
 
-      const blob = await (await fetch(photoDataUrl)).blob();
+      // canvas.toBlob() langsung, BUKAN fetch(dataUrl).then(r => r.blob())
+      // — Safari/WebKit (iOS) melempar "TypeError: The string did not
+      // match the expected pattern." saat fetch() dikasih data: URI (bug
+      // WebKit yg cukup terkenal), jadi absen selalu gagal di iPhone.
+      // toBlob didukung semua browser modern & tidak lewat parsing URL
+      // sama sekali.
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      if (!blob) throw new Error('Gagal memproses foto, coba lagi');
       const formData = new FormData();
       formData.append('file', blob, `presensi-${Date.now()}.jpg`);
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
