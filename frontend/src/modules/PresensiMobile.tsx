@@ -1604,7 +1604,7 @@ const PjPickerModal: React.FC<{ departemen: string; excludeNik: string; onClose:
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
-      <div style={{ position: 'relative', width: '100%', height: '80vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
+      <div style={{ position: 'relative', width: '100%', height: '80vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
         </div>
@@ -2792,7 +2792,7 @@ const TanggalPickerModal: React.FC<{
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onCancel} />
-      <div style={{ position: 'relative', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
+      <div style={{ position: 'relative', width: '100%', maxHeight: '85vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '20px 20px 0 0', padding: '16px 20px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: '#e5e7eb' }} />
         </div>
