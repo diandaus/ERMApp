@@ -89,7 +89,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
     { key: 'anjungan-antrian', label: 'Anjungan & Antrian' },
     { key: 'rekam-medis', label: 'Rekam Medis' },
     { key: 'berkas-digital', label: 'Berkas Digital' },
-    { key: 'jadwal-operasi', label: 'Kamar Operasi (OK)' },
+    { key: 'jadwal-operasi', label: 'Jadwal Operasi' },
     { key: 'laporan', label: 'Laporan' },
     { key: 'admin', label: 'Pengaturan' }
   ];

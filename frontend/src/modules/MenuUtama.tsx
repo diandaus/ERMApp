@@ -151,7 +151,7 @@ export const MenuUtamaView: React.FC<MenuUtamaViewProps> = ({ user, setActiveMen
     },
     {
       key: 'jadwal-operasi',
-      label: 'Kamar Operasi (OK)',
+      label: 'Jadwal Operasi',
       description: 'Penjadwalan & manajemen operasi ruang OK',
       icon: '🗓️',
       category: 'klinik',

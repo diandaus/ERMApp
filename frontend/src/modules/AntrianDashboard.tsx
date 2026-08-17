@@ -67,7 +67,7 @@ export const AntrianDashboardView: React.FC = () => {
     },
     {
       id: 'operasi',
-      label: 'Display Kamar Operasi (OK)',
+      label: 'Display Jadwal Operasi',
       description: 'Tampilan jadwal operasi hari ini',
       color: '#9333ea',
       icon: (

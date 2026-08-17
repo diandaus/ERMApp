@@ -564,7 +564,7 @@ const AbsenTab: React.FC<{
         // dibiarkan lolos sbg parse error mentah.
         const contentType = res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
-          throw new Error('Absen cuma bisa dilakukan lewat jaringan Rumah Sakit. Sambungkan HP ke wifi RS lalu coba lagi.');
+          throw new Error('Absen cuma bisa dilakukan lewat jaringan Rumah Sakit. Sambungkan HP ke WiFi yang tersedia di RS lalu coba lagi.');
         }
         data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Gagal menyimpan presensi');
