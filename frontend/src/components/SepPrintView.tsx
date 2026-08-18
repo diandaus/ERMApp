@@ -254,7 +254,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
                     &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
                   </td>
-                  <td style={{ width: '30%', verticalAlign: 'top', textAlign: 'right' }}>
+                  <td style={{ width: '30%', verticalAlign: 'top', textAlign: 'center' }}>
                     <div style={{ fontSize: 13 }}>Persetujuan</div>
                     <div style={{ fontSize: 13, marginBottom: 8 }}>Pasien/Keluarga Pasien</div>
                     {qrDataUrl && <img src={qrDataUrl} alt="QR" width={75} />}
