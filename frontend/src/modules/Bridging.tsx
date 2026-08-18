@@ -14,12 +14,20 @@ const TABS: { key: BridgingTab; label: string; icon: string }[] = [
 export const BridgingView: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<BridgingTab | null>(null);
 
-  // BPJS punya layout sendiri (sidebar + full layar), lepas dari shell aplikasi
-  // sepenuhnya — persis pola PemeriksaanRanapView yang dibuka dari RawatInap.tsx.
+  // BPJS & Satu Sehat punya layout sendiri (sidebar + full layar), lepas dari
+  // shell aplikasi sepenuhnya — persis pola PemeriksaanRanapView yang dibuka
+  // dari RawatInap.tsx.
   if (activeTab === 'bpjs') {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
         <BridgingBpjsView onBack={() => setActiveTab(null)} />
+      </div>
+    );
+  }
+  if (activeTab === 'satu-sehat') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+        <SatuSehatView onBack={() => setActiveTab(null)} />
       </div>
     );
   }
@@ -30,7 +38,6 @@ export const BridgingView: React.FC = () => {
     return (
       <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {activeTab === 'satu-sehat' && <SatuSehatView />}
           {activeTab === 'orthanc' && (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 12 }}>
               Fitur Bridging Orthanc akan dikembangkan nanti.

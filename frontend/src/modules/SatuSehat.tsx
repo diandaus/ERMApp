@@ -1,1226 +1,2441 @@
 import React from 'react';
-import DicomMonitor from '../components/DicomMonitor';
-import { localDateStr } from '../utils/date';
+import Swal from 'sweetalert2';
+import { MappingRadiologi } from './MappingSatuSehat';
 
-type TabKey = 'dashboard' | 'konfigurasi' | 'pasien' | 'imaging-study' | 'log';
+// SatuSehat.tsx — shell sidebar modul SATUSEHAT (integrasi Kemenkes),
+// dibangun ulang dari kosong (sebelumnya file ini sengaja dikosongkan utk
+// dibangun bertahap, persis pola ModalPermintaanRanap.tsx sebelumnya).
+// Struktur & pola styling PERSIS meniru BridgingBpjsView (BridgingBpjs.tsx)
+// — sidebar gradient, daftar menu utama scroll, "Pengaturan" terpisah di
+// footer sidebar (bukan bagian daftar menu utama). Gradiennya sengaja
+// beda warna (hijau teal, bukan biru BPJS) supaya dua modul bridging ini
+// gampang dibedakan sekilas.
+//
+// Tahap ini BARU sidebar shell-nya saja — tiap menu masih placeholder
+// (kecuali nanti diarahkan bangun satu per satu, spt pola Permintaan
+// Ranap sebelumnya). Backend satu_sehat_handler.go sudah punya sebagian
+// endpoint (Config/Pengaturan, ServiceRequest Radiologi, ImagingStudy),
+// belum ada endpoint utk resource FHIR lain di daftar menu ini (Encounter,
+// Condition, Observation, dst) — belum disambungkan di tahap ini.
 
-type SatuSehatConfig = {
-  org_id: string;
-  client_id: string;
-  client_secret: string;
-  auth_url: string;
-  fhir_url: string;
-  is_production: boolean;
-  orthanc_url?: string;
-  orthanc_worklist_dir?: string;
-};
+type SatuSehatTab =
+  | 'dashboard'
+  | 'referensi'
+  | 'encounter'
+  | 'condition'
+  | 'observation'
+  | 'procedure'
+  | 'composition'
+  | 'medication'
+  | 'medication-request'
+  | 'medication-dispense'
+  | 'allergy-intolerance'
+  | 'imaging-study'
+  | 'service-request'
+  | 'clinical-impression'
+  | 'immunization'
+  | 'questionnaire-response'
+  | 'medication-statement'
+  | 'care-plan'
+  | 'specimen'
+  | 'diagnostic-report'
+  | 'episode-of-care'
+  | 'pengaturan';
 
-type LogEntry = {
-  id: number;
-  waktu: string;
-  tipe: string;
-  status: 'sukses' | 'gagal' | 'pending';
-  pesan: string;
-  no_rawat?: string;
-};
-
-type ImagingStudyPemeriksaan = {
-  kd_jenis_prw: string;
-  nm_perawatan: string;
-  code: string | null;
-  system: string | null;
-  display: string | null;
-  modality_code: string | null;
-  modality_display: string | null;
-};
-
-type ImagingStudyItem = {
-  noorder: string;
-  no_rawat: string;
-  tgl_permintaan: string;
-  jam_permintaan: string;
-  nm_pasien: string;
-  no_rkm_medis: string;
-  nm_dokter: string;
-  diagnosis_klinis: string;
-  status: string;
-  id_imagingstudy: string | null;
-  id_encounter: string | null;
-  pemeriksaan: ImagingStudyPemeriksaan[];
-};
-
-type MappingRadiologi = {
-  kd_jenis_prw: string;
-  nm_perawatan: string;
-  code: string;
-  system: string;
-  display: string;
-  modality_code: string;
-  modality_display: string;
-};
-
-const MODALITY_OPTIONS = [
-  { code: 'DX',  display: 'Digital Radiography' },
-  { code: 'CR',  display: 'Computed Radiography' },
-  { code: 'CT',  display: 'Computed Tomography' },
-  { code: 'MR',  display: 'Magnetic Resonance' },
-  { code: 'US',  display: 'Ultrasound' },
-  { code: 'NM',  display: 'Nuclear Medicine' },
-  { code: 'PT',  display: 'PET' },
-  { code: 'XA',  display: 'X-Ray Angiography' },
-  { code: 'MG',  display: 'Mammography' },
-  { code: 'RF',  display: 'Radio Fluoroscopy' },
+const MENU: { key: SatuSehatTab; label: string; icon: React.ReactNode }[] = [
+  {
+    key: 'dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+        <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+        <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+      </svg>
+    ),
+  },
+  {
+    key: 'referensi',
+    label: 'Referensi Satu Sehat',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'encounter',
+    label: 'Encounter',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+    ),
+  },
+  {
+    key: 'condition',
+    label: 'Condition',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'observation',
+    label: 'Observation',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    ),
+  },
+  {
+    key: 'procedure',
+    label: 'Procedure',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="6" cy="6" r="3"></circle>
+        <circle cx="6" cy="18" r="3"></circle>
+        <path d="M20 4 8.12 15.88"></path>
+        <path d="M14.47 14.48 20 20"></path>
+        <path d="M8.12 8.12 12 12"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'composition',
+    label: 'Composition',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+      </svg>
+    ),
+  },
+  {
+    key: 'medication',
+    label: 'Medication',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path>
+        <path d="m8.5 8.5 7 7"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'medication-request',
+    label: 'Medication Request',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4"></path>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'medication-dispense',
+    label: 'Medication Dispense',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path>
+        <path d="M3.3 7 12 12l8.7-5"></path>
+        <path d="M12 22V12"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'allergy-intolerance',
+    label: 'Allergy Intolerance',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+    ),
+  },
+  {
+    key: 'imaging-study',
+    label: 'Imaging Study',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <circle cx="9" cy="9" r="2"></circle>
+        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'service-request',
+    label: 'Service Request',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <rect x="8" y="2" width="8" height="4" rx="1"></rect>
+        <path d="m9 14 2 2 4-4"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'clinical-impression',
+    label: 'Clinical Impression',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"></path>
+        <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"></path>
+        <circle cx="20" cy="10" r="2"></circle>
+      </svg>
+    ),
+  },
+  {
+    key: 'immunization',
+    label: 'Immunization',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m18 2 4 4"></path>
+        <path d="m17 7 3-3"></path>
+        <path d="M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5"></path>
+        <path d="m9 11 4 4"></path>
+        <path d="m5 19-3 3"></path>
+        <path d="m14 4 6 6"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'questionnaire-response',
+    label: 'Questionnaire Response',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <path d="m9 12 2 2 4-4"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'medication-statement',
+    label: 'Medication Statement',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <circle cx="10" cy="15" r="2"></circle>
+        <path d="M10 13v-2"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'care-plan',
+    label: 'Care Plan',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+        <path d="m9 16 2 2 4-4"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'specimen',
+    label: 'Specimen',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 2v6.4a4 4 0 0 1-.87 2.5L4.6 16.6A2 2 0 0 0 6.14 20h11.72a2 2 0 0 0 1.55-3.4l-3.53-5.7A4 4 0 0 1 15 8.4V2"></path>
+        <path d="M8.5 2h7"></path>
+        <path d="M7 16h10"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'diagnostic-report',
+    label: 'Diagnostic Report',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <path d="M9 15h1"></path>
+        <path d="M9 11h6"></path>
+        <path d="M12 15h3"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'episode-of-care',
+    label: 'Episode of Care',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+      </svg>
+    ),
+  },
 ];
 
-type ResourceItem = {
-  key: string;
-  label: string;
-  count: number | null;
-  icon: string;
-  color: string;
-  category: 'kunjungan' | 'klinis' | 'obat' | 'penunjang' | 'lainnya';
-  description: string;
+// Dipisah dari MENU utama, ditampilkan sebagai footer di bagian paling
+// bawah sidebar — persis pola SETTINGS_ITEM di BridgingBpjs.tsx.
+const SETTINGS_ITEM: { key: SatuSehatTab; label: string; icon: React.ReactNode } = {
+  key: 'pengaturan',
+  label: 'Pengaturan',
+  icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+    </svg>
+  ),
 };
 
-const RESOURCES: ResourceItem[] = [
-  { key: 'encounter',              label: 'Encounter',              count: 552,   icon: '🏥', color: '#2563eb', category: 'kunjungan', description: 'Data kunjungan rawat jalan & rawat inap' },
-  { key: 'episodeofcare',          label: 'EpisodeOfCare',          count: null,  icon: '📁', color: '#64748b', category: 'kunjungan', description: 'Episode perawatan pasien' },
-  { key: 'condition',              label: 'Condition',              count: 156,   icon: '🩺', color: '#dc2626', category: 'klinis',   description: 'Diagnosis & kondisi klinis pasien' },
-  { key: 'observation',            label: 'Observation',            count: 10477, icon: '📊', color: '#0891b2', category: 'klinis',   description: 'Tanda vital, hasil pemeriksaan & observasi' },
-  { key: 'procedure',              label: 'Procedure',              count: 71,    icon: '⚕️', color: '#7c3aed', category: 'klinis',   description: 'Tindakan & prosedur medis' },
-  { key: 'clinicalimpression',     label: 'ClinicalImpression',     count: 409,   icon: '📝', color: '#059669', category: 'klinis',   description: 'Catatan klinis & kesan dokter' },
-  { key: 'careplan',               label: 'CarePlan',               count: 330,   icon: '📋', color: '#0284c7', category: 'klinis',   description: 'Rencana perawatan pasien' },
-  { key: 'allergyintolerance',     label: 'AllergyIntolerance',     count: null,  icon: '⚠️', color: '#d97706', category: 'klinis',   description: 'Data alergi & intoleransi pasien' },
-  { key: 'immunization',           label: 'Immunization',           count: null,  icon: '💉', color: '#16a34a', category: 'klinis',   description: 'Riwayat imunisasi pasien' },
-  { key: 'medication',             label: 'Medication',             count: 2,     icon: '💊', color: '#c026d3', category: 'obat',     description: 'Data master obat' },
-  { key: 'medicationrequest',      label: 'MedicationRequest',      count: 642,   icon: '📄', color: '#7c3aed', category: 'obat',     description: 'Resep / permintaan obat' },
-  { key: 'medicationdispense',     label: 'MedicationDispense',     count: 344,   icon: '🧴', color: '#0891b2', category: 'obat',     description: 'Pemberian & dispensing obat' },
-  { key: 'medicationstatement',    label: 'MedicationStatement',    count: 3,     icon: '📌', color: '#64748b', category: 'obat',     description: 'Pernyataan penggunaan obat' },
-  { key: 'servicerequest',         label: 'ServiceRequest',         count: 89,    icon: '🔬', color: '#0284c7', category: 'penunjang','description': 'Permintaan pemeriksaan penunjang' },
-  { key: 'diagnosticreport',       label: 'DiagnosticReport',       count: 16,    icon: '📑', color: '#059669', category: 'penunjang','description': 'Hasil laporan diagnostik' },
-  { key: 'imagingstudy',           label: 'ImagingStudy',           count: null,  icon: '🩻', color: '#64748b', category: 'penunjang','description': 'Studi pencitraan radiologi' },
-  { key: 'specimen',               label: 'Specimen',               count: 85,    icon: '🧪', color: '#d97706', category: 'penunjang','description': 'Data spesimen laboratorium' },
-  { key: 'composition',            label: 'Composition',            count: null,  icon: '📃', color: '#64748b', category: 'lainnya',  description: 'Dokumen klinis terstruktur' },
-  { key: 'questionnaireresponse',  label: 'QuestionnaireResponse',  count: null,  icon: '📋', color: '#64748b', category: 'lainnya',  description: 'Jawaban kuesioner klinis' },
+const Placeholder: React.FC<{ title: string }> = ({ title }) => (
+  <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 16, background: '#ffffff' }}>
+    Fitur {title} akan dikembangkan nanti.
+  </div>
+);
+
+// ── Referensi Satu Sehat — padanan SatuSehatReferensiPraktisi.java /
+// SatuSehatReferensiPasien.java: cek NIK langsung ke FHIR Practitioner/Patient
+// Satu Sehat (bukan tabel lokal), jadi pakai tombol "Cari" eksplisit (bukan
+// debounce spt picker lokal) supaya tidak spam API eksternal tiap ketikan.
+type ReferensiSubTab = 'praktisi' | 'pasien';
+
+const REFERENSI_MENU: { key: ReferensiSubTab; label: string }[] = [
+  { key: 'praktisi', label: 'Referensi Praktisi' },
+  { key: 'pasien', label: 'Referensi Pasien' },
 ];
 
-const CATEGORY_LABELS: Record<ResourceItem['category'], string> = {
-  kunjungan: 'Kunjungan',
-  klinis:    'Klinis',
-  obat:      'Obat & Farmasi',
-  penunjang: 'Penunjang',
-  lainnya:   'Lainnya',
-};
+type ReferensiPraktisiRow = { kode_praktisi: string; nama_praktisi: string };
+type ReferensiPasienItem = { item: string; data: string };
 
-const TH: React.CSSProperties = {
-  padding: '7px 10px', textAlign: 'left', fontSize: 11,
-  fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap',
-};
+const ReferensiPraktisiTab: React.FC = () => {
+  const [nik, setNik] = React.useState('');
+  const [list, setList] = React.useState<ReferensiPraktisiRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [searched, setSearched] = React.useState(false);
 
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 12px',
-  borderRadius: 8,
-  border: '1px solid #d1d5db',
-  fontSize: 13,
-  outline: 'none',
-  boxSizing: 'border-box',
-};
-
-const LABEL_STYLE: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  color: '#374151',
-  marginBottom: 4,
-  display: 'block',
-};
-
-export const SatuSehatView: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<TabKey>('dashboard');
-  const [activeCat, setActiveCat] = React.useState<ResourceItem['category'] | 'semua'>('semua');
-  const [config, setConfig] = React.useState<SatuSehatConfig>({
-    org_id: '',
-    client_id: '',
-    client_secret: '',
-    auth_url: 'https://api-satusehat-dev.dto.kemkes.go.id/oauth2/v1',
-    fhir_url: 'https://api-satusehat-dev.dto.kemkes.go.id/fhir-r4/v1',
-    is_production: false,
-  });
-  const [configLoading, setConfigLoading] = React.useState(true);
-  const [savingConfig, setSavingConfig] = React.useState(false);
-  const [configMsg, setConfigMsg] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [testingConn, setTestingConn] = React.useState(false);
-  const [connStatus, setConnStatus] = React.useState<'idle' | 'ok' | 'error'>('idle');
-  const [searchNik, setSearchNik] = React.useState('');
-  const [searchingPatient, setSearchingPatient] = React.useState(false);
-  const [patientResult, setPatientResult] = React.useState<Record<string, unknown> | null>(null);
-  const [patientError, setPatientError] = React.useState<string | null>(null);
-
-  // ImagingStudy state
-  const [isSubTab, setIsSubTab] = React.useState<'daftar' | 'mapping' | 'monitor'>('daftar');
-  const [isTglDari, setIsTglDari] = React.useState(localDateStr());
-  const [isTglSampai, setIsTglSampai] = React.useState(localDateStr());
-  const [isStatusFilter, setIsStatusFilter] = React.useState('');
-  const [imagingList, setImagingList] = React.useState<ImagingStudyItem[]>([]);
-  const [imagingLoading, setImagingLoading] = React.useState(false);
-  const [sendingOrders, setSendingOrders] = React.useState<Set<string>>(new Set());
-  const [sendResults, setSendResults] = React.useState<Record<string, { ok: boolean; msg: string }>>({});
-  const [mappingList, setMappingList] = React.useState<MappingRadiologi[]>([]);
-  const [mappingLoading, setMappingLoading] = React.useState(false);
-  const [editingMapping, setEditingMapping] = React.useState<Record<string, MappingRadiologi>>({});
-  const [savingMapping, setSavingMapping] = React.useState<Set<string>>(new Set());
-  const [importingKhanza, setImportingKhanza] = React.useState(false);
-  const [importMsg, setImportMsg] = React.useState('');
-  const [mappingFilter, setMappingFilter] = React.useState<'semua' | 'belum-loinc' | 'belum-modality'>('semua');
-  // MWL state
-  const [mwlSending, setMwlSending] = React.useState<Set<string>>(new Set());
-  const [mwlResults, setMwlResults] = React.useState<Record<string, { ok: boolean; msg: string }>>({});
-  // ServiceRequest state
-  const [srSending, setSrSending] = React.useState<Set<string>>(new Set());
-  const [srResults, setSrResults] = React.useState<Record<string, { ok: boolean; msg: string }>>({});
-  // Orthanc config state
-  const [orthancUrl, setOrthancUrl] = React.useState('http://localhost:8042');
-  const [worklistDir, setWorklistDir] = React.useState('/etc/orthanc/worklists');
-  // DICOM send state
-  const [dicomSending, setDicomSending] = React.useState<Set<string>>(new Set());
-  const [dicomResults, setDicomResults] = React.useState<Record<string, { ok: boolean; msg: string }>>({});
-  const [dicomStudies, setDicomStudies] = React.useState<Record<string, boolean>>({});
-  // Register router state
-  const [registeringRouter, setRegisteringRouter] = React.useState(false);
-  const [registerMsg, setRegisterMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
-
-  const fetchImagingList = React.useCallback(async () => {
-    setImagingLoading(true);
+  const handleCari = async () => {
+    if (!nik.trim()) {
+      Swal.fire({ icon: 'warning', title: 'NIK belum diisi', text: 'Masukkan NIK praktisi terlebih dahulu' });
+      return;
+    }
+    setLoading(true);
+    setSearched(true);
     try {
-      const res = await fetch(`/api/satu-sehat/imaging-study?tgl_dari=${isTglDari}&tgl_sampai=${isTglSampai}&status=${isStatusFilter}`);
+      const res = await fetch(`/api/satu-sehat/referensi/praktisi?nik=${encodeURIComponent(nik.trim())}`);
       const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
-      setImagingList(list);
-      // cek study Orthanc untuk setiap order
-      list.forEach((item: ImagingStudyItem) => checkDicomStudy(item.noorder));
-    } catch { setImagingList([]); }
-    finally { setImagingLoading(false); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTglDari, isTglSampai, isStatusFilter]);
-
-  const fetchMapping = React.useCallback(async () => {
-    setMappingLoading(true);
-    try {
-      const res = await fetch('/api/satu-sehat/mapping/radiologi');
-      const data = await res.json();
-      setMappingList(Array.isArray(data) ? data : []);
-      const init: Record<string, MappingRadiologi> = {};
-      (Array.isArray(data) ? data : []).forEach((m: MappingRadiologi) => { init[m.kd_jenis_prw] = { ...m }; });
-      setEditingMapping(init);
-    } catch { setMappingList([]); }
-    finally { setMappingLoading(false); }
-  }, []);
-
-  React.useEffect(() => {
-    fetch('/api/satu-sehat/config')
-      .then(r => r.json())
-      .then(d => {
-        if (d && d.org_id !== undefined) {
-          setConfig(prev => ({
-            ...prev,
-            org_id: d.org_id ?? '',
-            client_id: d.client_id ?? '',
-            client_secret: prev.client_secret,
-            auth_url: d.auth_url || prev.auth_url,
-            fhir_url: d.fhir_url || prev.fhir_url,
-            is_production: d.is_production ?? false,
-          }));
-          if (d.orthanc_url) setOrthancUrl(d.orthanc_url);
-          if (d.orthanc_worklist_dir) setWorklistDir(d.orthanc_worklist_dir);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setConfigLoading(false));
-  }, []);
-
-  React.useEffect(() => {
-    if (activeTab === 'imaging-study') {
-      if (isSubTab === 'daftar') fetchImagingList();
-      else fetchMapping();
-    }
-  }, [activeTab, isSubTab, fetchImagingList, fetchMapping]);
-
-  const handleSendImaging = async (noOrder: string) => {
-    setSendingOrders(prev => new Set(prev).add(noOrder));
-    setSendResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: '' } }));
-    try {
-      const res = await fetch(`/api/satu-sehat/imaging-study/send/${noOrder}`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        setSendResults(prev => ({ ...prev, [noOrder]: { ok: true, msg: `Terkirim. ID: ${data.id_imagingstudy || '-'}` } }));
-        fetchImagingList();
-      } else {
-        setSendResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: data.error || 'Gagal' } }));
-      }
-    } catch {
-      setSendResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: 'Koneksi gagal' } }));
+      if (!res.ok) throw new Error(data.error || 'Gagal mencari praktisi');
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch (err) {
+      setList([]);
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
-      setSendingOrders(prev => { const s = new Set(prev); s.delete(noOrder); return s; });
+      setLoading(false);
     }
   };
-
-  const handleSendMWL = async (noOrder: string) => {
-    setMwlSending(prev => new Set(prev).add(noOrder));
-    try {
-      const res = await fetch(`/api/satu-sehat/mwl/send/${noOrder}`, { method: 'POST' });
-      const data = await res.json();
-      setMwlResults(prev => ({ ...prev, [noOrder]: { ok: res.ok, msg: res.ok ? `MWL terkirim (${data.steps} step)` : (data.error || 'Gagal') } }));
-    } catch {
-      setMwlResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: 'Koneksi gagal' } }));
-    } finally {
-      setMwlSending(prev => { const s = new Set(prev); s.delete(noOrder); return s; });
-    }
-  };
-
-  const handleSendServiceRequest = async (noOrder: string) => {
-    setSrSending(prev => new Set(prev).add(noOrder));
-    try {
-      const res = await fetch(`/api/satu-sehat/servicerequest-radiologi/send/${noOrder}`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        const ok = (data.results || []).filter((r: { id_servicerequest?: string }) => r.id_servicerequest).length;
-        setSrResults(prev => ({ ...prev, [noOrder]: { ok: true, msg: `${ok} ServiceRequest terkirim` } }));
-        fetchImagingList();
-      } else {
-        setSrResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: data.error || 'Gagal' } }));
-      }
-    } catch {
-      setSrResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: 'Koneksi gagal' } }));
-    } finally {
-      setSrSending(prev => { const s = new Set(prev); s.delete(noOrder); return s; });
-    }
-  };
-
-  const handleSendDicom = async (noOrder: string) => {
-    setDicomSending(prev => new Set(prev).add(noOrder));
-    try {
-      const res = await fetch(`/api/satu-sehat/dicom/send/${noOrder}`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        setDicomResults(prev => ({ ...prev, [noOrder]: { ok: true, msg: `${data.count} study terkirim ke DICOM Router` } }));
-        fetchImagingList();
-      } else {
-        setDicomResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: data.error || 'Gagal' } }));
-      }
-    } catch {
-      setDicomResults(prev => ({ ...prev, [noOrder]: { ok: false, msg: 'Koneksi gagal' } }));
-    } finally {
-      setDicomSending(prev => { const s = new Set(prev); s.delete(noOrder); return s; });
-    }
-  };
-
-  const checkDicomStudy = async (noOrder: string) => {
-    try {
-      const res = await fetch(`/api/satu-sehat/dicom/studies/${noOrder}`);
-      const data = await res.json();
-      setDicomStudies(prev => ({ ...prev, [noOrder]: data.found === true }));
-    } catch { /* ignore */ }
-  };
-
-  const handleRegisterRouter = async () => {
-    setRegisteringRouter(true);
-    setRegisterMsg(null);
-    try {
-      const res = await fetch('/api/satu-sehat/dicom/register-router', { method: 'POST' });
-      const data = await res.json();
-      setRegisterMsg({ ok: res.ok, text: res.ok ? data.message : (data.error || 'Gagal') });
-    } catch {
-      setRegisterMsg({ ok: false, text: 'Koneksi gagal' });
-    } finally {
-      setRegisteringRouter(false);
-    }
-  };
-
-  const handleSaveMapping = async (kd: string) => {
-    const m = editingMapping[kd];
-    if (!m) return;
-    setSavingMapping(prev => new Set(prev).add(kd));
-    try {
-      await fetch(`/api/satu-sehat/mapping/radiologi/${kd}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(m),
-      });
-      fetchMapping();
-    } finally {
-      setSavingMapping(prev => { const s = new Set(prev); s.delete(kd); return s; });
-    }
-  };
-
-  const handleImportKhanza = async () => {
-    setImportingKhanza(true);
-    setImportMsg('');
-    try {
-      const res = await fetch('/api/satu-sehat/mapping/import-khanza', { method: 'POST' });
-      const data = await res.json();
-      setImportMsg(data.message || 'Selesai');
-      fetchMapping();
-    } catch {
-      setImportMsg('Gagal menghubungi server');
-    } finally {
-      setImportingKhanza(false);
-    }
-  };
-
-  const [logs] = React.useState<LogEntry[]>([
-    { id: 1, waktu: '2026-05-08 08:12:33', tipe: 'Encounter',         status: 'sukses', pesan: 'Kunjungan berhasil dikirim',          no_rawat: '2026/05/08/000001' },
-    { id: 2, waktu: '2026-05-08 08:15:10', tipe: 'Observation',       status: 'sukses', pesan: 'Tanda vital berhasil dikirim',         no_rawat: '2026/05/08/000001' },
-    { id: 3, waktu: '2026-05-07 14:02:55', tipe: 'MedicationRequest', status: 'gagal',  pesan: 'Token expired, silakan refresh token', no_rawat: '2026/05/07/000012' },
-    { id: 4, waktu: '2026-05-07 09:44:21', tipe: 'Condition',         status: 'sukses', pesan: 'Diagnosis berhasil dikirim',           no_rawat: '2026/05/07/000008' },
-    { id: 5, waktu: '2026-05-07 09:45:02', tipe: 'CarePlan',          status: 'sukses', pesan: 'Rencana perawatan berhasil dikirim',   no_rawat: '2026/05/07/000008' },
-    { id: 6, waktu: '2026-05-06 16:30:11', tipe: 'Specimen',          status: 'pending',pesan: 'Menunggu konfirmasi server',           no_rawat: '2026/05/06/000021' },
-  ]);
-
-  const TABS: { key: TabKey; label: string; icon: string }[] = [
-    { key: 'dashboard',     label: 'Dashboard',     icon: '📊' },
-    { key: 'konfigurasi',   label: 'Konfigurasi',   icon: '⚙️' },
-    { key: 'pasien',        label: 'Cari Pasien',   icon: '🔍' },
-    { key: 'imaging-study', label: 'ImagingStudy',  icon: '🩻' },
-    { key: 'log',           label: 'Log Kirim',     icon: '📋' },
-  ];
-
-  const totalSent   = RESOURCES.reduce((s, r) => s + (r.count ?? 0), 0);
-  const activeRes   = RESOURCES.filter(r => (r.count ?? 0) > 0).length;
-  const pendingRes  = RESOURCES.filter(r => r.count === null).length;
-
-  const filteredResources = activeCat === 'semua'
-    ? RESOURCES
-    : RESOURCES.filter(r => r.category === activeCat);
-
-  const handleSaveConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingConfig(true);
-    setConfigMsg(null);
-    try {
-      const res = await fetch('/api/satu-sehat/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...config, orthanc_url: orthancUrl, orthanc_worklist_dir: worklistDir }),
-      });
-      if (res.ok) {
-        setConfigMsg({ type: 'success', text: 'Konfigurasi berhasil disimpan' });
-      } else {
-        const d = await res.json();
-        setConfigMsg({ type: 'error', text: d.error || 'Gagal menyimpan' });
-      }
-    } catch {
-      setConfigMsg({ type: 'error', text: 'Tidak dapat terhubung ke server' });
-    } finally {
-      setSavingConfig(false);
-      setTimeout(() => setConfigMsg(null), 3000);
-    }
-  };
-
-  const handleTestConn = async () => {
-    setTestingConn(true);
-    setConnStatus('idle');
-    try {
-      const res = await fetch('/api/satu-sehat/test-connection', { method: 'POST' });
-      setConnStatus(res.ok ? 'ok' : 'error');
-    } catch {
-      setConnStatus('error');
-    } finally {
-      setTestingConn(false);
-    }
-  };
-
-  const handleSearchPatient = async () => {
-    if (!searchNik.trim()) return;
-    setSearchingPatient(true);
-    setPatientResult(null);
-    setPatientError(null);
-    try {
-      const res = await fetch(`/api/satu-sehat/patient?nik=${encodeURIComponent(searchNik)}`);
-      const data = await res.json();
-      if (res.ok) setPatientResult(data);
-      else setPatientError(data.error || 'Pasien tidak ditemukan');
-    } catch {
-      setPatientError('Tidak dapat terhubung ke server');
-    } finally {
-      setSearchingPatient(false);
-    }
-  };
-
-  const statusColor = (s: LogEntry['status']) =>
-    s === 'sukses' ? '#16a34a' : s === 'gagal' ? '#dc2626' : '#d97706';
-  const statusBg = (s: LogEntry['status']) =>
-    s === 'sukses' ? '#f0fdf4' : s === 'gagal' ? '#fef2f2' : '#fffbeb';
-
-  const fmtCount = (n: number | null) =>
-    n === null ? <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>
-               : <span style={{ fontWeight: 700, fontSize: 18, color: n === 0 ? '#9ca3af' : '#111827' }}>{n.toLocaleString('id-ID')}</span>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)',
-        borderRadius: 16,
-        padding: '18px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
-        color: '#fff'
-      }}>
-        <div style={{
-          width: 44, height: 44,
-          background: 'rgba(255,255,255,0.2)',
-          borderRadius: 10,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 22, flexShrink: 0
-        }}>🏛️</div>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Satu Sehat</div>
-          <div style={{ fontSize: 11, opacity: 0.85 }}>
-            Integrasi Platform Data Kesehatan — Kementerian Kesehatan RI
-          </div>
-        </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <span style={{
-            background: config.is_production ? 'rgba(34,197,94,0.25)' : 'rgba(251,191,36,0.25)',
-            border: `1px solid ${config.is_production ? 'rgba(34,197,94,0.5)' : 'rgba(251,191,36,0.5)'}`,
-            borderRadius: 20,
-            padding: '3px 10px',
-            fontSize: 11,
-            fontWeight: 600
-          }}>
-            {config.is_production ? '🟢 Production' : '🟡 Sandbox'}
-          </span>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="text"
+          value={nik}
+          onChange={(e) => setNik(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCari()}
+          placeholder="Masukkan NIK praktisi..."
+          style={{ ...inputSm, width: 300 }}
+        />
+        <button
+          type="button"
+          onClick={handleCari}
+          disabled={loading}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loading ? '#9ca3af' : '#059669', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          {loading ? 'Mencari...' : 'Cari'}
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div style={{
-        background: '#fff',
-        border: '1px solid #e5e7eb',
-        borderRadius: 12,
-        padding: '4px 8px',
-        display: 'flex',
-        gap: 4,
-        width: 'fit-content'
-      }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 8,
-              border: activeTab === tab.key ? '1px solid #d1d5db' : 'none',
-              background: activeTab === tab.key ? '#f9fafb' : 'transparent',
-              color: activeTab === tab.key ? '#111827' : '#6b7280',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              display: 'flex', alignItems: 'center', gap: 6
-            }}
-          >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* ── DASHBOARD ── */}
-      {activeTab === 'dashboard' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Summary stats */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Total Data Terkirim', value: totalSent.toLocaleString('id-ID'), color: '#2563eb' },
-              { label: 'Resource Aktif',       value: activeRes,                         color: '#16a34a' },
-              { label: 'Belum Dikonfigurasi',  value: pendingRes,                        color: '#9ca3af' },
-              { label: 'Total Resource',       value: RESOURCES.length,                  color: '#7c3aed' },
-            ].map(s => (
-              <div key={s.label} style={{
-                background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12,
-                padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 130
-              }}>
-                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>{s.label}</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Category filter */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {(['semua', 'kunjungan', 'klinis', 'obat', 'penunjang', 'lainnya'] as const).map(cat => (
-              <button
-                key={cat}
-                onClick={() => setActiveCat(cat)}
-                style={{
-                  padding: '4px 12px', borderRadius: 20, fontSize: 12,
-                  border: activeCat === cat ? '1px solid #2563eb' : '1px solid #e5e7eb',
-                  background: activeCat === cat ? '#eff6ff' : '#fff',
-                  color: activeCat === cat ? '#2563eb' : '#6b7280',
-                  cursor: 'pointer', fontWeight: activeCat === cat ? 600 : 400
-                }}
-              >
-                {cat === 'semua' ? 'Semua' : CATEGORY_LABELS[cat as ResourceItem['category']]}
-              </button>
-            ))}
-          </div>
-
-          {/* Resource grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-            {filteredResources.map(r => {
-              const isClickable = r.key === 'imagingstudy';
-              return (
-              <div key={r.key}
-                onClick={() => { if (isClickable) setActiveTab('imaging-study'); }}
-                style={{
-                background: '#fff',
-                border: `1px solid ${isClickable ? '#bfdbfe' : (r.count ?? 0) > 0 ? '#e5e7eb' : '#f3f4f6'}`,
-                borderRadius: 12,
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-                opacity: r.count === null && !isClickable ? 0.6 : 1,
-                transition: 'box-shadow 0.15s',
-                cursor: isClickable ? 'pointer' : 'default',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.boxShadow = isClickable ? '0 2px 12px rgba(37,99,235,0.15)' : '0 2px 8px rgba(0,0,0,0.08)')}
-              onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 18 }}>{r.icon}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{r.label}</span>
-                  </div>
-                  <span style={{
-                    fontSize: 10, fontWeight: 600,
-                    background: `${r.color}18`,
-                    color: r.color,
-                    padding: '1px 6px', borderRadius: 10,
-                    border: `1px solid ${r.color}30`
-                  }}>
-                    {CATEGORY_LABELS[r.category]}
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.4 }}>{r.description}</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
-                  {fmtCount(r.count)}
-                  {r.count !== null && (
-                    <span style={{ fontSize: 10, color: '#9ca3af' }}>data terkirim</span>
-                  )}
-                  {r.count === null && !isClickable && (
-                    <span style={{ fontSize: 10, color: '#9ca3af' }}>belum dikonfigurasi</span>
-                  )}
-                  {isClickable && (
-                    <span style={{ fontSize: 10, color: '#2563eb', fontWeight: 500 }}>Lihat Monitor →</span>
-                  )}
-                </div>
-              </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── KONFIGURASI ── */}
-      {activeTab === 'konfigurasi' && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, maxWidth: 560 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 20 }}>Konfigurasi Koneksi Satu Sehat</div>
-          {configLoading ? (
-            <div style={{ fontSize: 12, color: '#9ca3af', padding: '12px 0' }}>Memuat konfigurasi...</div>
-          ) : (
-          <form onSubmit={handleSaveConfig} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <label style={LABEL_STYLE}>Organization ID (IHS Number Fasyankes)</label>
-              <input style={INPUT_STYLE} value={config.org_id}
-                onChange={e => setConfig(p => ({ ...p, org_id: e.target.value }))}
-                placeholder="Contoh: 10000004" />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>Client ID</label>
-              <input style={INPUT_STYLE} value={config.client_id}
-                onChange={e => setConfig(p => ({ ...p, client_id: e.target.value }))}
-                placeholder="Client ID dari developer.satusehat.kemkes.go.id" />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>Client Secret</label>
-              <input type="password" style={INPUT_STYLE} value={config.client_secret}
-                onChange={e => setConfig(p => ({ ...p, client_secret: e.target.value }))}
-                placeholder="Kosongkan jika tidak ingin mengubah" />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>Auth URL (OAuth2)</label>
-              <input style={INPUT_STYLE} value={config.auth_url}
-                onChange={e => setConfig(p => ({ ...p, auth_url: e.target.value }))}
-                placeholder="https://api-satusehat-dev.dto.kemkes.go.id/oauth2/v1" />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>FHIR Base URL</label>
-              <input style={INPUT_STYLE} value={config.fhir_url}
-                onChange={e => setConfig(p => ({ ...p, fhir_url: e.target.value }))}
-                placeholder="https://api-satusehat-dev.dto.kemkes.go.id/fhir-r4/v1" />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" id="is_production" checked={config.is_production}
-                onChange={e => {
-                  const prod = e.target.checked;
-                  setConfig(p => ({
-                    ...p,
-                    is_production: prod,
-                    auth_url: prod
-                      ? 'https://api-satusehat.kemkes.go.id/oauth2/v1'
-                      : 'https://api-satusehat-dev.dto.kemkes.go.id/oauth2/v1',
-                    fhir_url: prod
-                      ? 'https://api-satusehat.kemkes.go.id/fhir-r4/v1'
-                      : 'https://api-satusehat-dev.dto.kemkes.go.id/fhir-r4/v1',
-                  }));
-                }}
-                style={{ width: 16, height: 16, cursor: 'pointer' }} />
-              <label htmlFor="is_production" style={{ fontSize: 13, cursor: 'pointer', color: '#374151' }}>
-                Mode Production (hilangkan centang untuk Sandbox)
-              </label>
-            </div>
-
-            {/* Divider Orthanc / PACS */}
-            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 14, marginTop: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 12 }}>
-                Konfigurasi PACS (Orthanc) &amp; MWL
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label style={LABEL_STYLE}>Orthanc REST API URL</label>
-                  <input style={INPUT_STYLE} value={orthancUrl}
-                    onChange={e => setOrthancUrl(e.target.value)}
-                    placeholder="http://localhost:8042" />
-                </div>
-                <div>
-                  <label style={LABEL_STYLE}>Direktori Worklist (path di server)</label>
-                  <input style={INPUT_STYLE} value={worklistDir}
-                    onChange={e => setWorklistDir(e.target.value)}
-                    placeholder="/etc/orthanc/worklists" />
-                  <span style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, display: 'block' }}>
-                    Folder yang dibaca oleh plugin ModalityWorklists Orthanc
-                  </span>
-                </div>
-                <div>
-                  <label style={LABEL_STYLE}>DICOM Router AE Title</label>
-                  <input
-                    readOnly
-                    style={{ ...INPUT_STYLE, background: '#f9fafb', color: '#6b7280' }}
-                    value="DICOM_ROUTER"
-                    placeholder="DICOM_ROUTER (dari pengaturan server)"
-                  />
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button type="button" onClick={handleRegisterRouter} disabled={registeringRouter} style={{
-                      padding: '6px 14px', borderRadius: 7, border: '1px solid #2563eb',
-                      background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontSize: 12, fontWeight: 500
-                    }}>
-                      {registeringRouter ? 'Mendaftarkan...' : '⚡ Daftarkan DICOM Router ke Orthanc'}
-                    </button>
-                    {registerMsg && (
-                      <span style={{ fontSize: 11, color: registerMsg.ok ? '#16a34a' : '#dc2626' }}>
-                        {registerMsg.ok ? '✓' : '✗'} {registerMsg.text}
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, display: 'block' }}>
-                    Otomatis tambahkan DICOM Router ke daftar modality Orthanc (perlu Orthanc 1.9+)
-                  </span>
-                </div>
-              </div>
-            </div>
-            {configMsg && (
-              <div style={{
-                padding: '8px 12px', borderRadius: 8, fontSize: 12,
-                background: configMsg.type === 'success' ? '#f0fdf4' : '#fef2f2',
-                color: configMsg.type === 'success' ? '#16a34a' : '#dc2626',
-                border: `1px solid ${configMsg.type === 'success' ? '#bbf7d0' : '#fecaca'}`
-              }}>{configMsg.text}</div>
-            )}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button type="submit" disabled={savingConfig} style={{
-                padding: '8px 20px', borderRadius: 8, border: 'none',
-                background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500
-              }}>
-                {savingConfig ? 'Menyimpan...' : 'Simpan'}
-              </button>
-              <button type="button" onClick={handleTestConn} disabled={testingConn} style={{
-                padding: '8px 20px', borderRadius: 8,
-                border: '1px solid #d1d5db', background: '#fff',
-                cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                color: connStatus === 'ok' ? '#16a34a' : connStatus === 'error' ? '#dc2626' : '#374151'
-              }}>
-                {testingConn ? 'Menguji...' : connStatus === 'ok' ? '✓ Terhubung' : connStatus === 'error' ? '✗ Gagal' : 'Tes Koneksi'}
-              </button>
-            </div>
-          </form>
-          )}
-        </div>
-      )}
-
-      {/* ── CARI PASIEN ── */}
-      {activeTab === 'pasien' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 560 }}>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Cari Pasien di Satu Sehat</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                style={{ ...INPUT_STYLE, flex: 1 }}
-                value={searchNik}
-                onChange={e => setSearchNik(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearchPatient()}
-                placeholder="Masukkan NIK (16 digit)"
-                maxLength={16}
-              />
-              <button onClick={handleSearchPatient}
-                disabled={searchingPatient || !searchNik.trim()}
-                style={{
-                  padding: '8px 18px', borderRadius: 8, border: 'none',
-                  background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: 13,
-                  opacity: !searchNik.trim() ? 0.5 : 1
-                }}>
-                {searchingPatient ? '...' : 'Cari'}
-              </button>
-            </div>
-            {patientError && (
-              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
-                {patientError}
-              </div>
-            )}
-            {patientResult && (
-              <div style={{ marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', marginBottom: 8 }}>✓ Pasien Ditemukan</div>
-                <pre style={{ fontSize: 11, margin: 0, color: '#374151', overflowX: 'auto' }}>
-                  {JSON.stringify(patientResult, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── IMAGING STUDY ── */}
-      {activeTab === 'imaging-study' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-          {/* Sub-tab */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            {([
-              { key: 'daftar',   label: '🩻 Daftar Studi' },
-              { key: 'monitor',  label: '📊 Monitor DICOM' },
-              { key: 'mapping',  label: '🗺️ Mapping Modalitas' },
-            ] as const).map(t => (
-              <button key={t.key} onClick={() => setIsSubTab(t.key)} style={{
-                padding: '6px 16px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
-                border: isSubTab === t.key ? '1px solid #2563eb' : '1px solid #e5e7eb',
-                background: isSubTab === t.key ? '#eff6ff' : '#fff',
-                color: isSubTab === t.key ? '#2563eb' : '#6b7280',
-                fontWeight: isSubTab === t.key ? 600 : 400,
-              }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* ── Sub: Daftar Studi ── */}
-          {isSubTab === 'daftar' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-              {/* Filter bar */}
-              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: '#6b7280' }}>Dari</span>
-                  <input type="date" value={isTglDari} onChange={e => setIsTglDari(e.target.value)}
-                    style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #d1d5db', fontSize: 12 }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: '#6b7280' }}>Sampai</span>
-                  <input type="date" value={isTglSampai} onChange={e => setIsTglSampai(e.target.value)}
-                    style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #d1d5db', fontSize: 12 }} />
-                </div>
-                <select value={isStatusFilter} onChange={e => setIsStatusFilter(e.target.value)}
-                  style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid #d1d5db', fontSize: 12, color: '#374151' }}>
-                  <option value="">Semua Status</option>
-                  <option value="terkirim">Sudah Dikirim</option>
-                  <option value="belum">Belum Dikirim</option>
-                </select>
-                <button onClick={fetchImagingList} disabled={imagingLoading}
-                  style={{ padding: '5px 16px', borderRadius: 7, border: 'none', background: '#2563eb', color: '#fff', fontSize: 12, cursor: 'pointer' }}>
-                  {imagingLoading ? 'Memuat...' : 'Tampilkan'}
-                </button>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#6b7280' }}>
-                  {imagingList.length} data
-                </span>
-              </div>
-
-              {/* Table */}
-              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto', maxHeight: '60vh', overflowY: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                      <tr style={{ background: '#f9fafb' }}>
-                        {['No. Order', 'Tanggal', 'Pasien', 'Pemeriksaan', 'Workflow (MWL → SR → ImagingStudy)'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {imagingLoading ? (
-                        <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
-                      ) : imagingList.length === 0 ? (
-                        <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data</td></tr>
-                      ) : imagingList.map(item => {
-                        const mwlDone  = !!mwlResults[item.noorder]?.ok;
-                        const mwlMsg   = mwlResults[item.noorder];
-                        const srDone   = false; // akan di-track via API
-                        const srMsg    = srResults[item.noorder];
-                        const isSent   = !!item.id_imagingstudy;
-                        const hasMapping = item.pemeriksaan.every(p => p.modality_code);
-
-                        const StepBtn = ({ step, done, sending, label, onClick, disabled = false }: {
-                          step: number; done: boolean; sending: boolean; label: string;
-                          onClick: () => void; disabled?: boolean;
-                        }) => (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{
-                              width: 20, height: 20, borderRadius: '50%', fontSize: 10, fontWeight: 700,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                              background: done ? '#dcfce7' : '#f3f4f6',
-                              color: done ? '#16a34a' : '#6b7280',
-                              border: `1px solid ${done ? '#bbf7d0' : '#e5e7eb'}`,
-                            }}>{done ? '✓' : step}</div>
-                            <button onClick={onClick} disabled={sending || disabled} style={{
-                              padding: '3px 8px', borderRadius: 5, fontSize: 10, fontWeight: 500, cursor: (sending || disabled) ? 'not-allowed' : 'pointer',
-                              border: `1px solid ${done ? '#bbf7d0' : disabled ? '#e5e7eb' : '#2563eb'}`,
-                              background: done ? '#f0fdf4' : disabled ? '#f9fafb' : '#eff6ff',
-                              color: done ? '#16a34a' : disabled ? '#9ca3af' : '#2563eb',
-                              whiteSpace: 'nowrap', opacity: disabled ? 0.6 : 1,
-                            }}>
-                              {sending ? '...' : label}
-                            </button>
-                          </div>
-                        );
-
-                        return (
-                          <tr key={item.noorder} style={{ borderBottom: '1px solid #f3f4f6', verticalAlign: 'top' }}>
-                            <td style={{ padding: '10px 12px', fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>{item.noorder}</td>
-                            <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: '#374151' }}>
-                              {item.tgl_permintaan}<br />
-                              <span style={{ fontSize: 10, color: '#9ca3af' }}>{item.jam_permintaan}</span>
-                            </td>
-                            <td style={{ padding: '10px 12px' }}>
-                              <div style={{ fontWeight: 600, color: '#111827' }}>{item.nm_pasien}</div>
-                              <div style={{ fontSize: 10, color: '#6b7280' }}>{item.no_rkm_medis}</div>
-                            </td>
-                            <td style={{ padding: '10px 12px' }}>
-                              {item.pemeriksaan.map(p => (
-                                <div key={p.kd_jenis_prw} style={{ marginBottom: 2 }}>
-                                  <span style={{ fontSize: 11 }}>{p.nm_perawatan}</span>
-                                  {p.modality_code
-                                    ? <span style={{ marginLeft: 4, fontSize: 10, background: '#eff6ff', color: '#2563eb', padding: '1px 5px', borderRadius: 4 }}>{p.modality_code}</span>
-                                    : <span style={{ marginLeft: 4, fontSize: 10, background: '#fef3c7', color: '#d97706', padding: '1px 5px', borderRadius: 4 }}>mapping?</span>}
-                                </div>
-                              ))}
-                            </td>
-
-                            {/* Workflow Steps */}
-                            <td style={{ padding: '10px 12px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-
-                                {/* Step 1: MWL */}
-                                <StepBtn step={1} done={mwlDone}
-                                  sending={mwlSending.has(item.noorder)}
-                                  label="Kirim ke MWL"
-                                  onClick={() => handleSendMWL(item.noorder)} />
-                                {mwlMsg && <div style={{ fontSize: 10, paddingLeft: 26, color: mwlMsg.ok ? '#16a34a' : '#dc2626' }}>{mwlMsg.msg}</div>}
-
-                                {/* Step 2: ServiceRequest → Satu Sehat FHIR */}
-                                <StepBtn step={2} done={srDone}
-                                  sending={srSending.has(item.noorder)}
-                                  label="ServiceRequest"
-                                  onClick={() => handleSendServiceRequest(item.noorder)} />
-                                {srMsg && <div style={{ fontSize: 10, paddingLeft: 26, color: srMsg.ok ? '#16a34a' : '#dc2626' }}>{srMsg.msg}</div>}
-
-                                {/* Step 3: ImagingStudy (via DICOM Router otomatis / manual fallback) */}
-                                <StepBtn step={3} done={isSent}
-                                  sending={sendingOrders.has(item.noorder)}
-                                  label={isSent ? 'ImagingStudy ✓' : 'ImagingStudy'}
-                                  disabled={!hasMapping}
-                                  onClick={() => handleSendImaging(item.noorder)} />
-                                {sendResults[item.noorder] && (
-                                  <div style={{ fontSize: 10, paddingLeft: 26, color: sendResults[item.noorder].ok ? '#16a34a' : '#dc2626' }}>
-                                    {sendResults[item.noorder].msg}
-                                  </div>
-                                )}
-
-                                {/* Step 4: Kirim file DICOM via Orthanc → DICOM Router */}
-                                <StepBtn step={4} done={!!dicomResults[item.noorder]?.ok}
-                                  sending={dicomSending.has(item.noorder)}
-                                  label={dicomStudies[item.noorder] ? 'Kirim DICOM' : 'DICOM (belum ada)'}
-                                  disabled={!dicomStudies[item.noorder]}
-                                  onClick={() => handleSendDicom(item.noorder)} />
-                                {dicomResults[item.noorder] && (
-                                  <div style={{ fontSize: 10, paddingLeft: 26, color: dicomResults[item.noorder].ok ? '#16a34a' : '#dc2626' }}>
-                                    {dicomResults[item.noorder].msg}
-                                  </div>
-                                )}
-                                {!dicomStudies[item.noorder] && (
-                                  <div style={{ fontSize: 9, paddingLeft: 26, color: '#9ca3af' }}>
-                                    Menunggu gambar dari mesin CR AGFA
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Info */}
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', fontSize: 11, color: '#1e40af' }}>
-                <strong>Catatan:</strong> Sebelum mengirim, pastikan (1) konfigurasi Client ID & Secret sudah diisi, (2) mapping modalitas sudah dilengkapi, (3) Encounter untuk kunjungan sudah dikirim terlebih dahulu.
-              </div>
-            </div>
-          )}
-
-          {/* ── Sub: Monitor DICOM ── */}
-          {isSubTab === 'monitor' && (
-            <DicomMonitor
-              onSelectOrder={noorder => {
-                setIsSubTab('daftar');
-                // scroll ke order tersebut setelah daftar dimuat
-              }}
-            />
-          )}
-
-          {/* ── Sub: Mapping ── */}
-          {isSubTab === 'mapping' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-              {/* Toolbar */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, fontSize: 12, color: '#6b7280' }}>
-                  Petakan setiap jenis pemeriksaan radiologi ke <strong>kode LOINC</strong> (ServiceRequest) dan <strong>Modality DICOM</strong> (MWL/ImagingStudy).
-                </div>
-                <button onClick={handleImportKhanza} disabled={importingKhanza}
-                  style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid #7c3aed', background: importingKhanza ? '#f5f3ff' : '#faf5ff', fontSize: 12, cursor: 'pointer', color: '#7c3aed', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                  {importingKhanza ? '⏳ Mengimport...' : '⬇️ Import dari Khanza'}
-                </button>
-                <button onClick={() => { fetchMapping(); setImportMsg(''); }} disabled={mappingLoading}
-                  style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer', color: '#374151' }}>
-                  {mappingLoading ? 'Memuat...' : '↺ Refresh'}
-                </button>
-              </div>
-
-              {/* Import result message */}
-              {importMsg && (
-                <div style={{ padding: '8px 12px', borderRadius: 7, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#16a34a' }}>
-                  ✓ {importMsg}
-                </div>
-              )}
-
-              {/* Filter pills */}
-              <div style={{ display: 'flex', gap: 6 }}>
-                {([
-                  { key: 'semua',          label: `Semua (${mappingList.length})` },
-                  { key: 'belum-loinc',    label: `Belum LOINC (${mappingList.filter(m => !(editingMapping[m.kd_jenis_prw]?.code || m.code)).length})` },
-                  { key: 'belum-modality', label: `Belum Modality (${mappingList.filter(m => !(editingMapping[m.kd_jenis_prw]?.modality_code || m.modality_code)).length})` },
-                ] as const).map(f => (
-                  <button key={f.key} onClick={() => setMappingFilter(f.key)} style={{
-                    padding: '4px 12px', borderRadius: 20, fontSize: 11, cursor: 'pointer',
-                    border: mappingFilter === f.key ? '1px solid #2563eb' : '1px solid #e5e7eb',
-                    background: mappingFilter === f.key ? '#eff6ff' : '#fff',
-                    color: mappingFilter === f.key ? '#2563eb' : '#6b7280',
-                    fontWeight: mappingFilter === f.key ? 600 : 400,
-                  }}>{f.label}</button>
-                ))}
-              </div>
-
-              {/* Table */}
-              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto', maxHeight: '58vh', overflowY: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                      <tr style={{ background: '#f9fafb' }}>
-                        <th style={TH}>Kode</th>
-                        <th style={TH}>Nama Pemeriksaan</th>
-                        <th style={{ ...TH, background: '#faf5ff', borderLeft: '2px solid #e9d5ff' }} colSpan={3}>
-                          🔬 LOINC (ServiceRequest)
-                        </th>
-                        <th style={{ ...TH, background: '#eff6ff', borderLeft: '2px solid #bfdbfe' }} colSpan={2}>
-                          🩻 Modality DICOM (MWL)
-                        </th>
-                        <th style={TH}>Aksi</th>
-                      </tr>
-                      <tr style={{ background: '#f9fafb' }}>
-                        <th style={TH}></th>
-                        <th style={TH}></th>
-                        <th style={{ ...TH, background: '#faf5ff', fontSize: 10 }}>Kode LOINC</th>
-                        <th style={{ ...TH, background: '#faf5ff', fontSize: 10 }}>System</th>
-                        <th style={{ ...TH, background: '#faf5ff', fontSize: 10 }}>Display</th>
-                        <th style={{ ...TH, background: '#eff6ff', borderLeft: '2px solid #bfdbfe', fontSize: 10 }}>Modality</th>
-                        <th style={{ ...TH, background: '#eff6ff', fontSize: 10 }}>Keterangan</th>
-                        <th style={TH}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mappingLoading ? (
-                        <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
-                      ) : mappingList.length === 0 ? (
-                        <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Tidak ada jenis pemeriksaan radiologi aktif</td></tr>
-                      ) : mappingList
-                          .filter(m => {
-                            const ed = editingMapping[m.kd_jenis_prw] || m;
-                            if (mappingFilter === 'belum-loinc')    return !ed.code;
-                            if (mappingFilter === 'belum-modality') return !ed.modality_code;
-                            return true;
-                          })
-                          .map(m => {
-                        const ed = editingMapping[m.kd_jenis_prw] || m;
-                        const saving = savingMapping.has(m.kd_jenis_prw);
-                        const hasLoinc    = !!ed.code;
-                        const hasModality = !!ed.modality_code;
-                        const rowBg = !hasLoinc ? '#fffbeb' : !hasModality ? '#f0f9ff' : '#fff';
-
-                        return (
-                          <tr key={m.kd_jenis_prw} style={{ borderBottom: '1px solid #f3f4f6', background: rowBg }}>
-                            <td style={{ padding: '6px 12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>
-                              {m.kd_jenis_prw}
-                            </td>
-                            <td style={{ padding: '6px 12px', color: '#111827', maxWidth: 180 }}>
-                              {m.nm_perawatan}
-                              <div style={{ marginTop: 2, display: 'flex', gap: 3 }}>
-                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: hasLoinc ? '#dcfce7' : '#fef3c7', color: hasLoinc ? '#16a34a' : '#d97706', fontWeight: 600 }}>
-                                  {hasLoinc ? 'LOINC ✓' : 'LOINC ?'}
-                                </span>
-                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: hasModality ? '#dbeafe' : '#f3f4f6', color: hasModality ? '#1d4ed8' : '#9ca3af', fontWeight: 600 }}>
-                                  {hasModality ? `${ed.modality_code} ✓` : 'Modality ?'}
-                                </span>
-                              </div>
-                            </td>
-
-                            {/* LOINC columns */}
-                            <td style={{ padding: '6px 8px', background: '#faf5ff' }}>
-                              <input
-                                value={ed.code}
-                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, code: e.target.value } }))}
-                                placeholder="mis: 24628-0"
-                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, width: 95 }}
-                              />
-                            </td>
-                            <td style={{ padding: '6px 8px', background: '#faf5ff' }}>
-                              <select
-                                value={ed.system}
-                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, system: e.target.value } }))}
-                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, minWidth: 110 }}>
-                                <option value="">-- pilih --</option>
-                                <option value="http://loinc.org">LOINC</option>
-                                <option value="http://snomed.info/sct">SNOMED CT</option>
-                                <option value="http://www.ama-assn.org/go/cpt">CPT</option>
-                              </select>
-                            </td>
-                            <td style={{ padding: '6px 8px', background: '#faf5ff' }}>
-                              <input
-                                value={ed.display}
-                                onChange={e => setEditingMapping(prev => ({ ...prev, [m.kd_jenis_prw]: { ...ed, display: e.target.value } }))}
-                                placeholder="Nama prosedur LOINC"
-                                style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, width: 160 }}
-                              />
-                            </td>
-
-                            {/* Modality columns */}
-                            <td style={{ padding: '6px 8px', background: '#eff6ff', borderLeft: '2px solid #bfdbfe' }}>
-                              <select
-                                value={ed.modality_code}
-                                onChange={e => {
-                                  const opt = MODALITY_OPTIONS.find(o => o.code === e.target.value);
-                                  setEditingMapping(prev => ({
-                                    ...prev,
-                                    [m.kd_jenis_prw]: { ...ed, modality_code: e.target.value, modality_display: opt?.display || '' }
-                                  }));
-                                }}
-                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, minWidth: 70 }}>
-                                <option value="">-- pilih --</option>
-                                {MODALITY_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.code}</option>)}
-                              </select>
-                            </td>
-                            <td style={{ padding: '6px 8px', background: '#eff6ff', fontSize: 11, color: '#6b7280' }}>
-                              {ed.modality_display || '-'}
-                            </td>
-
-                            <td style={{ padding: '6px 8px' }}>
-                              <button
-                                onClick={() => handleSaveMapping(m.kd_jenis_prw)}
-                                disabled={saving}
-                                style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 500 }}>
-                                {saving ? '...' : 'Simpan'}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Legend */}
-              <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#6b7280', flexWrap: 'wrap' }}>
-                <span>🟡 Kuning = belum ada kode LOINC</span>
-                <span>🔵 Biru muda = belum ada Modality</span>
-                <span>⚪ Putih = lengkap</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── LOG ── */}
-      {activeTab === 'log' && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid #f3f4f6', fontSize: 13, fontWeight: 600 }}>
-            Log Pengiriman Data
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f9fafb' }}>
-                  {['Waktu', 'Resource', 'No. Rawat', 'Status', 'Pesan'].map(h => (
-                    <th key={h} style={{ padding: '8px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
-                  ))}
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              {['Kode Praktisi', 'Nama Praktisi'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={2} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Mencari...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={2} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>{searched ? 'Praktisi tidak ditemukan' : 'Masukkan NIK lalu klik Cari'}</td></tr>
+            ) : (
+              list.map((row, i) => (
+                <tr key={`${row.kode_praktisi}-${i}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kode_praktisi}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.nama_praktisi}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {logs.map(log => (
-                  <tr key={log.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '8px 14px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{log.waktu}</td>
-                    <td style={{ padding: '8px 14px', fontSize: 12, color: '#374151', fontWeight: 500 }}>{log.tipe}</td>
-                    <td style={{ padding: '8px 14px', fontSize: 12, color: '#2563eb' }}>{log.no_rawat || '-'}</td>
-                    <td style={{ padding: '8px 14px' }}>
-                      <span style={{
-                        fontSize: 11, fontWeight: 600,
-                        background: statusBg(log.status),
-                        color: statusColor(log.status),
-                        padding: '2px 8px', borderRadius: 20,
-                        border: `1px solid ${statusColor(log.status)}33`
-                      }}>
-                        {log.status.charAt(0).toUpperCase() + log.status.slice(1)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '8px 14px', fontSize: 12, color: '#374151' }}>{log.pesan}</td>
-                  </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const ReferensiPasienTab: React.FC = () => {
+  const [nik, setNik] = React.useState('');
+  const [list, setList] = React.useState<ReferensiPasienItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [searched, setSearched] = React.useState(false);
+
+  const handleCari = async () => {
+    if (!nik.trim()) {
+      Swal.fire({ icon: 'warning', title: 'NIK belum diisi', text: 'Masukkan NIK pasien terlebih dahulu' });
+      return;
+    }
+    setLoading(true);
+    setSearched(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/referensi/pasien?nik=${encodeURIComponent(nik.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mencari pasien');
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch (err) {
+      setList([]);
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="text"
+          value={nik}
+          onChange={(e) => setNik(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCari()}
+          placeholder="Masukkan NIK pasien..."
+          style={{ ...inputSm, width: 300 }}
+        />
+        <button
+          type="button"
+          onClick={handleCari}
+          disabled={loading}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loading ? '#9ca3af' : '#059669', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          {loading ? 'Mencari...' : 'Cari'}
+        </button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', maxWidth: 520 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              {['Item', 'Data'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={2} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Mencari...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={2} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>{searched ? 'Pasien tidak ditemukan' : 'Masukkan NIK lalu klik Cari'}</td></tr>
+            ) : (
+              list.map((row, i) => (
+                <tr key={`${row.item}-${i}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap', fontWeight: 500 }}>{row.item}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.data || '-'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const ReferensiSection: React.FC = () => {
+  const [sub, setSub] = React.useState<ReferensiSubTab>('praktisi');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb', flexShrink: 0, flexWrap: 'wrap' }}>
+        {REFERENSI_MENU.map((m) => {
+          const active = sub === m.key;
+          return (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setSub(m.key)}
+              style={{
+                padding: '8px 16px', border: 'none',
+                borderBottom: active ? '2px solid #059669' : '2px solid transparent',
+                background: 'transparent', color: active ? '#059669' : '#6b7280',
+                fontWeight: active ? 600 : 400, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {sub === 'praktisi' && <ReferensiPraktisiTab />}
+        {sub === 'pasien' && <ReferensiPasienTab />}
+      </div>
+    </div>
+  );
+};
+
+// ── Pengaturan Satu Sehat — 6 kategori mapping lokal <-> referensi Satu
+// Sehat, tab horizontal terpisah dari sidebar utama (persis pola tab
+// header di MappingSatuSehatView). "Mapping Tindakan Radiologi" reuse
+// komponen MappingRadiologi yg sudah ada & teruji (dipakai jg di menu
+// "Mapping Satu Sehat" lama) — 5 kategori lain masih placeholder,
+// menyusul dibangun satu per satu.
+type PengaturanSubTab =
+  | 'organisasi'
+  | 'lokasi'
+  | 'vaksin'
+  | 'obat-alkes-bhp'
+  | 'tindakan-radiologi'
+  | 'tindakan-laboratorium';
+
+const PENGATURAN_MENU: { key: PengaturanSubTab; label: string }[] = [
+  { key: 'organisasi', label: 'Mapping Organisasi' },
+  { key: 'lokasi', label: 'Mapping Lokasi' },
+  { key: 'vaksin', label: 'Mapping Vaksin' },
+  { key: 'obat-alkes-bhp', label: 'Mapping Obat/Alkes/BHP' },
+  { key: 'tindakan-radiologi', label: 'Mapping Tindakan Radiologi' },
+  { key: 'tindakan-laboratorium', label: 'Mapping Tindakan Laboratorium PK & MB' },
+];
+
+// ── Mapping Organisasi — padanan DlgMappingOrganisasiSatuSehat.java: tabel
+// satu_sehat_mapping_departemen INNER JOIN departemen (cuma yg sudah
+// dipetakan yg tampil di daftar utama, persis tampil() Java), + modal
+// "Tambah Mapping" utk departemen yang belum dipetakan (dropdown biasa,
+// departemen cuma segelintir jadi tidak perlu search-as-you-type).
+type MappingOrganisasiRow = { dep_id: string; nama_departemen: string; id_organisasi_satusehat: string };
+type DepartemenBelumMapping = { dep_id: string; nama: string };
+
+const MappingOrganisasiSection: React.FC = () => {
+  const [list, setList] = React.useState<MappingOrganisasiRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [edits, setEdits] = React.useState<Record<string, string>>({});
+  const [savingDep, setSavingDep] = React.useState<string | null>(null);
+
+  const [showTambah, setShowTambah] = React.useState(false);
+  const [belumMapping, setBelumMapping] = React.useState<DepartemenBelumMapping[]>([]);
+  const [tambahDepId, setTambahDepId] = React.useState('');
+  const [tambahId, setTambahId] = React.useState('');
+  const [savingTambah, setSavingTambah] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-organisasi?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      const rows: MappingOrganisasiRow[] = Array.isArray(data.list) ? data.list : [];
+      setList(rows);
+      setEdits(Object.fromEntries(rows.map((r) => [r.dep_id, r.id_organisasi_satusehat])));
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  const openTambah = async () => {
+    setTambahDepId('');
+    setTambahId('');
+    setShowTambah(true);
+    try {
+      const res = await fetch('/api/satu-sehat/departemen-belum-mapping');
+      const data = await res.json();
+      setBelumMapping(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setBelumMapping([]);
+    }
+  };
+
+  const handleSaveRow = async (depId: string) => {
+    const idOrganisasi = (edits[depId] || '').trim();
+    if (!idOrganisasi) {
+      Swal.fire({ icon: 'warning', title: 'ID Organisasi kosong', text: 'Isi ID Organisasi Satu Sehat dulu' });
+      return;
+    }
+    setSavingDep(depId);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-organisasi/${encodeURIComponent(depId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_organisasi_satusehat: idOrganisasi }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping');
+      Swal.fire({ icon: 'success', title: 'Tersimpan', timer: 1200, showConfirmButton: false });
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSavingDep(null);
+    }
+  };
+
+  const handleDeleteRow = async (row: MappingOrganisasiRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping?',
+      html: `Mapping departemen <strong>${row.nama_departemen}</strong> akan dihapus.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Hapus',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-organisasi/${encodeURIComponent(row.dep_id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const handleSaveTambah = async () => {
+    if (!tambahDepId || !tambahId.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Pilih departemen dan isi ID Organisasi Satu Sehat' });
+      return;
+    }
+    setSavingTambah(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-organisasi/${encodeURIComponent(tambahDepId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_organisasi_satusehat: tambahId.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping');
+      setShowTambah(false);
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSavingTambah(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cari kode/nama departemen atau ID Organisasi..."
+          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', width: 320, boxSizing: 'border-box' }}
+        />
+        <button
+          type="button"
+          onClick={openTambah}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          + Tambah Mapping
+        </button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>Kode Departemen</th>
+              <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>Nama Departemen</th>
+              <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>ID Organisasi Satu Sehat</th>
+              <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 140 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping organisasi</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.dep_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 12px', color: '#374151' }}>{row.dep_id}</td>
+                  <td style={{ padding: '6px 12px', color: '#111827' }}>{row.nama_departemen}</td>
+                  <td style={{ padding: '6px 12px' }}>
+                    <input
+                      type="text"
+                      value={edits[row.dep_id] ?? ''}
+                      onChange={(e) => setEdits((prev) => ({ ...prev, [row.dep_id]: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveRow(row.dep_id)}
+                        disabled={savingDep === row.dep_id}
+                        style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 11.5, fontWeight: 500 }}
+                      >
+                        {savingDep === row.dep_id ? '...' : 'Simpan'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRow(row)}
+                        style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11.5, fontWeight: 500 }}
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showTambah && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10020 }}
+          onClick={() => setShowTambah(false)}
+        >
+          <div
+            style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 380, maxWidth: '90%', display: 'flex', flexDirection: 'column', gap: 12 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Tambah Mapping Organisasi</div>
+              <button type="button" onClick={() => setShowTambah(false)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Departemen</label>
+              <select
+                value={tambahDepId}
+                onChange={(e) => setTambahDepId(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              >
+                <option value="">-- Pilih Departemen --</option>
+                {belumMapping.map((d) => (
+                  <option key={d.dep_id} value={d.dep_id}>{d.nama}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+              {belumMapping.length === 0 && (
+                <div style={{ marginTop: 4, fontSize: 11, color: '#9ca3af' }}>Semua departemen sudah punya mapping.</div>
+              )}
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>ID Organisasi Satu Sehat</label>
+              <input
+                type="text"
+                value={tambahId}
+                onChange={(e) => setTambahId(e.target.value)}
+                placeholder="ID organisasi dari portal Satu Sehat"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={() => setShowTambah(false)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTambah}
+                disabled={savingTambah}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: savingTambah ? '#9ca3af' : '#059669', color: '#fff', cursor: savingTambah ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+              >
+                {savingTambah ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
+  );
+};
+
+// ── Mapping Lokasi — padanan SatuSehatMapingLokasi.java: 8 kategori lokasi,
+// 3 (Poli/Kamar/Depo Farmasi) punya kode unit lokal + pencarian, 5 lainnya
+// (Ruang OK/Lab PK/Lab PA/Lab MB/Radiologi) lokasi global tanpa kode unit &
+// tanpa pencarian (persis tampil() Java). Semua baris WAJIB pilih ID
+// Organisasi Satu Sehat yg SUDAH ada di Mapping Organisasi (dropdown,
+// reuse GET /api/satu-sehat/mapping-organisasi).
+type LokasiKategoriUnit = 'ralan' | 'ranap' | 'depo-farmasi';
+type LokasiKategoriGlobal = 'ruang-ok' | 'ruang-lab-pk' | 'ruang-lab-pa' | 'ruang-lab-mb' | 'ruang-radiologi';
+type LokasiSubTab = LokasiKategoriUnit | LokasiKategoriGlobal;
+
+const LOKASI_UNIT_KATEGORI = new Set<LokasiSubTab>(['ralan', 'ranap', 'depo-farmasi']);
+
+const LOKASI_MENU: { key: LokasiSubTab; label: string }[] = [
+  { key: 'ralan', label: 'Poli / Rawat Jalan' },
+  { key: 'ranap', label: 'Kamar / Rawat Inap' },
+  { key: 'ruang-ok', label: 'Ruang OK' },
+  { key: 'ruang-lab-pk', label: 'Ruang Lab PK' },
+  { key: 'ruang-lab-pa', label: 'Ruang Lab PA' },
+  { key: 'ruang-lab-mb', label: 'Ruang Lab MB' },
+  { key: 'ruang-radiologi', label: 'Ruang Radiologi' },
+  { key: 'depo-farmasi', label: 'Depo Farmasi' },
+];
+
+const LOKASI_UNIT_LABELS: Record<LokasiKategoriUnit, { kode: string; nama: string }> = {
+  ralan: { kode: 'Kode Unit', nama: 'Nama Unit' },
+  ranap: { kode: 'Nomor Ruang', nama: 'Kamar/Ruang' },
+  'depo-farmasi': { kode: 'Kode Farmasi', nama: 'Nama Depo Farmasi' },
+};
+
+type MappingLokasiUnitRow = {
+  kode_unit: string; nama_unit: string; id_lokasi_satusehat: string;
+  longitude: string; latitude: string; altitude: string;
+  dep_id: string; nama_departemen: string; id_organisasi_satusehat: string;
+};
+type MappingLokasiGlobalRow = {
+  id_lokasi_satusehat: string; longitude: string; latitude: string; altitude: string;
+  dep_id: string; nama_departemen: string; id_organisasi_satusehat: string;
+};
+type OrganisasiOption = { dep_id: string; nama_departemen: string; id_organisasi_satusehat: string };
+type UnitOption = { kode: string; nama: string };
+
+const inputSm: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' };
+const labelSm: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 };
+
+// LokasiFormModal — dipakai bareng oleh kategori unit & global (kode unit
+// disembunyikan/readonly utk kategori global krn tidak ada konsep unit lokal).
+const LokasiFormModal: React.FC<{
+  title: string;
+  showUnitField: boolean;
+  unitLabel?: string;
+  unitOptions?: UnitOption[];
+  fixedUnitLabel?: string; // dipakai saat mode edit (kode unit tidak bisa diganti)
+  organisasiOptions: OrganisasiOption[];
+  initial: { kode: string; idLokasi: string; longitude: string; latitude: string; altitude: string; idOrganisasi: string };
+  onClose: () => void;
+  onSave: (v: { kode: string; idLokasi: string; longitude: string; latitude: string; altitude: string; idOrganisasi: string }) => void;
+  saving: boolean;
+}> = ({ title, showUnitField, unitLabel, unitOptions, fixedUnitLabel, organisasiOptions, initial, onClose, onSave, saving }) => {
+  const [kode, setKode] = React.useState(initial.kode);
+  const [idLokasi, setIdLokasi] = React.useState(initial.idLokasi);
+  const [longitude, setLongitude] = React.useState(initial.longitude);
+  const [latitude, setLatitude] = React.useState(initial.latitude);
+  const [altitude, setAltitude] = React.useState(initial.altitude);
+  const [idOrganisasi, setIdOrganisasi] = React.useState(initial.idOrganisasi);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10020 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 420, maxWidth: '90%', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+
+        {showUnitField && (
+          fixedUnitLabel ? (
+            <div>
+              <label style={labelSm}>{unitLabel}</label>
+              <input type="text" value={fixedUnitLabel} readOnly style={{ ...inputSm, background: '#f9fafb', color: '#6b7280' }} />
+            </div>
+          ) : (
+            <div>
+              <label style={labelSm}>{unitLabel}</label>
+              <select value={kode} onChange={(e) => setKode(e.target.value)} style={inputSm}>
+                <option value="">-- Pilih --</option>
+                {(unitOptions || []).map((u) => (
+                  <option key={u.kode} value={u.kode}>{u.nama}</option>
+                ))}
+              </select>
+              {(unitOptions || []).length === 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#9ca3af' }}>Semua unit sudah punya mapping.</div>}
+            </div>
+          )
+        )}
+
+        <div>
+          <label style={labelSm}>ID Lokasi Satu Sehat</label>
+          <input type="text" value={idLokasi} onChange={(e) => setIdLokasi(e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Longitude</label>
+            <input type="text" value={longitude} onChange={(e) => setLongitude(e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Latitude</label>
+            <input type="text" value={latitude} onChange={(e) => setLatitude(e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Altitude</label>
+            <input type="text" value={altitude} onChange={(e) => setAltitude(e.target.value)} style={inputSm} />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>ID Organisasi Satu Sehat (Departemen)</label>
+          <select value={idOrganisasi} onChange={(e) => setIdOrganisasi(e.target.value)} style={inputSm}>
+            <option value="">-- Pilih Departemen --</option>
+            {organisasiOptions.map((o) => (
+              <option key={o.dep_id} value={o.id_organisasi_satusehat}>{o.nama_departemen} ({o.id_organisasi_satusehat})</option>
+            ))}
+          </select>
+          {organisasiOptions.length === 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#dc2626' }}>Belum ada data di Mapping Organisasi — isi dulu di sana.</div>}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => onSave({ kode, idLokasi, longitude, latitude, altitude, idOrganisasi })}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MappingLokasiUnitTable: React.FC<{ kategori: LokasiKategoriUnit }> = ({ kategori }) => {
+  const labels = LOKASI_UNIT_LABELS[kategori];
+  const [list, setList] = React.useState<MappingLokasiUnitRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [organisasiOptions, setOrganisasiOptions] = React.useState<OrganisasiOption[]>([]);
+  const [unitOptions, setUnitOptions] = React.useState<UnitOption[]>([]);
+  const [modal, setModal] = React.useState<{ mode: 'tambah' | 'edit'; row?: MappingLokasiUnitRow } | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi/${kategori}?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [kategori]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  const fetchOrganisasiOptions = async () => {
+    try {
+      const res = await fetch('/api/satu-sehat/mapping-organisasi');
+      const data = await res.json();
+      setOrganisasiOptions(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setOrganisasiOptions([]);
+    }
+  };
+
+  const openTambah = async () => {
+    await fetchOrganisasiOptions();
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi/${kategori}/unit-belum-mapping`);
+      const data = await res.json();
+      setUnitOptions(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setUnitOptions([]);
+    }
+    setModal({ mode: 'tambah' });
+  };
+
+  const openEdit = async (row: MappingLokasiUnitRow) => {
+    await fetchOrganisasiOptions();
+    setModal({ mode: 'edit', row });
+  };
+
+  const handleSave = async (v: { kode: string; idLokasi: string; longitude: string; latitude: string; altitude: string; idOrganisasi: string }) => {
+    if (!v.kode || !v.idLokasi.trim() || !v.idOrganisasi) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Pilih unit, isi ID Lokasi, dan pilih departemen' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi/${kategori}/${encodeURIComponent(v.kode)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_lokasi_satusehat: v.idLokasi.trim(), longitude: v.longitude, latitude: v.latitude, altitude: v.altitude, id_organisasi_satusehat: v.idOrganisasi }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping lokasi');
+      setModal(null);
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (row: MappingLokasiUnitRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping Lokasi?',
+      html: `Mapping lokasi <strong>${row.nama_unit}</strong> akan dihapus.`,
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi/${kategori}/${encodeURIComponent(row.kode_unit)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama unit, departemen..." style={{ ...inputSm, width: 320 }} />
+        <button type="button" onClick={openTambah} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{labels.kode}</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{labels.nama}</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Lokasi Satu Sehat</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Longitude</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Latitude</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Altitude</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Kode Departemen</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Nama Departemen</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Organisasi Satu Sehat</th>
+              <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 140 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={10} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={10} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping lokasi</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.kode_unit} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kode_unit}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.nama_unit}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.id_lokasi_satusehat}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.longitude}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.latitude}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.altitude}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.dep_id}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.nama_departemen}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.id_organisasi_satusehat}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => openEdit(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
+                      <button type="button" onClick={() => handleDelete(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <LokasiFormModal
+          title={modal.mode === 'tambah' ? 'Tambah Mapping Lokasi' : 'Edit Mapping Lokasi'}
+          showUnitField
+          unitLabel={labels.kode}
+          unitOptions={unitOptions}
+          fixedUnitLabel={modal.mode === 'edit' ? `${modal.row!.kode_unit} — ${modal.row!.nama_unit}` : undefined}
+          organisasiOptions={organisasiOptions}
+          initial={{
+            kode: modal.row?.kode_unit || '',
+            idLokasi: modal.row?.id_lokasi_satusehat || '',
+            longitude: modal.row?.longitude || '',
+            latitude: modal.row?.latitude || '',
+            altitude: modal.row?.altitude || '',
+            idOrganisasi: modal.row?.id_organisasi_satusehat || '',
+          }}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+};
+
+const MappingLokasiGlobalTable: React.FC<{ kategori: LokasiKategoriGlobal }> = ({ kategori }) => {
+  const [list, setList] = React.useState<MappingLokasiGlobalRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [organisasiOptions, setOrganisasiOptions] = React.useState<OrganisasiOption[]>([]);
+  const [showTambah, setShowTambah] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchList = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi-global/${kategori}`);
+      const data = await res.json();
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [kategori]);
+
+  React.useEffect(() => { fetchList(); }, [fetchList]);
+
+  const openTambah = async () => {
+    try {
+      const res = await fetch('/api/satu-sehat/mapping-organisasi');
+      const data = await res.json();
+      setOrganisasiOptions(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setOrganisasiOptions([]);
+    }
+    setShowTambah(true);
+  };
+
+  const handleSave = async (v: { idLokasi: string; longitude: string; latitude: string; altitude: string; idOrganisasi: string }) => {
+    if (!v.idLokasi.trim() || !v.idOrganisasi) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Isi ID Lokasi dan pilih departemen' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi-global/${kategori}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_lokasi_satusehat: v.idLokasi.trim(), longitude: v.longitude, latitude: v.latitude, altitude: v.altitude, id_organisasi_satusehat: v.idOrganisasi }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping lokasi');
+      setShowTambah(false);
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (row: MappingLokasiGlobalRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping Lokasi?',
+      html: `Mapping lokasi <strong>${row.id_lokasi_satusehat}</strong> akan dihapus.`,
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lokasi-global/${kategori}/${encodeURIComponent(row.id_lokasi_satusehat)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button type="button" onClick={openTambah} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Lokasi Satu Sehat</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Longitude</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Latitude</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Altitude</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Kode Departemen</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Nama Departemen</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Organisasi Satu Sehat</th>
+              <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 90 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={8} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={8} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping lokasi</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.id_lokasi_satusehat} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.id_lokasi_satusehat}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.longitude}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.latitude}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.altitude}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.dep_id}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.nama_departemen}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.id_organisasi_satusehat}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    <button type="button" onClick={() => handleDelete(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showTambah && (
+        <LokasiFormModal
+          title="Tambah Mapping Lokasi"
+          showUnitField={false}
+          organisasiOptions={organisasiOptions}
+          initial={{ kode: '', idLokasi: '', longitude: '', latitude: '', altitude: '', idOrganisasi: '' }}
+          onClose={() => setShowTambah(false)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+};
+
+const MappingLokasiSection: React.FC = () => {
+  const [sub, setSub] = React.useState<LokasiSubTab>('ralan');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb', flexShrink: 0, flexWrap: 'wrap' }}>
+        {LOKASI_MENU.map((m) => {
+          const active = sub === m.key;
+          return (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setSub(m.key)}
+              style={{
+                padding: '8px 16px', border: 'none',
+                borderBottom: active ? '2px solid #059669' : '2px solid transparent',
+                background: 'transparent', color: active ? '#059669' : '#6b7280',
+                fontWeight: active ? 600 : 400, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {LOKASI_UNIT_KATEGORI.has(sub) ? (
+          <MappingLokasiUnitTable kategori={sub as LokasiKategoriUnit} />
+        ) : (
+          <MappingLokasiGlobalTable kategori={sub as LokasiKategoriGlobal} />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Mapping Vaksin — padanan SatuSehatMapingVaksin.java: tabel
+// satu_sehat_mapping_vaksin INNER JOIN databarang. databarang punya 2000+
+// baris jadi picker "Tambah" pakai search-as-you-type (debounced), bukan
+// dropdown biasa spt Mapping Organisasi/Lokasi.
+type MappingVaksinRow = {
+  vaksin_code: string; vaksin_system: string; kode_brng: string; nama_brng: string;
+  vaksin_display: string; route_code: string; route_system: string; route_display: string;
+  dose_quantity_code: string; dose_quantity_system: string; dose_quantity_unit: string;
+};
+type ObatOption = { kode_brng: string; nama_brng: string };
+
+type VaksinFormValues = {
+  vaksinCode: string; vaksinSystem: string; vaksinDisplay: string;
+  routeCode: string; routeSystem: string; routeDisplay: string;
+  doseCode: string; doseSystem: string; doseUnit: string;
+};
+
+const VaksinFormModal: React.FC<{
+  title: string;
+  fixedObat?: { kode: string; nama: string }; // mode edit: obat sudah tetap
+  initial: VaksinFormValues;
+  onClose: () => void;
+  onSave: (kodeBrng: string, v: VaksinFormValues) => void;
+  saving: boolean;
+}> = ({ title, fixedObat, initial, onClose, onSave, saving }) => {
+  const [obatSearch, setObatSearch] = React.useState('');
+  const [obatResults, setObatResults] = React.useState<ObatOption[]>([]);
+  const [obatLoading, setObatLoading] = React.useState(false);
+  const [selectedObat, setSelectedObat] = React.useState<ObatOption | null>(fixedObat ? { kode_brng: fixedObat.kode, nama_brng: fixedObat.nama } : null);
+  const [v, setV] = React.useState<VaksinFormValues>(initial);
+
+  React.useEffect(() => {
+    if (fixedObat) return;
+    const t = setTimeout(async () => {
+      if (!obatSearch.trim()) { setObatResults([]); return; }
+      setObatLoading(true);
+      try {
+        const res = await fetch(`/api/satu-sehat/mapping-vaksin/cari-obat?q=${encodeURIComponent(obatSearch.trim())}`);
+        const data = await res.json();
+        setObatResults(Array.isArray(data.list) ? data.list : []);
+      } catch {
+        setObatResults([]);
+      } finally {
+        setObatLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [obatSearch, fixedObat]);
+
+  const set = (key: keyof VaksinFormValues, val: string) => setV((prev) => ({ ...prev, [key]: val }));
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10020 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 480, maxWidth: '90%', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+
+        {fixedObat ? (
+          <div>
+            <label style={labelSm}>Kode Vaksin / Nama Vaksin</label>
+            <input type="text" readOnly value={`${fixedObat.kode} — ${fixedObat.nama}`} style={{ ...inputSm, background: '#f9fafb', color: '#6b7280' }} />
+          </div>
+        ) : (
+          <div>
+            <label style={labelSm}>Cari Obat/Vaksin (kode atau nama)</label>
+            <input
+              type="text"
+              value={obatSearch}
+              onChange={(e) => { setObatSearch(e.target.value); setSelectedObat(null); }}
+              placeholder="Ketik nama atau kode obat..."
+              style={inputSm}
+              autoFocus
+            />
+            {selectedObat && (
+              <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: 12, color: '#065f46' }}>
+                Terpilih: {selectedObat.kode_brng} — {selectedObat.nama_brng}
+              </div>
+            )}
+            {!selectedObat && obatSearch.trim() && (
+              <div style={{ marginTop: 6, border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 160, overflowY: 'auto' }}>
+                {obatLoading ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#6b7280' }}>Mencari...</div>
+                ) : obatResults.length === 0 ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#9ca3af' }}>Tidak ada hasil</div>
+                ) : (
+                  obatResults.map((o) => (
+                    <div
+                      key={o.kode_brng}
+                      onClick={() => { setSelectedObat(o); setObatSearch(''); }}
+                      style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <strong>{o.kode_brng}</strong> — {o.nama_brng}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Vaksin Code</label>
+            <input type="text" value={v.vaksinCode} onChange={(e) => set('vaksinCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Vaksin System</label>
+            <input type="text" value={v.vaksinSystem} onChange={(e) => set('vaksinSystem', e.target.value)} style={inputSm} placeholder="http://..." />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>Vaksin Display</label>
+          <input type="text" value={v.vaksinDisplay} onChange={(e) => set('vaksinDisplay', e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Route Code</label>
+            <input type="text" value={v.routeCode} onChange={(e) => set('routeCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Route System</label>
+            <input type="text" value={v.routeSystem} onChange={(e) => set('routeSystem', e.target.value)} style={inputSm} placeholder="http://..." />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>Route Display</label>
+          <input type="text" value={v.routeDisplay} onChange={(e) => set('routeDisplay', e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Dose Code</label>
+            <input type="text" value={v.doseCode} onChange={(e) => set('doseCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Dose System</label>
+            <input type="text" value={v.doseSystem} onChange={(e) => set('doseSystem', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Dose Unit</label>
+            <input type="text" value={v.doseUnit} onChange={(e) => set('doseUnit', e.target.value)} style={inputSm} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => selectedObat && onSave(selectedObat.kode_brng, v)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MappingVaksinSection: React.FC = () => {
+  const [list, setList] = React.useState<MappingVaksinRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [modal, setModal] = React.useState<{ mode: 'tambah' | 'edit'; row?: MappingVaksinRow } | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-vaksin?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  const handleSave = async (kodeBrng: string, v: VaksinFormValues) => {
+    if (!v.vaksinCode.trim() || !v.vaksinSystem.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Vaksin Code dan Vaksin System wajib diisi' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-vaksin/${encodeURIComponent(kodeBrng)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vaksin_code: v.vaksinCode, vaksin_system: v.vaksinSystem, vaksin_display: v.vaksinDisplay,
+          route_code: v.routeCode, route_system: v.routeSystem, route_display: v.routeDisplay,
+          dose_quantity_code: v.doseCode, dose_quantity_system: v.doseSystem, dose_quantity_unit: v.doseUnit,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping vaksin');
+      setModal(null);
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (row: MappingVaksinRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping Vaksin?',
+      html: `Mapping vaksin <strong>${row.nama_brng}</strong> akan dihapus.`,
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-vaksin/${encodeURIComponent(row.kode_brng)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const emptyForm: VaksinFormValues = { vaksinCode: '', vaksinSystem: '', vaksinDisplay: '', routeCode: '', routeSystem: '', routeDisplay: '', doseCode: '', doseSystem: '', doseUnit: '' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama obat, vaksin code/display, route..." style={{ ...inputSm, width: 340 }} />
+        <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              {['Vaksin Code', 'Vaksin System', 'Kode Vaksin', 'Nama Vaksin', 'Vaksin Display', 'Route Code', 'Route System', 'Route Display', 'Dose Code', 'Dose System', 'Dose Unit'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+              <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 140 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={12} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={12} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping vaksin</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.kode_brng} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.vaksin_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.vaksin_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kode_brng}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.nama_brng}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.vaksin_display}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.route_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.route_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.route_display}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.dose_quantity_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.dose_quantity_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.dose_quantity_unit}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setModal({ mode: 'edit', row })} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
+                      <button type="button" onClick={() => handleDelete(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <VaksinFormModal
+          title={modal.mode === 'tambah' ? 'Tambah Mapping Vaksin' : 'Edit Mapping Vaksin'}
+          fixedObat={modal.mode === 'edit' ? { kode: modal.row!.kode_brng, nama: modal.row!.nama_brng } : undefined}
+          initial={modal.mode === 'edit' ? {
+            vaksinCode: modal.row!.vaksin_code, vaksinSystem: modal.row!.vaksin_system, vaksinDisplay: modal.row!.vaksin_display,
+            routeCode: modal.row!.route_code, routeSystem: modal.row!.route_system, routeDisplay: modal.row!.route_display,
+            doseCode: modal.row!.dose_quantity_code, doseSystem: modal.row!.dose_quantity_system, doseUnit: modal.row!.dose_quantity_unit,
+          } : emptyForm}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+};
+
+// ── Mapping Obat/Alkes/BHP — padanan SatuSehatMapingObat.java: tabel
+// satu_sehat_mapping_obat INNER JOIN databarang. databarang punya 2000+
+// baris jadi picker "Tambah" pakai search-as-you-type (debounced), sama
+// seperti Mapping Vaksin.
+type MappingObatRow = {
+  obat_code: string; obat_system: string; kode_brng: string; nama_brng: string;
+  obat_display: string; form_code: string; form_system: string; form_display: string;
+  numerator_code: string; numerator_system: string; denominator_code: string; denominator_system: string;
+  route_code: string; route_system: string; route_display: string;
+};
+
+type ObatFormValues = {
+  obatCode: string; obatSystem: string; obatDisplay: string;
+  formCode: string; formSystem: string; formDisplay: string;
+  numeratorCode: string; numeratorSystem: string;
+  denominatorCode: string; denominatorSystem: string;
+  routeCode: string; routeSystem: string; routeDisplay: string;
+};
+
+const ObatFormModal: React.FC<{
+  title: string;
+  fixedObat?: { kode: string; nama: string }; // mode edit: obat sudah tetap
+  initial: ObatFormValues;
+  onClose: () => void;
+  onSave: (kodeBrng: string, v: ObatFormValues) => void;
+  saving: boolean;
+}> = ({ title, fixedObat, initial, onClose, onSave, saving }) => {
+  const [obatSearch, setObatSearch] = React.useState('');
+  const [obatResults, setObatResults] = React.useState<ObatOption[]>([]);
+  const [obatLoading, setObatLoading] = React.useState(false);
+  const [selectedObat, setSelectedObat] = React.useState<ObatOption | null>(fixedObat ? { kode_brng: fixedObat.kode, nama_brng: fixedObat.nama } : null);
+  const [v, setV] = React.useState<ObatFormValues>(initial);
+
+  React.useEffect(() => {
+    if (fixedObat) return;
+    const t = setTimeout(async () => {
+      if (!obatSearch.trim()) { setObatResults([]); return; }
+      setObatLoading(true);
+      try {
+        const res = await fetch(`/api/satu-sehat/mapping-obat/cari-obat?q=${encodeURIComponent(obatSearch.trim())}`);
+        const data = await res.json();
+        setObatResults(Array.isArray(data.list) ? data.list : []);
+      } catch {
+        setObatResults([]);
+      } finally {
+        setObatLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [obatSearch, fixedObat]);
+
+  const set = (key: keyof ObatFormValues, val: string) => setV((prev) => ({ ...prev, [key]: val }));
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10020 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 520, maxWidth: '90%', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+
+        {fixedObat ? (
+          <div>
+            <label style={labelSm}>Kode Barang / Nama Obat</label>
+            <input type="text" readOnly value={`${fixedObat.kode} — ${fixedObat.nama}`} style={{ ...inputSm, background: '#f9fafb', color: '#6b7280' }} />
+          </div>
+        ) : (
+          <div>
+            <label style={labelSm}>Cari Obat/Alkes/BHP (kode atau nama)</label>
+            <input
+              type="text"
+              value={obatSearch}
+              onChange={(e) => { setObatSearch(e.target.value); setSelectedObat(null); }}
+              placeholder="Ketik nama atau kode barang..."
+              style={inputSm}
+              autoFocus
+            />
+            {selectedObat && (
+              <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: 12, color: '#065f46' }}>
+                Terpilih: {selectedObat.kode_brng} — {selectedObat.nama_brng}
+              </div>
+            )}
+            {!selectedObat && obatSearch.trim() && (
+              <div style={{ marginTop: 6, border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 160, overflowY: 'auto' }}>
+                {obatLoading ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#6b7280' }}>Mencari...</div>
+                ) : obatResults.length === 0 ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#9ca3af' }}>Tidak ada hasil</div>
+                ) : (
+                  obatResults.map((o) => (
+                    <div
+                      key={o.kode_brng}
+                      onClick={() => { setSelectedObat(o); setObatSearch(''); }}
+                      style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <strong>{o.kode_brng}</strong> — {o.nama_brng}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>KFA Code (Obat Code)</label>
+            <input type="text" value={v.obatCode} onChange={(e) => set('obatCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>KFA System (Obat System)</label>
+            <input type="text" value={v.obatSystem} onChange={(e) => set('obatSystem', e.target.value)} style={inputSm} placeholder="http://..." />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>KFA Display (Obat Display)</label>
+          <input type="text" value={v.obatDisplay} onChange={(e) => set('obatDisplay', e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Form Code</label>
+            <input type="text" value={v.formCode} onChange={(e) => set('formCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Form System</label>
+            <input type="text" value={v.formSystem} onChange={(e) => set('formSystem', e.target.value)} style={inputSm} placeholder="http://..." />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>Form Display</label>
+          <input type="text" value={v.formDisplay} onChange={(e) => set('formDisplay', e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Numerator Code</label>
+            <input type="text" value={v.numeratorCode} onChange={(e) => set('numeratorCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Numerator System</label>
+            <input type="text" value={v.numeratorSystem} onChange={(e) => set('numeratorSystem', e.target.value)} style={inputSm} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Denominator Code</label>
+            <input type="text" value={v.denominatorCode} onChange={(e) => set('denominatorCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Denominator System</label>
+            <input type="text" value={v.denominatorSystem} onChange={(e) => set('denominatorSystem', e.target.value)} style={inputSm} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Route Code</label>
+            <input type="text" value={v.routeCode} onChange={(e) => set('routeCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Route System</label>
+            <input type="text" value={v.routeSystem} onChange={(e) => set('routeSystem', e.target.value)} style={inputSm} />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>Route Display</label>
+          <input type="text" value={v.routeDisplay} onChange={(e) => set('routeDisplay', e.target.value)} style={inputSm} />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => selectedObat && onSave(selectedObat.kode_brng, v)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MappingObatSection: React.FC = () => {
+  const [list, setList] = React.useState<MappingObatRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [modal, setModal] = React.useState<{ mode: 'tambah' | 'edit'; row?: MappingObatRow } | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-obat?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  const handleSave = async (kodeBrng: string, v: ObatFormValues) => {
+    if (!v.obatCode.trim() || !v.obatSystem.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'KFA Code dan KFA System wajib diisi' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-obat/${encodeURIComponent(kodeBrng)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          obat_code: v.obatCode, obat_system: v.obatSystem, obat_display: v.obatDisplay,
+          form_code: v.formCode, form_system: v.formSystem, form_display: v.formDisplay,
+          numerator_code: v.numeratorCode, numerator_system: v.numeratorSystem,
+          denominator_code: v.denominatorCode, denominator_system: v.denominatorSystem,
+          route_code: v.routeCode, route_system: v.routeSystem, route_display: v.routeDisplay,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping obat');
+      setModal(null);
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (row: MappingObatRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping Obat?',
+      html: `Mapping obat <strong>${row.nama_brng}</strong> akan dihapus.`,
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-obat/${encodeURIComponent(row.kode_brng)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const emptyForm: ObatFormValues = {
+    obatCode: '', obatSystem: '', obatDisplay: '',
+    formCode: '', formSystem: '', formDisplay: '',
+    numeratorCode: '', numeratorSystem: '',
+    denominatorCode: '', denominatorSystem: '',
+    routeCode: '', routeSystem: '', routeDisplay: '',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama barang, obat code/display, form, route..." style={{ ...inputSm, width: 340 }} />
+        <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              {['KFA Code', 'KFA System', 'Kode Barang', 'Nama Obat/Alkes/BHP', 'KFA Display', 'Form Code', 'Form System', 'Form Display', 'Numerator Code', 'Numerator System', 'Denominator Code', 'Denominator System', 'Route Code', 'Route System', 'Route Display'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+              <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 140 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={16} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={16} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping obat/alkes/bhp</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.kode_brng} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.obat_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.obat_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kode_brng}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.nama_brng}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.obat_display}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.form_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.form_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.form_display}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.numerator_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.numerator_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.denominator_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.denominator_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.route_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.route_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.route_display}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setModal({ mode: 'edit', row })} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
+                      <button type="button" onClick={() => handleDelete(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <ObatFormModal
+          title={modal.mode === 'tambah' ? 'Tambah Mapping Obat/Alkes/BHP' : 'Edit Mapping Obat/Alkes/BHP'}
+          fixedObat={modal.mode === 'edit' ? { kode: modal.row!.kode_brng, nama: modal.row!.nama_brng } : undefined}
+          initial={modal.mode === 'edit' ? {
+            obatCode: modal.row!.obat_code, obatSystem: modal.row!.obat_system, obatDisplay: modal.row!.obat_display,
+            formCode: modal.row!.form_code, formSystem: modal.row!.form_system, formDisplay: modal.row!.form_display,
+            numeratorCode: modal.row!.numerator_code, numeratorSystem: modal.row!.numerator_system,
+            denominatorCode: modal.row!.denominator_code, denominatorSystem: modal.row!.denominator_system,
+            routeCode: modal.row!.route_code, routeSystem: modal.row!.route_system, routeDisplay: modal.row!.route_display,
+          } : emptyForm}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+};
+
+// ── Mapping Tindakan Laboratorium PK & MB — padanan SatuSehatMapingLab.java:
+// tabel satu_sehat_mapping_lab INNER JOIN template_laboratorium (id_template
+// PK/FK). Sama pola dgn Mapping Vaksin/Obat (template_laboratorium 2000+
+// baris, picker "Tambah" search-as-you-type); id_template berupa angka.
+type MappingLabRow = {
+  periksa_code: string; pemeriksaan_system: string; id_template: number; detail_pemeriksaan: string;
+  pemeriksaan_display: string; sampel_code: string; sampel_system: string; sampel_display: string;
+};
+type TemplateOption = { id_template: number; pemeriksaan: string };
+
+type LabFormValues = {
+  code: string; system: string; display: string;
+  sampelCode: string; sampelSystem: string; sampelDisplay: string;
+};
+
+const LabFormModal: React.FC<{
+  title: string;
+  fixedTemplate?: { idTemplate: number; pemeriksaan: string }; // mode edit: template sudah tetap
+  initial: LabFormValues;
+  onClose: () => void;
+  onSave: (idTemplate: number, v: LabFormValues) => void;
+  saving: boolean;
+}> = ({ title, fixedTemplate, initial, onClose, onSave, saving }) => {
+  const [templateSearch, setTemplateSearch] = React.useState('');
+  const [templateResults, setTemplateResults] = React.useState<TemplateOption[]>([]);
+  const [templateLoading, setTemplateLoading] = React.useState(false);
+  const [selectedTemplate, setSelectedTemplate] = React.useState<TemplateOption | null>(fixedTemplate ? { id_template: fixedTemplate.idTemplate, pemeriksaan: fixedTemplate.pemeriksaan } : null);
+  const [v, setV] = React.useState<LabFormValues>(initial);
+
+  React.useEffect(() => {
+    if (fixedTemplate) return;
+    const t = setTimeout(async () => {
+      if (!templateSearch.trim()) { setTemplateResults([]); return; }
+      setTemplateLoading(true);
+      try {
+        const res = await fetch(`/api/satu-sehat/mapping-lab/cari-template?q=${encodeURIComponent(templateSearch.trim())}`);
+        const data = await res.json();
+        setTemplateResults(Array.isArray(data.list) ? data.list : []);
+      } catch {
+        setTemplateResults([]);
+      } finally {
+        setTemplateLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [templateSearch, fixedTemplate]);
+
+  const set = (key: keyof LabFormValues, val: string) => setV((prev) => ({ ...prev, [key]: val }));
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10020 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 480, maxWidth: '90%', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+
+        {fixedTemplate ? (
+          <div>
+            <label style={labelSm}>ID Detail / Detail Pemeriksaan</label>
+            <input type="text" readOnly value={`${fixedTemplate.idTemplate} — ${fixedTemplate.pemeriksaan}`} style={{ ...inputSm, background: '#f9fafb', color: '#6b7280' }} />
+          </div>
+        ) : (
+          <div>
+            <label style={labelSm}>Cari Pemeriksaan Laboratorium (ID atau nama)</label>
+            <input
+              type="text"
+              value={templateSearch}
+              onChange={(e) => { setTemplateSearch(e.target.value); setSelectedTemplate(null); }}
+              placeholder="Ketik nama atau ID pemeriksaan..."
+              style={inputSm}
+              autoFocus
+            />
+            {selectedTemplate && (
+              <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: 12, color: '#065f46' }}>
+                Terpilih: {selectedTemplate.id_template} — {selectedTemplate.pemeriksaan}
+              </div>
+            )}
+            {!selectedTemplate && templateSearch.trim() && (
+              <div style={{ marginTop: 6, border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 160, overflowY: 'auto' }}>
+                {templateLoading ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#6b7280' }}>Mencari...</div>
+                ) : templateResults.length === 0 ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#9ca3af' }}>Tidak ada hasil</div>
+                ) : (
+                  templateResults.map((o) => (
+                    <div
+                      key={o.id_template}
+                      onClick={() => { setSelectedTemplate(o); setTemplateSearch(''); }}
+                      style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <strong>{o.id_template}</strong> — {o.pemeriksaan}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Periksa Code</label>
+            <input type="text" value={v.code} onChange={(e) => set('code', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Pemeriksaan System</label>
+            <input type="text" value={v.system} onChange={(e) => set('system', e.target.value)} style={inputSm} placeholder="http://..." />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>Pemeriksaan Display</label>
+          <input type="text" value={v.display} onChange={(e) => set('display', e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={labelSm}>Sampel Code</label>
+            <input type="text" value={v.sampelCode} onChange={(e) => set('sampelCode', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Sampel System</label>
+            <input type="text" value={v.sampelSystem} onChange={(e) => set('sampelSystem', e.target.value)} style={inputSm} placeholder="http://..." />
+          </div>
+        </div>
+        <div>
+          <label style={labelSm}>Sampel Display</label>
+          <input type="text" value={v.sampelDisplay} onChange={(e) => set('sampelDisplay', e.target.value)} style={inputSm} />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => selectedTemplate && onSave(selectedTemplate.id_template, v)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MappingLabSection: React.FC = () => {
+  const [list, setList] = React.useState<MappingLabRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [modal, setModal] = React.useState<{ mode: 'tambah' | 'edit'; row?: MappingLabRow } | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lab?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  const handleSave = async (idTemplate: number, v: LabFormValues) => {
+    if (!v.system.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Pemeriksaan System wajib diisi' });
+      return;
+    }
+    if (!v.sampelCode.trim() || !v.sampelSystem.trim() || !v.sampelDisplay.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Sampel Code, Sampel System, dan Sampel Display wajib diisi' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lab/${idTemplate}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: v.code, system: v.system, display: v.display,
+          sampel_code: v.sampelCode, sampel_system: v.sampelSystem, sampel_display: v.sampelDisplay,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping laboratorium');
+      setModal(null);
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (row: MappingLabRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping Laboratorium?',
+      html: `Mapping pemeriksaan <strong>${row.detail_pemeriksaan}</strong> akan dihapus.`,
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lab/${row.id_template}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const emptyForm: LabFormValues = { code: '', system: '', display: '', sampelCode: '', sampelSystem: '', sampelDisplay: '' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari ID/nama pemeriksaan, periksa code, display..." style={{ ...inputSm, width: 340 }} />
+        <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              {['Periksa Code', 'Pemeriksaan System', 'ID Detail', 'Detail Pemeriksaan', 'Pemeriksaan Display', 'Sampel Code', 'Sampel System', 'Sampel Display'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+              <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 140 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={9} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping tindakan laboratorium</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.id_template} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.periksa_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.pemeriksaan_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.id_template}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.detail_pemeriksaan}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.pemeriksaan_display}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.sampel_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.sampel_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.sampel_display}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setModal({ mode: 'edit', row })} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
+                      <button type="button" onClick={() => handleDelete(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <LabFormModal
+          title={modal.mode === 'tambah' ? 'Tambah Mapping Tindakan Laboratorium' : 'Edit Mapping Tindakan Laboratorium'}
+          fixedTemplate={modal.mode === 'edit' ? { idTemplate: modal.row!.id_template, pemeriksaan: modal.row!.detail_pemeriksaan } : undefined}
+          initial={modal.mode === 'edit' ? {
+            code: modal.row!.periksa_code, system: modal.row!.pemeriksaan_system, display: modal.row!.pemeriksaan_display,
+            sampelCode: modal.row!.sampel_code, sampelSystem: modal.row!.sampel_system, sampelDisplay: modal.row!.sampel_display,
+          } : emptyForm}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+};
+
+const PengaturanSection: React.FC = () => {
+  const [sub, setSub] = React.useState<PengaturanSubTab>('organisasi');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb', flexShrink: 0, flexWrap: 'wrap' }}>
+        {PENGATURAN_MENU.map((m) => {
+          const active = sub === m.key;
+          return (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setSub(m.key)}
+              style={{
+                padding: '8px 16px',
+                border: 'none',
+                borderBottom: active ? '2px solid #059669' : '2px solid transparent',
+                background: 'transparent',
+                color: active ? '#059669' : '#6b7280',
+                fontWeight: active ? 600 : 400,
+                fontSize: 13,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {sub === 'organisasi' && <MappingOrganisasiSection />}
+        {sub === 'lokasi' && <MappingLokasiSection />}
+        {sub === 'vaksin' && <MappingVaksinSection />}
+        {sub === 'obat-alkes-bhp' && <MappingObatSection />}
+        {sub === 'tindakan-radiologi' && <MappingRadiologi />}
+        {sub === 'tindakan-laboratorium' && <MappingLabSection />}
+      </div>
+    </div>
+  );
+};
+
+type SatuSehatViewProps = {
+  onBack?: () => void;
+};
+
+export const SatuSehatView: React.FC<SatuSehatViewProps> = ({ onBack }) => {
+  const [activeTab, setActiveTab] = React.useState<SatuSehatTab>('dashboard');
+  const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
+
+  return (
+    <section
+      style={{
+        background: '#F3F4F6',
+        padding: 20,
+        height: '100%',
+        display: 'flex',
+        gap: 16,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* Sidebar */}
+      <aside
+        style={{
+          width: 240,
+          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+          borderRadius: 24,
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          padding: 16,
+          boxSizing: 'border-box',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+        }}
+      >
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 20px' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+          </div>
+          <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, letterSpacing: '0.2px' }}>
+            Satu Sehat
+          </div>
+        </div>
+
+        {/* Menu — pola scrollbar auto-hide sama dgn BridgingBpjs.tsx
+            (di-override manual krn scrollbar native Windows/Chrome selalu
+            tampil tebal). */}
+        <nav className="satusehat-sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {MENU.map((item) => {
+            const active = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveTab(item.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+                  color: active ? '#ffffff' : 'rgba(255,255,255,0.8)',
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Footer — Pengaturan, terpisah dari daftar menu utama */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 8 }}>
+          {(() => {
+            const active = activeTab === SETTINGS_ITEM.key;
+            return (
+              <button
+                type="button"
+                onClick={() => setActiveTab(SETTINGS_ITEM.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+                  color: active ? '#ffffff' : 'rgba(255,255,255,0.8)',
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {SETTINGS_ITEM.icon}
+                {SETTINGS_ITEM.label}
+              </button>
+            );
+          })()}
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Header — langsung di atas background, tanpa card */}
+        <div
+          style={{
+            padding: '0 4px 16px',
+            flexShrink: 0,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div style={{ fontSize: 13, color: '#6b7280' }}>
+            <span style={{ color: '#059669', fontWeight: 600 }}>Satu Sehat</span> / {activeLabel}
+          </div>
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 8,
+                border: '1px solid #059669',
+                background: '#059669',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              Tutup
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div
+          style={{
+            padding: 24,
+            overflowY: 'auto',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            background: '#ffffff',
+            borderRadius: 24,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+          }}
+        >
+          {activeTab === 'dashboard' && <Placeholder title="Dashboard Satu Sehat" />}
+          {activeTab === 'referensi' && <ReferensiSection />}
+          {activeTab === 'encounter' && <Placeholder title="Encounter" />}
+          {activeTab === 'condition' && <Placeholder title="Condition" />}
+          {activeTab === 'observation' && <Placeholder title="Observation" />}
+          {activeTab === 'procedure' && <Placeholder title="Procedure" />}
+          {activeTab === 'composition' && <Placeholder title="Composition" />}
+          {activeTab === 'medication' && <Placeholder title="Medication" />}
+          {activeTab === 'medication-request' && <Placeholder title="Medication Request" />}
+          {activeTab === 'medication-dispense' && <Placeholder title="Medication Dispense" />}
+          {activeTab === 'allergy-intolerance' && <Placeholder title="Allergy Intolerance" />}
+          {activeTab === 'imaging-study' && <Placeholder title="Imaging Study" />}
+          {activeTab === 'service-request' && <Placeholder title="Service Request" />}
+          {activeTab === 'clinical-impression' && <Placeholder title="Clinical Impression" />}
+          {activeTab === 'immunization' && <Placeholder title="Immunization" />}
+          {activeTab === 'questionnaire-response' && <Placeholder title="Questionnaire Response" />}
+          {activeTab === 'medication-statement' && <Placeholder title="Medication Statement" />}
+          {activeTab === 'care-plan' && <Placeholder title="Care Plan" />}
+          {activeTab === 'specimen' && <Placeholder title="Specimen" />}
+          {activeTab === 'diagnostic-report' && <Placeholder title="Diagnostic Report" />}
+          {activeTab === 'episode-of-care' && <Placeholder title="Episode of Care" />}
+          {activeTab === 'pengaturan' && <PengaturanSection />}
+        </div>
+      </div>
+
+      <style>{`
+        .satusehat-sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }
+        .satusehat-sidebar-nav::-webkit-scrollbar { width: 6px; }
+        .satusehat-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .satusehat-sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
+        .satusehat-sidebar-nav:hover { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.35) transparent; }
+        .satusehat-sidebar-nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); }
+      `}</style>
+    </section>
   );
 };

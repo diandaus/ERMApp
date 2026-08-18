@@ -2656,7 +2656,13 @@ export const App: React.FC = () => {
       case 'admin':
         return <AdminView />;
       case 'satu-sehat':
-        return <SatuSehatView />;
+        // Layout sendiri (sidebar + full layar), lepas dari shell aplikasi
+        // sepenuhnya — persis pola ApotekView/BridgingBpjsView.
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+            <SatuSehatView onBack={() => setActiveMenu('menu-utama')} />
+          </div>
+        );
       case 'mapping-satu-sehat':
         return <MappingSatuSehatView />;
       default:

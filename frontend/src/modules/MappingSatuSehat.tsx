@@ -510,7 +510,11 @@ function AddMappingModal({ onClose, onSaved }: {
 
 // ─── Mapping Radiologi ────────────────────────────────────────────────────────
 
-function MappingRadiologi() {
+// Diekspor krn dipakai ulang sbg tab "Mapping Tindakan Radiologi" di dalam
+// Pengaturan Satu Sehat (SatuSehat.tsx) — komponen ini sudah lengkap &
+// teruji (search/filter/edit/simpan + kredensial LOINC), jadi reuse
+// langsung alih2 duplikasi ~300 baris logic yg sama.
+export function MappingRadiologi() {
   const [list, setList] = React.useState<MappingRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [keyword, setKeyword] = React.useState('');

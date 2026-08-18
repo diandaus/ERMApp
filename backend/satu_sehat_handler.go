@@ -17,14 +17,14 @@ import (
 // ─── Structs ─────────────────────────────────────────────────────────────────
 
 type SatuSehatConfig struct {
-	OrgID               string `json:"org_id"`
-	ClientID            string `json:"client_id"`
-	ClientSecret        string `json:"client_secret"`
-	AuthURL             string `json:"auth_url"`
-	FhirURL             string `json:"fhir_url"`
-	IsProduction        bool   `json:"is_production"`
-	OrthancURL          string `json:"orthanc_url"`
-	OrthancWorklistDir  string `json:"orthanc_worklist_dir"`
+	OrgID              string `json:"org_id"`
+	ClientID           string `json:"client_id"`
+	ClientSecret       string `json:"client_secret"`
+	AuthURL            string `json:"auth_url"`
+	FhirURL            string `json:"fhir_url"`
+	IsProduction       bool   `json:"is_production"`
+	OrthancURL         string `json:"orthanc_url"`
+	OrthancWorklistDir string `json:"orthanc_worklist_dir"`
 }
 
 type ImagingStudyItem struct {
@@ -183,6 +183,272 @@ func searchPatientSatuSehat(db *sql.DB) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, result)
 	}
+}
+
+// ─── Referensi Praktisi & Pasien ───────────────────────────────────────────────
+// Padanan SatuSehatReferensiPraktisi.java / SatuSehatReferensiPasien.java: cek
+// NIK langsung ke FHIR Practitioner/Patient Satu Sehat (bukan tabel lokal, jadi
+// hasil selalu real-time dari server Satu Sehat).
+
+type ReferensiPraktisiRow struct {
+	KodePraktisi string `json:"kode_praktisi"`
+	NamaPraktisi string `json:"nama_praktisi"`
+}
+
+// GET /api/satu-sehat/referensi/praktisi?nik=... — persis tampil()
+// SatuSehatReferensiPraktisi.java: Practitioner?identifier=.../nik|{nik},
+// loop entry -> resource.name[] (satu resource bisa punya beberapa nama).
+func getReferensiPraktisiSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		nik := strings.TrimSpace(c.Query("nik"))
+		if nik == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "NIK wajib diisi"})
+			return
+		}
+
+		cfg, err := getSatuSehatConfig(db)
+		if err != nil || cfg.ClientID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Konfigurasi Satu Sehat belum lengkap"})
+			return
+		}
+		token, err := getSatuSehatToken(cfg)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal mendapatkan token: " + err.Error()})
+			return
+		}
+
+		apiURL := fmt.Sprintf("%s/Practitioner?identifier=https://fhir.kemkes.go.id/id/nik|%s", cfg.FhirURL, url.QueryEscape(nik))
+		req, _ := http.NewRequest("GET", apiURL, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Satu Sehat: " + err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+
+		var result map[string]interface{}
+		json.Unmarshal(respBody, &result)
+		if resp.StatusCode != 200 {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
+			return
+		}
+
+		list := []ReferensiPraktisiRow{}
+		entries, _ := result["entry"].([]interface{})
+		for _, e := range entries {
+			entry, _ := e.(map[string]interface{})
+			resource, _ := entry["resource"].(map[string]interface{})
+			if resource == nil {
+				continue
+			}
+			id := satuSehatJSONStr(resource["id"])
+			names, _ := resource["name"].([]interface{})
+			for _, n := range names {
+				name, _ := n.(map[string]interface{})
+				text := satuSehatJSONStr(name["text"])
+				if text == "" {
+					continue
+				}
+				list = append(list, ReferensiPraktisiRow{KodePraktisi: id, NamaPraktisi: text})
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+type ReferensiPasienItem struct {
+	Item string `json:"item"`
+	Data string `json:"data"`
+}
+
+// GET /api/satu-sehat/referensi/pasien?nik=... — persis tampil()
+// SatuSehatReferensiPasien.java (via SatuSehatCekNIK): Patient?identifier=.../nik|{nik},
+// diuraikan jadi daftar Item/Data. Kelurahan/Kecamatan/Kabupaten/Propinsi
+// ditampilkan sebagai kode administratif mentah dari Satu Sehat — ERMApp tidak
+// punya tabel padanan kode wilayah Kemendagri utk resolve jadi nama seperti di
+// Khanza (villagename/districtname/cityname/provincename), jadi hanya kode yg tersedia.
+func getReferensiPasienSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		nik := strings.TrimSpace(c.Query("nik"))
+		if nik == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "NIK wajib diisi"})
+			return
+		}
+
+		cfg, err := getSatuSehatConfig(db)
+		if err != nil || cfg.ClientID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Konfigurasi Satu Sehat belum lengkap"})
+			return
+		}
+		token, err := getSatuSehatToken(cfg)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal mendapatkan token: " + err.Error()})
+			return
+		}
+
+		apiURL := fmt.Sprintf("%s/Patient?identifier=https://fhir.kemkes.go.id/id/nik|%s", cfg.FhirURL, url.QueryEscape(nik))
+		req, _ := http.NewRequest("GET", apiURL, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Satu Sehat: " + err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+
+		var result map[string]interface{}
+		json.Unmarshal(respBody, &result)
+		if resp.StatusCode != 200 {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
+			return
+		}
+
+		entries, _ := result["entry"].([]interface{})
+		if len(entries) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Data pasien dengan NIK tersebut tidak ditemukan di Satu Sehat"})
+			return
+		}
+		entry0, _ := entries[0].(map[string]interface{})
+		resource, _ := entry0["resource"].(map[string]interface{})
+
+		idPasien := satuSehatJSONStr(resource["id"])
+
+		noKtp := ""
+		if idents, ok := resource["identifier"].([]interface{}); ok {
+			for _, it := range idents {
+				m, _ := it.(map[string]interface{})
+				if strings.Contains(satuSehatJSONStr(m["system"]), "nik") {
+					noKtp = satuSehatJSONStr(m["value"])
+					break
+				}
+			}
+		}
+
+		nama := ""
+		if names, ok := resource["name"].([]interface{}); ok && len(names) > 0 {
+			m, _ := names[0].(map[string]interface{})
+			nama = satuSehatJSONStr(m["text"])
+		}
+
+		tglLahir := satuSehatJSONStr(resource["birthDate"])
+
+		gender := satuSehatJSONStr(resource["gender"])
+		switch gender {
+		case "male":
+			gender = "Laki-laki"
+		case "female":
+			gender = "Perempuan"
+		}
+
+		statusNikah := ""
+		if ms, ok := resource["maritalStatus"].(map[string]interface{}); ok {
+			if codings, ok := ms["coding"].([]interface{}); ok && len(codings) > 0 {
+				cm, _ := codings[0].(map[string]interface{})
+				statusNikah = satuSehatJSONStr(cm["display"])
+				if statusNikah == "" {
+					statusNikah = satuSehatJSONStr(cm["code"])
+				}
+			}
+			if statusNikah == "" {
+				statusNikah = satuSehatJSONStr(ms["text"])
+			}
+		}
+
+		alamat, rt, rw, kelurahan, kecamatan, kabupaten, propinsi, kodePos := "", "", "", "", "", "", "", ""
+		if addrs, ok := resource["address"].([]interface{}); ok && len(addrs) > 0 {
+			am, _ := addrs[0].(map[string]interface{})
+			if lines, ok := am["line"].([]interface{}); ok {
+				parts := []string{}
+				for _, l := range lines {
+					if s := satuSehatJSONStr(l); s != "" {
+						parts = append(parts, s)
+					}
+				}
+				alamat = strings.Join(parts, ", ")
+			}
+			kodePos = satuSehatJSONStr(am["postalCode"])
+			if exts, ok := am["extension"].([]interface{}); ok {
+				for _, e := range exts {
+					em, _ := e.(map[string]interface{})
+					eurl := satuSehatJSONStr(em["url"])
+					switch {
+					case strings.Contains(eurl, "administrativeCode"):
+						if subExts, ok := em["extension"].([]interface{}); ok {
+							for _, se := range subExts {
+								sm, _ := se.(map[string]interface{})
+								sval := satuSehatJSONStr(sm["valueCode"])
+								switch satuSehatJSONStr(sm["url"]) {
+								case "province":
+									propinsi = sval
+								case "city":
+									kabupaten = sval
+								case "district":
+									kecamatan = sval
+								case "village":
+									kelurahan = sval
+								}
+							}
+						}
+					case strings.HasSuffix(strings.ToLower(eurl), "/rt"):
+						rt = satuSehatJSONStr(em["valueString"])
+					case strings.HasSuffix(strings.ToLower(eurl), "/rw"):
+						rw = satuSehatJSONStr(em["valueString"])
+					}
+				}
+			}
+		}
+
+		noHp, email := "", ""
+		if telecoms, ok := resource["telecom"].([]interface{}); ok {
+			for _, t := range telecoms {
+				tm, _ := t.(map[string]interface{})
+				sys := satuSehatJSONStr(tm["system"])
+				val := satuSehatJSONStr(tm["value"])
+				if sys == "phone" && noHp == "" {
+					noHp = val
+				} else if sys == "email" && email == "" {
+					email = val
+				}
+			}
+		}
+
+		list := []ReferensiPasienItem{
+			{"ID Pasien", idPasien},
+			{"Nomor KTP", noKtp},
+			{"Nama", nama},
+			{"Tanggal Lahir", tglLahir},
+			{"Jenis Kelamin", gender},
+			{"Status Pernikahan", statusNikah},
+			{"Alamat Rumah", alamat},
+			{"R.T.", rt},
+			{"R.W.", rw},
+			{"Kelurahan", kelurahan},
+			{"Kecamatan", kecamatan},
+			{"Kabupaten", kabupaten},
+			{"Propinsi", propinsi},
+			{"Kode P.O.S.", kodePos},
+			{"Nomor HP", noHp},
+			{"E-Mail", email},
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list})
+	}
+}
+
+func satuSehatJSONStr(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 // ─── ServiceRequest Radiologi ─────────────────────────────────────────────────
@@ -1010,4 +1276,1047 @@ func getSatuSehatToken(cfg SatuSehatConfig) (string, error) {
 		return "", fmt.Errorf("token tidak diterima dari server")
 	}
 	return token, nil
+}
+
+// ============================================================================
+// PENGATURAN SATU SEHAT — Mapping Organisasi. Padanan RMCariHasilRadiologi-
+// style dialog (DlgMappingOrganisasiSatuSehat.java): tabel
+// satu_sehat_mapping_departemen (dep_id, id_organisasi_satusehat) SUDAH ADA
+// di skema (bukan tabel baru buatan ERMApp), INNER JOIN ke departemen persis
+// tampil() Java — cuma departemen yang SUDAH punya mapping yang muncul di
+// daftar utama; departemen yang belum di-mapping ditambahkan lewat
+// "Tambah Mapping" (lihat getDepartemenBelumMappingSatuSehat).
+// ============================================================================
+
+type MappingOrganisasiRow struct {
+	DepID                 string `json:"dep_id"`
+	NamaDepartemen        string `json:"nama_departemen"`
+	IDOrganisasiSatuSehat string `json:"id_organisasi_satusehat"`
+}
+
+// GET /api/satu-sehat/mapping-organisasi?q= — persis tampil()
+// DlgMappingOrganisasiSatuSehat.java: cari di dep_id, departemen.nama,
+// id_organisasi_satusehat; urut nama departemen.
+func getMappingOrganisasiSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+
+		query := `
+			SELECT
+				satu_sehat_mapping_departemen.dep_id,
+				departemen.nama,
+				satu_sehat_mapping_departemen.id_organisasi_satusehat
+			FROM satu_sehat_mapping_departemen
+			INNER JOIN departemen ON satu_sehat_mapping_departemen.dep_id = departemen.dep_id
+		`
+		args := []interface{}{}
+		if keyword != "" {
+			query += ` WHERE (satu_sehat_mapping_departemen.dep_id LIKE ? OR departemen.nama LIKE ? OR satu_sehat_mapping_departemen.id_organisasi_satusehat LIKE ?)`
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw, kw)
+		}
+		query += " ORDER BY departemen.nama"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MappingOrganisasiRow{}
+		for rows.Next() {
+			var r MappingOrganisasiRow
+			if err := rows.Scan(&r.DepID, &r.NamaDepartemen, &r.IDOrganisasiSatuSehat); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+// GET /api/satu-sehat/departemen-belum-mapping — daftar departemen lokal yg
+// BELUM punya baris di satu_sehat_mapping_departemen, dipakai dropdown
+// "Tambah Mapping" (departemen cuma ada segelintir, jadi dropdown biasa
+// cukup, tidak perlu search-as-you-type spt mapping poli/dokter BPJS).
+func getDepartemenBelumMappingSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rows, err := db.Query(`
+			SELECT departemen.dep_id, departemen.nama
+			FROM departemen
+			LEFT JOIN satu_sehat_mapping_departemen ON departemen.dep_id = satu_sehat_mapping_departemen.dep_id
+			WHERE satu_sehat_mapping_departemen.dep_id IS NULL
+			ORDER BY departemen.nama
+		`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type DepItem struct {
+			DepID string `json:"dep_id"`
+			Nama  string `json:"nama"`
+		}
+		list := []DepItem{}
+		for rows.Next() {
+			var d DepItem
+			if err := rows.Scan(&d.DepID, &d.Nama); err == nil {
+				list = append(list, d)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list})
+	}
+}
+
+// PUT /api/satu-sehat/mapping-organisasi/:dep_id
+func saveMappingOrganisasiSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dep := c.Param("dep_id")
+		var body struct {
+			IDOrganisasiSatuSehat string `json:"id_organisasi_satusehat"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(body.IDOrganisasiSatuSehat) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ID Organisasi Satu Sehat wajib diisi"})
+			return
+		}
+
+		// id_organisasi_satusehat UNIQUE di satu_sehat_mapping_departemen —
+		// dicek eksplisit dulu (sama alasannya dgn saveMappingPoliBpjs):
+		// INSERT ... ON DUPLICATE KEY UPDATE akan diam-diam meng-update
+		// baris departemen LAIN yang sudah pakai ID ini kalau tidak dicegat.
+		var existingDep string
+		checkErr := db.QueryRow(`SELECT dep_id FROM satu_sehat_mapping_departemen WHERE id_organisasi_satusehat = ? AND dep_id != ?`, body.IDOrganisasiSatuSehat, dep).Scan(&existingDep)
+		if checkErr == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "ID Organisasi " + body.IDOrganisasiSatuSehat + " sudah dipakai untuk departemen " + existingDep})
+			return
+		} else if checkErr != sql.ErrNoRows {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": checkErr.Error()})
+			return
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO satu_sehat_mapping_departemen (dep_id, id_organisasi_satusehat)
+			VALUES (?, ?)
+			ON DUPLICATE KEY UPDATE id_organisasi_satusehat = VALUES(id_organisasi_satusehat)
+		`, dep, body.IDOrganisasiSatuSehat)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping organisasi berhasil disimpan"})
+	}
+}
+
+// DELETE /api/satu-sehat/mapping-organisasi/:dep_id
+func deleteMappingOrganisasiSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		dep := c.Param("dep_id")
+		if _, err := db.Exec(`DELETE FROM satu_sehat_mapping_departemen WHERE dep_id = ?`, dep); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping organisasi berhasil dihapus"})
+	}
+}
+
+// ============================================================================
+// PENGATURAN SATU SEHAT — Mapping Lokasi. Padanan SatuSehatMapingLokasi.java:
+// 8 kategori lokasi (Poli/Ralan, Kamar/Ranap, Ruang OK, Ruang Lab PK, Ruang
+// Lab PA, Ruang Lab MB, Ruang Radiologi, Depo Farmasi), tabel-tabel
+// satu_sehat_mapping_lokasi_* SUDAH ADA di skema (bukan tabel baru). Tiap
+// baris lokasi WAJIB terhubung ke satu_sehat_mapping_departemen via
+// id_organisasi_satusehat (FK implisit, bukan dep_id langsung) — jadi
+// Mapping Organisasi harus diisi dulu sebelum bisa menambah mapping lokasi.
+//
+// 3 kategori (Poli/Ralan, Kamar/Ranap, Depo Farmasi) terhubung ke SATU
+// tabel referensi lokal (poliklinik / kamar+bangsal / bangsal) via kode
+// unit — tampil() Java-nya INNER JOIN + search 4 kolom (dep_id/nama
+// departemen/nama unit/kode unit). 5 kategori lain (Ruang OK/Lab PK/Lab
+// PA/Lab MB/Radiologi) TIDAK terhubung ke unit lokal apa pun (lokasi
+// global RS, biasanya cuma 1 baris) — tampil() Java-nya TANPA search sama
+// sekali, jadi endpointnya juga tidak menerima parameter pencarian.
+// ============================================================================
+
+type MappingLokasiUnitRow struct {
+	KodeUnit              string `json:"kode_unit"`
+	NamaUnit              string `json:"nama_unit"`
+	IDLokasiSatuSehat     string `json:"id_lokasi_satusehat"`
+	Longitude             string `json:"longitude"`
+	Latitude              string `json:"latitude"`
+	Altitude              string `json:"altitude"`
+	DepID                 string `json:"dep_id"`
+	NamaDepartemen        string `json:"nama_departemen"`
+	IDOrganisasiSatuSehat string `json:"id_organisasi_satusehat"`
+}
+
+type mappingLokasiUnitDef struct {
+	table        string
+	pkCol        string
+	joinSQL      string
+	kodeUnitExpr string
+	namaUnitExpr string
+	searchExprs  []string
+	unitListSQL  string
+}
+
+// Kunci map ini dipakai sbg segmen URL (:kategori) — hardcode di Go & FE,
+// bukan dari input user, jadi aman diselipkan langsung ke query string.
+var mappingLokasiUnitDefs = map[string]mappingLokasiUnitDef{
+	"ralan": {
+		table:        "satu_sehat_mapping_lokasi_ralan",
+		pkCol:        "kd_poli",
+		joinSQL:      "INNER JOIN poliklinik ON satu_sehat_mapping_lokasi_ralan.kd_poli = poliklinik.kd_poli",
+		kodeUnitExpr: "satu_sehat_mapping_lokasi_ralan.kd_poli",
+		namaUnitExpr: "poliklinik.nm_poli",
+		searchExprs:  []string{"poliklinik.nm_poli", "satu_sehat_mapping_lokasi_ralan.kd_poli"},
+		unitListSQL: `
+			SELECT poliklinik.kd_poli, poliklinik.nm_poli
+			FROM poliklinik
+			LEFT JOIN satu_sehat_mapping_lokasi_ralan ON poliklinik.kd_poli = satu_sehat_mapping_lokasi_ralan.kd_poli
+			WHERE satu_sehat_mapping_lokasi_ralan.kd_poli IS NULL
+			ORDER BY poliklinik.nm_poli
+		`,
+	},
+	"ranap": {
+		table:        "satu_sehat_mapping_lokasi_ranap",
+		pkCol:        "kd_kamar",
+		joinSQL:      "INNER JOIN kamar ON satu_sehat_mapping_lokasi_ranap.kd_kamar = kamar.kd_kamar INNER JOIN bangsal ON kamar.kd_bangsal = bangsal.kd_bangsal",
+		kodeUnitExpr: "satu_sehat_mapping_lokasi_ranap.kd_kamar",
+		namaUnitExpr: "bangsal.nm_bangsal",
+		searchExprs:  []string{"bangsal.nm_bangsal", "satu_sehat_mapping_lokasi_ranap.kd_kamar"},
+		unitListSQL: `
+			SELECT kamar.kd_kamar, CONCAT(kamar.kd_kamar, ' - ', bangsal.nm_bangsal)
+			FROM kamar
+			INNER JOIN bangsal ON kamar.kd_bangsal = bangsal.kd_bangsal
+			LEFT JOIN satu_sehat_mapping_lokasi_ranap ON kamar.kd_kamar = satu_sehat_mapping_lokasi_ranap.kd_kamar
+			WHERE satu_sehat_mapping_lokasi_ranap.kd_kamar IS NULL
+			ORDER BY bangsal.nm_bangsal, kamar.kd_kamar
+		`,
+	},
+	"depo-farmasi": {
+		table:        "satu_sehat_mapping_lokasi_depo_farmasi",
+		pkCol:        "kd_bangsal",
+		joinSQL:      "INNER JOIN bangsal ON satu_sehat_mapping_lokasi_depo_farmasi.kd_bangsal = bangsal.kd_bangsal",
+		kodeUnitExpr: "satu_sehat_mapping_lokasi_depo_farmasi.kd_bangsal",
+		namaUnitExpr: "bangsal.nm_bangsal",
+		searchExprs:  []string{"bangsal.nm_bangsal", "satu_sehat_mapping_lokasi_depo_farmasi.kd_bangsal"},
+		unitListSQL: `
+			SELECT bangsal.kd_bangsal, bangsal.nm_bangsal
+			FROM bangsal
+			LEFT JOIN satu_sehat_mapping_lokasi_depo_farmasi ON bangsal.kd_bangsal = satu_sehat_mapping_lokasi_depo_farmasi.kd_bangsal
+			WHERE satu_sehat_mapping_lokasi_depo_farmasi.kd_bangsal IS NULL
+			ORDER BY bangsal.nm_bangsal
+		`,
+	},
+}
+
+// GET /api/satu-sehat/mapping-lokasi/:kategori?q=
+func getMappingLokasiUnit(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		def, ok := mappingLokasiUnitDefs[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		keyword := strings.TrimSpace(c.Query("q"))
+
+		query := fmt.Sprintf(`
+			SELECT %s, %s, %s.id_lokasi_satusehat, %s.longitude, %s.latitude, %s.altittude,
+				satu_sehat_mapping_departemen.dep_id, departemen.nama, %s.id_organisasi_satusehat
+			FROM %s
+			%s
+			INNER JOIN satu_sehat_mapping_departemen ON %s.id_organisasi_satusehat = satu_sehat_mapping_departemen.id_organisasi_satusehat
+			INNER JOIN departemen ON satu_sehat_mapping_departemen.dep_id = departemen.dep_id
+		`, def.kodeUnitExpr, def.namaUnitExpr, def.table, def.table, def.table, def.table, def.table, def.table, def.joinSQL, def.table)
+
+		args := []interface{}{}
+		if keyword != "" {
+			conds := []string{"satu_sehat_mapping_departemen.dep_id LIKE ?", "departemen.nama LIKE ?"}
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw)
+			for _, expr := range def.searchExprs {
+				conds = append(conds, expr+" LIKE ?")
+				args = append(args, kw)
+			}
+			query += " WHERE (" + strings.Join(conds, " OR ") + ")"
+		}
+		query += " ORDER BY departemen.nama"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MappingLokasiUnitRow{}
+		for rows.Next() {
+			var r MappingLokasiUnitRow
+			if err := rows.Scan(&r.KodeUnit, &r.NamaUnit, &r.IDLokasiSatuSehat, &r.Longitude, &r.Latitude, &r.Altitude, &r.DepID, &r.NamaDepartemen, &r.IDOrganisasiSatuSehat); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+// GET /api/satu-sehat/mapping-lokasi/:kategori/unit-belum-mapping
+func getUnitBelumMappingLokasi(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		def, ok := mappingLokasiUnitDefs[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		rows, err := db.Query(def.unitListSQL)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type UnitItem struct {
+			Kode string `json:"kode"`
+			Nama string `json:"nama"`
+		}
+		list := []UnitItem{}
+		for rows.Next() {
+			var u UnitItem
+			if err := rows.Scan(&u.Kode, &u.Nama); err == nil {
+				list = append(list, u)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list})
+	}
+}
+
+type mappingLokasiBody struct {
+	IDLokasiSatuSehat     string `json:"id_lokasi_satusehat"`
+	Longitude             string `json:"longitude"`
+	Latitude              string `json:"latitude"`
+	Altitude              string `json:"altitude"`
+	IDOrganisasiSatuSehat string `json:"id_organisasi_satusehat"`
+}
+
+// cekOrganisasiSatuSehatAda — id_organisasi_satusehat di tabel lokasi TIDAK
+// punya FK constraint sungguhan ke satu_sehat_mapping_departemen (cuma
+// dihubungkan lewat INNER JOIN di query tampil()), jadi dicek manual di
+// sini supaya staf tidak bisa menyimpan mapping lokasi yg mengacu ke ID
+// organisasi yg belum pernah dibuat di Mapping Organisasi.
+func cekOrganisasiSatuSehatAda(db *sql.DB, idOrganisasi string) error {
+	var depCheck string
+	err := db.QueryRow(`SELECT dep_id FROM satu_sehat_mapping_departemen WHERE id_organisasi_satusehat = ?`, idOrganisasi).Scan(&depCheck)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("ID Organisasi Satu Sehat belum ada di Mapping Organisasi — tambahkan dulu di sana")
+	}
+	return err
+}
+
+// PUT /api/satu-sehat/mapping-lokasi/:kategori/:kode
+func saveMappingLokasiUnit(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		def, ok := mappingLokasiUnitDefs[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		kode := c.Param("kode")
+
+		var body mappingLokasiBody
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(body.IDLokasiSatuSehat) == "" || strings.TrimSpace(body.IDOrganisasiSatuSehat) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ID Lokasi dan Organisasi Satu Sehat wajib diisi"})
+			return
+		}
+		if err := cekOrganisasiSatuSehatAda(db, body.IDOrganisasiSatuSehat); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// id_lokasi_satusehat UNIQUE di sebagian tabel (ralan/ranap/depo_farmasi)
+		var existingKode string
+		checkQuery := fmt.Sprintf(`SELECT %s FROM %s WHERE id_lokasi_satusehat = ? AND %s != ?`, def.pkCol, def.table, def.pkCol)
+		checkErr := db.QueryRow(checkQuery, body.IDLokasiSatuSehat, kode).Scan(&existingKode)
+		if checkErr == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "ID Lokasi " + body.IDLokasiSatuSehat + " sudah dipakai untuk " + existingKode})
+			return
+		} else if checkErr != sql.ErrNoRows {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": checkErr.Error()})
+			return
+		}
+
+		upsertQuery := fmt.Sprintf(`
+			INSERT INTO %s (%s, id_lokasi_satusehat, longitude, latitude, altittude, id_organisasi_satusehat)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				id_lokasi_satusehat = VALUES(id_lokasi_satusehat),
+				longitude = VALUES(longitude),
+				latitude = VALUES(latitude),
+				altittude = VALUES(altittude),
+				id_organisasi_satusehat = VALUES(id_organisasi_satusehat)
+		`, def.table, def.pkCol)
+		if _, err := db.Exec(upsertQuery, kode, body.IDLokasiSatuSehat, body.Longitude, body.Latitude, body.Altitude, body.IDOrganisasiSatuSehat); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping lokasi berhasil disimpan"})
+	}
+}
+
+// DELETE /api/satu-sehat/mapping-lokasi/:kategori/:kode
+func deleteMappingLokasiUnit(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		def, ok := mappingLokasiUnitDefs[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		query := fmt.Sprintf(`DELETE FROM %s WHERE %s = ?`, def.table, def.pkCol)
+		if _, err := db.Exec(query, c.Param("kode")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping lokasi berhasil dihapus"})
+	}
+}
+
+type MappingLokasiGlobalRow struct {
+	IDLokasiSatuSehat     string `json:"id_lokasi_satusehat"`
+	Longitude             string `json:"longitude"`
+	Latitude              string `json:"latitude"`
+	Altitude              string `json:"altitude"`
+	DepID                 string `json:"dep_id"`
+	NamaDepartemen        string `json:"nama_departemen"`
+	IDOrganisasiSatuSehat string `json:"id_organisasi_satusehat"`
+}
+
+var mappingLokasiGlobalTables = map[string]string{
+	"ruang-ok":        "satu_sehat_mapping_lokasi_ruangok",
+	"ruang-lab-pk":    "satu_sehat_mapping_lokasi_ruanglab",
+	"ruang-lab-pa":    "satu_sehat_mapping_lokasi_ruanglabpa",
+	"ruang-lab-mb":    "satu_sehat_mapping_lokasi_ruanglabmb",
+	"ruang-radiologi": "satu_sehat_mapping_lokasi_ruangrad",
+}
+
+// GET /api/satu-sehat/mapping-lokasi-global/:kategori — persis tampil()
+// Java utk Ruang OK/Lab PK/Lab PA/Lab MB/Radiologi: TANPA search sama sekali.
+func getMappingLokasiGlobal(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		table, ok := mappingLokasiGlobalTables[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		query := fmt.Sprintf(`
+			SELECT %s.id_lokasi_satusehat, %s.longitude, %s.latitude, %s.altittude,
+				satu_sehat_mapping_departemen.dep_id, departemen.nama, %s.id_organisasi_satusehat
+			FROM %s
+			INNER JOIN satu_sehat_mapping_departemen ON %s.id_organisasi_satusehat = satu_sehat_mapping_departemen.id_organisasi_satusehat
+			INNER JOIN departemen ON satu_sehat_mapping_departemen.dep_id = departemen.dep_id
+		`, table, table, table, table, table, table, table)
+
+		rows, err := db.Query(query)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MappingLokasiGlobalRow{}
+		for rows.Next() {
+			var r MappingLokasiGlobalRow
+			if err := rows.Scan(&r.IDLokasiSatuSehat, &r.Longitude, &r.Latitude, &r.Altitude, &r.DepID, &r.NamaDepartemen, &r.IDOrganisasiSatuSehat); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+// POST /api/satu-sehat/mapping-lokasi-global/:kategori — PK-nya
+// id_lokasi_satusehat sendiri (bukan kode unit lokal), jadi selalu INSERT
+// baris baru, bukan upsert-by-existing-kode spt kategori unit.
+func createMappingLokasiGlobal(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		table, ok := mappingLokasiGlobalTables[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		var body mappingLokasiBody
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(body.IDLokasiSatuSehat) == "" || strings.TrimSpace(body.IDOrganisasiSatuSehat) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ID Lokasi dan Organisasi Satu Sehat wajib diisi"})
+			return
+		}
+		if err := cekOrganisasiSatuSehatAda(db, body.IDOrganisasiSatuSehat); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		insertQuery := fmt.Sprintf(`INSERT INTO %s (id_lokasi_satusehat, longitude, latitude, altittude, id_organisasi_satusehat) VALUES (?, ?, ?, ?, ?)`, table)
+		if _, err := db.Exec(insertQuery, body.IDLokasiSatuSehat, body.Longitude, body.Latitude, body.Altitude, body.IDOrganisasiSatuSehat); err != nil {
+			if strings.Contains(err.Error(), "Duplicate entry") {
+				c.JSON(http.StatusConflict, gin.H{"error": "ID Lokasi Satu Sehat sudah dipakai"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping lokasi berhasil ditambahkan"})
+	}
+}
+
+// DELETE /api/satu-sehat/mapping-lokasi-global/:kategori/:id_lokasi
+func deleteMappingLokasiGlobal(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		table, ok := mappingLokasiGlobalTables[c.Param("kategori")]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kategori tidak dikenal"})
+			return
+		}
+		query := fmt.Sprintf(`DELETE FROM %s WHERE id_lokasi_satusehat = ?`, table)
+		if _, err := db.Exec(query, c.Param("id_lokasi")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping lokasi berhasil dihapus"})
+	}
+}
+
+// ============================================================================
+// PENGATURAN SATU SEHAT — Mapping Vaksin. Padanan
+// SatuSehatMapingVaksin.java: tabel satu_sehat_mapping_vaksin SUDAH ADA di
+// skema, INNER JOIN ke databarang (item obat/alkes/BHP master — 2000+ baris,
+// jadi picker "Tambah" pakai search-as-you-type, BUKAN dropdown biasa spt
+// Mapping Organisasi/Lokasi yg cuma segelintir opsi).
+// ============================================================================
+
+type MappingVaksinRow struct {
+	VaksinCode         string `json:"vaksin_code"`
+	VaksinSystem       string `json:"vaksin_system"`
+	KodeBrng           string `json:"kode_brng"`
+	NamaBrng           string `json:"nama_brng"`
+	VaksinDisplay      string `json:"vaksin_display"`
+	RouteCode          string `json:"route_code"`
+	RouteSystem        string `json:"route_system"`
+	RouteDisplay       string `json:"route_display"`
+	DoseQuantityCode   string `json:"dose_quantity_code"`
+	DoseQuantitySystem string `json:"dose_quantity_system"`
+	DoseQuantityUnit   string `json:"dose_quantity_unit"`
+}
+
+// GET /api/satu-sehat/mapping-vaksin?q= — persis tampil()
+// SatuSehatMapingVaksin.java: cari di kode_brng/nama_brng/vaksin_code/
+// vaksin_display/route_display; urut vaksin_code.
+func getMappingVaksinSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+
+		query := `
+			SELECT
+				COALESCE(satu_sehat_mapping_vaksin.vaksin_code,''),
+				satu_sehat_mapping_vaksin.vaksin_system,
+				satu_sehat_mapping_vaksin.kode_brng,
+				databarang.nama_brng,
+				COALESCE(satu_sehat_mapping_vaksin.vaksin_display,''),
+				COALESCE(satu_sehat_mapping_vaksin.route_code,''),
+				COALESCE(satu_sehat_mapping_vaksin.route_system,''),
+				COALESCE(satu_sehat_mapping_vaksin.route_display,''),
+				COALESCE(satu_sehat_mapping_vaksin.dose_quantity_code,''),
+				COALESCE(satu_sehat_mapping_vaksin.dose_quantity_system,''),
+				COALESCE(satu_sehat_mapping_vaksin.dose_quantity_unit,'')
+			FROM satu_sehat_mapping_vaksin
+			INNER JOIN databarang ON satu_sehat_mapping_vaksin.kode_brng = databarang.kode_brng
+		`
+		args := []interface{}{}
+		if keyword != "" {
+			query += ` WHERE (satu_sehat_mapping_vaksin.kode_brng LIKE ? OR databarang.nama_brng LIKE ? OR satu_sehat_mapping_vaksin.vaksin_code LIKE ? OR satu_sehat_mapping_vaksin.vaksin_display LIKE ? OR satu_sehat_mapping_vaksin.route_display LIKE ?)`
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw, kw, kw, kw)
+		}
+		query += " ORDER BY satu_sehat_mapping_vaksin.vaksin_code"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MappingVaksinRow{}
+		for rows.Next() {
+			var r MappingVaksinRow
+			if err := rows.Scan(&r.VaksinCode, &r.VaksinSystem, &r.KodeBrng, &r.NamaBrng, &r.VaksinDisplay, &r.RouteCode, &r.RouteSystem, &r.RouteDisplay, &r.DoseQuantityCode, &r.DoseQuantitySystem, &r.DoseQuantityUnit); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+// GET /api/satu-sehat/mapping-vaksin/cari-obat?q= — search-as-you-type
+// item databarang yg BELUM ada di satu_sehat_mapping_vaksin, dipakai
+// picker "Tambah Mapping" (databarang 2000+ baris, tidak praktis pakai
+// dropdown biasa spt Mapping Organisasi/Lokasi).
+func cariObatBelumMappingVaksin(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+		if keyword == "" {
+			c.JSON(http.StatusOK, gin.H{"list": []interface{}{}})
+			return
+		}
+		rows, err := db.Query(`
+			SELECT databarang.kode_brng, databarang.nama_brng
+			FROM databarang
+			LEFT JOIN satu_sehat_mapping_vaksin ON databarang.kode_brng = satu_sehat_mapping_vaksin.kode_brng
+			WHERE satu_sehat_mapping_vaksin.kode_brng IS NULL
+				AND (databarang.kode_brng LIKE ? OR databarang.nama_brng LIKE ?)
+			ORDER BY databarang.nama_brng
+			LIMIT 30
+		`, "%"+keyword+"%", "%"+keyword+"%")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type ObatItem struct {
+			KodeBrng string `json:"kode_brng"`
+			NamaBrng string `json:"nama_brng"`
+		}
+		list := []ObatItem{}
+		for rows.Next() {
+			var o ObatItem
+			if err := rows.Scan(&o.KodeBrng, &o.NamaBrng); err == nil {
+				list = append(list, o)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list})
+	}
+}
+
+// PUT /api/satu-sehat/mapping-vaksin/:kode_brng
+func saveMappingVaksinSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		kode := c.Param("kode_brng")
+		var body struct {
+			VaksinCode         string `json:"vaksin_code"`
+			VaksinSystem       string `json:"vaksin_system"`
+			VaksinDisplay      string `json:"vaksin_display"`
+			RouteCode          string `json:"route_code"`
+			RouteSystem        string `json:"route_system"`
+			RouteDisplay       string `json:"route_display"`
+			DoseQuantityCode   string `json:"dose_quantity_code"`
+			DoseQuantitySystem string `json:"dose_quantity_system"`
+			DoseQuantityUnit   string `json:"dose_quantity_unit"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(body.VaksinCode) == "" || strings.TrimSpace(body.VaksinSystem) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Vaksin Code dan Vaksin System wajib diisi"})
+			return
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO satu_sehat_mapping_vaksin (
+				kode_brng, vaksin_code, vaksin_system, vaksin_display,
+				route_code, route_system, route_display,
+				dose_quantity_code, dose_quantity_system, dose_quantity_unit
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				vaksin_code = VALUES(vaksin_code),
+				vaksin_system = VALUES(vaksin_system),
+				vaksin_display = VALUES(vaksin_display),
+				route_code = VALUES(route_code),
+				route_system = VALUES(route_system),
+				route_display = VALUES(route_display),
+				dose_quantity_code = VALUES(dose_quantity_code),
+				dose_quantity_system = VALUES(dose_quantity_system),
+				dose_quantity_unit = VALUES(dose_quantity_unit)
+		`, kode, body.VaksinCode, body.VaksinSystem, body.VaksinDisplay, body.RouteCode, body.RouteSystem, body.RouteDisplay, body.DoseQuantityCode, body.DoseQuantitySystem, body.DoseQuantityUnit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping vaksin berhasil disimpan"})
+	}
+}
+
+// DELETE /api/satu-sehat/mapping-vaksin/:kode_brng
+func deleteMappingVaksinSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, err := db.Exec(`DELETE FROM satu_sehat_mapping_vaksin WHERE kode_brng = ?`, c.Param("kode_brng")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping vaksin berhasil dihapus"})
+	}
+}
+
+// ============================================================================
+// PENGATURAN SATU SEHAT — Mapping Obat/Alkes/BHP. Padanan
+// SatuSehatMapingObat.java: tabel satu_sehat_mapping_obat INNER JOIN
+// databarang — pola persis Mapping Vaksin (databarang 2000+ baris, picker
+// "Tambah" search-as-you-type), cuma beda kolom (KFA code/system/display,
+// form, numerator/denominator, route).
+// ============================================================================
+
+type MappingObatRow struct {
+	ObatCode          string `json:"obat_code"`
+	ObatSystem        string `json:"obat_system"`
+	KodeBrng          string `json:"kode_brng"`
+	NamaBrng          string `json:"nama_brng"`
+	ObatDisplay       string `json:"obat_display"`
+	FormCode          string `json:"form_code"`
+	FormSystem        string `json:"form_system"`
+	FormDisplay       string `json:"form_display"`
+	NumeratorCode     string `json:"numerator_code"`
+	NumeratorSystem   string `json:"numerator_system"`
+	DenominatorCode   string `json:"denominator_code"`
+	DenominatorSystem string `json:"denominator_system"`
+	RouteCode         string `json:"route_code"`
+	RouteSystem       string `json:"route_system"`
+	RouteDisplay      string `json:"route_display"`
+}
+
+// GET /api/satu-sehat/mapping-obat?q= — persis tampil()
+// SatuSehatMapingObat.java: cari di kode_brng/nama_brng/obat_code/
+// obat_display/form_display; urut obat_code.
+func getMappingObatSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+
+		query := `
+			SELECT
+				COALESCE(satu_sehat_mapping_obat.obat_code,''),
+				satu_sehat_mapping_obat.obat_system,
+				satu_sehat_mapping_obat.kode_brng,
+				databarang.nama_brng,
+				COALESCE(satu_sehat_mapping_obat.obat_display,''),
+				COALESCE(satu_sehat_mapping_obat.form_code,''),
+				COALESCE(satu_sehat_mapping_obat.form_system,''),
+				COALESCE(satu_sehat_mapping_obat.form_display,''),
+				COALESCE(satu_sehat_mapping_obat.numerator_code,''),
+				COALESCE(satu_sehat_mapping_obat.numerator_system,''),
+				COALESCE(satu_sehat_mapping_obat.denominator_code,''),
+				COALESCE(satu_sehat_mapping_obat.denominator_system,''),
+				COALESCE(satu_sehat_mapping_obat.route_code,''),
+				COALESCE(satu_sehat_mapping_obat.route_system,''),
+				COALESCE(satu_sehat_mapping_obat.route_display,'')
+			FROM satu_sehat_mapping_obat
+			INNER JOIN databarang ON satu_sehat_mapping_obat.kode_brng = databarang.kode_brng
+		`
+		args := []interface{}{}
+		if keyword != "" {
+			query += ` WHERE (satu_sehat_mapping_obat.kode_brng LIKE ? OR databarang.nama_brng LIKE ? OR satu_sehat_mapping_obat.obat_code LIKE ? OR satu_sehat_mapping_obat.obat_display LIKE ? OR satu_sehat_mapping_obat.form_display LIKE ?)`
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw, kw, kw, kw)
+		}
+		query += " ORDER BY satu_sehat_mapping_obat.obat_code"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MappingObatRow{}
+		for rows.Next() {
+			var r MappingObatRow
+			if err := rows.Scan(&r.ObatCode, &r.ObatSystem, &r.KodeBrng, &r.NamaBrng, &r.ObatDisplay, &r.FormCode, &r.FormSystem, &r.FormDisplay, &r.NumeratorCode, &r.NumeratorSystem, &r.DenominatorCode, &r.DenominatorSystem, &r.RouteCode, &r.RouteSystem, &r.RouteDisplay); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+// GET /api/satu-sehat/mapping-obat/cari-obat?q= — search-as-you-type item
+// databarang yg BELUM ada di satu_sehat_mapping_obat, dipakai picker
+// "Tambah Mapping" (sama alasan dgn cariObatBelumMappingVaksin).
+func cariBarangBelumMappingObat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+		if keyword == "" {
+			c.JSON(http.StatusOK, gin.H{"list": []interface{}{}})
+			return
+		}
+		rows, err := db.Query(`
+			SELECT databarang.kode_brng, databarang.nama_brng
+			FROM databarang
+			LEFT JOIN satu_sehat_mapping_obat ON databarang.kode_brng = satu_sehat_mapping_obat.kode_brng
+			WHERE satu_sehat_mapping_obat.kode_brng IS NULL
+				AND (databarang.kode_brng LIKE ? OR databarang.nama_brng LIKE ?)
+			ORDER BY databarang.nama_brng
+			LIMIT 30
+		`, "%"+keyword+"%", "%"+keyword+"%")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type BarangItem struct {
+			KodeBrng string `json:"kode_brng"`
+			NamaBrng string `json:"nama_brng"`
+		}
+		list := []BarangItem{}
+		for rows.Next() {
+			var o BarangItem
+			if err := rows.Scan(&o.KodeBrng, &o.NamaBrng); err == nil {
+				list = append(list, o)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list})
+	}
+}
+
+// PUT /api/satu-sehat/mapping-obat/:kode_brng
+func saveMappingObatSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		kode := c.Param("kode_brng")
+		var body struct {
+			ObatCode          string `json:"obat_code"`
+			ObatSystem        string `json:"obat_system"`
+			ObatDisplay       string `json:"obat_display"`
+			FormCode          string `json:"form_code"`
+			FormSystem        string `json:"form_system"`
+			FormDisplay       string `json:"form_display"`
+			NumeratorCode     string `json:"numerator_code"`
+			NumeratorSystem   string `json:"numerator_system"`
+			DenominatorCode   string `json:"denominator_code"`
+			DenominatorSystem string `json:"denominator_system"`
+			RouteCode         string `json:"route_code"`
+			RouteSystem       string `json:"route_system"`
+			RouteDisplay      string `json:"route_display"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(body.ObatCode) == "" || strings.TrimSpace(body.ObatSystem) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "KFA Code dan KFA System wajib diisi"})
+			return
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO satu_sehat_mapping_obat (
+				kode_brng, obat_code, obat_system, obat_display,
+				form_code, form_system, form_display,
+				numerator_code, numerator_system, denominator_code, denominator_system,
+				route_code, route_system, route_display
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				obat_code = VALUES(obat_code),
+				obat_system = VALUES(obat_system),
+				obat_display = VALUES(obat_display),
+				form_code = VALUES(form_code),
+				form_system = VALUES(form_system),
+				form_display = VALUES(form_display),
+				numerator_code = VALUES(numerator_code),
+				numerator_system = VALUES(numerator_system),
+				denominator_code = VALUES(denominator_code),
+				denominator_system = VALUES(denominator_system),
+				route_code = VALUES(route_code),
+				route_system = VALUES(route_system),
+				route_display = VALUES(route_display)
+		`, kode, body.ObatCode, body.ObatSystem, body.ObatDisplay, body.FormCode, body.FormSystem, body.FormDisplay, body.NumeratorCode, body.NumeratorSystem, body.DenominatorCode, body.DenominatorSystem, body.RouteCode, body.RouteSystem, body.RouteDisplay)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping obat berhasil disimpan"})
+	}
+}
+
+// DELETE /api/satu-sehat/mapping-obat/:kode_brng
+func deleteMappingObatSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, err := db.Exec(`DELETE FROM satu_sehat_mapping_obat WHERE kode_brng = ?`, c.Param("kode_brng")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping obat berhasil dihapus"})
+	}
+}
+
+// ============================================================================
+// PENGATURAN SATU SEHAT — Mapping Tindakan Laboratorium PK & MB. Padanan
+// SatuSehatMapingLab.java: tabel satu_sehat_mapping_lab INNER JOIN
+// template_laboratorium (id_template PK/FK) — pola sama dgn Mapping Vaksin/
+// Obat (template_laboratorium 2000+ baris, picker "Tambah" search-as-you-type),
+// cuma id_template numeric (int) bukan varchar spt kode_brng/vaksin.
+// ============================================================================
+
+type MappingLabRow struct {
+	PeriksaCode        string `json:"periksa_code"`
+	PemeriksaanSystem  string `json:"pemeriksaan_system"`
+	IDTemplate         int    `json:"id_template"`
+	DetailPemeriksaan  string `json:"detail_pemeriksaan"`
+	PemeriksaanDisplay string `json:"pemeriksaan_display"`
+	SampelCode         string `json:"sampel_code"`
+	SampelSystem       string `json:"sampel_system"`
+	SampelDisplay      string `json:"sampel_display"`
+}
+
+// GET /api/satu-sehat/mapping-lab?q= — persis tampil() SatuSehatMapingLab.java:
+// cari di id_template/Pemeriksaan/code/display; urut code.
+func getMappingLabSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+
+		query := `
+			SELECT
+				COALESCE(satu_sehat_mapping_lab.code,''),
+				satu_sehat_mapping_lab.system,
+				satu_sehat_mapping_lab.id_template,
+				template_laboratorium.Pemeriksaan,
+				COALESCE(satu_sehat_mapping_lab.display,''),
+				satu_sehat_mapping_lab.sampel_code,
+				satu_sehat_mapping_lab.sampel_system,
+				satu_sehat_mapping_lab.sampel_display
+			FROM satu_sehat_mapping_lab
+			INNER JOIN template_laboratorium ON satu_sehat_mapping_lab.id_template = template_laboratorium.id_template
+		`
+		args := []interface{}{}
+		if keyword != "" {
+			query += ` WHERE (satu_sehat_mapping_lab.id_template LIKE ? OR template_laboratorium.Pemeriksaan LIKE ? OR satu_sehat_mapping_lab.code LIKE ? OR satu_sehat_mapping_lab.display LIKE ?)`
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw, kw, kw)
+		}
+		query += " ORDER BY satu_sehat_mapping_lab.code"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MappingLabRow{}
+		for rows.Next() {
+			var r MappingLabRow
+			if err := rows.Scan(&r.PeriksaCode, &r.PemeriksaanSystem, &r.IDTemplate, &r.DetailPemeriksaan, &r.PemeriksaanDisplay, &r.SampelCode, &r.SampelSystem, &r.SampelDisplay); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
+// GET /api/satu-sehat/mapping-lab/cari-template?q= — search-as-you-type item
+// template_laboratorium yg BELUM ada di satu_sehat_mapping_lab, dipakai picker
+// "Tambah Mapping" (sama alasan dgn cariObatBelumMappingVaksin/cariBarangBelumMappingObat).
+func cariTemplateBelumMappingLab(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		keyword := strings.TrimSpace(c.Query("q"))
+		if keyword == "" {
+			c.JSON(http.StatusOK, gin.H{"list": []interface{}{}})
+			return
+		}
+		rows, err := db.Query(`
+			SELECT template_laboratorium.id_template, template_laboratorium.Pemeriksaan
+			FROM template_laboratorium
+			LEFT JOIN satu_sehat_mapping_lab ON template_laboratorium.id_template = satu_sehat_mapping_lab.id_template
+			WHERE satu_sehat_mapping_lab.id_template IS NULL
+				AND (template_laboratorium.id_template LIKE ? OR template_laboratorium.Pemeriksaan LIKE ?)
+			ORDER BY template_laboratorium.Pemeriksaan
+			LIMIT 30
+		`, "%"+keyword+"%", "%"+keyword+"%")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type TemplateItem struct {
+			IDTemplate  int    `json:"id_template"`
+			Pemeriksaan string `json:"pemeriksaan"`
+		}
+		list := []TemplateItem{}
+		for rows.Next() {
+			var o TemplateItem
+			if err := rows.Scan(&o.IDTemplate, &o.Pemeriksaan); err == nil {
+				list = append(list, o)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list})
+	}
+}
+
+// PUT /api/satu-sehat/mapping-lab/:id_template
+func saveMappingLabSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idTemplate := c.Param("id_template")
+		var body struct {
+			Code          string `json:"code"`
+			System        string `json:"system"`
+			Display       string `json:"display"`
+			SampelCode    string `json:"sampel_code"`
+			SampelSystem  string `json:"sampel_system"`
+			SampelDisplay string `json:"sampel_display"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(body.System) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Pemeriksaan System wajib diisi"})
+			return
+		}
+		if strings.TrimSpace(body.SampelCode) == "" || strings.TrimSpace(body.SampelSystem) == "" || strings.TrimSpace(body.SampelDisplay) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Sampel Code, Sampel System, dan Sampel Display wajib diisi"})
+			return
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO satu_sehat_mapping_lab (
+				id_template, code, system, display, sampel_code, sampel_system, sampel_display
+			) VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				code = VALUES(code),
+				system = VALUES(system),
+				display = VALUES(display),
+				sampel_code = VALUES(sampel_code),
+				sampel_system = VALUES(sampel_system),
+				sampel_display = VALUES(sampel_display)
+		`, idTemplate, body.Code, body.System, body.Display, body.SampelCode, body.SampelSystem, body.SampelDisplay)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping laboratorium berhasil disimpan"})
+	}
+}
+
+// DELETE /api/satu-sehat/mapping-lab/:id_template
+func deleteMappingLabSatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, err := db.Exec(`DELETE FROM satu_sehat_mapping_lab WHERE id_template = ?`, c.Param("id_template")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Mapping laboratorium berhasil dihapus"})
+	}
 }
