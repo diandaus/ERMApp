@@ -506,6 +506,7 @@ const ReferensiSection: React.FC = () => {
 // "Mapping Satu Sehat" lama) — 5 kategori lain masih placeholder,
 // menyusul dibangun satu per satu.
 type PengaturanSubTab =
+  | 'konfigurasi'
   | 'organisasi'
   | 'lokasi'
   | 'vaksin'
@@ -514,6 +515,7 @@ type PengaturanSubTab =
   | 'tindakan-laboratorium';
 
 const PENGATURAN_MENU: { key: PengaturanSubTab; label: string }[] = [
+  { key: 'konfigurasi', label: 'Konfigurasi' },
   { key: 'organisasi', label: 'Mapping Organisasi' },
   { key: 'lokasi', label: 'Mapping Lokasi' },
   { key: 'vaksin', label: 'Mapping Vaksin' },
@@ -2183,8 +2185,168 @@ const MappingLabSection: React.FC = () => {
   );
 };
 
+// ── Konfigurasi Satu Sehat — mengisi tabel satu_sehat_konfigurasi (kode/nilai:
+// org_id, client_id, client_secret, auth_url, fhir_url, is_production,
+// orthanc_url, orthanc_worklist_dir) lewat endpoint /api/satu-sehat/config
+// yg sudah ada di backend sejak lama tapi belum pernah dipasang di UI mana pun.
+// PENTING: ini TABEL BERBEDA dari "Pengaturan Bridging > Satu Sehat" di
+// Admin.tsx (yg nyimpen ke setting_bridging dgn key CLIENTIDSATUSEHAT dst) —
+// getSatuSehatToken()/getSatuSehatConfig() di backend HANYA baca dari
+// satu_sehat_konfigurasi, jadi konfigurasi wajib diisi di sini supaya token
+// Satu Sehat (dipakai Referensi Praktisi/Pasien, dll) bisa didapat.
+type SatuSehatConfigForm = {
+  org_id: string; client_id: string; client_secret: string;
+  auth_url: string; fhir_url: string; is_production: boolean;
+  orthanc_url: string; orthanc_worklist_dir: string;
+};
+
+const KonfigurasiSection: React.FC = () => {
+  const [form, setForm] = React.useState<SatuSehatConfigForm>({
+    org_id: '', client_id: '', client_secret: '', auth_url: '', fhir_url: '',
+    is_production: false, orthanc_url: '', orthanc_worklist_dir: '',
+  });
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
+
+  const fetchConfig = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/satu-sehat/config');
+      const data = await res.json();
+      setForm({
+        org_id: data.org_id || '', client_id: data.client_id || '', client_secret: data.client_secret || '',
+        auth_url: data.auth_url || '', fhir_url: data.fhir_url || '',
+        is_production: !!data.is_production,
+        orthanc_url: data.orthanc_url || '', orthanc_worklist_dir: data.orthanc_worklist_dir || '',
+      });
+    } catch {
+      // biarkan form kosong kalau gagal fetch
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { fetchConfig(); }, [fetchConfig]);
+
+  const set = (key: keyof SatuSehatConfigForm, val: string | boolean) => setForm((prev) => ({ ...prev, [key]: val }));
+
+  const handleSave = async () => {
+    if (!form.org_id.trim() || !form.client_id.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Org ID dan Client ID wajib diisi' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/satu-sehat/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan konfigurasi');
+      Swal.fire({ icon: 'success', title: 'Tersimpan', text: 'Konfigurasi Satu Sehat berhasil disimpan', timer: 1500, showConfirmButton: false });
+      fetchConfig();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const res = await fetch('/api/satu-sehat/test-connection', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Koneksi gagal');
+      Swal.fire({ icon: 'success', title: 'Koneksi Berhasil', text: `Token Satu Sehat berhasil didapat (panjang: ${data.token_length} karakter)` });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Koneksi Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</div>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 560 }}>
+      <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', fontSize: 12, color: '#92400e' }}>
+        Konfigurasi di sini terpisah dari "Admin &gt; Pengaturan Bridging &gt; Satu Sehat". Token OAuth2 Satu Sehat
+        (dipakai Referensi Praktisi/Pasien dan fitur lain) hanya dibaca dari form ini.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div>
+          <label style={labelSm}>Org ID</label>
+          <input type="text" value={form.org_id} onChange={(e) => set('org_id', e.target.value)} style={inputSm} />
+        </div>
+        <div>
+          <label style={labelSm}>Client ID</label>
+          <input type="text" value={form.client_id} onChange={(e) => set('client_id', e.target.value)} style={inputSm} />
+        </div>
+      </div>
+      <div>
+        <label style={labelSm}>Client Secret</label>
+        <input
+          type="password"
+          value={form.client_secret}
+          onChange={(e) => set('client_secret', e.target.value)}
+          style={inputSm}
+          placeholder={form.client_secret === '***' ? 'Sudah tersimpan — isi ulang untuk mengganti' : ''}
+        />
+      </div>
+      <div>
+        <label style={labelSm}>Auth URL</label>
+        <input type="text" value={form.auth_url} onChange={(e) => set('auth_url', e.target.value)} style={inputSm} placeholder="https://api-satusehat-dev.dto.kemkes.go.id/oauth2/v1" />
+      </div>
+      <div>
+        <label style={labelSm}>FHIR URL</label>
+        <input type="text" value={form.fhir_url} onChange={(e) => set('fhir_url', e.target.value)} style={inputSm} placeholder="https://api-satusehat-dev.dto.kemkes.go.id/fhir-r4/v1" />
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+        <input type="checkbox" checked={form.is_production} onChange={(e) => set('is_production', e.target.checked)} />
+        Gunakan environment Production (bukan sandbox/dev)
+      </label>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div>
+          <label style={labelSm}>Orthanc URL (opsional)</label>
+          <input type="text" value={form.orthanc_url} onChange={(e) => set('orthanc_url', e.target.value)} style={inputSm} />
+        </div>
+        <div>
+          <label style={labelSm}>Orthanc Worklist Dir (opsional)</label>
+          <input type="text" value={form.orthanc_worklist_dir} onChange={(e) => set('orthanc_worklist_dir', e.target.value)} style={inputSm} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={handleSave}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          {saving ? 'Menyimpan...' : 'Simpan'}
+        </button>
+        <button
+          type="button"
+          disabled={testing}
+          onClick={handleTest}
+          style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: testing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          {testing ? 'Menguji...' : 'Test Koneksi'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const PengaturanSection: React.FC = () => {
-  const [sub, setSub] = React.useState<PengaturanSubTab>('organisasi');
+  const [sub, setSub] = React.useState<PengaturanSubTab>('konfigurasi');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
@@ -2215,6 +2377,7 @@ const PengaturanSection: React.FC = () => {
       </div>
 
       <div style={{ flex: 1, minHeight: 0 }}>
+        {sub === 'konfigurasi' && <KonfigurasiSection />}
         {sub === 'organisasi' && <MappingOrganisasiSection />}
         {sub === 'lokasi' && <MappingLokasiSection />}
         {sub === 'vaksin' && <MappingVaksinSection />}
