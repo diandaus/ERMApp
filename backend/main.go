@@ -3640,6 +3640,7 @@ func main() {
 	r.GET("/api/satu-sehat/patient", searchPatientSatuSehat(db))
 	r.GET("/api/satu-sehat/referensi/praktisi", getReferensiPraktisiSatuSehat(db))
 	r.GET("/api/satu-sehat/referensi/pasien", getReferensiPasienSatuSehat(db))
+	r.GET("/api/satu-sehat/encounter", getEncounterCandidates(db))
 	r.GET("/api/satu-sehat/imaging-study", getImagingStudyList(db))
 	r.POST("/api/satu-sehat/imaging-study/send/*noorder", sendImagingStudy(db))
 	r.GET("/api/satu-sehat/mapping/radiologi", getMappingRadiologi(db))

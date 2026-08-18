@@ -457,6 +457,102 @@ func satuSehatJSONStr(v interface{}) string {
 	return fmt.Sprintf("%v", v)
 }
 
+// ─── Encounter ──────────────────────────────────────────────────────────────
+// Padanan tampil() dialog "SatuSehatEncounter.java" (rawat jalan): daftar
+// reg_periksa yang SUDAH BAYAR di rentang tanggal, INNER JOIN ke
+// satu_sehat_mapping_lokasi_ralan (jadi hanya poli yang SUDAH punya mapping
+// lokasi Satu Sehat yang muncul — tanpa itu Encounter tidak bisa dikirim),
+// LEFT JOIN satu_sehat_encounter utk lihat status sudah/belum terkirim.
+// Ini baru daftar/monitoring (persis tampil() yg dikasih); logika kirim
+// Encounter ke Satu Sehat (create resource) menyusul kalau referensi
+// payload-nya sudah ada.
+
+type EncounterCandidateRow struct {
+	TglRegistrasi string `json:"tgl_registrasi"`
+	NoRawat       string `json:"no_rawat"`
+	NoRM          string `json:"no_rm"`
+	NamaPasien    string `json:"nama_pasien"`
+	NoKtpPasien   string `json:"no_ktp_pasien"`
+	KodeDokter    string `json:"kode_dokter"`
+	NamaDokter    string `json:"nama_dokter"`
+	NoKtpDokter   string `json:"no_ktp_dokter"`
+	KodePoli      string `json:"kode_poli"`
+	NamaPoli      string `json:"nama_poli"`
+	IDLokasiUnit  string `json:"id_lokasi_unit"`
+	SttsRawat     string `json:"stts_rawat"`
+	SttsLanjut    string `json:"stts_lanjut"`
+	TanggalPulang string `json:"tanggal_pulang"`
+	IDEncounter   string `json:"id_encounter"`
+}
+
+// GET /api/satu-sehat/encounter?tgl_dari=&tgl_sampai=&q= — persis tampil()
+// SatuSehatEncounter.java (rawat jalan).
+func getEncounterCandidates(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tglDari := strings.TrimSpace(c.Query("tgl_dari"))
+		tglSampai := strings.TrimSpace(c.Query("tgl_sampai"))
+		if tglDari == "" || tglSampai == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Tanggal dari dan sampai wajib diisi"})
+			return
+		}
+		keyword := strings.TrimSpace(c.Query("q"))
+
+		query := `
+			SELECT
+				reg_periksa.tgl_registrasi,
+				reg_periksa.no_rawat,
+				reg_periksa.no_rkm_medis,
+				pasien.nm_pasien,
+				IFNULL(pasien.no_ktp,''),
+				reg_periksa.kd_dokter,
+				pegawai.nama,
+				IFNULL(pegawai.no_ktp,''),
+				reg_periksa.kd_poli,
+				poliklinik.nm_poli,
+				IFNULL(satu_sehat_mapping_lokasi_ralan.id_lokasi_satusehat,''),
+				reg_periksa.stts,
+				reg_periksa.status_lanjut,
+				CONCAT(reg_periksa.tgl_registrasi,'T',reg_periksa.jam_reg,'+07:00') AS pulang,
+				IFNULL(satu_sehat_encounter.id_encounter,'')
+			FROM reg_periksa
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			INNER JOIN pegawai ON pegawai.nik = reg_periksa.kd_dokter
+			INNER JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
+			INNER JOIN satu_sehat_mapping_lokasi_ralan ON satu_sehat_mapping_lokasi_ralan.kd_poli = poliklinik.kd_poli
+			LEFT JOIN satu_sehat_encounter ON satu_sehat_encounter.no_rawat = reg_periksa.no_rawat
+			WHERE reg_periksa.status_bayar = 'Sudah Bayar' AND reg_periksa.tgl_registrasi BETWEEN ? AND ?
+		`
+		args := []interface{}{tglDari, tglSampai}
+		if keyword != "" {
+			query += ` AND (reg_periksa.no_rawat LIKE ? OR reg_periksa.no_rkm_medis LIKE ? OR pasien.nm_pasien LIKE ? OR pasien.no_ktp LIKE ? OR pegawai.nama LIKE ? OR poliklinik.nm_poli LIKE ? OR reg_periksa.stts LIKE ? OR reg_periksa.status_lanjut LIKE ?)`
+			kw := "%" + keyword + "%"
+			for i := 0; i < 8; i++ {
+				args = append(args, kw)
+			}
+		}
+		query += " ORDER BY reg_periksa.tgl_registrasi DESC, reg_periksa.jam_reg DESC"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []EncounterCandidateRow{}
+		for rows.Next() {
+			var r EncounterCandidateRow
+			if err := rows.Scan(&r.TglRegistrasi, &r.NoRawat, &r.NoRM, &r.NamaPasien, &r.NoKtpPasien,
+				&r.KodeDokter, &r.NamaDokter, &r.NoKtpDokter, &r.KodePoli, &r.NamaPoli, &r.IDLokasiUnit,
+				&r.SttsRawat, &r.SttsLanjut, &r.TanggalPulang, &r.IDEncounter); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
 // ─── ServiceRequest Radiologi ─────────────────────────────────────────────────
 
 // POST /api/satu-sehat/servicerequest-radiologi/send/:noorder

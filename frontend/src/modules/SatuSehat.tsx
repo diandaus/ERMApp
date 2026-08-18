@@ -499,6 +499,128 @@ const ReferensiSection: React.FC = () => {
   );
 };
 
+// ── Encounter — padanan tampil() SatuSehatEncounter.java (rawat jalan):
+// daftar reg_periksa SUDAH BAYAR di rentang tanggal yg poli-nya SUDAH punya
+// mapping lokasi Satu Sehat (kalau belum, tidak akan muncul di daftar —
+// harus dimapping dulu di Pengaturan > Mapping Lokasi). Kolom "ID Encounter"
+// nunjukin status: kosong = belum dikirim, terisi = sudah. Ini baru daftar/
+// monitoring; tombol "Kirim ke Satu Sehat" (create resource Encounter)
+// menyusul kalau referensi payload FHIR-nya sudah ada.
+type EncounterCandidateRow = {
+  tgl_registrasi: string; no_rawat: string; no_rm: string; nama_pasien: string; no_ktp_pasien: string;
+  kode_dokter: string; nama_dokter: string; no_ktp_dokter: string; kode_poli: string; nama_poli: string;
+  id_lokasi_unit: string; stts_rawat: string; stts_lanjut: string; tanggal_pulang: string; id_encounter: string;
+};
+
+const formatTglJamEncounter = (iso: string): string => {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const todayISO = (): string => new Date().toISOString().slice(0, 10);
+
+const EncounterSection: React.FC = () => {
+  const [tglDari, setTglDari] = React.useState(todayISO());
+  const [tglSampai, setTglSampai] = React.useState(todayISO());
+  const [search, setSearch] = React.useState('');
+  const [list, setList] = React.useState<EncounterCandidateRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  const fetchList = React.useCallback(async (dari: string, sampai: string, q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/encounter?tgl_dari=${dari}&tgl_sampai=${sampai}&q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memuat daftar Encounter');
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch (err) {
+      setList([]);
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(tglDari, tglSampai, search), 300);
+    return () => clearTimeout(t);
+  }, [tglDari, tglSampai, search, fetchList]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div>
+          <label style={labelSm}>Tanggal Dari</label>
+          <input type="date" value={tglDari} onChange={(e) => setTglDari(e.target.value)} style={inputSm} />
+        </div>
+        <div>
+          <label style={labelSm}>Tanggal Sampai</label>
+          <input type="date" value={tglSampai} onChange={(e) => setTglSampai(e.target.value)} style={inputSm} />
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={labelSm}>Cari</label>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="No.Rawat, No.RM, nama pasien/dokter, poli, status..."
+            style={inputSm}
+          />
+        </div>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              {['P', 'Tanggal Registrasi', 'No.Rawat', 'No.RM', 'Nama Pasien', 'No.KTP Pasien', 'Kode Dokter', 'Nama Dokter', 'No.KTP Dokter', 'Kode Poli', 'Nama Poli/Unit', 'ID Lokasi Unit', 'Stts Rawat', 'Stts Lanjut', 'Tanggal Pulang', 'ID Encounter'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={16} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={16} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data pada rentang tanggal ini (pastikan poli sudah punya Mapping Lokasi)</td></tr>
+            ) : (
+              list.map((row, i) => (
+                <tr key={row.no_rawat} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#9ca3af', textAlign: 'center' }}>{i + 1}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{formatTglJamEncounter(row.tgl_registrasi)}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827', whiteSpace: 'nowrap' }}>{row.no_rawat}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.no_rm}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.nama_pasien}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.no_ktp_pasien}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kode_dokter}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.nama_dokter}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.no_ktp_dokter}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kode_poli}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.nama_poli}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.id_lokasi_unit}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.stts_rawat}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.stts_lanjut}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{formatTglJamEncounter(row.tanggal_pulang)}</td>
+                  <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>
+                    {row.id_encounter ? (
+                      <span style={{ padding: '3px 8px', borderRadius: 999, background: '#ecfdf5', color: '#065f46', fontSize: 11, fontWeight: 600 }}>{row.id_encounter}</span>
+                    ) : (
+                      <span style={{ padding: '3px 8px', borderRadius: 999, background: '#fef2f2', color: '#991b1b', fontSize: 11, fontWeight: 600 }}>Belum Terkirim</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ── Pengaturan Satu Sehat — 6 kategori mapping lokal <-> referensi Satu
 // Sehat, tab horizontal terpisah dari sidebar utama (persis pola tab
 // header di MappingSatuSehatView). "Mapping Tindakan Radiologi" reuse
@@ -2568,7 +2690,7 @@ export const SatuSehatView: React.FC<SatuSehatViewProps> = ({ onBack }) => {
         >
           {activeTab === 'dashboard' && <Placeholder title="Dashboard Satu Sehat" />}
           {activeTab === 'referensi' && <ReferensiSection />}
-          {activeTab === 'encounter' && <Placeholder title="Encounter" />}
+          {activeTab === 'encounter' && <EncounterSection />}
           {activeTab === 'condition' && <Placeholder title="Condition" />}
           {activeTab === 'observation' && <Placeholder title="Observation" />}
           {activeTab === 'procedure' && <Placeholder title="Procedure" />}
