@@ -1316,19 +1316,23 @@ export const ModalPengajuanSEP: React.FC<ModalPengajuanSEPProps> = ({ editingIte
                   onChange={(v) => setForm((p) => ({ ...p, tujuankunjungan: v }))}
                   options={[
                     { value: '0', label: '0. Normal' },
-                    { value: '1', label: '1. Konsul Dokter Lain' },
-                    { value: '2', label: '2. Prosedur / Tindakan Lanjutan' },
+                    { value: '1', label: '1. Prosedur' },
+                    { value: '2', label: '2. Konsul Dokter' },
                   ]}
                 />
               </Row>
+              {/* flagProcedure — wajib "" kalau Tujuan Kunjungan = "0" (spec
+                  resmi VClaim), field lain (Penunjang/Asesmen Pelayanan) jg
+                  sama aturannya, tapi tidak dipaksa reset di sini supaya
+                  staf yg sudah isi manual sebelumnya tidak tiba2 hilang. */}
               <Row label="Flag Prosedur">
                 <PillSelect
                   value={form.flagprosedur}
                   onChange={(v) => setForm((p) => ({ ...p, flagprosedur: v }))}
                   options={[
                     { value: '', label: '-' },
-                    { value: '0', label: '0. Tidak Ada Prosedur' },
-                    { value: '1', label: '1. Ada Prosedur' },
+                    { value: '0', label: '0. Prosedur Tidak Berkelanjutan' },
+                    { value: '1', label: '1. Prosedur dan Terapi Berkelanjutan' },
                   ]}
                 />
               </Row>
@@ -1336,14 +1340,35 @@ export const ModalPengajuanSEP: React.FC<ModalPengajuanSEPProps> = ({ editingIte
                 <PillSelect
                   value={form.penunjang}
                   onChange={(v) => setForm((p) => ({ ...p, penunjang: v }))}
-                  options={[{ value: '', label: '-' }, ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Kode ${i + 1}` }))]}
+                  options={[
+                    { value: '', label: '-' },
+                    { value: '1', label: '1. Radioterapi' },
+                    { value: '2', label: '2. Kemoterapi' },
+                    { value: '3', label: '3. Rehabilitasi Medik' },
+                    { value: '4', label: '4. Rehabilitasi Psikososial' },
+                    { value: '5', label: '5. Transfusi Darah' },
+                    { value: '6', label: '6. Pelayanan Gigi' },
+                    { value: '7', label: '7. Laboratorium' },
+                    { value: '8', label: '8. USG' },
+                    { value: '9', label: '9. Farmasi' },
+                    { value: '10', label: '10. Lain-Lain' },
+                    { value: '11', label: '11. MRI' },
+                    { value: '12', label: '12. HEMODIALISA' },
+                  ]}
                 />
               </Row>
               <Row label="Asesmen Pelayanan">
                 <PillSelect
                   value={form.asesmenpelayanan}
                   onChange={(v) => setForm((p) => ({ ...p, asesmenpelayanan: v }))}
-                  options={[{ value: '', label: '-' }, ...Array.from({ length: 5 }, (_, i) => ({ value: String(i + 1), label: `Kode ${i + 1}` }))]}
+                  options={[
+                    { value: '', label: '-' },
+                    { value: '1', label: '1. Poli spesialis tidak tersedia pada hari sebelumnya' },
+                    { value: '2', label: '2. Jam Poli telah berakhir pada hari sebelumnya' },
+                    { value: '3', label: '3. Dokter Spesialis yang dimaksud tidak praktek pada hari sebelumnya' },
+                    { value: '4', label: '4. Atas Instruksi RS' },
+                    { value: '5', label: '5. Tujuan Kontrol' },
+                  ]}
                 />
               </Row>
               <Row label="DPJP Layanan">

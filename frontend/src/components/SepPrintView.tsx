@@ -17,16 +17,16 @@ import { SepItem } from './ModalPengajuanSEP';
 //  - bridging_sep lokal (GET /api/bridging/sep/by-no-rawat/:no_rawat).
 //  - /api/admin/settings utk nama RS (dipakai di judul & butir consent b).
 //  - Cek peserta LIVE ke BPJS (GET /api/bridging/peserta/nokartu/:no_kartu)
-//    khusus utk "Kls.Hak" (hakKelas — kelas hak peserta sesuai BPJS,
-//    BEDA dari Kls.Rawat/klsrawat yg kelas kamar aktual dipakai) — supaya
-//    datanya otoritatif dari BPJS, bukan dikarang. Gagal → tampil "-".
+//    khusus utk "Kls.Hak" (hakKelas — kelas hak peserta sesuai BPJS) —
+//    supaya datanya otoritatif dari BPJS, bukan dikarang. Gagal → tampil "-".
 //
 // Batasan jujur (field yg TIDAK ada sumber datanya, ditampilkan "-"):
 //  - Poli Perujuk — tidak ada kolom/endpoint yg kita punya utk ini (beda
 //    dari Poli Tujuan/nmpolitujuan yg sudah ada).
-//  - Jns.Kunjungan — ditampilkan dari tujuankunjungan/flagprosedur yg
-//    SUDAH tersimpan di form SEP (bukan teks referensi resmi BPJS persis,
-//    krn belum ada endpoint referensi utk ini di app).
+//  - Kls.Rawat — belum jelas sumber datanya yg benar (BEDA dari Kls.Hak/
+//    hakKelas di atas), jadi selalu "-" dulu sampai ada kejelasan.
+// Jns.Kunjungan diambil dari field "Asesmen Pelayanan" (sep.asesmenpelayanan)
+// yg sudah tersimpan di form SEP.
 // Logo BPJS: backend/uploads/images/bpjslogo.png (di-serve di /images/...).
 
 type SepPrintViewProps = {
@@ -46,15 +46,13 @@ const jnsRawatLabel = (v: string) => (v === '1' ? 'R.Inap' : 'R.Jalan');
 const kelaminLabel = (v: string) => (v === 'L' ? 'Laki-laki' : v === 'P' ? 'Perempuan' : '-');
 const isoDate = (v: string) => (v ? v.split('T')[0] : '-');
 
-const tujuanKunjunganLabel = (v: string) => {
-  if (v === '1') return 'Konsul Dokter Lain';
-  if (v === '2') return 'Prosedur/Tindakan Lanjutan';
-  return '';
-};
-const flagProsedurLabel = (v: string) => {
-  if (v === '1') return 'Ada Prosedur';
-  if (v === '0') return 'Tidak Ada Prosedur';
-  return '';
+// Sinkron dgn options PillSelect "Asesmen Pelayanan" di ModalPengajuanSEP.tsx.
+const ASESMEN_PELAYANAN_LABEL: Record<string, string> = {
+  '1': 'Poli spesialis tidak tersedia pada hari sebelumnya',
+  '2': 'Jam Poli telah berakhir pada hari sebelumnya',
+  '3': 'Dokter Spesialis yang dimaksud tidak praktek pada hari sebelumnya',
+  '4': 'Atas Instruksi RS',
+  '5': 'Tujuan Kontrol',
 };
 
 export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) => {
@@ -84,8 +82,8 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
           const settingsData = await settingsRes.json();
           if (!cancelled) setNamaInstansi(settingsData?.nama_instansi || '');
         }
-        if (sepData?.nama_pasien) {
-          const dataUrl = await QRCode.toDataURL(sepData.nama_pasien, { width: 90, margin: 1 });
+        if (sepData?.no_kartu) {
+          const dataUrl = await QRCode.toDataURL(sepData.no_kartu, { width: 90, margin: 1 });
           if (!cancelled) setQrDataUrl(dataUrl);
         }
         if (sepData?.no_kartu && sepData?.tglsep) {
@@ -115,9 +113,6 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
   }, [noRawat]);
 
   const handlePrint = () => window.print();
-
-  const jnsKunjungan1 = sep ? tujuanKunjunganLabel(sep.tujuankunjungan) : '';
-  const jnsKunjungan2 = sep ? flagProsedurLabel(sep.flagprosedur) : '';
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10010, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '20px 0' }}>
@@ -180,7 +175,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ width: '54%', verticalAlign: 'top', paddingRight: 20 }}>
+                  <td style={{ width: '60%', verticalAlign: 'top', paddingRight: 20 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <Row label="No.SEP" value={sep.no_sep} />
@@ -200,24 +195,34 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                         <Row label="Catatan" value={sep.catatan || '-'} />
                       </tbody>
                     </table>
+
+                    {/* Persetujuan / disclaimer */}
+                    <div style={{ fontSize: 8, lineHeight: 1.5, marginTop: 12 }}>
+                      *Saya menyetujui BPJS Kesehatan untuk :<br />
+                      a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
+                      &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
+                      b. memberikan akses informasi medis atau riwayat pelayanan kepada dokter/tenaga medis pada {namaInstansi}<br />
+                      &nbsp;&nbsp;&nbsp;untuk kepentingan pemeliharaan kesehatan, pengobatan, penyembuhan, dan perawatan Pasien<br />
+                      *Saya mengetahui dan memahami :<br />
+                      a. Rumah Sakit dapat melakukan koordinasi dengan PT Jasa Raharja / PT Taspen / PT ASABRI / BPJS Ketenagakerjaan atau<br />
+                      &nbsp;&nbsp;&nbsp;Penjamin lainnya, jika Peserta merupakan pasien yang mengalami kecelakaan lalulintas dan / atau kecelakaan kerja<br />
+                      b. SEP bukan sebagai bukti penjaminan peserta<br />
+                      <br />
+                      ** Dengan tampilnya luaran SEP elektronik ini merupakan hasil validasi terhadap eligibilitas Pasien secara elektronik<br />
+                      &nbsp;&nbsp;(validasi finger print atau biometrik / sistem validasi lain)<br />
+                      &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
+                      &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
+                    </div>
                   </td>
 
-                  <td style={{ width: '46%', verticalAlign: 'top' }}>
+                  <td style={{ width: '40%', verticalAlign: 'top', paddingLeft: 12 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <Row label="Peserta" value={sep.peserta || '-'} labelWidth={110} />
                         <Row label="Jns.Rawat" value={jnsRawatLabel(sep.jnspelayanan)} labelWidth={110} />
                         <Row
                           label="Jns.Kunjungan"
-                          value={
-                            jnsKunjungan1 || jnsKunjungan2 ? (
-                              <>
-                                {jnsKunjungan1 && <>- {jnsKunjungan1}</>}
-                                {jnsKunjungan1 && jnsKunjungan2 && <br />}
-                                {jnsKunjungan2 && <>- {jnsKunjungan2}</>}
-                              </>
-                            ) : '-'
-                          }
+                          value={sep.asesmenpelayanan ? `- ${ASESMEN_PELAYANAN_LABEL[sep.asesmenpelayanan] || sep.asesmenpelayanan}` : '-'}
                           labelWidth={110}
                         />
                       </tbody>
@@ -226,7 +231,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                       <tbody>
                         <Row label="Poli Perujuk" value="-" labelWidth={110} />
                         <Row label="Kls.Hak" value={klsHak} labelWidth={110} />
-                        <Row label="Kls.Rawat" value={sep.klsrawat ? `Kelas ${sep.klsrawat}` : '-'} labelWidth={110} />
+                        <Row label="Kls.Rawat" value="-" labelWidth={110} />
                         <Row label="Penjamin" value="" labelWidth={110} />
                       </tbody>
                     </table>
@@ -250,24 +255,6 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                 </tr>
               </tbody>
             </table>
-
-            {/* Persetujuan / disclaimer */}
-            <div style={{ fontSize: 10, lineHeight: 1.5, marginTop: 12 }}>
-              *Saya menyetujui BPJS Kesehatan untuk :<br />
-              a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
-              &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
-              b. memberikan akses informasi medis atau riwayat pelayanan kepada dokter/tenaga medis pada {namaInstansi}<br />
-              &nbsp;&nbsp;&nbsp;untuk kepentingan pemeliharaan kesehatan, pengobatan, penyembuhan, dan perawatan Pasien<br />
-              *Saya mengetahui dan memahami :<br />
-              a. Rumah Sakit dapat melakukan koordinasi dengan PT Jasa Raharja / PT Taspen / PT ASABRI / BPJS Ketenagakerjaan atau<br />
-              &nbsp;&nbsp;&nbsp;Penjamin lainnya, jika Peserta merupakan pasien yang mengalami kecelakaan lalulintas dan / atau kecelakaan kerja<br />
-              b. SEP bukan sebagai bukti penjaminan peserta<br />
-              <br />
-              ** Dengan tampilnya luaran SEP elektronik ini merupakan hasil validasi terhadap eligibilitas Pasien secara elektronik<br />
-              &nbsp;&nbsp;(validasi finger print atau biometrik / sistem validasi lain)<br />
-              &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
-              &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
-            </div>
           </div>
         )}
       </div>
