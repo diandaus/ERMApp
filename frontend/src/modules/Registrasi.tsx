@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import { ModalRegistrasi } from '../components/ModalRegistrasi';
 import { ModalPengajuanSEP, type SepItem } from '../components/ModalPengajuanSEP';
 import { HistoriPelayananBpjsModal } from '../components/HistoriPelayananBpjsModal';
+import { SepPrintView } from '../components/SepPrintView';
 import { localDateStr } from '../utils/date';
 
 type Patient = {
@@ -81,6 +82,10 @@ export const RegistrasiView: React.FC = () => {
   // pelayanan BPJS 90 hari terakhir (live VClaim by No. Kartu), BUKAN
   // riwayat kunjungan pasien lokal.
   const [historiPelayananPatient, setHistoriPelayananPatient] = React.useState<Patient | null>(null);
+  // sepPrintNoRawat — "[BPJS] > Lihat SEP": tampilkan Surat Elegibilitas
+  // Peserta (SEP) yg SUDAH terbit (hanya aktif kalau patient.no_sep
+  // terisi), beda dari "Cetak SEP" yg buka form Input/Update.
+  const [sepPrintNoRawat, setSepPrintNoRawat] = React.useState<string | null>(null);
   // sepModal — buka ModalPengajuanSEP (form Input/Update SEP yg sama dgn modul
   // Bridging > SEP): mode 'edit' kalau kunjungan ini SUDAH punya SEP
   // (patient.no_sep terisi, data lengkap di-fetch dulu by no_rawat), mode
@@ -171,6 +176,10 @@ export const RegistrasiView: React.FC = () => {
           // No. Kartu BPJS dari master pasien (pasien.no_peserta, diisi staf
           // saat Pendaftaran) — supaya tidak perlu ketik ulang di form SEP.
           no_kartu: patient.no_kartu || '',
+          // No. Telp dari master pasien (pasien.no_tlp) — sebelumnya field
+          // ini selalu kosong di form SEP walau datanya sudah ada di baris
+          // Pendaftaran.
+          notelep: patient.no_tlp || '',
           // Pendaftaran = selalu kunjungan rawat jalan (Java kirim literal
           // "2. Ralan" ke setNoRm2 dari MnSEPActionPerformed).
           jnspelayanan: '2',
@@ -901,6 +910,20 @@ export const RegistrasiView: React.FC = () => {
                                   </svg>
                                   <span>Riwayat Kunjungan</span>
                                 </button>
+                                {patient.no_sep && (
+                                  <button
+                                    onClick={() => { setShowBpjsDropdown(null); setSepPrintNoRawat(patient.no_rawat); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', background: 'transparent', color: '#374151', fontSize: 12, textAlign: 'left', cursor: 'pointer' }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#2563eb'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151'; }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                      <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                    <span>Lihat SEP</span>
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -936,6 +959,9 @@ export const RegistrasiView: React.FC = () => {
           onClose={() => setSepModal(null)}
           onSaved={fetchPatients}
         />
+      )}
+      {sepPrintNoRawat && (
+        <SepPrintView noRawat={sepPrintNoRawat} onClose={() => setSepPrintNoRawat(null)} />
       )}
     </>
   );
