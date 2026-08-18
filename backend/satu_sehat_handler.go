@@ -161,7 +161,7 @@ func searchPatientSatuSehat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		apiURL := fmt.Sprintf("%s/Patient?identifier=https://fhir.kemkes.go.id/id/nik|%s", cfg.FhirURL, url.QueryEscape(nik))
+		apiURL := fmt.Sprintf("%s/Patient?identifier=%s", cfg.FhirURL, url.QueryEscape("https://fhir.kemkes.go.id/id/nik|"+nik))
 		req, _ := http.NewRequest("GET", apiURL, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 
@@ -217,7 +217,7 @@ func getReferensiPraktisiSatuSehat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		apiURL := fmt.Sprintf("%s/Practitioner?identifier=https://fhir.kemkes.go.id/id/nik|%s", cfg.FhirURL, url.QueryEscape(nik))
+		apiURL := fmt.Sprintf("%s/Practitioner?identifier=%s", cfg.FhirURL, url.QueryEscape("https://fhir.kemkes.go.id/id/nik|"+nik))
 		req, _ := http.NewRequest("GET", apiURL, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 
@@ -290,7 +290,7 @@ func getReferensiPasienSatuSehat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		apiURL := fmt.Sprintf("%s/Patient?identifier=https://fhir.kemkes.go.id/id/nik|%s", cfg.FhirURL, url.QueryEscape(nik))
+		apiURL := fmt.Sprintf("%s/Patient?identifier=%s", cfg.FhirURL, url.QueryEscape("https://fhir.kemkes.go.id/id/nik|"+nik))
 		req, _ := http.NewRequest("GET", apiURL, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 
