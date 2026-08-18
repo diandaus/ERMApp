@@ -3,51 +3,64 @@ import QRCode from 'qrcode';
 import JsBarcode from 'jsbarcode';
 import { SepItem, formatTgl } from './ModalPengajuanSEP';
 
-// SepPrintView — "Surat Elegibilitas Peserta" (SEP), layout 2 kolom persis
-// contoh cetakan resmi yang dipasangkan user. Dipicu tombol "Lihat SEP" di
-// dropdown [BPJS] Registrasi/IGD, hanya aktif kalau kunjungan itu SUDAH
-// punya SEP (patient.no_sep terisi).
+// SepPrintView — "Surat Elegibilitas Peserta" (SEP), padanan PERSIS
+// template cetak SEP asli (fieldset "cetaksep") yang dipasangkan user:
+// single-column, label:value berpasangan per baris (sebagian baris 2
+// pasang label:value), PRB bold-underline di atas barcode CODE39, QR di
+// pojok kanan bawah berisi teks "No.SEP: {no_sep}", tombol Cetak/Tutup.
+//
+// Dipicu tombol "Lihat SEP" (sebelah tombol [BPJS]) di Registrasi/IGD,
+// hanya aktif kalau kunjungan itu SUDAH punya SEP (patient.no_sep terisi).
 //
 // Sumber data:
-//  - bridging_sep lokal (GET /api/bridging/sep/by-no-rawat/:no_rawat) utk
-//    sebagian besar field + no_reg (reg_periksa, ditambahkan backend).
+//  - bridging_sep lokal (GET /api/bridging/sep/by-no-rawat/:no_rawat).
 //  - /api/admin/settings utk nama RS.
 //  - Cek peserta LIVE ke BPJS (GET /api/bridging/peserta/nokartu/:no_kartu,
-//    endpoint yg sama dipakai ModalPengajuanSEP) khusus utk "Kls. Hak" &
-//    "Potensi PRB" — supaya datanya OTORITATIF dari BPJS, bukan dikarang.
-//    Kalau gagal (mis. no. kartu tidak valid / BPJS unreachable), kedua
-//    field ini ditampilkan "-" alih2 bikin seluruh halaman gagal tampil.
+//    endpoint yg sama dipakai ModalPengajuanSEP) khusus utk "potensi_prb"
+//    (informasi.prolanisPRB/prb) — supaya datanya otoritatif dari BPJS,
+//    bukan dikarang. Kalau gagal, baris itu ditampilkan kosong (spt
+//    isset_or() di template asli kalau datanya tidak ada).
 //
-// Batasan jujur yg TIDAK bisa diisi krn datanya tidak kita punya:
-//  - Jns.Kunjungan (mis. "Konsultasi dokter(pertama)") & Poli Perujuk —
-//    tidak ada sumber lokal maupun endpoint BPJS yg sudah kita pakai utk
-//    ini, ditampilkan "-".
-//  - Barcode (No. SEP, CODE39 via lib 'jsbarcode') & QR (No. SEP, lib
-//    'qrcode') di-generate LOKAL, bukan barcode/QR resmi BPJS (yg formatnya
-//    tidak didokumentasikan/tidak kita punya endpoint-nya).
-//  - Logo BPJS: frontend/public/images/bpjslogo.png (sudah ada).
+// Batasan jujur: barcode CODE39 (lib 'jsbarcode') & QR (lib 'qrcode')
+// di-generate LOKAL di browser — bukan dari {?=url()?}/api/barcode/...
+// atau $data_sep.qrCode (proxy/endpoint BPJS khusus yg tidak kita punya).
+// batas_rujukan (akhir masa berlaku) juga tidak tersimpan lokal, jadi
+// ditampilkan "-" alih2 dikarang.
+// Logo BPJS: backend/uploads/images/bpjslogo.png (di-serve di /images/...).
 
 type SepPrintViewProps = {
   noRawat: string;
   onClose: () => void;
 };
 
-const Row: React.FC<{ label: string; value: React.ReactNode; labelWidth?: number }> = ({ label, value, labelWidth = 92 }) => (
+const Row: React.FC<{
+  label: string;
+  value: React.ReactNode;
+  label2?: string;
+  value2?: React.ReactNode;
+}> = ({ label, value, label2, value2 }) => (
   <tr>
-    <td style={{ width: labelWidth, padding: '2px 0', verticalAlign: 'top', whiteSpace: 'nowrap' }}>{label}</td>
-    <td style={{ width: 10, padding: '2px 0', verticalAlign: 'top' }}>:</td>
-    <td style={{ padding: '2px 0', verticalAlign: 'top' }}>{value}</td>
+    <td style={{ width: 170, padding: '2px 0', verticalAlign: 'top' }}>{label}</td>
+    <td style={{ width: 12, padding: '2px 0', verticalAlign: 'top' }}>:</td>
+    <td style={{ padding: '2px 0', verticalAlign: 'top', width: label2 ? 300 : undefined }}>{value}</td>
+    {label2 !== undefined && (
+      <>
+        <td style={{ width: 90, padding: '2px 0', verticalAlign: 'top' }}>{label2}</td>
+        <td style={{ width: 12, padding: '2px 0', verticalAlign: 'top' }}>:</td>
+        <td style={{ padding: '2px 0', verticalAlign: 'top' }}>{value2}</td>
+      </>
+    )}
   </tr>
 );
 
-const jnsRawatLabel = (v: string) => (v === '1' ? 'Rawat Inap' : 'Rawat Jalan');
+const jnsRawatLabel = (v: string) => (v === '1' ? '1. R. Inap' : '2. R.Jalan');
+const cobLabel = (v?: string) => (v?.trim().startsWith('1') ? '1. Ya' : '0. Tidak');
 
 export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) => {
   const [sep, setSep] = React.useState<SepItem | null>(null);
   const [namaInstansi, setNamaInstansi] = React.useState('');
   const [qrDataUrl, setQrDataUrl] = React.useState('');
-  const [klsHak, setKlsHak] = React.useState('-');
-  const [potensiPrb, setPotensiPrb] = React.useState('-');
+  const [potensiPrb, setPotensiPrb] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const barcodeRef = React.useRef<SVGSVGElement>(null);
@@ -71,7 +84,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
           if (!cancelled) setNamaInstansi(settingsData?.nama_instansi || '');
         }
         if (sepData?.no_sep) {
-          const dataUrl = await QRCode.toDataURL(sepData.no_sep, { width: 110, margin: 1 });
+          const dataUrl = await QRCode.toDataURL(`No.SEP: ${sepData.no_sep}`, { width: 90, margin: 1 });
           if (!cancelled) setQrDataUrl(dataUrl);
         }
         if (sepData?.no_kartu && sepData?.tglsep) {
@@ -80,7 +93,6 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
             .then((data) => {
               if (cancelled || !data) return;
               const p = data.peserta?.peserta ?? data.peserta ?? {};
-              if (p.hakKelas?.keterangan || p.hakKelas?.kode) setKlsHak(p.hakKelas.keterangan || `Kelas ${p.hakKelas.kode}`);
               const prb = p.informasi?.prolanisPRB || p.informasi?.prb;
               if (prb) setPotensiPrb(prb);
             })
@@ -98,7 +110,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
   React.useEffect(() => {
     if (!sep?.no_sep || !barcodeRef.current) return;
     try {
-      JsBarcode(barcodeRef.current, sep.no_sep, { format: 'CODE39', width: 1.4, height: 40, displayValue: false, margin: 0 });
+      JsBarcode(barcodeRef.current, sep.no_sep, { format: 'CODE39', width: 1.6, height: 55, displayValue: false, margin: 0 });
     } catch {
       // No. SEP kosong/format tidak valid utk CODE39 — biarkan area barcode kosong.
     }
@@ -116,7 +128,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
           .sep-no-print { display: none !important; }
         }
       `}</style>
-      <div style={{ background: '#ffffff', borderRadius: 12, width: 900, maxWidth: '95%', padding: 24, boxShadow: '0 20px 48px rgba(0,0,0,0.3)' }}>
+      <div style={{ background: '#ffffff', borderRadius: 12, width: 850, maxWidth: '95%', padding: 24, boxShadow: '0 20px 48px rgba(0,0,0,0.3)' }}>
         <div className="sep-no-print" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
           <button
             type="button"
@@ -139,86 +151,86 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
         {error && <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{error}</div>}
 
         {!loading && !error && sep && (
-          <div id="sep-print-area" style={{ fontFamily: 'Arial, sans-serif', fontSize: 13, color: '#111827', border: '1px solid #9ca3af', borderRadius: 4, padding: 24 }}>
+          <div id="sep-print-area" style={{ fontFamily: 'Arial, sans-serif', fontSize: 16, color: '#111827' }}>
             {/* Header */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ width: 260, verticalAlign: 'middle' }}>
-                    <img src="/images/bpjslogo.png" alt="BPJS Kesehatan" style={{ maxWidth: 240, maxHeight: 60 }} />
+                  <td style={{ width: 420, verticalAlign: 'middle' }}>
+                    <img src="/images/bpjslogo.png" alt="BPJS Kesehatan" width={400} height={68} style={{ maxWidth: '100%', height: 'auto' }} />
                   </td>
-                  <td style={{ verticalAlign: 'middle' }}>
-                    <div style={{ fontSize: 20, fontWeight: 700 }}>SURAT ELEGIBILITAS PESERTA</div>
-                    <div style={{ fontSize: 15 }}>{namaInstansi}</div>
+                  <td style={{ width: 580, verticalAlign: 'middle' }}>
+                    <div style={{ fontSize: 28, fontWeight: 'bold', textAlign: 'center' }}>SURAT ELEGIBILITAS PESERTA</div>
+                    <div style={{ fontSize: 21, textAlign: 'center' }}>{namaInstansi}</div>
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            {/* Body 2 kolom */}
+            {/* PRB + Barcode */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  {/* Kolom kiri */}
-                  <td style={{ width: '52%', verticalAlign: 'top', paddingRight: 16 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <tbody>
-                        <Row label="No. SEP" value={sep.no_sep} />
-                        <Row label="Tgl. SEP" value={formatTgl(sep.tglsep)} />
-                        <Row label="No. Kartu" value={<>{sep.no_kartu} ( MR : {sep.nomr} )</>} />
-                        <Row label="Nama Peserta" value={sep.nama_pasien} />
-                        <Row label="Tgl. Lahir" value={formatTgl(sep.tanggal_lahir)} />
-                        <Row label="No.Telepon" value={sep.notelep || '-'} />
-                        <Row label="Sub/Spesialis" value={sep.nmpolitujuan || '-'} />
-                        <Row label="Dokter" value={sep.nmdpdjp || '-'} />
-                        <Row label="Faskes Perujuk" value={sep.nmppkrujukan || '-'} />
-                        <Row label="Diagnosa Awal" value={sep.nmdiagnosaawal || '-'} />
-                      </tbody>
-                    </table>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
-                      <tbody>
-                        <Row label="Catatan" value={sep.catatan || '-'} />
-                      </tbody>
-                    </table>
+                  <td style={{ width: 420, verticalAlign: 'middle' }}>
+                    <b><u>{potensiPrb}</u></b>
+                  </td>
+                  <td style={{ width: 580, textAlign: 'center' }}>
+                    <svg ref={barcodeRef} style={{ maxWidth: 200 }} />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
 
-                    <div style={{ marginTop: 20, fontSize: 11, fontStyle: 'italic', color: '#374151', lineHeight: 1.6 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                <Row label="No. SEP" value={sep.no_sep} />
+                <Row label="Tgl. SEP" value={formatTgl(sep.tglsep)} />
+                <Row
+                  label="No. Kartu" value={<>{sep.no_kartu} (MR: {sep.nomr})</>}
+                  label2="Peserta" value2={sep.peserta}
+                />
+                <Row
+                  label="Nama Peserta" value={<>{sep.nama_pasien} ({sep.jkel})</>}
+                  label2="COB" value2={cobLabel(sep.cob)}
+                />
+                <Row
+                  label="Tgl. Lahir" value={formatTgl(sep.tanggal_lahir)}
+                  label2="Jns. Rawat" value2={jnsRawatLabel(sep.jnspelayanan)}
+                />
+                <Row
+                  label="No. Telepon" value={sep.notelep || '-'}
+                  label2="Kls. Rawat" value2={sep.klsrawat ? `Kelas ${sep.klsrawat}` : '-'}
+                />
+                <Row label="Spesialis/Sub Spesialis" value={sep.nmpolitujuan || '-'} />
+                <Row label="DPJP Yg Melayani" value={sep.nmdpdjp || '-'} />
+                <Row label="Faskes Perujuk" value={sep.nmppkrujukan || '-'} />
+                <Row label="Diagnosa Awal" value={sep.diagawal ? `${sep.diagawal} - ${sep.nmdiagnosaawal}` : '-'} />
+              </tbody>
+            </table>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                <tr>
+                  <td style={{ width: 170, padding: '2px 0', verticalAlign: 'top' }}>Catatan</td>
+                  <td style={{ width: 12, padding: '2px 0', verticalAlign: 'top' }}>:</td>
+                  <td style={{ width: 550, padding: '2px 0', verticalAlign: 'top' }}>{sep.catatan || '-'}</td>
+                  <td style={{ width: 200, padding: '2px 0', verticalAlign: 'bottom', textAlign: 'center' }}>Pasien/Keluarga Pasien</td>
+                </tr>
+                <tr>
+                  <td colSpan={3} style={{ verticalAlign: 'top', paddingTop: 8 }}>
+                    <i style={{ fontSize: 11 }}>
                       *Saya Menyetujui BPJS Kesehatan menggunakan informasi Medis Pasien jika diperlukan.<br />
                       **SEP bukan sebagai bukti penjaminan peserta<br />
-                      Cetakan ke 1 {new Date().toLocaleDateString('id-ID')} {new Date().toLocaleTimeString('id-ID')}
-                    </div>
+                      Cetakan ke 1 {new Date().toLocaleDateString('id-ID')} {new Date().toLocaleTimeString('id-ID')}<br />
+                      Masa berlaku {formatTgl(sep.tglrujukan) || '-'} s/d -
+                    </i>
                   </td>
-
-                  {/* Kolom kanan */}
-                  <td style={{ width: '48%', verticalAlign: 'top', borderLeft: '1px solid #e5e7eb', paddingLeft: 16 }}>
-                    <div style={{ textAlign: 'center', marginBottom: 2 }}>
-                      <svg ref={barcodeRef} style={{ maxWidth: '100%' }} />
-                    </div>
-                    <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 10 }}>Potensi PRB : {potensiPrb}</div>
-
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <tbody>
-                        <Row label="No. Rawat" value={sep.no_rawat} labelWidth={100} />
-                        <Row label="No. Reg" value={sep.no_reg || '-'} labelWidth={100} />
-                        <Row label="Peserta" value={sep.peserta || '-'} labelWidth={100} />
-                        <Row label="Jns. Rawat" value={jnsRawatLabel(sep.jnspelayanan)} labelWidth={100} />
-                        <Row label="Jns.Kunjungan" value="-" labelWidth={100} />
-                      </tbody>
-                    </table>
-
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
-                      <tbody>
-                        <Row label="Poli Perujuk" value="-" labelWidth={100} />
-                        <Row label="Kls. Hak" value={klsHak} labelWidth={100} />
-                        <Row label="Kls. Rawat" value={sep.klsrawat ? `Kelas ${sep.klsrawat}` : '-'} labelWidth={100} />
-                        <Row label="Penjamin" value="BPJS Kesehatan" labelWidth={100} />
-                      </tbody>
-                    </table>
-
-                    <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12 }}>Pasien/Keluarga Pasien</div>
-                    <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                      {qrDataUrl && <img src={qrDataUrl} alt="QR No. SEP" width={100} />}
-                    </div>
-                    <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 600 }}>{sep.nama_pasien}</div>
+                  <td style={{ verticalAlign: 'bottom', textAlign: 'center', padding: 0 }}>
+                    {qrDataUrl && <img src={qrDataUrl} alt="QR No. SEP" width={90} />}
+                    <br />
+                    {sep.nama_pasien}
+                    <br />
+                    -----------------------------------
                   </td>
                 </tr>
               </tbody>
