@@ -180,7 +180,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ width: '55%', verticalAlign: 'top', paddingRight: 20 }}>
+                  <td style={{ width: '58%', verticalAlign: 'top', paddingRight: 20 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <Row label="No.SEP" value={sep.no_sep} />
@@ -200,27 +200,9 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                         <Row label="Catatan" value={sep.catatan || '-'} />
                       </tbody>
                     </table>
-
-                    {/* Persetujuan / disclaimer */}
-                    <div style={{ fontSize: 9, lineHeight: 1.2, marginTop: 4 }}>
-                      *Saya menyetujui BPJS Kesehatan untuk :<br />
-                      a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
-                      &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
-                      b. memberikan akses informasi medis atau riwayat pelayanan kepada dokter/tenaga medis pada {namaInstansi}<br />
-                      &nbsp;&nbsp;&nbsp;untuk kepentingan pemeliharaan kesehatan, pengobatan, penyembuhan, dan perawatan Pasien<br />
-                      *Saya mengetahui dan memahami :<br />
-                      a. Rumah Sakit dapat melakukan koordinasi dengan PT Jasa Raharja / PT Taspen / PT ASABRI / BPJS Ketenagakerjaan atau<br />
-                      &nbsp;&nbsp;&nbsp;Penjamin lainnya, jika Peserta merupakan pasien yang mengalami kecelakaan lalulintas dan / atau kecelakaan kerja<br />
-                      b. SEP bukan sebagai bukti penjaminan peserta<br />
-                      <br />
-                      ** Dengan tampilnya luaran SEP elektronik ini merupakan hasil validasi terhadap eligibilitas Pasien secara elektronik<br />
-                      &nbsp;&nbsp;(validasi finger print atau biometrik / sistem validasi lain)<br />
-                      &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
-                      &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
-                    </div>
                   </td>
 
-                  <td style={{ width: '45%', verticalAlign: 'top', paddingLeft: 12 }}>
+                  <td style={{ width: '42%', verticalAlign: 'top', paddingLeft: 12 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <Row label="Peserta" value={sep.peserta || '-'} labelWidth={110} />
@@ -265,6 +247,24 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                 </tr>
               </tbody>
             </table>
+
+            {/* Persetujuan / disclaimer */}
+            <div style={{ fontSize: 9, lineHeight: 1, marginTop: 4 }}>
+              *Saya menyetujui BPJS Kesehatan untuk :<br />
+              a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
+              &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
+              b. memberikan akses informasi medis atau riwayat pelayanan kepada dokter/tenaga medis pada {namaInstansi}<br />
+              &nbsp;&nbsp;&nbsp;untuk kepentingan pemeliharaan kesehatan, pengobatan, penyembuhan, dan perawatan Pasien<br />
+              *Saya mengetahui dan memahami :<br />
+              a. Rumah Sakit dapat melakukan koordinasi dengan PT Jasa Raharja / PT Taspen / PT ASABRI / BPJS Ketenagakerjaan atau<br />
+              &nbsp;&nbsp;&nbsp;Penjamin lainnya, jika Peserta merupakan pasien yang mengalami kecelakaan lalulintas dan / atau kecelakaan kerja<br />
+              b. SEP bukan sebagai bukti penjaminan peserta<br />
+              <br />
+              ** Dengan tampilnya luaran SEP elektronik ini merupakan hasil validasi terhadap eligibilitas Pasien secara elektronik<br />
+              &nbsp;&nbsp;(validasi finger print atau biometrik / sistem validasi lain)<br />
+              &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
+              &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
+            </div>
           </div>
         )}
       </div>
