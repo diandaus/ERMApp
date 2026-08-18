@@ -21,12 +21,18 @@ import { SepItem } from './ModalPengajuanSEP';
 //    supaya datanya otoritatif dari BPJS, bukan dikarang. Gagal → tampil "-".
 //
 // Batasan jujur (field yg TIDAK ada sumber datanya, ditampilkan "-"):
-//  - Poli Perujuk — tidak ada kolom/endpoint yg kita punya utk ini (beda
-//    dari Poli Tujuan/nmpolitujuan yg sudah ada).
+//  - Poli Perujuk — dikonfirmasi dari source asli rptBridgingSEP3.jrxml
+//    (JasperReports Khanza Desktop): field ini memang HARDCODE "-" di
+//    reportnya sendiri, bukan field dinamis — jadi bukan keterbatasan kita.
 //  - Kls.Rawat — belum jelas sumber datanya yg benar (BEDA dari Kls.Hak/
 //    hakKelas di atas), jadi selalu "-" dulu sampai ada kejelasan.
-// Jns.Kunjungan diambil dari field "Asesmen Pelayanan" (sep.asesmenpelayanan)
-// yg sudah tersimpan di form SEP.
+//
+// Jns.Kunjungan — dikonfirmasi PERSIS dari source rptBridgingSEP3.jrxml
+// (2 baris terpisah, textFieldExpression):
+//   baris 1: tujuankunjungan=="0" ? "Konsultasi dokter(pertama)" : "Kunjungan Kontrol(ulangan)"
+//   baris 2: flagprosedur: "0"->"Prosedur Tidak Berkelanjutan", "1"->"Prosedur dan Terapi Berkelanjutan", ""->kosong
+// (SEBELUMNYA sempat diarahkan ke Asesmen Pelayanan — itu keliru, source
+// Jasper asli konfirmasi field yg benar adalah tujuankunjungan+flagprosedur).
 // Logo BPJS: backend/uploads/images/bpjslogo.png (di-serve di /images/...).
 
 type SepPrintViewProps = {
@@ -46,13 +52,12 @@ const jnsRawatLabel = (v: string) => (v === '1' ? 'R.Inap' : 'R.Jalan');
 const kelaminLabel = (v: string) => (v === 'L' ? 'Laki-laki' : v === 'P' ? 'Perempuan' : '-');
 const isoDate = (v: string) => (v ? v.split('T')[0] : '-');
 
-// Sinkron dgn options PillSelect "Asesmen Pelayanan" di ModalPengajuanSEP.tsx.
-const ASESMEN_PELAYANAN_LABEL: Record<string, string> = {
-  '1': 'Poli spesialis tidak tersedia pada hari sebelumnya',
-  '2': 'Jam Poli telah berakhir pada hari sebelumnya',
-  '3': 'Dokter Spesialis yang dimaksud tidak praktek pada hari sebelumnya',
-  '4': 'Atas Instruksi RS',
-  '5': 'Tujuan Kontrol',
+// Persis textFieldExpression rptBridgingSEP3.jrxml (lihat komentar atas).
+const jnsKunjunganLine1 = (v: string) => (v === '0' ? 'Konsultasi dokter(pertama)' : 'Kunjungan Kontrol(ulangan)');
+const jnsKunjunganLine2 = (v: string) => {
+  if (v === '0') return 'Prosedur Tidak Berkelanjutan';
+  if (v === '1') return 'Prosedur dan Terapi Berkelanjutan';
+  return '';
 };
 
 export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) => {
@@ -83,7 +88,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
           if (!cancelled) setNamaInstansi(settingsData?.nama_instansi || '');
         }
         if (sepData?.no_kartu) {
-          const dataUrl = await QRCode.toDataURL(sepData.no_kartu, { width: 90, margin: 1 });
+          const dataUrl = await QRCode.toDataURL(sepData.no_kartu, { width: 75, margin: 1 });
           if (!cancelled) setQrDataUrl(dataUrl);
         }
         if (sepData?.no_kartu && sepData?.tglsep) {
@@ -175,7 +180,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ width: '60%', verticalAlign: 'top', paddingRight: 20 }}>
+                  <td style={{ width: '55%', verticalAlign: 'top', paddingRight: 20 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <Row label="No.SEP" value={sep.no_sep} />
@@ -197,7 +202,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     </table>
 
                     {/* Persetujuan / disclaimer */}
-                    <div style={{ fontSize: 8, lineHeight: 1.5, marginTop: 12 }}>
+                    <div style={{ fontSize: 9, lineHeight: 1.5, marginTop: 12 }}>
                       *Saya menyetujui BPJS Kesehatan untuk :<br />
                       a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
                       &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
@@ -215,14 +220,19 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     </div>
                   </td>
 
-                  <td style={{ width: '40%', verticalAlign: 'top', paddingLeft: 12 }}>
+                  <td style={{ width: '45%', verticalAlign: 'top', paddingLeft: 12 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         <Row label="Peserta" value={sep.peserta || '-'} labelWidth={110} />
                         <Row label="Jns.Rawat" value={jnsRawatLabel(sep.jnspelayanan)} labelWidth={110} />
                         <Row
                           label="Jns.Kunjungan"
-                          value={sep.asesmenpelayanan ? `- ${ASESMEN_PELAYANAN_LABEL[sep.asesmenpelayanan] || sep.asesmenpelayanan}` : '-'}
+                          value={
+                            <>
+                              - {jnsKunjunganLine1(sep.tujuankunjungan)}
+                              {sep.flagprosedur && <><br />- {jnsKunjunganLine2(sep.flagprosedur)}</>}
+                            </>
+                          }
                           labelWidth={110}
                         />
                       </tbody>
@@ -239,7 +249,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     <div style={{ textAlign: 'right', marginTop: 24 }}>
                       <div style={{ fontSize: 13 }}>Persetujuan</div>
                       <div style={{ fontSize: 13, marginBottom: 8 }}>Pasien/Keluarga Pasien</div>
-                      {qrDataUrl && <img src={qrDataUrl} alt="QR" width={90} />}
+                      {qrDataUrl && <img src={qrDataUrl} alt="QR" width={75} />}
                       <div style={{ fontSize: 13, marginTop: 4 }}>{sep.nama_pasien}</div>
                       <div style={{ fontSize: 11, marginTop: 8 }}>
                         Cetakan ke 1 {(() => {
