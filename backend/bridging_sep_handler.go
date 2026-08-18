@@ -92,6 +92,11 @@ type BridgingSep struct {
 	// ditambahkan di sini supaya ikut tampil di tabel daftar SEP (kolom
 	// "Tanggal Pulang" di BPJSDataSEP.java).
 	TglPulang string `json:"tglpulang"`
+	// NoReg — reg_periksa.no_reg, HANYA diisi oleh getBridgingSepByNoRawat
+	// (query tambahan terpisah, lihat di bawah) utk cetak Surat Elegibilitas
+	// Peserta (SepPrintView.tsx). Endpoint list/internal-list lain tidak
+	// mengisi field ini (default "").
+	NoReg string `json:"no_reg"`
 }
 
 // bridgingSepSelectCols adalah daftar kolom yang dipakai bersama oleh semua
@@ -212,6 +217,7 @@ func getBridgingSepByNoRawat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		s.SudahDikirim = true
+		db.QueryRow(`SELECT COALESCE(no_reg,'') FROM reg_periksa WHERE no_rawat = ? LIMIT 1`, noRawat).Scan(&s.NoReg)
 		c.JSON(http.StatusOK, s)
 	}
 }

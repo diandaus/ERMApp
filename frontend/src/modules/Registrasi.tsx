@@ -843,7 +843,8 @@ export const RegistrasiView: React.FC = () => {
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {patient.png_jawab === 'BPJS' ? (
-                          <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
                             <button
                               onClick={(e) => {
                                 if (showBpjsDropdown === patient.no_rawat) {
@@ -910,22 +911,29 @@ export const RegistrasiView: React.FC = () => {
                                   </svg>
                                   <span>Riwayat Kunjungan</span>
                                 </button>
-                                {patient.no_sep && (
-                                  <button
-                                    onClick={() => { setShowBpjsDropdown(null); setSepPrintNoRawat(patient.no_rawat); }}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', background: 'transparent', color: '#374151', fontSize: 12, textAlign: 'left', cursor: 'pointer' }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#2563eb'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151'; }}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                      <circle cx="12" cy="12" r="3"></circle>
-                                    </svg>
-                                    <span>Lihat SEP</span>
-                                  </button>
-                                )}
                               </div>
                             )}
+                          </div>
+                          {patient.no_sep && (
+                            <button
+                              onClick={() => setSepPrintNoRawat(patient.no_rawat)}
+                              title="Lihat SEP"
+                              style={{
+                                padding: '4px 8px', borderRadius: 2, border: '1px solid #16a34a',
+                                background: '#ffffff', color: '#16a34a', cursor: 'pointer',
+                                fontSize: 11, fontWeight: 600, transition: 'all 0.2s ease',
+                                display: 'flex', alignItems: 'center', gap: 4,
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#16a34a'; e.currentTarget.style.color = '#ffffff'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#16a34a'; }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                              </svg>
+                              Lihat SEP
+                            </button>
+                          )}
                           </div>
                         ) : (
                           patient.png_jawab || '-'

@@ -64,6 +64,9 @@ export type SepItem = {
   asesmenpelayanan: string;
   kddpjplayanan: string;
   nmdpjplayanan: string;
+  // no_reg — HANYA diisi endpoint GET .../sep/by-no-rawat/:no_rawat (dipakai
+  // SepPrintView.tsx), opsional krn tidak relevan utk form Input/Update SEP.
+  no_reg?: string;
 };
 
 export const emptyForm = (): SepItem => ({
