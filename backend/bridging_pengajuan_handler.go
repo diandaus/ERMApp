@@ -52,13 +52,19 @@ func ensureBridgingPengajuanTable(db *sql.DB) error {
 }
 
 type PengajuanPenjaminan struct {
-	ID              int    `json:"id"`
-	NoSep           string `json:"no_sep"`
-	NoKartu         string `json:"no_kartu"`
-	NamaPasien      string `json:"nama_pasien"`
-	JenisPengajuan  string `json:"jenis_pengajuan"`
-	TglPengajuan    string `json:"tgl_pengajuan"`
-	TglMasuk        string `json:"tgl_masuk"`
+	ID             int    `json:"id"`
+	NoSep          string `json:"no_sep"`
+	NoKartu        string `json:"no_kartu"`
+	NamaPasien     string `json:"nama_pasien"`
+	JenisPengajuan string `json:"jenis_pengajuan"`
+	TglPengajuan   string `json:"tgl_pengajuan"`
+	TglMasuk       string `json:"tgl_masuk"`
+	// TglSep/JnsPelayanan — dikirim ke BPJS (t_sep.tglSep/jnsPelayanan),
+	// TIDAK disimpan ke tabel lokal (cukup no_kartu+jenis+tgl_pengajuan utk
+	// dedup 11.1.4) — beda dari TglPengajuan (tanggal STAF mengajukan,
+	// dipakai validasi 11.1.5) dan TglMasuk (dipakai validasi 11.1.1 RITL).
+	TglSep          string `json:"tgl_sep"`
+	JnsPelayanan    string `json:"jns_pelayanan"`
 	Alasan          string `json:"alasan"`
 	Status          string `json:"status"`
 	CatatanApproval string `json:"catatan_approval"`
@@ -134,6 +140,14 @@ func submitPengajuanPenjaminan(db *sql.DB) gin.HandlerFunc {
 		if strings.TrimSpace(p.TglPengajuan) == "" {
 			p.TglPengajuan = time.Now().Format("2006-01-02")
 		}
+		if strings.TrimSpace(p.TglSep) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Tgl. SEP wajib diisi"})
+			return
+		}
+		if p.JnsPelayanan != "1" && p.JnsPelayanan != "2" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Jenis pelayanan tidak sesuai"})
+			return
+		}
 
 		// 11.1.5 — tgl pengajuan tidak boleh melebihi tanggal hari ini
 		if tglPengajuan, err := time.Parse("2006-01-02", p.TglPengajuan); err == nil {
@@ -174,16 +188,19 @@ func submitPengajuanPenjaminan(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		jnsPengajuan := map[string]string{"ritl_backdate": "1", "rjtl_backdate": "2", "tanpa_fingerprint": "3"}[p.JenisPengajuan]
+		// Spec resmi VClaim 11.1 Pengajuan Penjaminan: jnsPengajuan cuma 2
+		// nilai (1=backdate, 2=finger print) — RITL/RJTL backdate SAMA-SAMA
+		// kirim "1" ke BPJS, bedanya cuma di validasi LOKAL 11.1.1 (RITL
+		// wajib >3x24 jam) yg sudah dicek di atas.
+		jnsPengajuan := map[string]string{"ritl_backdate": "1", "rjtl_backdate": "1", "tanpa_fingerprint": "2"}[p.JenisPengajuan]
 		payload := map[string]interface{}{
 			"request": map[string]interface{}{
-				"t_pengajuan": map[string]interface{}{
+				"t_sep": map[string]interface{}{
 					"noKartu":      p.NoKartu,
-					"noSep":        p.NoSep,
+					"tglSep":       p.TglSep,
+					"jnsPelayanan": p.JnsPelayanan,
 					"jnsPengajuan": jnsPengajuan,
-					"tglPengajuan": p.TglPengajuan,
-					"tglMasuk":     p.TglMasuk,
-					"alasan":       p.Alasan,
+					"keterangan":   p.Alasan,
 					"user":         p.UserEntry,
 				},
 			},
@@ -311,5 +328,139 @@ func approvalPengajuanPenjaminan(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Penjaminan berhasil disetujui", "response": result})
+	}
+}
+
+// AprovalSepRequest — body POST /api/bridging/sep/aproval-langsung.
+type AprovalSepRequest struct {
+	NoKartu      string `json:"no_kartu"`
+	NamaPasien   string `json:"nama_pasien"`
+	TglSep       string `json:"tgl_sep"`
+	JnsPelayanan string `json:"jns_pelayanan"`
+	// JnsPengajuan opsional — sesuai spec resmi: kalau kosong/tidak
+	// dikirim, BPJS default ke "1" (Aproval Backdate); kalau diisi, aproval
+	// mengikuti jenis itu ("1"=backdate, "2"=finger print). Tombol "Aproval
+	// SEP Finger" di ModalPengajuanSEP.tsx selalu kirim "2" eksplisit.
+	JnsPengajuan string `json:"jns_pengajuan"`
+	Keterangan   string `json:"keterangan"`
+	UserEntry    string `json:"user_entry"`
+}
+
+// aprovalSepLangsung menangani 11.2 Aproval Penjaminan versi "langsung dari
+// form SEP" (dipicu tombol di ModalPengajuanSEP.tsx), BEDA dari
+// approvalPengajuanPenjaminan di atas yang meng-approve baris pengajuan yg
+// SUDAH ada di tabel lokal (dipakai modul daftar BpjsPengajuanPenjaminan.tsx)
+// — di sini tidak perlu ada pengajuan lokal sebelumnya, staf langsung minta
+// aproval ke BPJS dgn data dari form SEP yg sedang dibuka. Tetap dicatat ke
+// tabel bridging_pengajuan_penjaminan (status langsung 'disetujui') supaya
+// riwayatnya tetap kelihatan di daftar yang sama.
+func aprovalSepLangsung(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body AprovalSepRequest
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data tidak valid"})
+			return
+		}
+		if strings.TrimSpace(body.NoKartu) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No. Kartu wajib diisi"})
+			return
+		}
+		if strings.TrimSpace(body.TglSep) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Tgl. SEP wajib diisi"})
+			return
+		}
+		if body.JnsPelayanan != "1" && body.JnsPelayanan != "2" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Jenis pelayanan tidak sesuai"})
+			return
+		}
+		if body.JnsPengajuan != "" && body.JnsPengajuan != "1" && body.JnsPengajuan != "2" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Jenis pengajuan tidak sesuai"})
+			return
+		}
+
+		cfg, err := getVclaimConfig(db)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		tSep := map[string]interface{}{
+			"noKartu":      body.NoKartu,
+			"tglSep":       body.TglSep,
+			"jnsPelayanan": body.JnsPelayanan,
+			"keterangan":   body.Keterangan,
+			"user":         body.UserEntry,
+		}
+		if body.JnsPengajuan != "" {
+			tSep["jnsPengajuan"] = body.JnsPengajuan
+		}
+		bodyJSON, err := json.Marshal(map[string]interface{}{"request": map[string]interface{}{"t_sep": tSep}})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		result, bpjsErr := vclaimRequest(cfg, http.MethodPost, "Sep/aprovalSEP", bodyJSON)
+
+		respJSON := ""
+		status := "disetujui"
+		catatan := "Disetujui langsung dari form SEP"
+		if bpjsErr != nil {
+			status = "ditolak"
+			catatan = bpjsErr.Error()
+		} else if resultBytes, errM := json.Marshal(result); errM == nil {
+			respJSON = string(resultBytes)
+		}
+
+		jenisPengajuanLokal := "tanpa_fingerprint"
+		if body.JnsPengajuan == "1" {
+			jenisPengajuanLokal = "ritl_backdate"
+		}
+		db.Exec(`
+			INSERT INTO bridging_pengajuan_penjaminan (
+				no_kartu, nama_pasien, jenis_pengajuan, tgl_pengajuan,
+				alasan, status, catatan_approval, respon_bpjs, user_entry
+			) VALUES (?, ?, ?, CURDATE(), ?, ?, ?, ?, ?)
+		`,
+			body.NoKartu, body.NamaPasien, jenisPengajuanLokal,
+			body.Keterangan, status, catatan, respJSON, body.UserEntry,
+		)
+
+		if bpjsErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": bpjsErr.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Aproval SEP berhasil dikirim ke BPJS", "response": result})
+	}
+}
+
+// getPersetujuanSepList menangani "List Data Persetujuan SEP New"
+// (GET Sep/persetujuanSEP/list/bulan/{bulan}/tahun/{tahun}) — laporan
+// bulanan riwayat pengajuan/aproval SEP backdate & finger print LANGSUNG
+// dari BPJS (beda dari tabel lokal bridging_pengajuan_penjaminan yang cuma
+// mencatat apa yang diajukan lewat aplikasi ini; endpoint ini otoritatif
+// dari sisi BPJS, termasuk pengajuan yang mungkin dibuat lewat kanal lain).
+func getPersetujuanSepList(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		bulan := strings.TrimSpace(c.Query("bulan"))
+		tahun := strings.TrimSpace(c.Query("tahun"))
+		if bulan == "" || tahun == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Bulan dan tahun wajib diisi"})
+			return
+		}
+
+		cfg, err := getVclaimConfig(db)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		path := "Sep/persetujuanSEP/list/bulan/" + bulan + "/tahun/" + tahun
+		result, err := vclaimRequest(cfg, http.MethodGet, path, nil)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, result)
 	}
 }

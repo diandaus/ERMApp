@@ -70,7 +70,10 @@ export const emptyForm = (): SepItem => ({
   no_sep: '',
   no_rawat: '',
   tglsep: localDateStr(),
-  tglrujukan: '',
+  // Persis Khanza Desktop: Tgl. Rujuk otomatis terisi tanggal hari ini
+  // saat dialog Cetak SEP dibuka (masih bisa diedit manual kalau rujukan
+  // sebenarnya dari tanggal lain).
+  tglrujukan: localDateStr(),
   no_rujukan: '',
   kdppkrujukan: '',
   nmppkrujukan: '',
@@ -295,11 +298,325 @@ export const ModalPengajuanSEP: React.FC<ModalPengajuanSEPProps> = ({ editingIte
   const [checkingPeserta, setCheckingPeserta] = React.useState(false);
   const editingNoSep = editingItem?.no_sep || null;
 
-  // handleCekPeserta — dipicu saat field No.Kartu kehilangan fokus (blur),
-  // meniru perilaku Khanza Desktop: ketik no. kartu lalu Tab, data pasien
-  // (nama/tgl lahir/JK/jenis peserta/status keaktifan) otomatis terisi dari
-  // BPJS. "Status" cuma ditampilkan (tidak disimpan ke bridging_sep — tidak
-  // ada kolomnya), field lain hanya diisi kalau masih kosong di form.
+  // sepMenu — tombol "+" di sebelah No. Kartu, padanan combo box Khanza
+  // Desktop (Pengajuan/Aproval SEP Backdate & Finger, Ambil SEP di VClaim,
+  // Status Finger). Baru UI-nya dulu — fungsinya menyusul, jadi tiap item
+  // sementara cuma nutup menu + kasih tahu belum tersedia.
+  const [showSepMenu, setShowSepMenu] = React.useState(false);
+  const [sepMenuPos, setSepMenuPos] = React.useState<{ top: number; left: number } | null>(null);
+  const sepMenuRef = React.useRef<HTMLDivElement>(null);
+  const sepMenuBtnRef = React.useRef<HTMLButtonElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        sepMenuRef.current && !sepMenuRef.current.contains(event.target as Node) &&
+        sepMenuBtnRef.current && !sepMenuBtnRef.current.contains(event.target as Node)
+      ) {
+        setShowSepMenu(false);
+      }
+    };
+    if (showSepMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSepMenu]);
+
+  const SEP_MENU_ITEMS = [
+    'Pengajuan SEP Backdate',
+    'Aproval SEP Backdate',
+    'Aproval SEP Finger',
+    'Persetujuan SEP tanpa Fingerprint',
+    'Ambil SEP di VClaim',
+    'Status Finger',
+  ];
+
+  // handlePersetujuanTanpaFinger — 11.1 Pengajuan Penjaminan VClaim, jenis
+  // "Persetujuan SEP tanpa Fingerprint". Data pasien (No.Kartu/Tgl.SEP/
+  // Jns.Pelayanan) diambil LANGSUNG dari form Pengajuan SEP yang sedang
+  // dibuka (sesuai instruksi "isi otomatis ambil semua data pasien yang
+  // dibutuhkan yang ada pada modal") — staf cuma perlu isi "Keterangan"
+  // (alasan pengajuan, mis. "Hari libur") sebelum dikirim ke BPJS lewat
+  // endpoint backend yang sudah ada (submitPengajuanPenjaminan, POST
+  // /api/bridging/pengajuan-penjaminan).
+  const handlePersetujuanTanpaFinger = async () => {
+    setShowSepMenu(false);
+    if (!form.no_kartu.trim()) {
+      Swal.fire({ icon: 'warning', title: 'No. Kartu kosong', text: 'Isi No. Kartu dulu sebelum mengajukan persetujuan tanpa fingerprint.' });
+      return;
+    }
+    if (!form.tglsep) {
+      Swal.fire({ icon: 'warning', title: 'Tgl. SEP kosong', text: 'Isi Tgl. SEP dulu sebelum mengajukan persetujuan tanpa fingerprint.' });
+      return;
+    }
+
+    const { value: keterangan } = await Swal.fire({
+      title: 'Persetujuan SEP tanpa Fingerprint',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.8;margin-bottom:4px">
+        <div>No. Kartu : <strong>${form.no_kartu}</strong></div>
+        <div>Nama Pasien : <strong>${form.nama_pasien || '-'}</strong></div>
+        <div>Tgl. SEP : <strong>${formatTgl(form.tglsep)}</strong></div>
+        <div>Jns. Pelayanan : <strong>${form.jnspelayanan === '1' ? 'Rawat Inap' : 'Rawat Jalan'}</strong></div>
+      </div>`,
+      input: 'text',
+      inputLabel: 'Keterangan',
+      inputPlaceholder: 'Alasan pengajuan, mis. Hari libur',
+      showCancelButton: true,
+      confirmButtonText: 'Kirim ke BPJS',
+      cancelButtonText: 'Batal',
+      inputValidator: (value) => (!value ? 'Keterangan wajib diisi' : undefined),
+    });
+    if (keterangan === undefined) return;
+
+    Swal.fire({ title: 'Mengirim ke BPJS...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const res = await fetch('/api/bridging/pengajuan-penjaminan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          no_sep: editingNoSep || '',
+          no_kartu: form.no_kartu,
+          nama_pasien: form.nama_pasien,
+          jenis_pengajuan: 'tanpa_fingerprint',
+          tgl_sep: form.tglsep,
+          jns_pelayanan: form.jnspelayanan,
+          alasan: keterangan,
+          user_entry: getLoggedInUsername(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim pengajuan');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: data.message || 'Pengajuan berhasil dikirim ke BPJS' });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  // handleAprovalSepFinger — 11.2 Aproval Penjaminan VClaim, khusus jenis
+  // finger print (jnsPengajuan="2" dikirim eksplisit — kalau parameter ini
+  // kosong BPJS default-nya ke "1"/Aproval Backdate, jadi WAJIB dikirim di
+  // sini supaya sesuai nama tombolnya). Sama seperti Persetujuan tanpa
+  // Fingerprint: data diambil otomatis dari form SEP yang sedang dibuka,
+  // staf cuma isi Keterangan.
+  const handleAprovalSepFinger = async () => {
+    setShowSepMenu(false);
+    if (!form.no_kartu.trim()) {
+      Swal.fire({ icon: 'warning', title: 'No. Kartu kosong', text: 'Isi No. Kartu dulu sebelum aproval SEP finger.' });
+      return;
+    }
+    if (!form.tglsep) {
+      Swal.fire({ icon: 'warning', title: 'Tgl. SEP kosong', text: 'Isi Tgl. SEP dulu sebelum aproval SEP finger.' });
+      return;
+    }
+
+    const { value: keterangan } = await Swal.fire({
+      title: 'Aproval SEP Finger',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.8;margin-bottom:4px">
+        <div>No. Kartu : <strong>${form.no_kartu}</strong></div>
+        <div>Nama Pasien : <strong>${form.nama_pasien || '-'}</strong></div>
+        <div>Tgl. SEP : <strong>${formatTgl(form.tglsep)}</strong></div>
+        <div>Jns. Pelayanan : <strong>${form.jnspelayanan === '1' ? 'Rawat Inap' : 'Rawat Jalan'}</strong></div>
+      </div>`,
+      input: 'text',
+      inputLabel: 'Keterangan',
+      inputPlaceholder: 'Alasan aproval, mis. Hari libur',
+      showCancelButton: true,
+      confirmButtonText: 'Aproval ke BPJS',
+      cancelButtonText: 'Batal',
+      inputValidator: (value) => (!value ? 'Keterangan wajib diisi' : undefined),
+    });
+    if (keterangan === undefined) return;
+
+    Swal.fire({ title: 'Mengirim aproval ke BPJS...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const res = await fetch('/api/bridging/sep/aproval-langsung', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          no_kartu: form.no_kartu,
+          nama_pasien: form.nama_pasien,
+          tgl_sep: form.tglsep,
+          jns_pelayanan: form.jnspelayanan,
+          jns_pengajuan: '2',
+          keterangan,
+          user_entry: getLoggedInUsername(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim aproval');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: data.message || 'Aproval SEP berhasil dikirim ke BPJS' });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  // handlePengajuanSepBackdate — 11.1 Pengajuan Penjaminan, jenis backdate.
+  // jenis_pengajuan lokal (ritl_backdate/rjtl_backdate — dipakai validasi
+  // 11.1.1 & dedup 11.1.4, BUKAN dikirim apa adanya ke BPJS) diturunkan
+  // OTOMATIS dari Jns.Pelayanan form: Rawat Inap → RITL, Rawat Jalan → RJTL.
+  // RITL backdate wajib Tgl. Masuk Rawat (validasi backend: minimal 3x24
+  // jam sebelum tanggal pengajuan) — field ini tidak ada di form SEP, jadi
+  // diminta lewat dialog konfirmasi bareng Keterangan.
+  const handlePengajuanSepBackdate = async () => {
+    setShowSepMenu(false);
+    if (!form.no_kartu.trim()) {
+      Swal.fire({ icon: 'warning', title: 'No. Kartu kosong', text: 'Isi No. Kartu dulu sebelum pengajuan SEP backdate.' });
+      return;
+    }
+    if (!form.tglsep) {
+      Swal.fire({ icon: 'warning', title: 'Tgl. SEP kosong', text: 'Isi Tgl. SEP dulu sebelum pengajuan SEP backdate.' });
+      return;
+    }
+    const jenisPengajuan = form.jnspelayanan === '1' ? 'ritl_backdate' : 'rjtl_backdate';
+    const needsTglMasuk = jenisPengajuan === 'ritl_backdate';
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Pengajuan SEP Backdate',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.8;margin-bottom:8px">
+          <div>No. Kartu : <strong>${form.no_kartu}</strong></div>
+          <div>Nama Pasien : <strong>${form.nama_pasien || '-'}</strong></div>
+          <div>Tgl. SEP : <strong>${formatTgl(form.tglsep)}</strong></div>
+          <div>Jns. Pelayanan : <strong>${form.jnspelayanan === '1' ? 'Rawat Inap (RITL)' : 'Rawat Jalan (RJTL)'}</strong></div>
+        </div>
+        ${needsTglMasuk ? `<label for="swal-tgl-masuk" style="display:block;text-align:left;font-size:12px;margin-bottom:4px">Tgl. Masuk Rawat (min. 3x24 jam sebelum pengajuan)</label>
+        <input id="swal-tgl-masuk" type="date" class="swal2-input" style="margin:0 0 10px 0">` : ''}
+        <label for="swal-keterangan" style="display:block;text-align:left;font-size:12px;margin-bottom:4px">Keterangan</label>
+        <input id="swal-keterangan" type="text" class="swal2-input" placeholder="Alasan pengajuan, mis. Hari libur" style="margin:0">`,
+      showCancelButton: true,
+      confirmButtonText: 'Kirim ke BPJS',
+      cancelButtonText: 'Batal',
+      focusConfirm: false,
+      preConfirm: () => {
+        const keterangan = (document.getElementById('swal-keterangan') as HTMLInputElement)?.value.trim();
+        const tglMasuk = needsTglMasuk ? (document.getElementById('swal-tgl-masuk') as HTMLInputElement)?.value : '';
+        if (!keterangan) {
+          Swal.showValidationMessage('Keterangan wajib diisi');
+          return;
+        }
+        if (needsTglMasuk && !tglMasuk) {
+          Swal.showValidationMessage('Tgl. Masuk Rawat wajib diisi');
+          return;
+        }
+        return { keterangan, tglMasuk };
+      },
+    });
+    if (!formValues) return;
+
+    Swal.fire({ title: 'Mengirim ke BPJS...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const res = await fetch('/api/bridging/pengajuan-penjaminan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          no_kartu: form.no_kartu,
+          nama_pasien: form.nama_pasien,
+          jenis_pengajuan: jenisPengajuan,
+          tgl_sep: form.tglsep,
+          jns_pelayanan: form.jnspelayanan,
+          tgl_masuk: formValues.tglMasuk || '',
+          alasan: formValues.keterangan,
+          user_entry: getLoggedInUsername(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim pengajuan');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: data.message || 'Pengajuan berhasil dikirim ke BPJS' });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  // handleAprovalSepBackdate — 11.2 Aproval Penjaminan, khusus backdate
+  // (jnsPengajuan="1" dikirim eksplisit, konsisten dgn Aproval SEP Finger
+  // yg selalu kirim "2" — walau BPJS default ke "1" kalau parameter ini
+  // kosong, kita tetap kirim tegas supaya jelas aproval jenis apa).
+  const handleAprovalSepBackdate = async () => {
+    setShowSepMenu(false);
+    if (!form.no_kartu.trim()) {
+      Swal.fire({ icon: 'warning', title: 'No. Kartu kosong', text: 'Isi No. Kartu dulu sebelum aproval SEP backdate.' });
+      return;
+    }
+    if (!form.tglsep) {
+      Swal.fire({ icon: 'warning', title: 'Tgl. SEP kosong', text: 'Isi Tgl. SEP dulu sebelum aproval SEP backdate.' });
+      return;
+    }
+
+    const { value: keterangan } = await Swal.fire({
+      title: 'Aproval SEP Backdate',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.8;margin-bottom:4px">
+        <div>No. Kartu : <strong>${form.no_kartu}</strong></div>
+        <div>Nama Pasien : <strong>${form.nama_pasien || '-'}</strong></div>
+        <div>Tgl. SEP : <strong>${formatTgl(form.tglsep)}</strong></div>
+        <div>Jns. Pelayanan : <strong>${form.jnspelayanan === '1' ? 'Rawat Inap' : 'Rawat Jalan'}</strong></div>
+      </div>`,
+      input: 'text',
+      inputLabel: 'Keterangan',
+      inputPlaceholder: 'Alasan aproval, mis. Hari libur',
+      showCancelButton: true,
+      confirmButtonText: 'Aproval ke BPJS',
+      cancelButtonText: 'Batal',
+      inputValidator: (value) => (!value ? 'Keterangan wajib diisi' : undefined),
+    });
+    if (keterangan === undefined) return;
+
+    Swal.fire({ title: 'Mengirim aproval ke BPJS...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const res = await fetch('/api/bridging/sep/aproval-langsung', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          no_kartu: form.no_kartu,
+          nama_pasien: form.nama_pasien,
+          tgl_sep: form.tglsep,
+          jns_pelayanan: form.jnspelayanan,
+          jns_pengajuan: '1',
+          keterangan,
+          user_entry: getLoggedInUsername(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengirim aproval');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: data.message || 'Aproval SEP berhasil dikirim ke BPJS' });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const handleSepMenuItem = (label: string) => {
+    if (label === 'Persetujuan SEP tanpa Fingerprint') {
+      handlePersetujuanTanpaFinger();
+      return;
+    }
+    if (label === 'Aproval SEP Finger') {
+      handleAprovalSepFinger();
+      return;
+    }
+    if (label === 'Pengajuan SEP Backdate') {
+      handlePengajuanSepBackdate();
+      return;
+    }
+    if (label === 'Aproval SEP Backdate') {
+      handleAprovalSepBackdate();
+      return;
+    }
+    setShowSepMenu(false);
+    Swal.fire({ icon: 'info', title: label, text: 'Fitur ini akan dikembangkan lebih lanjut.' });
+  };
+
+  // handleCekPeserta — dipicu saat field No.Kartu kehilangan fokus (blur)
+  // ATAU otomatis sekali saat dialog dibuka kalau No.Kartu sudah terisi
+  // dari Pendaftaran (lihat useEffect di bawah) — meniru perilaku Khanza
+  // Desktop: begitu No.Kartu ada, data peserta LANGSUNG terisi semua dari
+  // BPJS tanpa nunggu staf ketik manual/klik apa pun:
+  //   nama/tgl lahir/JK/jenis peserta/status keaktifan (sudah ada),
+  //   + PPK Rujukan (provUmum = faskes 1 peserta) dan Kelas (hakKelas =
+  //   kelas rawat sesuai hak peserta) — DUA field terakhir ini sebelumnya
+  //   TIDAK diambil sama sekali dari respons cek-peserta, makanya di web
+  //   selalu kosong padahal Khanza Java selalu menampilkannya.
+  // "Status" cuma ditampilkan (tidak disimpan ke bridging_sep — tidak ada
+  // kolomnya); field identitas pasien hanya diisi kalau masih kosong di
+  // form, tapi PPK Rujukan & Kelas SELALU disamakan dgn data BPJS terbaru
+  // (otoritatif dari BPJS, bukan sekadar draft staf).
   const handleCekPeserta = async () => {
     const noKartu = form.no_kartu.trim();
     if (!noKartu) return;
@@ -310,13 +627,19 @@ export const ModalPengajuanSEP: React.FC<ModalPengajuanSEPProps> = ({ editingIte
       const res = await fetch(`/api/bridging/peserta/nokartu/${encodeURIComponent(noKartu)}?tgl_sep=${tgl}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal cek peserta');
-      const p = data.peserta || {};
+      // Jaga-jaga thd kemungkinan respons dibungkus 2x ({peserta:{peserta:{...}}})
+      // vs 1x ({peserta:{...}}) — tergantung apakah payload VClaim yg sudah
+      // didekripsi backend masih bawa key "peserta" lagi di dalamnya.
+      const p = data.peserta?.peserta ?? data.peserta ?? {};
       setForm((prev) => ({
         ...prev,
         nama_pasien: prev.nama_pasien || p.nama || '',
         tanggal_lahir: prev.tanggal_lahir || p.tglLahir || '',
         jkel: prev.jkel || (p.jenisKelamin ? String(p.jenisKelamin).charAt(0).toUpperCase() : ''),
         peserta: prev.peserta || p.jenisPeserta?.keterangan || '',
+        kdppkrujukan: prev.kdppkrujukan || p.provUmum?.kdProviderUmum || '',
+        nmppkrujukan: prev.nmppkrujukan || p.provUmum?.nmProviderUmum || '',
+        klsrawat: p.hakKelas?.kode || prev.klsrawat,
       }));
       setStatusPeserta(p.statusPeserta?.keterangan || (typeof p.statusPeserta === 'string' ? p.statusPeserta : '') || '-');
     } catch (err) {
@@ -326,6 +649,38 @@ export const ModalPengajuanSEP: React.FC<ModalPengajuanSEPProps> = ({ editingIte
       setCheckingPeserta(false);
     }
   };
+
+  // Auto-jalankan cek peserta SEKALI saat dialog dibuka mode "Input SEP
+  // baru" (bukan Update) kalau No.Kartu sudah terisi dari Pendaftaran —
+  // supaya tidak perlu klik/blur manual dulu spt Khanza Desktop.
+  React.useEffect(() => {
+    if (!editingNoSep && form.no_kartu.trim()) {
+      handleCekPeserta();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // PPK Pelayanan = kode PPK BPJS rumah sakit sendiri (Pengaturan >
+  // Identitas RS), SELALU sama utk semua SEP yg diterbitkan RS ini —
+  // persis Khanza Desktop yg auto-isi dari akses.getkodeppk(). Hanya utk
+  // mode Input baru & kalau field masih kosong (mode Update pakai data
+  // SEP yg sudah tersimpan).
+  React.useEffect(() => {
+    if (editingNoSep) return;
+    if (form.kdppkpelayanan.trim()) return;
+    fetch('/api/admin/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setForm((prev) =>
+          prev.kdppkpelayanan.trim()
+            ? prev
+            : { ...prev, kdppkpelayanan: data.kode_ppk_bpjs || '', nmppkpelayanan: data.nama_instansi || '' }
+        );
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // historiPelayananModal — tombol paperclip pertama ("Histori Pelayanan
   // BPJS") — dipakai bareng dgn tombol "[BPJS] > Riwayat Kunjungan" di
@@ -810,6 +1165,51 @@ export const ModalPengajuanSEP: React.FC<ModalPengajuanSEPProps> = ({ editingIte
               onChange={(e) => setForm((p) => ({ ...p, no_kartu: e.target.value }))}
               onBlur={handleCekPeserta}
             />
+            <button
+              ref={sepMenuBtnRef}
+              type="button"
+              title="Menu SEP Backdate/Finger"
+              onClick={(e) => {
+                if (showSepMenu) {
+                  setShowSepMenu(false);
+                } else {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setSepMenuPos({ top: rect.bottom + 4, left: rect.left });
+                  setShowSepMenu(true);
+                }
+              }}
+              style={{
+                width: 30, height: 30, borderRadius: 8, border: '1px solid #2563eb',
+                background: '#ffffff', color: '#2563eb', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer', flexShrink: 0, padding: 0, fontSize: 16, fontWeight: 700, lineHeight: 1,
+              }}
+            >
+              +
+            </button>
+            {showSepMenu && sepMenuPos && (
+              <div
+                ref={sepMenuRef}
+                style={{
+                  position: 'fixed', top: sepMenuPos.top, left: sepMenuPos.left,
+                  background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 8,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 10005, minWidth: 210, padding: 4,
+                }}
+              >
+                {SEP_MENU_ITEMS.map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => handleSepMenuItem(label)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 'none', background: 'transparent', color: '#374151', fontSize: 12.5, textAlign: 'left', cursor: 'pointer', borderRadius: 6 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ width: 50, flexShrink: 0, textAlign: 'right', fontSize: 12.5, color: '#111827' }}>Status :</div>
             <input readOnly style={{ ...pillInput, flex: '0 0 150px', background: '#f9fafb', color: '#374151' }} value={checkingPeserta ? 'Mengecek...' : statusPeserta} />
             <div style={{ width: 94, flexShrink: 0, textAlign: 'right', fontSize: 12.5, color: '#111827' }}>No. Rujukan :</div>

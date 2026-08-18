@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,78 +15,78 @@ import (
 
 // ResumePasien represents resume for outpatient (rawat jalan)
 type ResumePasien struct {
-	KdDokter              string `json:"kd_dokter"`
-	NmDokter              string `json:"nm_dokter"`
-	KondisiPulang         string `json:"kondisi_pulang"`
-	KeluhanUtama          string `json:"keluhan_utama"`
-	JalannyaPenyakit      string `json:"jalannya_penyakit"`
-	PemeriksaanPenunjang  string `json:"pemeriksaan_penunjang"`
-	HasilLaborat          string `json:"hasil_laborat"`
-	DiagnosaUtama         string `json:"diagnosa_utama"`
-	KdDiagnosaUtama       string `json:"kd_diagnosa_utama"`
-	DiagnosaSekunder      string `json:"diagnosa_sekunder"`
-	KdDiagnosaSekunder    string `json:"kd_diagnosa_sekunder"`
-	DiagnosaSekunder2     string `json:"diagnosa_sekunder2"`
-	KdDiagnosaSekunder2   string `json:"kd_diagnosa_sekunder2"`
-	DiagnosaSekunder3     string `json:"diagnosa_sekunder3"`
-	KdDiagnosaSekunder3   string `json:"kd_diagnosa_sekunder3"`
-	DiagnosaSekunder4     string `json:"diagnosa_sekunder4"`
-	KdDiagnosaSekunder4   string `json:"kd_diagnosa_sekunder4"`
-	ProsedurUtama         string `json:"prosedur_utama"`
-	KdProsedurUtama       string `json:"kd_prosedur_utama"`
-	ProsedurSekunder      string `json:"prosedur_sekunder"`
-	KdProsedurSekunder    string `json:"kd_prosedur_sekunder"`
-	ProsedurSekunder2     string `json:"prosedur_sekunder2"`
-	KdProsedurSekunder2   string `json:"kd_prosedur_sekunder2"`
-	ProsedurSekunder3     string `json:"prosedur_sekunder3"`
-	KdProsedurSekunder3   string `json:"kd_prosedur_sekunder3"`
-	ObatPulang            string `json:"obat_pulang"`
+	KdDokter             string `json:"kd_dokter"`
+	NmDokter             string `json:"nm_dokter"`
+	KondisiPulang        string `json:"kondisi_pulang"`
+	KeluhanUtama         string `json:"keluhan_utama"`
+	JalannyaPenyakit     string `json:"jalannya_penyakit"`
+	PemeriksaanPenunjang string `json:"pemeriksaan_penunjang"`
+	HasilLaborat         string `json:"hasil_laborat"`
+	DiagnosaUtama        string `json:"diagnosa_utama"`
+	KdDiagnosaUtama      string `json:"kd_diagnosa_utama"`
+	DiagnosaSekunder     string `json:"diagnosa_sekunder"`
+	KdDiagnosaSekunder   string `json:"kd_diagnosa_sekunder"`
+	DiagnosaSekunder2    string `json:"diagnosa_sekunder2"`
+	KdDiagnosaSekunder2  string `json:"kd_diagnosa_sekunder2"`
+	DiagnosaSekunder3    string `json:"diagnosa_sekunder3"`
+	KdDiagnosaSekunder3  string `json:"kd_diagnosa_sekunder3"`
+	DiagnosaSekunder4    string `json:"diagnosa_sekunder4"`
+	KdDiagnosaSekunder4  string `json:"kd_diagnosa_sekunder4"`
+	ProsedurUtama        string `json:"prosedur_utama"`
+	KdProsedurUtama      string `json:"kd_prosedur_utama"`
+	ProsedurSekunder     string `json:"prosedur_sekunder"`
+	KdProsedurSekunder   string `json:"kd_prosedur_sekunder"`
+	ProsedurSekunder2    string `json:"prosedur_sekunder2"`
+	KdProsedurSekunder2  string `json:"kd_prosedur_sekunder2"`
+	ProsedurSekunder3    string `json:"prosedur_sekunder3"`
+	KdProsedurSekunder3  string `json:"kd_prosedur_sekunder3"`
+	ObatPulang           string `json:"obat_pulang"`
 }
 
 // ResumePasienRanap represents resume for inpatient (rawat inap)
 type ResumePasienRanap struct {
-	KdDokter              string `json:"kd_dokter"`
-	NmDokter              string `json:"nm_dokter"`
-	KdDokterPengirim      string `json:"kd_dokter_pengirim"`
-	NmDokterPengirim      string `json:"nm_dokter_pengirim"`
-	DiagnosaAwal          string `json:"diagnosa_awal"`
-	Alasan                string `json:"alasan"`
-	KeluhanUtama          string `json:"keluhan_utama"`
-	PemeriksaanFisik      string `json:"pemeriksaan_fisik"`
-	PemeriksaanPenunjang  string `json:"pemeriksaan_penunjang"`
-	HasilLaborat          string `json:"hasil_laborat"`
-	ObatDiRS              string `json:"obat_di_rs"`
-	DiagnosaUtama         string `json:"diagnosa_utama"`
-	KdDiagnosaUtama       string `json:"kd_diagnosa_utama"`
-	DiagnosaSekunder      string `json:"diagnosa_sekunder"`
-	KdDiagnosaSekunder    string `json:"kd_diagnosa_sekunder"`
-	DiagnosaSekunder2     string `json:"diagnosa_sekunder2"`
-	KdDiagnosaSekunder2   string `json:"kd_diagnosa_sekunder2"`
-	DiagnosaSekunder3     string `json:"diagnosa_sekunder3"`
-	KdDiagnosaSekunder3   string `json:"kd_diagnosa_sekunder3"`
-	DiagnosaSekunder4     string `json:"diagnosa_sekunder4"`
-	KdDiagnosaSekunder4   string `json:"kd_diagnosa_sekunder4"`
-	DiagnosaSekunder5     string `json:"diagnosa_sekunder5"`
-	KdDiagnosaSekunder5   string `json:"kd_diagnosa_sekunder5"`
-	ProsedurUtama         string `json:"prosedur_utama"`
-	KdProsedurUtama       string `json:"kd_prosedur_utama"`
-	ProsedurSekunder      string `json:"prosedur_sekunder"`
-	KdProsedurSekunder    string `json:"kd_prosedur_sekunder"`
-	ProsedurSekunder2     string `json:"prosedur_sekunder2"`
-	KdProsedurSekunder2   string `json:"kd_prosedur_sekunder2"`
-	ProsedurSekunder3     string `json:"prosedur_sekunder3"`
-	KdProsedurSekunder3   string `json:"kd_prosedur_sekunder3"`
-	ProsedurSekunder4     string `json:"prosedur_sekunder4"`
-	KdProsedurSekunder4   string `json:"kd_prosedur_sekunder4"`
-	ProsedurSekunder5     string `json:"prosedur_sekunder5"`
-	KdProsedurSekunder5   string `json:"kd_prosedur_sekunder5"`
-	KonsulDokter          string `json:"konsul_dokter"`
-	Edukasi               string `json:"edukasi"`
-	CaraKeluar            string `json:"cara_keluar"`
-	KetKeluar             string `json:"ket_keluar"`
-	Keadaan               string `json:"keadaan"`
-	KetKeadaan            string `json:"ket_keadaan"`
-	ObatPulang            string `json:"obat_pulang"`
+	KdDokter             string `json:"kd_dokter"`
+	NmDokter             string `json:"nm_dokter"`
+	KdDokterPengirim     string `json:"kd_dokter_pengirim"`
+	NmDokterPengirim     string `json:"nm_dokter_pengirim"`
+	DiagnosaAwal         string `json:"diagnosa_awal"`
+	Alasan               string `json:"alasan"`
+	KeluhanUtama         string `json:"keluhan_utama"`
+	PemeriksaanFisik     string `json:"pemeriksaan_fisik"`
+	PemeriksaanPenunjang string `json:"pemeriksaan_penunjang"`
+	HasilLaborat         string `json:"hasil_laborat"`
+	ObatDiRS             string `json:"obat_di_rs"`
+	DiagnosaUtama        string `json:"diagnosa_utama"`
+	KdDiagnosaUtama      string `json:"kd_diagnosa_utama"`
+	DiagnosaSekunder     string `json:"diagnosa_sekunder"`
+	KdDiagnosaSekunder   string `json:"kd_diagnosa_sekunder"`
+	DiagnosaSekunder2    string `json:"diagnosa_sekunder2"`
+	KdDiagnosaSekunder2  string `json:"kd_diagnosa_sekunder2"`
+	DiagnosaSekunder3    string `json:"diagnosa_sekunder3"`
+	KdDiagnosaSekunder3  string `json:"kd_diagnosa_sekunder3"`
+	DiagnosaSekunder4    string `json:"diagnosa_sekunder4"`
+	KdDiagnosaSekunder4  string `json:"kd_diagnosa_sekunder4"`
+	DiagnosaSekunder5    string `json:"diagnosa_sekunder5"`
+	KdDiagnosaSekunder5  string `json:"kd_diagnosa_sekunder5"`
+	ProsedurUtama        string `json:"prosedur_utama"`
+	KdProsedurUtama      string `json:"kd_prosedur_utama"`
+	ProsedurSekunder     string `json:"prosedur_sekunder"`
+	KdProsedurSekunder   string `json:"kd_prosedur_sekunder"`
+	ProsedurSekunder2    string `json:"prosedur_sekunder2"`
+	KdProsedurSekunder2  string `json:"kd_prosedur_sekunder2"`
+	ProsedurSekunder3    string `json:"prosedur_sekunder3"`
+	KdProsedurSekunder3  string `json:"kd_prosedur_sekunder3"`
+	ProsedurSekunder4    string `json:"prosedur_sekunder4"`
+	KdProsedurSekunder4  string `json:"kd_prosedur_sekunder4"`
+	ProsedurSekunder5    string `json:"prosedur_sekunder5"`
+	KdProsedurSekunder5  string `json:"kd_prosedur_sekunder5"`
+	KonsulDokter         string `json:"konsul_dokter"`
+	Edukasi              string `json:"edukasi"`
+	CaraKeluar           string `json:"cara_keluar"`
+	KetKeluar            string `json:"ket_keluar"`
+	Keadaan              string `json:"keadaan"`
+	KetKeadaan           string `json:"ket_keadaan"`
+	ObatPulang           string `json:"obat_pulang"`
 }
 
 // ResumeResponse represents the complete resume data response
@@ -265,43 +266,43 @@ type ResumeRanapPayload struct {
 	NmDokter             string `json:"nm_dokter"`
 	KdDokterPengirim     string `json:"kd_dokter_pengirim"`
 	DiagnosaAwal         string `json:"diagnosa_awal"`
-	Alasan            string `json:"alasan"`
-	KeluhanUtama      string `json:"keluhan_utama"`
-	PemeriksaanFisik  string `json:"pemeriksaan_fisik"`
+	Alasan               string `json:"alasan"`
+	KeluhanUtama         string `json:"keluhan_utama"`
+	PemeriksaanFisik     string `json:"pemeriksaan_fisik"`
 	PemeriksaanPenunjang string `json:"pemeriksaan_penunjang"`
-	HasilLaborat      string `json:"hasil_laborat"`
-	ObatDiRS          string `json:"obat_di_rs"`
-	DiagnosaUtama     string `json:"diagnosa_utama"`
-	KdDiagnosaUtama   string `json:"kd_diagnosa_utama"`
-	DiagnosaSekunder  string `json:"diagnosa_sekunder"`
-	KdDiagnosaSekunder string `json:"kd_diagnosa_sekunder"`
-	DiagnosaSekunder2  string `json:"diagnosa_sekunder2"`
-	KdDiagnosaSekunder2 string `json:"kd_diagnosa_sekunder2"`
-	DiagnosaSekunder3  string `json:"diagnosa_sekunder3"`
-	KdDiagnosaSekunder3 string `json:"kd_diagnosa_sekunder3"`
-	DiagnosaSekunder4  string `json:"diagnosa_sekunder4"`
-	KdDiagnosaSekunder4 string `json:"kd_diagnosa_sekunder4"`
-	DiagnosaSekunder5  string `json:"diagnosa_sekunder5"`
-	KdDiagnosaSekunder5 string `json:"kd_diagnosa_sekunder5"`
-	ProsedurUtama     string `json:"prosedur_utama"`
-	KdProsedurUtama   string `json:"kd_prosedur_utama"`
-	ProsedurSekunder  string `json:"prosedur_sekunder"`
-	KdProsedurSekunder string `json:"kd_prosedur_sekunder"`
-	ProsedurSekunder2  string `json:"prosedur_sekunder2"`
-	KdProsedurSekunder2 string `json:"kd_prosedur_sekunder2"`
-	ProsedurSekunder3  string `json:"prosedur_sekunder3"`
-	KdProsedurSekunder3 string `json:"kd_prosedur_sekunder3"`
-	ProsedurSekunder4  string `json:"prosedur_sekunder4"`
-	KdProsedurSekunder4 string `json:"kd_prosedur_sekunder4"`
-	ProsedurSekunder5  string `json:"prosedur_sekunder5"`
-	KdProsedurSekunder5 string `json:"kd_prosedur_sekunder5"`
-	KonsulDokter      string `json:"konsul_dokter"`
-	Edukasi           string `json:"edukasi"`
-	CaraKeluar        string `json:"cara_keluar"`
-	KetKeluar         string `json:"ket_keluar"`
-	Keadaan           string `json:"keadaan"`
-	KetKeadaan        string `json:"ket_keadaan"`
-	ObatPulang        string `json:"obat_pulang"`
+	HasilLaborat         string `json:"hasil_laborat"`
+	ObatDiRS             string `json:"obat_di_rs"`
+	DiagnosaUtama        string `json:"diagnosa_utama"`
+	KdDiagnosaUtama      string `json:"kd_diagnosa_utama"`
+	DiagnosaSekunder     string `json:"diagnosa_sekunder"`
+	KdDiagnosaSekunder   string `json:"kd_diagnosa_sekunder"`
+	DiagnosaSekunder2    string `json:"diagnosa_sekunder2"`
+	KdDiagnosaSekunder2  string `json:"kd_diagnosa_sekunder2"`
+	DiagnosaSekunder3    string `json:"diagnosa_sekunder3"`
+	KdDiagnosaSekunder3  string `json:"kd_diagnosa_sekunder3"`
+	DiagnosaSekunder4    string `json:"diagnosa_sekunder4"`
+	KdDiagnosaSekunder4  string `json:"kd_diagnosa_sekunder4"`
+	DiagnosaSekunder5    string `json:"diagnosa_sekunder5"`
+	KdDiagnosaSekunder5  string `json:"kd_diagnosa_sekunder5"`
+	ProsedurUtama        string `json:"prosedur_utama"`
+	KdProsedurUtama      string `json:"kd_prosedur_utama"`
+	ProsedurSekunder     string `json:"prosedur_sekunder"`
+	KdProsedurSekunder   string `json:"kd_prosedur_sekunder"`
+	ProsedurSekunder2    string `json:"prosedur_sekunder2"`
+	KdProsedurSekunder2  string `json:"kd_prosedur_sekunder2"`
+	ProsedurSekunder3    string `json:"prosedur_sekunder3"`
+	KdProsedurSekunder3  string `json:"kd_prosedur_sekunder3"`
+	ProsedurSekunder4    string `json:"prosedur_sekunder4"`
+	KdProsedurSekunder4  string `json:"kd_prosedur_sekunder4"`
+	ProsedurSekunder5    string `json:"prosedur_sekunder5"`
+	KdProsedurSekunder5  string `json:"kd_prosedur_sekunder5"`
+	KonsulDokter         string `json:"konsul_dokter"`
+	Edukasi              string `json:"edukasi"`
+	CaraKeluar           string `json:"cara_keluar"`
+	KetKeluar            string `json:"ket_keluar"`
+	Keadaan              string `json:"keadaan"`
+	KetKeadaan           string `json:"ket_keadaan"`
+	ObatPulang           string `json:"obat_pulang"`
 }
 
 func saveResumeRanap(db *sql.DB) gin.HandlerFunc {
@@ -401,3 +402,207 @@ func deleteResumeRanap(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// ============================================================================
+// RIWAYAT UTK RefBtn "referensi" DI ModalInputResume.tsx (Radiologi, Lab, Obat)
+// Padanan RMCariHasilRadiologi.java / RMCariHasilLaborat.java /
+// RMCariJumlahObat.java — masing2 endpoint tabel legacy tunggal (bukan
+// UNION spt getRiwayatPemeriksaan), jadi tidak perlu whitelist kolom krn
+// tidak ada parameter field dinamis.
+// ============================================================================
+
+type RiwayatRadiologiRow struct {
+	TglPeriksa string `json:"tgl_periksa"`
+	Jam        string `json:"jam"`
+	Hasil      string `json:"hasil"`
+}
+
+// GET /api/riwayat-radiologi/:no_rawat?search=
+func getRiwayatHasilRadiologi(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		search := strings.TrimSpace(c.Query("search"))
+
+		query := `SELECT DATE_FORMAT(tgl_periksa,'%d/%m/%Y'), TIME_FORMAT(jam,'%H:%i:%s'), COALESCE(hasil,'')
+			FROM hasil_radiologi WHERE no_rawat = ?`
+		args := []interface{}{noRawat}
+		if search != "" {
+			like := "%" + search + "%"
+			query += " AND (tgl_periksa LIKE ? OR hasil LIKE ?)"
+			args = append(args, like, like)
+		}
+		query += " ORDER BY tgl_periksa, jam"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []RiwayatRadiologiRow{}
+		for rows.Next() {
+			var r RiwayatRadiologiRow
+			if err := rows.Scan(&r.TglPeriksa, &r.Jam, &r.Hasil); err == nil {
+				list = append(list, r)
+			}
+		}
+		c.JSON(http.StatusOK, list)
+	}
+}
+
+type RiwayatLaboratRow struct {
+	TglPeriksa   string `json:"tgl_periksa"`
+	Jam          string `json:"jam"`
+	Pemeriksaan  string `json:"pemeriksaan"`
+	Nilai        string `json:"nilai"`
+	NilaiRujukan string `json:"nilai_rujukan"`
+}
+
+// GET /api/riwayat-laborat/:no_rawat?search=
+func getRiwayatLaborat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		search := strings.TrimSpace(c.Query("search"))
+
+		query := `SELECT DATE_FORMAT(detail_periksa_lab.tgl_periksa,'%d/%m/%Y'), TIME_FORMAT(detail_periksa_lab.jam,'%H:%i:%s'),
+			COALESCE(template_laboratorium.Pemeriksaan,''), COALESCE(detail_periksa_lab.nilai,''), COALESCE(detail_periksa_lab.nilai_rujukan,'')
+			FROM detail_periksa_lab
+			INNER JOIN template_laboratorium ON detail_periksa_lab.id_template = template_laboratorium.id_template
+			WHERE detail_periksa_lab.no_rawat = ?`
+		args := []interface{}{noRawat}
+		if search != "" {
+			like := "%" + search + "%"
+			query += " AND (detail_periksa_lab.tgl_periksa LIKE ? OR template_laboratorium.Pemeriksaan LIKE ?)"
+			args = append(args, like, like)
+		}
+		query += " ORDER BY detail_periksa_lab.tgl_periksa, detail_periksa_lab.jam"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []RiwayatLaboratRow{}
+		for rows.Next() {
+			var r RiwayatLaboratRow
+			if err := rows.Scan(&r.TglPeriksa, &r.Jam, &r.Pemeriksaan, &r.Nilai, &r.NilaiRujukan); err == nil {
+				list = append(list, r)
+			}
+		}
+		c.JSON(http.StatusOK, list)
+	}
+}
+
+type RiwayatObatRanapRow struct {
+	TglPerawatan string  `json:"tgl_perawatan"`
+	Jam          string  `json:"jam"`
+	NamaBarang   string  `json:"nama_brng"`
+	Jml          float64 `json:"jml"`
+	KodeSat      string  `json:"kode_sat"`
+}
+
+// GET /api/riwayat-obat-ranap/:no_rawat?search=
+func getRiwayatObatRanap(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		search := strings.TrimSpace(c.Query("search"))
+
+		query := `SELECT DATE_FORMAT(detail_pemberian_obat.tgl_perawatan,'%d/%m/%Y'), TIME_FORMAT(detail_pemberian_obat.jam,'%H:%i:%s'),
+			COALESCE(databarang.nama_brng,''), detail_pemberian_obat.jml, COALESCE(databarang.kode_sat,'')
+			FROM detail_pemberian_obat
+			INNER JOIN databarang ON detail_pemberian_obat.kode_brng = databarang.kode_brng
+			WHERE detail_pemberian_obat.no_rawat = ?`
+		args := []interface{}{noRawat}
+		if search != "" {
+			like := "%" + search + "%"
+			query += " AND (detail_pemberian_obat.tgl_perawatan LIKE ? OR databarang.nama_brng LIKE ?)"
+			args = append(args, like, like)
+		}
+		query += " ORDER BY detail_pemberian_obat.tgl_perawatan, detail_pemberian_obat.jam"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []RiwayatObatRanapRow{}
+		for rows.Next() {
+			var r RiwayatObatRanapRow
+			if err := rows.Scan(&r.TglPerawatan, &r.Jam, &r.NamaBarang, &r.Jml, &r.KodeSat); err == nil {
+				list = append(list, r)
+			}
+		}
+		c.JSON(http.StatusOK, list)
+	}
+}
+
+// GET /api/dpjp-ranap/:no_rawat — dipakai isi otomatis field DPJP di
+// ModalInputResume.tsx. DPJP disimpan terpisah dari reg_periksa.kd_dokter
+// (yg dipakai utk "Dokter IGD"/dokter pengirim) di tabel dpjp_ranap —
+// padanan pola fallback yg sudah dipakai di resep_handler.go (dpjp_ranap
+// diutamakan, satu pasien bisa saja punya >1 DPJP jadi diambil salah satu).
+func getDpjpRanap(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+
+		var kdDokter, nmDokter string
+		err := db.QueryRow(`
+			SELECT dr.kd_dokter, COALESCE(d.nm_dokter,'')
+			FROM dpjp_ranap dr
+			LEFT JOIN dokter d ON dr.kd_dokter = d.kd_dokter
+			WHERE dr.no_rawat = ?
+			LIMIT 1
+		`, noRawat).Scan(&kdDokter, &nmDokter)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"kd_dokter": "", "nm_dokter": ""})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"kd_dokter": kdDokter, "nm_dokter": nmDokter})
+	}
+}
+
+// GET /api/dokter-pengirim/:no_rawat — dipakai isi otomatis field
+// "Dokter IGD" di ModalInputResume.tsx. Sumbernya reg_periksa.kd_dokter
+// (dokter yg mendaftarkan/merujuk pasien saat masuk), BEDA dari DPJP
+// (dpjp_ranap, lihat getDpjpRanap) — sebelumnya field ini keliru dikira
+// bisa dipakai dari `patient.kd_dokter` di frontend, padahal field itu
+// isinya DPJP juga (lihat getRawatInapList), jadi sering kosong krn tidak
+// semua pasien sudah punya baris dpjp_ranap.
+func getDokterPengirim(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+
+		var kdDokter, nmDokter string
+		err := db.QueryRow(`
+			SELECT reg_periksa.kd_dokter, COALESCE(dokter.nm_dokter,'')
+			FROM reg_periksa
+			LEFT JOIN dokter ON reg_periksa.kd_dokter = dokter.kd_dokter
+			WHERE reg_periksa.no_rawat = ?
+			LIMIT 1
+		`, noRawat).Scan(&kdDokter, &nmDokter)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"kd_dokter": "", "nm_dokter": ""})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"kd_dokter": kdDokter, "nm_dokter": nmDokter})
+	}
+}

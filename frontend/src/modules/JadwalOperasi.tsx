@@ -1,4 +1,5 @@
 import React from 'react';
+import { DetailOperasiPasienView } from './DetailOperasiPasien';
 
 // ============================================================================
 // KAMAR OPERASI (OK) — Jadwal Operasi, padanan tab "tampil()" di
@@ -10,12 +11,14 @@ import React from 'react';
 // backend/booking_operasi_handler.go.
 // ============================================================================
 
-type BookingOperasiRow = {
+export type BookingOperasiRow = {
   no_rawat: string;
   no_rkm_medis: string;
   nama_pasien: string;
   umur: string;
   jk: string;
+  tgl_lahir: string;
+  alamat_pasien: string;
   tanggal: string;
   jam_mulai: string;
   jam_selesai: string;
@@ -323,6 +326,7 @@ export const JadwalOperasiView: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [detailRow, setDetailRow] = React.useState<BookingOperasiRow | null>(null);
+  const [pasienRow, setPasienRow] = React.useState<BookingOperasiRow | null>(null);
 
   const butuhTanggal = filter === 'tanggal' || filter === 'selesai';
 
@@ -359,26 +363,39 @@ export const JadwalOperasiView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, tglAwal, tglAkhir, search]);
 
+  // Detail Operasi Pasien — halaman penuh terpisah, lepas dari shell
+  // aplikasi sepenuhnya, persis pola PemeriksaanRanapView dibuka dari
+  // RawatInap.tsx.
+  if (pasienRow) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+        <DetailOperasiPasienView row={pasienRow} onBack={() => setPasienRow(null)} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flexShrink: 0 }}>
         <div>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Status</label>
-          <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 10, padding: 4, gap: 4 }}>
+          <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
             {FILTER_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
                 type="button"
                 onClick={() => setFilter(opt.key)}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: 7,
-                  border: filter === opt.key ? '1px solid #ec4899' : '1px solid transparent',
+                  padding: '6px 24px',
+                  borderRadius: 8,
+                  border: filter === opt.key ? '1px solid #d1d5db' : 'none',
                   background: filter === opt.key ? '#ffffff' : 'transparent',
-                  color: filter === opt.key ? '#ec4899' : '#6b7280',
+                  color: filter === opt.key ? '#111827' : '#6b7280',
                   cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: filter === opt.key ? 600 : 400,
+                  fontSize: 13,
+                  fontWeight: filter === opt.key ? 500 : 400,
+                  transition: 'all 0.2s ease',
+                  boxShadow: filter === opt.key ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -451,7 +468,15 @@ export const JadwalOperasiView: React.FC = () => {
                 return (
                   <tr key={`${row.no_rawat}-${row.kode_operasi}-${row.tanggal}`} style={{ background: index % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                     <td style={TD}>{index + 1}.</td>
-                    <td style={TD}>{row.no_rawat}</td>
+                    <td style={TD}>
+                      <button
+                        type="button"
+                        onClick={() => setPasienRow(row)}
+                        style={{ padding: '2px 10px', borderRadius: 2, fontSize: 11, fontWeight: 600, background: '#2563eb', color: '#ffffff', border: '1px solid #1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {row.no_rawat}
+                      </button>
+                    </td>
                     <td style={{ ...TD, fontWeight: 600, color: '#111827' }}>{row.nama_pasien}</td>
                     <td style={TD}>{row.umur}</td>
                     <td style={TD}>{row.jk}</td>
@@ -463,12 +488,12 @@ export const JadwalOperasiView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setDetailRow(row)}
-                          style={{ padding: '2px 10px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: badge.bg, color: badge.fg, border: `1px solid ${badge.border}`, cursor: 'pointer' }}
+                          style={{ padding: '2px 10px', borderRadius: 2, fontSize: 11, fontWeight: 600, background: badge.bg, color: badge.fg, border: `1px solid ${badge.border}`, cursor: 'pointer' }}
                         >
                           {row.status}
                         </button>
                       ) : (
-                        <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: badge.bg, color: badge.fg }}>{row.status}</span>
+                        <span style={{ padding: '2px 8px', borderRadius:2, fontSize: 11, fontWeight: 600, background: badge.bg, color: badge.fg }}>{row.status}</span>
                       )}
                     </td>
                     <td style={TD}>{row.rujukan_dari}</td>

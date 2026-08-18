@@ -38,6 +38,20 @@ export const ResumeTab: React.FC<ResumeTabProps> = ({ patient }) => {
 
   const fetchResume = async () => {
     setLoading(true);
+    // DPJP (dpjp_ranap) dan Dokter Pengirim/IGD (reg_periksa.kd_dokter)
+    // sumbernya BEDA TABEL — sebelumnya field "Dokter IGD" salah pakai
+    // patient.kd_dokter/nm_dokter yg ternyata isinya DPJP juga (lihat
+    // getRawatInapList di backend), jadi sering kosong krn tidak semua
+    // pasien sudah punya baris dpjp_ranap. Sekarang fetch masing2 dari
+    // endpoint yg benar.
+    const [dpjp, dokterPengirim] = await Promise.all([
+      fetch(`/api/dpjp-ranap/${patient.no_rawat}`)
+        .then((res) => (res.ok ? res.json() : { kd_dokter: '', nm_dokter: '' }))
+        .catch(() => ({ kd_dokter: '', nm_dokter: '' })),
+      fetch(`/api/dokter-pengirim/${patient.no_rawat}`)
+        .then((res) => (res.ok ? res.json() : { kd_dokter: '', nm_dokter: '' }))
+        .catch(() => ({ kd_dokter: '', nm_dokter: '' })),
+    ]);
     try {
       const res = await fetch(`/api/resume/${patient.no_rawat}`);
       if (!res.ok) throw new Error();
@@ -46,16 +60,29 @@ export const ResumeTab: React.FC<ResumeTabProps> = ({ patient }) => {
         setForm({
           ...empty,
           ...data.resume_pasien_ranap,
-          kd_dokter_pengirim: data.resume_pasien_ranap.kd_dokter_pengirim || patient.kd_dokter || '',
-          nm_dokter_pengirim: data.resume_pasien_ranap.nm_dokter_pengirim || patient.nm_dokter || '',
+          kd_dokter_pengirim: data.resume_pasien_ranap.kd_dokter_pengirim || dokterPengirim.kd_dokter || '',
+          nm_dokter_pengirim: data.resume_pasien_ranap.nm_dokter_pengirim || dokterPengirim.nm_dokter || '',
+          kd_dokter: data.resume_pasien_ranap.kd_dokter || dpjp.kd_dokter || '',
+          nm_dokter: data.resume_pasien_ranap.nm_dokter || dpjp.nm_dokter || '',
+          diagnosa_awal: data.resume_pasien_ranap.diagnosa_awal || patient.diagnosa_awal || '',
         });
         setExists(true);
       } else {
-        setForm({ ...empty, kd_dokter_pengirim: patient.kd_dokter || '', nm_dokter_pengirim: patient.nm_dokter || '' });
+        setForm({
+          ...empty,
+          kd_dokter_pengirim: dokterPengirim.kd_dokter || '', nm_dokter_pengirim: dokterPengirim.nm_dokter || '',
+          kd_dokter: dpjp.kd_dokter || '', nm_dokter: dpjp.nm_dokter || '',
+          diagnosa_awal: patient.diagnosa_awal || '',
+        });
         setExists(false);
       }
     } catch {
-      setForm({ ...empty, kd_dokter_pengirim: patient.kd_dokter || '', nm_dokter_pengirim: patient.nm_dokter || '' });
+      setForm({
+        ...empty,
+        kd_dokter_pengirim: dokterPengirim.kd_dokter || '', nm_dokter_pengirim: dokterPengirim.nm_dokter || '',
+        kd_dokter: dpjp.kd_dokter || '', nm_dokter: dpjp.nm_dokter || '',
+        diagnosa_awal: patient.diagnosa_awal || '',
+      });
       setExists(false);
     } finally {
       setLoading(false);
@@ -80,8 +107,7 @@ export const ResumeTab: React.FC<ResumeTabProps> = ({ patient }) => {
     try {
       const res = await fetch(`/api/resume-ranap?no_rawat=${encodeURIComponent(patient.no_rawat)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error || 'Gagal menghapus');
-      setExists(false);
-      setForm({ ...empty, kd_dokter_pengirim: patient.kd_dokter || '', nm_dokter_pengirim: patient.nm_dokter || '' });
+      await fetchResume();
       Swal.fire({ icon: 'success', title: 'Resume dihapus', timer: 1500, showConfirmButton: false });
     } catch (e: any) {
       Swal.fire({ icon: 'error', title: 'Gagal', text: e.message });

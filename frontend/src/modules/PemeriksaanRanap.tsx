@@ -834,20 +834,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 220 }}>
                           <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Pegawai :</span>
                           <div style={{ display: 'flex', gap: 2, flex: 1, position: 'relative' }}>
-                            <input type="text" value={soapNip}
-                              onChange={async (e) => {
-                                setSoapNip(e.target.value); setSoapPetugasNama('');
-                                if (e.target.value.length >= 2) {
-                                  try {
-                                    const res = await fetch(`/api/pegawai?search=${encodeURIComponent(e.target.value)}`);
-                                    const data = await res.json();
-                                    const found = (Array.isArray(data) ? data : []).find((p: any) => p.nik === e.target.value);
-                                    if (found) setSoapPetugasNama(found.nama);
-                                  } catch { /* ignore */ }
-                                }
-                              }}
-                              placeholder="NIK"
-                              style={{ width: '30%', padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }} />
                             <input type="text" value={soapPetugasNama} readOnly placeholder="Nama pegawai"
                               style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb' }} />
                             <button type="button" onClick={() => setSoapPetugasOpen(true)}
@@ -1411,24 +1397,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, position: 'relative' }}>
                     <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Petugas :</span>
                     <div style={{ display: 'flex', gap: 6, flex: 1, position: 'relative' }}>
-                      <input
-                        type="text"
-                        value={adimeNip}
-                        onChange={async (e) => {
-                          setAdimeNip(e.target.value);
-                          setAdimePetugasNama('');
-                          if (e.target.value.length >= 2) {
-                            try {
-                              const res = await fetch(`/api/petugas?search=${encodeURIComponent(e.target.value)}`);
-                              const data = await res.json();
-                              const found = (Array.isArray(data) ? data : []).find((p: any) => p.nip === e.target.value);
-                              if (found) setAdimePetugasNama(found.nama);
-                            } catch { /* ignore */ }
-                          }
-                        }}
-                        placeholder="NIP"
-                        style={{ width: '30%', padding: '8px 10px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
-                      />
                       <input
                         type="text"
                         value={adimePetugasNama}

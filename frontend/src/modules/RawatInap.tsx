@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { PemeriksaanRanapView } from './PemeriksaanRanap';
+import { ModalPermintaanRanap } from '../components/ModalPermintaanRanap';
 import { localDateStr } from '../utils/date';
 
 type Patient = {
@@ -54,6 +55,7 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
   const [error, setError] = React.useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
   const [periksaPatient, setPeriksaPatient] = React.useState<Patient | null>(null);
+  const [showPermintaanRanap, setShowPermintaanRanap] = React.useState(false);
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
 
   // Fetch data from API
@@ -180,22 +182,10 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
 
           {/* Action Buttons Group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {/* Masuk Button */}
+            {/* Permintaan Ranap Button */}
             <button
               type="button"
-              onClick={() => {
-                if (!selectedPatient) {
-                  Swal.fire({
-                    icon: 'warning',
-                    title: 'Peringatan',
-                    text: 'Silakan pilih pasien terlebih dahulu',
-                    confirmButtonColor: '#2563eb'
-                  });
-                  return;
-                }
-                console.log('Masuk patient:', selectedPatient);
-                // TODO: Implement masuk functionality
-              }}
+              onClick={() => setShowPermintaanRanap(true)}
               style={{
                 padding: '6px 12px',
                 borderRadius: 8,
@@ -211,14 +201,15 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
               }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <g id="Interface / Log_Out">
-                  <path id="Vector" d="M12 15L15 12M15 12L12 9M15 12H4M9 7.24859V7.2002C9 6.08009 9 5.51962 9.21799 5.0918C9.40973 4.71547 9.71547 4.40973 10.0918 4.21799C10.5196 4 11.0801 4 12.2002 4H16.8002C17.9203 4 18.4796 4 18.9074 4.21799C19.2837 4.40973 19.5905 4.71547 19.7822 5.0918C20 5.5192 20 6.07899 20 7.19691V16.8036C20 17.9215 20 18.4805 19.7822 18.9079C19.5905 19.2842 19.2837 19.5905 18.9074 19.7822C18.48 20 17.921 20 16.8031 20H12.1969C11.079 20 10.5192 20 10.0918 19.7822C9.71547 19.5905 9.40973 19.2839 9.21799 18.9076C9 18.4798 9 17.9201 9 16.8V16.75" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </g>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M14 2v6h6" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 15h6" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 11h6" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>Masuk</span>
+              <span>Permintaan Ranap</span>
             </button>
 
-            {/* Keluar Button */}
+            {/* Jadwal Obat Button */}
             <button
               type="button"
               onClick={() => {
@@ -231,14 +222,14 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
                   });
                   return;
                 }
-                console.log('Keluar patient:', selectedPatient);
-                // TODO: Implement keluar functionality
+                console.log('Jadwal Obat patient:', selectedPatient);
+                // TODO: Implement jadwal obat functionality
               }}
               style={{
                 padding: '6px 12px',
                 borderRadius: 8,
                 border: 'none',
-                background: '#dc2626',
+                background: '#059669',
                 color: '#ffffff',
                 cursor: 'pointer',
                 fontSize: 12,
@@ -249,45 +240,10 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
               }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path fillRule="evenodd" clipRule="evenodd" d="M21.593 10.943c.584.585.584 1.53 0 2.116L18.71 15.95c-.39.39-1.03.39-1.42 0a.996.996 0 0 1 0-1.41 9.552 9.552 0 0 1 1.689-1.345l.387-.242-.207-.206a10 10 0 0 1-2.24.254H8.998a1 1 0 1 1 0-2h7.921a10 10 0 0 1 2.24.254l.207-.206-.386-.241a9.562 9.562 0 0 1-1.69-1.348.996.996 0 0 1 0-1.41c.39-.39 1.03-.39 1.42 0l2.883 2.893zM14 16a1 1 0 0 0-1 1v1.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v1.505a1 1 0 1 0 2 0V5.5A2.5 2.5 0 0 0 12.5 3h-7A2.5 2.5 0 0 0 3 5.5v13A2.5 2.5 0 0 0 5.5 21h7a2.5 2.5 0 0 0 2.5-2.5V17a1 1 0 0 0-1-1z" fill="#ffffff"/>
+                <circle cx="12" cy="12" r="9" stroke="#ffffff" strokeWidth="2"/>
+                <path d="M12 7v5l3.5 2" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>Keluar</span>
-            </button>
-
-            {/* Pindah Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (!selectedPatient) {
-                  Swal.fire({
-                    icon: 'warning',
-                    title: 'Peringatan',
-                    text: 'Silakan pilih pasien terlebih dahulu',
-                    confirmButtonColor: '#2563eb'
-                  });
-                  return;
-                }
-                console.log('Pindah patient:', selectedPatient);
-                // TODO: Implement pindah functionality
-              }}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 8,
-                border: 'none',
-                background: '#f59e0b',
-                color: '#ffffff',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M12 3V9M12 3L9 6M12 3L15 6M12 15V21M12 21L15 18M12 21L9 18M3 12H9M3 12L6 15M3 12L6 9M15 12H21M21 12L18 9M21 12L18 15" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span>Pindah</span>
+              <span>Jadwal Obat</span>
             </button>
           </div>
 
@@ -518,6 +474,8 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
           </table>
         </div>
       </section>
+
+      <ModalPermintaanRanap open={showPermintaanRanap} onClose={() => setShowPermintaanRanap(false)} />
     </>
   );
 };

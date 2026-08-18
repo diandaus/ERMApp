@@ -140,7 +140,178 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
   const [form, setForm] = React.useState<ResumeRanap>(initialData);
   const [saving, setSaving] = React.useState(false);
   const [dokterOpen, setDokterOpen] = React.useState(false);
+  // "Referensi keluhan utama" (RefBtn di field Keluhan Utama) — padanan
+  // dialog cari keluhan Java (query pemeriksaan_ralan.no_rawat=? + LIKE
+  // tgl_perawatan/keluhan). Diadaptasi ke `pemeriksaan_ranap` krn konteks
+  // di sini Rawat Inap, bukan Rawat Jalan — sumber data yg sama dgn tab
+  // SOAP/CPPT pasien ini (GET /api/pemeriksaan-ranap/:no_rawat, sudah ada,
+  // tidak perlu endpoint baru).
   const [refField, setRefField] = React.useState<string | null>(null);
+  const [keluhanHistory, setKeluhanHistory] = React.useState<{ tgl_perawatan: string; jam_rawat: string; keluhan: string; nama: string }[]>([]);
+  const [keluhanLoading, setKeluhanLoading] = React.useState(false);
+  const [keluhanSearch, setKeluhanSearch] = React.useState('');
+  // "Referensi pemeriksaan fisik" — padanan dialog Java yg cari di KEDUA
+  // tabel pemeriksaan_ralan + pemeriksaan_ranap (beda dari Keluhan yg cuma
+  // ralan), lewat endpoint generik GET /api/riwayat-pemeriksaan/:no_rawat?
+  // field=pemeriksaan.
+  const [pemeriksaanFisikHistory, setPemeriksaanFisikHistory] = React.useState<{ tgl_perawatan: string; jam_rawat: string; value: string; nama: string }[]>([]);
+  const [pemeriksaanFisikLoading, setPemeriksaanFisikLoading] = React.useState(false);
+  const [pemeriksaanFisikSearch, setPemeriksaanFisikSearch] = React.useState('');
+  // "Referensi Radiologi" — single-select spt Keluhan/Pemeriksaan Fisik,
+  // sumber hasil_radiologi (GET /api/riwayat-hasil-radiologi/:no_rawat).
+  const [radiologiHistory, setRadiologiHistory] = React.useState<{ tgl_periksa: string; jam: string; hasil: string }[]>([]);
+  const [radiologiLoading, setRadiologiLoading] = React.useState(false);
+  const [radiologiSearch, setRadiologiSearch] = React.useState('');
+  // "Referensi Laboratorium" & "Referensi Obat selama rawatan" — beda dari
+  // yg di atas: multi-select via checkbox (padanan kolom "P" di Java) lalu
+  // tombol "Tambahkan" meng-APPEND baris terpilih (bukan replace) ke
+  // textarea, krn wajar user mau gabungkan beberapa item hasil lab/obat.
+  const [laboratHistory, setLaboratHistory] = React.useState<{ tgl_periksa: string; jam: string; pemeriksaan: string; nilai: string; nilai_rujukan: string }[]>([]);
+  const [laboratLoading, setLaboratLoading] = React.useState(false);
+  const [laboratSearch, setLaboratSearch] = React.useState('');
+  const [laboratChecked, setLaboratChecked] = React.useState<Set<number>>(new Set());
+  const [obatHistory, setObatHistory] = React.useState<{ tgl_perawatan: string; jam: string; nama_brng: string; jml: number; kode_sat: string }[]>([]);
+  const [obatLoading, setObatLoading] = React.useState(false);
+  const [obatSearch, setObatSearch] = React.useState('');
+  const [obatChecked, setObatChecked] = React.useState<Set<number>>(new Set());
+
+  // Obat Pulang — beda dari field RefBtn lain: langsung terisi OTOMATIS
+  // dari resep_pulang (GET /api/resep-pulang/:no_rawat, endpoint yg sudah
+  // ada) begitu modal dibuka, tanpa perlu klik apa pun. Hanya isi kalau
+  // field masih kosong, supaya tidak menimpa resume yg sudah pernah
+  // disimpan/diedit manual sebelumnya.
+  React.useEffect(() => {
+    if (form.obat_pulang.trim() !== '') return;
+    fetch(`/api/resep-pulang/${encodeURIComponent(patient.no_rawat)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: { kode_brng: string; nama_brng: string; kode_sat: string; jml: number; dosis: string }[]) => {
+        if (!Array.isArray(data) || data.length === 0) return;
+        const grouped = new Map<string, { nama_brng: string; kode_sat: string; dosis: string; jml: number }>();
+        data.forEach((item) => {
+          const key = `${item.kode_brng}|${item.dosis}`;
+          const g = grouped.get(key);
+          if (g) g.jml += item.jml;
+          else grouped.set(key, { nama_brng: item.nama_brng, kode_sat: item.kode_sat, dosis: item.dosis, jml: item.jml });
+        });
+        const lines = Array.from(grouped.values()).map((g) =>
+          `${g.nama_brng} ${g.jml} ${g.kode_sat}${g.dosis ? ' - ' + g.dosis : ''}`
+        );
+        setForm((prev) => (prev.obat_pulang.trim() !== '' ? prev : { ...prev, obat_pulang: lines.join('\n') }));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient.no_rawat]);
+  // Kotak modal Input Resume (outer gray box: maxWidth 1000/width 90%/
+  // maxHeight 90vh) — DIUKUR LANGSUNG lewat getBoundingClientRect(), bukan
+  // ditiru pakai CSS calc()/sizer manual (percobaan sebelumnya masih
+  // sedikit meleset krn padding overlay & tinggi konten ikut memengaruhi
+  // ukuran akhirnya). Dengan koordinat pixel asli ini, kartu referensi
+  // dijamin pas persis sisi kiri/atas/bawahnya berapa pun ukuran layar/
+  // kontennya.
+  const modalBoxRef = React.useRef<HTMLDivElement>(null);
+  const [modalBoxRect, setModalBoxRect] = React.useState<{ top: number; left: number; width: number; height: number } | null>(null);
+
+  React.useEffect(() => {
+    if (refField !== 'keluhan_utama') return;
+    setKeluhanSearch('');
+    setKeluhanLoading(true);
+    fetch(`/api/pemeriksaan-ranap/${encodeURIComponent(patient.no_rawat)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setKeluhanHistory(Array.isArray(data) ? data : []))
+      .catch(() => setKeluhanHistory([]))
+      .finally(() => setKeluhanLoading(false));
+
+    const measure = () => {
+      if (!modalBoxRef.current) return;
+      const r = modalBoxRef.current.getBoundingClientRect();
+      setModalBoxRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [refField, patient.no_rawat]);
+
+  React.useEffect(() => {
+    if (refField !== 'pemeriksaan_penunjang') return;
+    setRadiologiSearch('');
+    setRadiologiLoading(true);
+    fetch(`/api/riwayat-hasil-radiologi/${encodeURIComponent(patient.no_rawat)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setRadiologiHistory(Array.isArray(data) ? data : []))
+      .catch(() => setRadiologiHistory([]))
+      .finally(() => setRadiologiLoading(false));
+
+    const measure = () => {
+      if (!modalBoxRef.current) return;
+      const r = modalBoxRef.current.getBoundingClientRect();
+      setModalBoxRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [refField, patient.no_rawat]);
+
+  React.useEffect(() => {
+    if (refField !== 'hasil_laborat') return;
+    setLaboratSearch('');
+    setLaboratChecked(new Set());
+    setLaboratLoading(true);
+    fetch(`/api/riwayat-laborat/${encodeURIComponent(patient.no_rawat)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setLaboratHistory(Array.isArray(data) ? data : []))
+      .catch(() => setLaboratHistory([]))
+      .finally(() => setLaboratLoading(false));
+
+    const measure = () => {
+      if (!modalBoxRef.current) return;
+      const r = modalBoxRef.current.getBoundingClientRect();
+      setModalBoxRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [refField, patient.no_rawat]);
+
+  React.useEffect(() => {
+    if (refField !== 'obat_di_rs') return;
+    setObatSearch('');
+    setObatChecked(new Set());
+    setObatLoading(true);
+    fetch(`/api/riwayat-obat-ranap/${encodeURIComponent(patient.no_rawat)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setObatHistory(Array.isArray(data) ? data : []))
+      .catch(() => setObatHistory([]))
+      .finally(() => setObatLoading(false));
+
+    const measure = () => {
+      if (!modalBoxRef.current) return;
+      const r = modalBoxRef.current.getBoundingClientRect();
+      setModalBoxRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [refField, patient.no_rawat]);
+
+  React.useEffect(() => {
+    if (refField !== 'pemeriksaan_fisik') return;
+    setPemeriksaanFisikSearch('');
+    setPemeriksaanFisikLoading(true);
+    fetch(`/api/riwayat-pemeriksaan/${encodeURIComponent(patient.no_rawat)}?field=pemeriksaan`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setPemeriksaanFisikHistory(Array.isArray(data) ? data : []))
+      .catch(() => setPemeriksaanFisikHistory([]))
+      .finally(() => setPemeriksaanFisikLoading(false));
+
+    const measure = () => {
+      if (!modalBoxRef.current) return;
+      const r = modalBoxRef.current.getBoundingClientRect();
+      setModalBoxRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [refField, patient.no_rawat]);
   const [caraKeluarFocused, setCaraKeluarFocused] = React.useState(false);
   const caraKeluarRef = React.useRef<HTMLSelectElement>(null);
   const [keadaanFocused, setKeadaanFocused] = React.useState(false);
@@ -187,6 +358,7 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
       >
         {/* Modal Container */}
         <div
+          ref={modalBoxRef}
           style={{
             background: '#F3F4F6', borderRadius: 20,
             padding: '35px 8px 8px 8px', position: 'relative',
@@ -462,6 +634,462 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
           </div>
         </div>
       </div>
+
+      {/* Cari Riwayat Keluhan — muncul saat RefBtn field Keluhan Utama diklik.
+          Posisi/ukuran kartu diambil dari modalBoxRect (getBoundingClientRect
+          modal Input Resume, diukur di useEffect di atas) — left/top/height
+          persis sama dgn modal itu, width separuhnya. */}
+      {refField === 'keluhan_utama' && modalBoxRect && (
+        <div
+          onClick={() => setRefField(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 10002 }}
+        >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: modalBoxRect.top,
+                left: modalBoxRect.left,
+                width: modalBoxRect.width / 2,
+                height: modalBoxRect.height,
+                background: '#ffffff', borderRadius: 16, padding: 20,
+                display: 'flex', flexDirection: 'column', gap: 12,
+                boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
+              }}
+            >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Keluhan</div>
+              <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+            </div>
+            <input
+              type="text"
+              value={keluhanSearch}
+              onChange={(e) => setKeluhanSearch(e.target.value)}
+              placeholder="Cari tanggal atau keluhan..."
+              autoFocus
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Tanggal</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Jam</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Keluhan</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Dokter/Paramedis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {keluhanLoading ? (
+                    <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+                  ) : (() => {
+                    const q = keluhanSearch.trim().toLowerCase();
+                    const filtered = keluhanHistory.filter((item) =>
+                      !q || (item.tgl_perawatan || '').toLowerCase().includes(q) || (item.keluhan || '').toLowerCase().includes(q)
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data</td>
+                        </tr>
+                      );
+                    }
+                    return filtered.map((item, idx) => (
+                      <tr
+                        key={idx}
+                        onClick={() => { set('keluhan_utama', item.keluhan || ''); setRefField(null); }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.tgl_perawatan}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.jam_rawat}</td>
+                        <td style={{ padding: '7px 10px', color: '#111827' }}>{item.keluhan || '-'}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.nama || '-'}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cari Riwayat Pemeriksaan Fisik — muncul saat RefBtn field
+          Pemeriksaan Fisik diklik. Sumber dari kedua tabel pemeriksaan_ralan
+          + pemeriksaan_ranap (GET /api/riwayat-pemeriksaan). Posisi/ukuran
+          sama seperti kartu Cari Riwayat Keluhan di atas. */}
+      {refField === 'pemeriksaan_fisik' && modalBoxRect && (
+        <div
+          onClick={() => setRefField(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 10002 }}
+        >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: modalBoxRect.top,
+                left: modalBoxRect.left,
+                width: modalBoxRect.width / 2,
+                height: modalBoxRect.height,
+                background: '#ffffff', borderRadius: 16, padding: 20,
+                display: 'flex', flexDirection: 'column', gap: 12,
+                boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
+              }}
+            >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Pemeriksaan Fisik</div>
+              <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+            </div>
+            <input
+              type="text"
+              value={pemeriksaanFisikSearch}
+              onChange={(e) => setPemeriksaanFisikSearch(e.target.value)}
+              placeholder="Cari tanggal atau pemeriksaan..."
+              autoFocus
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Tanggal</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Jam</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Pemeriksaan</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Dokter/Paramedis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pemeriksaanFisikLoading ? (
+                    <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+                  ) : (() => {
+                    const q = pemeriksaanFisikSearch.trim().toLowerCase();
+                    const filtered = pemeriksaanFisikHistory.filter((item) =>
+                      !q || (item.tgl_perawatan || '').toLowerCase().includes(q) || (item.value || '').toLowerCase().includes(q)
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data</td>
+                        </tr>
+                      );
+                    }
+                    return filtered.map((item, idx) => (
+                      <tr
+                        key={idx}
+                        onClick={() => { set('pemeriksaan_fisik', item.value || ''); setRefField(null); }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.tgl_perawatan}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.jam_rawat}</td>
+                        <td style={{ padding: '7px 10px', color: '#111827' }}>{item.value || '-'}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.nama || '-'}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cari Riwayat Radiologi — single-select spt Keluhan/Pemeriksaan
+          Fisik. Sumber hasil_radiologi (GET /api/riwayat-hasil-radiologi). */}
+      {refField === 'pemeriksaan_penunjang' && modalBoxRect && (
+        <div
+          onClick={() => setRefField(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 10002 }}
+        >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: modalBoxRect.top,
+                left: modalBoxRect.left,
+                width: modalBoxRect.width / 2,
+                height: modalBoxRect.height,
+                background: '#ffffff', borderRadius: 16, padding: 20,
+                display: 'flex', flexDirection: 'column', gap: 12,
+                boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
+              }}
+            >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Radiologi</div>
+              <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+            </div>
+            <input
+              type="text"
+              value={radiologiSearch}
+              onChange={(e) => setRadiologiSearch(e.target.value)}
+              placeholder="Cari tanggal atau hasil pemeriksaan..."
+              autoFocus
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Tanggal</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Jam</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Hasil Pemeriksaan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {radiologiLoading ? (
+                    <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+                  ) : (() => {
+                    const q = radiologiSearch.trim().toLowerCase();
+                    const filtered = radiologiHistory.filter((item) =>
+                      !q || (item.tgl_periksa || '').toLowerCase().includes(q) || (item.hasil || '').toLowerCase().includes(q)
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={3} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data</td>
+                        </tr>
+                      );
+                    }
+                    return filtered.map((item, idx) => (
+                      <tr
+                        key={idx}
+                        onClick={() => { set('pemeriksaan_penunjang', item.hasil || ''); setRefField(null); }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.tgl_periksa}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.jam}</td>
+                        <td style={{ padding: '7px 10px', color: '#111827', whiteSpace: 'pre-line' }}>{item.hasil || '-'}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cari Riwayat Laboratorium — checkbox multi-select (padanan kolom
+          "P" di Java) + tombol "Tambahkan" yg meng-APPEND baris terpilih
+          ke textarea hasil_laborat (bukan replace, krn biasanya user mau
+          gabungkan beberapa item hasil lab). */}
+      {refField === 'hasil_laborat' && modalBoxRect && (
+        <div
+          onClick={() => setRefField(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 10002 }}
+        >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: modalBoxRect.top,
+                left: modalBoxRect.left,
+                width: modalBoxRect.width / 2,
+                height: modalBoxRect.height,
+                background: '#ffffff', borderRadius: 16, padding: 20,
+                display: 'flex', flexDirection: 'column', gap: 12,
+                boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
+              }}
+            >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Laboratorium</div>
+              <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+            </div>
+            <input
+              type="text"
+              value={laboratSearch}
+              onChange={(e) => setLaboratSearch(e.target.value)}
+              placeholder="Cari tanggal atau nama pemeriksaan..."
+              autoFocus
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', width: 30 }}></th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Tanggal</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Jam</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Hasil Pemeriksaan</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Nilai Normal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {laboratLoading ? (
+                    <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+                  ) : (() => {
+                    const q = laboratSearch.trim().toLowerCase();
+                    const filtered = laboratHistory
+                      .map((item, idx) => ({ item, idx }))
+                      .filter(({ item }) =>
+                        !q || (item.tgl_periksa || '').toLowerCase().includes(q) || (item.pemeriksaan || '').toLowerCase().includes(q)
+                      );
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data</td>
+                        </tr>
+                      );
+                    }
+                    return filtered.map(({ item, idx }) => (
+                      <tr
+                        key={idx}
+                        onClick={() => {
+                          setLaboratChecked((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(idx)) next.delete(idx); else next.add(idx);
+                            return next;
+                          });
+                        }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f3f4f6', background: laboratChecked.has(idx) ? '#eff6ff' : 'transparent' }}
+                      >
+                        <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                          <input type="checkbox" checked={laboratChecked.has(idx)} onChange={() => {}} style={{ cursor: 'pointer' }} />
+                        </td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.tgl_periksa}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.jam}</td>
+                        <td style={{ padding: '7px 10px', color: '#111827' }}>{item.pemeriksaan || '-'}: {item.nilai || '-'}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.nilai_rujukan || '-'}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+            <button
+              type="button"
+              disabled={laboratChecked.size === 0}
+              onClick={() => {
+                const lines = laboratHistory
+                  .filter((_, idx) => laboratChecked.has(idx))
+                  .map((item) => `${item.pemeriksaan}: ${item.nilai} (Normal: ${item.nilai_rujukan || '-'})`);
+                if (lines.length > 0) {
+                  const existing = form.hasil_laborat ? form.hasil_laborat + '\n' : '';
+                  set('hasil_laborat', existing + lines.join('\n'));
+                }
+                setRefField(null);
+              }}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none', alignSelf: 'flex-end',
+                background: laboratChecked.size === 0 ? '#9ca3af' : '#2563eb', color: '#fff',
+                cursor: laboratChecked.size === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500,
+              }}
+            >Masukan {laboratChecked.size > 0 ? `(${laboratChecked.size})` : ''}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Cari Riwayat Obat selama rawatan — checkbox multi-select spt
+          Laboratorium. Sumber detail_pemberian_obat (GET
+          /api/riwayat-obat-ranap). */}
+      {refField === 'obat_di_rs' && modalBoxRect && (
+        <div
+          onClick={() => setRefField(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', zIndex: 10002 }}
+        >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: modalBoxRect.top,
+                left: modalBoxRect.left,
+                width: modalBoxRect.width / 2,
+                height: modalBoxRect.height,
+                background: '#ffffff', borderRadius: 16, padding: 20,
+                display: 'flex', flexDirection: 'column', gap: 12,
+                boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
+              }}
+            >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Obat Selama Rawatan</div>
+              <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+            </div>
+            <input
+              type="text"
+              value={obatSearch}
+              onChange={(e) => setObatSearch(e.target.value)}
+              placeholder="Cari tanggal atau nama obat..."
+              autoFocus
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', width: 30 }}></th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Tanggal</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Jam</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>Obat Diberikan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {obatLoading ? (
+                    <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+                  ) : (() => {
+                    const q = obatSearch.trim().toLowerCase();
+                    const filtered = obatHistory
+                      .map((item, idx) => ({ item, idx }))
+                      .filter(({ item }) =>
+                        !q || (item.tgl_perawatan || '').toLowerCase().includes(q) || (item.nama_brng || '').toLowerCase().includes(q)
+                      );
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada data</td>
+                        </tr>
+                      );
+                    }
+                    return filtered.map(({ item, idx }) => (
+                      <tr
+                        key={idx}
+                        onClick={() => {
+                          setObatChecked((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(idx)) next.delete(idx); else next.add(idx);
+                            return next;
+                          });
+                        }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f3f4f6', background: obatChecked.has(idx) ? '#eff6ff' : 'transparent' }}
+                      >
+                        <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                          <input type="checkbox" checked={obatChecked.has(idx)} onChange={() => {}} style={{ cursor: 'pointer' }} />
+                        </td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.tgl_perawatan}</td>
+                        <td style={{ padding: '7px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{item.jam}</td>
+                        <td style={{ padding: '7px 10px', color: '#111827' }}>{item.nama_brng || '-'} ({item.jml} {item.kode_sat})</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+            <button
+              type="button"
+              disabled={obatChecked.size === 0}
+              onClick={() => {
+                const lines = obatHistory
+                  .filter((_, idx) => obatChecked.has(idx))
+                  .map((item) => `${item.nama_brng} - ${item.jml} ${item.kode_sat}`);
+                if (lines.length > 0) {
+                  const existing = form.obat_di_rs ? form.obat_di_rs + '\n' : '';
+                  set('obat_di_rs', existing + lines.join('\n'));
+                }
+                setRefField(null);
+              }}
+              style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none', alignSelf: 'flex-end',
+                background: obatChecked.size === 0 ? '#9ca3af' : '#2563eb', color: '#fff',
+                cursor: obatChecked.size === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500,
+              }}
+            >Masukan {obatChecked.size > 0 ? `(${obatChecked.size})` : ''}</button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

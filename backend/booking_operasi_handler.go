@@ -25,6 +25,8 @@ type BookingOperasiRow struct {
 	NamaPasien   string `json:"nama_pasien"`
 	Umur         string `json:"umur"`
 	JK           string `json:"jk"`
+	TglLahir     string `json:"tgl_lahir"`
+	AlamatPasien string `json:"alamat_pasien"`
 	Tanggal      string `json:"tanggal"`
 	JamMulai     string `json:"jam_mulai"`
 	JamSelesai   string `json:"jam_selesai"`
@@ -80,6 +82,7 @@ func getBookingOperasiList(db *sql.DB) gin.HandlerFunc {
 		query := `
 			SELECT booking_operasi.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien,
 				CONCAT(reg_periksa.umurdaftar,' ',reg_periksa.sttsumur) AS umur, pasien.jk,
+				COALESCE(DATE_FORMAT(pasien.tgl_lahir,'%Y-%m-%d'),''), COALESCE(pasien.alamat,''),
 				DATE_FORMAT(booking_operasi.tanggal,'%Y-%m-%d'), booking_operasi.jam_mulai, COALESCE(booking_operasi.jam_selesai,''),
 				booking_operasi.status, booking_operasi.kode_paket, paket_operasi.nm_perawatan,
 				booking_operasi.kd_dokter, dokter.nm_dokter, booking_operasi.kd_ruang_ok, ruang_ok.nm_ruang_ok,
@@ -128,6 +131,7 @@ func getBookingOperasiList(db *sql.DB) gin.HandlerFunc {
 			var diagnosa sql.NullString
 			if err := rows.Scan(
 				&r.NoRawat, &r.NoRKMMedis, &r.NamaPasien, &r.Umur, &r.JK,
+				&r.TglLahir, &r.AlamatPasien,
 				&r.Tanggal, &r.JamMulai, &r.JamSelesai,
 				&r.Status, &r.KodeOperasi, &r.Operasi,
 				&r.KodeOperator, &r.Operator, &r.KodeOK, &r.NamaRuangOK,

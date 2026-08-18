@@ -3244,6 +3244,12 @@ func main() {
 	r.POST("/api/pemeriksaan-ranap", savePemeriksaanRanap(db))
 	r.PUT("/api/pemeriksaan-ranap", updatePemeriksaanRanap(db))
 	r.DELETE("/api/pemeriksaan-ranap", deletePemeriksaanRanap(db))
+	r.GET("/api/riwayat-pemeriksaan/*no_rawat", getRiwayatPemeriksaan(db))
+	r.GET("/api/riwayat-hasil-radiologi/*no_rawat", getRiwayatHasilRadiologi(db))
+	r.GET("/api/riwayat-laborat/*no_rawat", getRiwayatLaborat(db))
+	r.GET("/api/riwayat-obat-ranap/*no_rawat", getRiwayatObatRanap(db))
+	r.GET("/api/dpjp-ranap/*no_rawat", getDpjpRanap(db))
+	r.GET("/api/dokter-pengirim/*no_rawat", getDokterPengirim(db))
 
 	// ADIME Gizi endpoints
 	r.GET("/api/adime/*no_rawat", getAdime(db))
@@ -3350,6 +3356,8 @@ func main() {
 	r.GET("/api/bridging/pengajuan-penjaminan/list", getPengajuanPenjaminanList(db))
 	r.POST("/api/bridging/pengajuan-penjaminan", submitPengajuanPenjaminan(db))
 	r.POST("/api/bridging/pengajuan-penjaminan/approval", approvalPengajuanPenjaminan(db))
+	r.POST("/api/bridging/sep/aproval-langsung", aprovalSepLangsung(db))
+	r.GET("/api/bridging/sep/persetujuan-list", getPersetujuanSepList(db))
 
 	// Bridging Rujukan Keluar — Pembuatan/Edit Rujukan (BPJS VClaim)
 	r.GET("/api/bridging/rujukan-keluar/list", getRujukanKeluarList(db))
@@ -3734,6 +3742,12 @@ func main() {
 	// === Kamar Operasi (OK) — Jadwal Operasi ===
 	r.GET("/api/booking-operasi/list", getBookingOperasiList(db))
 	r.PUT("/api/booking-operasi/update", updateBookingOperasi(db))
+
+	// === Permintaan Ranap ===
+	r.GET("/api/permintaan-ranap/list", getPermintaanRanapList(db))
+	r.GET("/api/permintaan-ranap/pasien/*no_rawat", getPermintaanRanapPasienInfo(db))
+	r.GET("/api/kamar/list", getKamarList(db))
+	r.POST("/api/permintaan-ranap", createPermintaanRanap(db))
 
 	addr := getEnv("APP_ADDR", ":8080")
 	log.Printf("Server berjalan di %s", addr)

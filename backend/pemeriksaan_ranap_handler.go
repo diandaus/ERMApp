@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -50,7 +52,7 @@ func getPemeriksaanRanap(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-	query := `
+		query := `
 		SELECT
 			DATE_FORMAT(pemeriksaan_ranap.tgl_perawatan, '%d/%m/%Y') as tgl_perawatan,
 			TIME_FORMAT(pemeriksaan_ranap.jam_rawat, '%H:%i:%s') as jam_rawat,
@@ -119,6 +121,96 @@ func getPemeriksaanRanap(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, pemeriksaanList)
+	}
+}
+
+// riwayatPemeriksaanFieldColumns — kolom mana yg boleh diambil sbg
+// "riwayat" per field, whitelist supaya `field` dari query string TIDAK
+// bisa dipakai utk SQL injection (nama kolom tidak bisa di-parameterize
+// pakai placeholder ?, jadi harus divalidasi lewat whitelist eksplisit).
+var riwayatPemeriksaanFieldColumns = map[string]string{
+	"keluhan":     "keluhan",
+	"pemeriksaan": "pemeriksaan",
+}
+
+type RiwayatPemeriksaanRow struct {
+	TglPerawatan string `json:"tgl_perawatan"`
+	JamRawat     string `json:"jam_rawat"`
+	Value        string `json:"value"`
+	Nama         string `json:"nama"`
+	Sumber       string `json:"sumber"` // "Ralan" atau "Ranap" — dari tabel mana entri ini berasal
+}
+
+// GET /api/riwayat-pemeriksaan/:no_rawat?field=keluhan|pemeriksaan&search=
+//
+// Padanan tampil() dialog "Cari Riwayat" Java (mis. DlgCariKeluhan/
+// DlgCariPemeriksaan) — union dari pemeriksaan_ralan DAN pemeriksaan_ranap
+// utk no_rawat yg sama (satu episode rawat bisa punya catatan dari
+// keduanya: SOAP awal di Ralan/IGD sebelum resmi pindah ke kamar, lanjut
+// SOAP harian di Ranap — no_rawat-nya TETAP SAMA sepanjang episode itu,
+// tidak berganti saat pindah dari Ralan ke Ranap). Dipakai generik utk
+// beberapa field referensi di ModalInputResume.tsx (Keluhan Utama,
+// Pemeriksaan Fisik, dst — tinggal tambah entri baru di
+// riwayatPemeriksaanFieldColumns kalau field-nya juga ada di kedua tabel).
+func getRiwayatPemeriksaan(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Param("no_rawat")
+		if len(noRawat) > 0 && noRawat[0] == '/' {
+			noRawat = noRawat[1:]
+		}
+		field := strings.TrimSpace(c.Query("field"))
+		kolom, ok := riwayatPemeriksaanFieldColumns[field]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Field tidak valid"})
+			return
+		}
+		search := strings.TrimSpace(c.Query("search"))
+
+		likeClause := ""
+		args := []interface{}{noRawat}
+		if search != "" {
+			likeClause = fmt.Sprintf(" AND (t.tgl_perawatan LIKE ? OR t.%s LIKE ?)", kolom)
+			like := "%" + search + "%"
+			args = append(args, like, like)
+		}
+		// args dipakai 2x (Ralan lalu Ranap) krn UNION ALL dari 2 query
+		// terpisah, masing2 butuh no_rawat (+ search kalau ada) sendiri.
+		fullArgs := append(append([]interface{}{}, args...), args...)
+
+		query := fmt.Sprintf(`
+			SELECT tgl_perawatan, jam_rawat, value, nama, sumber FROM (
+				(SELECT t.tgl_perawatan AS sort_tgl, DATE_FORMAT(t.tgl_perawatan,'%%d/%%m/%%Y') AS tgl_perawatan,
+					t.jam_rawat AS sort_jam, TIME_FORMAT(t.jam_rawat,'%%H:%%i:%%s') AS jam_rawat,
+					COALESCE(t.%s,'') AS value, COALESCE(pegawai.nama,'') AS nama, 'Ralan' AS sumber
+				FROM pemeriksaan_ralan t
+				LEFT JOIN pegawai ON t.nip = pegawai.nik
+				WHERE t.no_rawat = ?%s)
+				UNION ALL
+				(SELECT t.tgl_perawatan AS sort_tgl, DATE_FORMAT(t.tgl_perawatan,'%%d/%%m/%%Y') AS tgl_perawatan,
+					t.jam_rawat AS sort_jam, TIME_FORMAT(t.jam_rawat,'%%H:%%i:%%s') AS jam_rawat,
+					COALESCE(t.%s,'') AS value, COALESCE(pegawai.nama,'') AS nama, 'Ranap' AS sumber
+				FROM pemeriksaan_ranap t
+				LEFT JOIN pegawai ON t.nip = pegawai.nik
+				WHERE t.no_rawat = ?%s)
+			) combined
+			ORDER BY sort_tgl, sort_jam
+		`, kolom, likeClause, kolom, likeClause)
+
+		rows, err := db.Query(query, fullArgs...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []RiwayatPemeriksaanRow{}
+		for rows.Next() {
+			var r RiwayatPemeriksaanRow
+			if err := rows.Scan(&r.TglPerawatan, &r.JamRawat, &r.Value, &r.Nama, &r.Sumber); err == nil {
+				list = append(list, r)
+			}
+		}
+		c.JSON(http.StatusOK, list)
 	}
 }
 
@@ -210,9 +302,9 @@ func updatePemeriksaanRanap(db *sql.DB) gin.HandlerFunc {
 
 func deletePemeriksaanRanap(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		noRawat      := c.Query("no_rawat")
+		noRawat := c.Query("no_rawat")
 		tglPerawatan := c.Query("tgl_perawatan")
-		jamRawat     := c.Query("jam_rawat")
+		jamRawat := c.Query("jam_rawat")
 		if noRawat == "" || tglPerawatan == "" || jamRawat == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat, tgl_perawatan, jam_rawat wajib diisi"})
 			return
