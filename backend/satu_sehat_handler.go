@@ -374,32 +374,38 @@ func getReferensiPasienSatuSehat(db *sql.DB) gin.HandlerFunc {
 				alamat = strings.Join(parts, ", ")
 			}
 			kodePos = satuSehatJSONStr(am["postalCode"])
+			// Struktur asli (contoh resmi Postman "Practitioner - By NIK"): province/
+			// city/district/village/rw/rt semuanya NESTED di dalam satu extension
+			// administrativeCode yg sama, pakai valueCode — bukan extension terpisah
+			// dgn valueString spt yg tadinya diasumsikan di sini.
 			if exts, ok := am["extension"].([]interface{}); ok {
 				for _, e := range exts {
 					em, _ := e.(map[string]interface{})
 					eurl := satuSehatJSONStr(em["url"])
-					switch {
-					case strings.Contains(eurl, "administrativeCode"):
-						if subExts, ok := em["extension"].([]interface{}); ok {
-							for _, se := range subExts {
-								sm, _ := se.(map[string]interface{})
-								sval := satuSehatJSONStr(sm["valueCode"])
-								switch satuSehatJSONStr(sm["url"]) {
-								case "province":
-									propinsi = sval
-								case "city":
-									kabupaten = sval
-								case "district":
-									kecamatan = sval
-								case "village":
-									kelurahan = sval
-								}
-							}
+					if !strings.Contains(eurl, "administrativeCode") {
+						continue
+					}
+					subExts, ok := em["extension"].([]interface{})
+					if !ok {
+						continue
+					}
+					for _, se := range subExts {
+						sm, _ := se.(map[string]interface{})
+						sval := satuSehatJSONStr(sm["valueCode"])
+						switch satuSehatJSONStr(sm["url"]) {
+						case "province":
+							propinsi = sval
+						case "city":
+							kabupaten = sval
+						case "district":
+							kecamatan = sval
+						case "village":
+							kelurahan = sval
+						case "rw":
+							rw = sval
+						case "rt":
+							rt = sval
 						}
-					case strings.HasSuffix(strings.ToLower(eurl), "/rt"):
-						rt = satuSehatJSONStr(em["valueString"])
-					case strings.HasSuffix(strings.ToLower(eurl), "/rw"):
-						rw = satuSehatJSONStr(em["valueString"])
 					}
 				}
 			}
