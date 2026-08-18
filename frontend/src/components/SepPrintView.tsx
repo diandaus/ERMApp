@@ -202,7 +202,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     </table>
 
                     {/* Persetujuan / disclaimer */}
-                    <div style={{ fontSize: 9, lineHeight: 1.5, marginTop: 12 }}>
+                    <div style={{ fontSize: 9, lineHeight: 1.2, marginTop: 4 }}>
                       *Saya menyetujui BPJS Kesehatan untuk :<br />
                       a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
                       &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
