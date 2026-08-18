@@ -36,9 +36,9 @@ type SepPrintViewProps = {
 
 const Row: React.FC<{ label: string; value: React.ReactNode; labelWidth?: number }> = ({ label, value, labelWidth = 140 }) => (
   <tr>
-    <td style={{ width: labelWidth, padding: '3px 0', verticalAlign: 'top', whiteSpace: 'nowrap' }}>{label}</td>
-    <td style={{ width: 14, padding: '3px 0', verticalAlign: 'top' }}>:</td>
-    <td style={{ padding: '3px 0', verticalAlign: 'top' }}>{value}</td>
+    <td style={{ width: labelWidth, padding: '2px 0', verticalAlign: 'top', whiteSpace: 'nowrap' }}>{label}</td>
+    <td style={{ width: 14, padding: '2px 0', verticalAlign: 'top' }}>:</td>
+    <td style={{ padding: '2px 0', verticalAlign: 'top' }}>{value}</td>
   </tr>
 );
 
@@ -94,8 +94,12 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
             .then((data) => {
               if (cancelled || !data) return;
               const p = data.peserta?.peserta ?? data.peserta ?? {};
-              if (p.hakKelas?.keterangan) setKlsHak(p.hakKelas.keterangan);
-              else if (p.hakKelas?.kode) setKlsHak(`Kelas ${p.hakKelas.kode}`);
+              // Pakai kode + format "Kelas X" sendiri (bukan teks
+              // keterangan mentah dari BPJS, mis. "KELAS I") supaya
+              // konsisten dgn format "Kelas 1" yg dipakai di seluruh
+              // halaman ini (Kls.Rawat dst).
+              if (p.hakKelas?.kode) setKlsHak(`Kelas ${p.hakKelas.kode}`);
+              else if (p.hakKelas?.keterangan) setKlsHak(p.hakKelas.keterangan);
               const prb = p.informasi?.prolanisPRB || p.informasi?.prb;
               if (prb) setPotensiPrb(prb);
             })
@@ -148,7 +152,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
         {error && <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{error}</div>}
 
         {!loading && !error && sep && (
-          <div id="sep-print-area" style={{ fontFamily: 'Arial, sans-serif', fontSize: 15, color: '#111827' }}>
+          <div id="sep-print-area" style={{ fontFamily: 'Arial, sans-serif', fontSize: 13, color: '#111827' }}>
             {/* Header */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
               <tbody>
@@ -157,8 +161,8 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     <img src="/images/bpjslogo.png" alt="BPJS Kesehatan" style={{ maxWidth: 260, height: 'auto' }} />
                   </td>
                   <td style={{ verticalAlign: 'middle' }}>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>SURAT ELEGIBILITAS PESERTA</div>
-                    <div style={{ fontSize: 18 }}>{namaInstansi}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>SURAT ELEGIBILITAS PESERTA</div>
+                    <div style={{ fontSize: 15 }}>{namaInstansi}</div>
                   </td>
                 </tr>
               </tbody>
@@ -228,12 +232,18 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                     </table>
 
                     <div style={{ textAlign: 'right', marginTop: 24 }}>
-                      <div style={{ fontSize: 15 }}>Persetujuan</div>
-                      <div style={{ fontSize: 15, marginBottom: 8 }}>Pasien/Keluarga Pasien</div>
+                      <div style={{ fontSize: 13 }}>Persetujuan</div>
+                      <div style={{ fontSize: 13, marginBottom: 8 }}>Pasien/Keluarga Pasien</div>
                       {qrDataUrl && <img src={qrDataUrl} alt="QR" width={90} />}
-                      <div style={{ fontSize: 14, marginTop: 4 }}>{sep.nama_pasien}</div>
+                      <div style={{ fontSize: 13, marginTop: 4 }}>{sep.nama_pasien}</div>
                       <div style={{ fontSize: 11, marginTop: 8 }}>
-                        Cetakan ke 1 {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')} {new Date().toLocaleTimeString('id-ID')}
+                        Cetakan ke 1 {(() => {
+                          const now = new Date();
+                          const pad = (n: number) => String(n).padStart(2, '0');
+                          const tgl = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+                          const jam = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+                          return `${tgl} ${jam}`;
+                        })()}
                       </div>
                     </div>
                   </td>
@@ -242,7 +252,7 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
             </table>
 
             {/* Persetujuan / disclaimer */}
-            <div style={{ fontSize: 11, lineHeight: 1.5, marginTop: 12 }}>
+            <div style={{ fontSize: 10, lineHeight: 1.5, marginTop: 12 }}>
               *Saya menyetujui BPJS Kesehatan untuk :<br />
               a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
               &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
