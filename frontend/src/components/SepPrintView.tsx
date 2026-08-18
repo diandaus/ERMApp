@@ -227,43 +227,51 @@ export const SepPrintView: React.FC<SepPrintViewProps> = ({ noRawat, onClose }) 
                         <Row label="Penjamin" value="" labelWidth={110} />
                       </tbody>
                     </table>
-
-                    <div style={{ textAlign: 'right', marginTop: 24 }}>
-                      <div style={{ fontSize: 13 }}>Persetujuan</div>
-                      <div style={{ fontSize: 13, marginBottom: 8 }}>Pasien/Keluarga Pasien</div>
-                      {qrDataUrl && <img src={qrDataUrl} alt="QR" width={75} />}
-                      <div style={{ fontSize: 13, marginTop: 4 }}>{sep.nama_pasien}</div>
-                      <div style={{ fontSize: 11, marginTop: 8 }}>
-                        Cetakan ke 1 {(() => {
-                          const now = new Date();
-                          const pad = (n: number) => String(n).padStart(2, '0');
-                          const tgl = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
-                          const jam = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-                          return `${tgl} ${jam}`;
-                        })()}
-                      </div>
-                    </div>
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            {/* Persetujuan / disclaimer */}
-            <div style={{ fontSize: 9, lineHeight: 1, marginTop: 4 }}>
-              *Saya menyetujui BPJS Kesehatan untuk :<br />
-              a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
-              &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
-              b. memberikan akses informasi medis atau riwayat pelayanan kepada dokter/tenaga medis pada {namaInstansi}<br />
-              &nbsp;&nbsp;&nbsp;untuk kepentingan pemeliharaan kesehatan, pengobatan, penyembuhan, dan perawatan Pasien<br />
-              *Saya mengetahui dan memahami :<br />
-              a. Rumah Sakit dapat melakukan koordinasi dengan PT Jasa Raharja / PT Taspen / PT ASABRI / BPJS Ketenagakerjaan atau<br />
-              &nbsp;&nbsp;&nbsp;Penjamin lainnya, jika Peserta merupakan pasien yang mengalami kecelakaan lalulintas dan / atau kecelakaan kerja<br />
-              b. SEP bukan sebagai bukti penjaminan peserta<br />
-              <br />
-              ** Dengan tampilnya luaran SEP elektronik ini merupakan hasil validasi terhadap eligibilitas Pasien secara elektronik<br />
-              &nbsp;&nbsp;(validasi finger print atau biometrik / sistem validasi lain)<br />
-              &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
-              &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
+            {/* Persetujuan / disclaimer digabung 1 baris dgn blok QR: 70% teks
+                persetujuan (kiri), 30% Persetujuan Pasien/Keluarga Pasien +
+                QR + nama pasien (kanan). */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
+              <tbody>
+                <tr>
+                  <td style={{ width: '70%', verticalAlign: 'top', fontSize: 9, lineHeight: 1 }}>
+                    *Saya menyetujui BPJS Kesehatan untuk :<br />
+                    a. membuka dan atau menggunakan informasi medis Pasien untuk keperluan administrasi, pembayaran asuransi atau<br />
+                    &nbsp;&nbsp;&nbsp;jaminan pembiayaan kesehatan<br />
+                    b. memberikan akses informasi medis atau riwayat pelayanan kepada dokter/tenaga medis pada {namaInstansi}<br />
+                    &nbsp;&nbsp;&nbsp;untuk kepentingan pemeliharaan kesehatan, pengobatan, penyembuhan, dan perawatan Pasien<br />
+                    *Saya mengetahui dan memahami :<br />
+                    a. Rumah Sakit dapat melakukan koordinasi dengan PT Jasa Raharja / PT Taspen / PT ASABRI / BPJS Ketenagakerjaan atau<br />
+                    &nbsp;&nbsp;&nbsp;Penjamin lainnya, jika Peserta merupakan pasien yang mengalami kecelakaan lalulintas dan / atau kecelakaan kerja<br />
+                    b. SEP bukan sebagai bukti penjaminan peserta<br />
+                    <br />
+                    ** Dengan tampilnya luaran SEP elektronik ini merupakan hasil validasi terhadap eligibilitas Pasien secara elektronik<br />
+                    &nbsp;&nbsp;(validasi finger print atau biometrik / sistem validasi lain)<br />
+                    &nbsp;&nbsp;dan selanjutnya Pasien dapat mengakses pelayanan kesehatan rujukan sesuai ketentuan berlaku.<br />
+                    &nbsp;&nbsp;Kebenaran dan keaslian atas informasi data Pasien menjadi tanggung jawab penuh FKRTL
+                  </td>
+                  <td style={{ width: '30%', verticalAlign: 'top', textAlign: 'right' }}>
+                    <div style={{ fontSize: 13 }}>Persetujuan</div>
+                    <div style={{ fontSize: 13, marginBottom: 8 }}>Pasien/Keluarga Pasien</div>
+                    {qrDataUrl && <img src={qrDataUrl} alt="QR" width={75} />}
+                    <div style={{ fontSize: 13, marginTop: 4 }}>{sep.nama_pasien}</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style={{ fontSize: 11, textAlign: 'right', marginTop: 8 }}>
+              Cetakan ke 1 {(() => {
+                const now = new Date();
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const tgl = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+                const jam = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+                return `${tgl} ${jam}`;
+              })()}
             </div>
           </div>
         )}
