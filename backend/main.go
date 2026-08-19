@@ -344,6 +344,24 @@ func ensureSatuSehatTables(db *sql.DB) error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE KEY uq_order_prw (noorder, kd_jenis_prw)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS satu_sehat_servicerequest_lab (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			noorder VARCHAR(20) NOT NULL,
+			id_template INT NOT NULL,
+			kd_jenis_prw VARCHAR(20) NOT NULL,
+			id_servicerequest VARCHAR(100) DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE KEY uq_order_template_prw (noorder, id_template, kd_jenis_prw)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS satu_sehat_servicerequest_lab_mb (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			noorder VARCHAR(20) NOT NULL,
+			id_template INT NOT NULL,
+			kd_jenis_prw VARCHAR(20) NOT NULL,
+			id_servicerequest VARCHAR(100) DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE KEY uq_order_template_prw (noorder, id_template, kd_jenis_prw)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 		`CREATE TABLE IF NOT EXISTS satu_sehat_mwl_radiologi (
 			id INT AUTO_INCREMENT PRIMARY KEY,
 			noorder VARCHAR(20) NOT NULL UNIQUE,
@@ -379,6 +397,14 @@ func ensureSatuSehatTables(db *sql.DB) error {
 		`ALTER TABLE satu_sehat_mapping_radiologi ADD COLUMN IF NOT EXISTS sampel_code VARCHAR(100) DEFAULT ''`,
 		`ALTER TABLE satu_sehat_mapping_radiologi ADD COLUMN IF NOT EXISTS sampel_system VARCHAR(200) DEFAULT ''`,
 		`ALTER TABLE satu_sehat_mapping_radiologi ADD COLUMN IF NOT EXISTS sampel_display VARCHAR(200) DEFAULT ''`,
+		// satu_sehat_episodeofcare sebelumnya cuma stub (no_rawat, id_encounter) —
+		// belum pernah dipakai kode manapun. Dilengkapi jadi keyed (no_rawat,
+		// kd_penyakit, status) persis diagnosa_pasien, spy satu kunjungan dgn
+		// >1 diagnosa (bab ICD-10 "O" — kehamilan/persalinan) bisa dilacak per-diagnosa.
+		`ALTER TABLE satu_sehat_episodeofcare ADD COLUMN IF NOT EXISTS kd_penyakit VARCHAR(15) NOT NULL DEFAULT ''`,
+		`ALTER TABLE satu_sehat_episodeofcare ADD COLUMN IF NOT EXISTS status ENUM('Ralan','Ranap') NOT NULL DEFAULT 'Ralan'`,
+		`ALTER TABLE satu_sehat_episodeofcare ADD COLUMN IF NOT EXISTS id_episodeofcare VARCHAR(40) DEFAULT ''`,
+		`ALTER TABLE satu_sehat_episodeofcare ADD UNIQUE KEY IF NOT EXISTS uq_norawat_penyakit_status (no_rawat, kd_penyakit, status)`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // abaikan error (kolom mungkin sudah ada di versi MySQL lama)
@@ -844,6 +870,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel settings: %v", err)
 	}
 
+	if err := ensureSatuSehatTables(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel satu sehat: %v", err)
+	}
+
 	if err := ensureAntrianPoliTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel antrian_poli: %v", err)
 	}
@@ -858,6 +888,10 @@ func main() {
 
 	if err := ensureSettingBridgingTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel setting_bridging: %v", err)
+	}
+
+	if err := ensureSatuSehatPasienDokterTables(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel satu_sehat_pasien/satu_sehat_dokter: %v", err)
 	}
 
 	if err := ensureBridgingPengajuanTable(db); err != nil {
@@ -3641,8 +3675,56 @@ func main() {
 	r.GET("/api/satu-sehat/referensi/praktisi", getReferensiPraktisiSatuSehat(db))
 	r.GET("/api/satu-sehat/referensi/pasien", getReferensiPasienSatuSehat(db))
 	r.GET("/api/satu-sehat/encounter", getEncounterCandidates(db))
+	r.POST("/api/satu-sehat/encounter/send/*no_rawat", sendEncounterSatuSehat(db))
+	r.GET("/api/satu-sehat/encounter/detail/*no_rawat", getEncounterDetailSatuSehat(db))
+	r.POST("/api/satu-sehat/encounter/inprogress/*no_rawat", updateEncounterInprogress(db))
+	r.POST("/api/satu-sehat/encounter/disposisi/*no_rawat", updateEncounterDisposisi(db))
+	r.POST("/api/satu-sehat/encounter/finished/*no_rawat", updateEncounterFinished(db))
+	r.GET("/api/satu-sehat/condition", getConditionCandidates(db))
+	r.POST("/api/satu-sehat/condition/send/*no_rawat", sendConditionSatuSehat(db))
+	r.POST("/api/satu-sehat/condition/update/*no_rawat", updateConditionSatuSehat(db))
+	r.GET("/api/satu-sehat/observation-ttv/:jenis", getObservationTTVCandidates(db))
+	r.POST("/api/satu-sehat/observation-ttv/:jenis/send/*no_rawat", sendObservationTTV(db))
+	r.POST("/api/satu-sehat/observation-ttv/:jenis/update/*no_rawat", updateObservationTTV(db))
+	r.GET("/api/satu-sehat/procedure", getProcedureCandidates(db))
+	r.POST("/api/satu-sehat/procedure/send/*no_rawat", sendProcedureSatuSehat(db))
+	r.POST("/api/satu-sehat/procedure/update/*no_rawat", updateProcedureSatuSehat(db))
+	r.GET("/api/satu-sehat/medication", getMedicationCandidates(db))
+	r.POST("/api/satu-sehat/medication/send/:kode_brng", sendMedicationSatuSehat(db))
+	r.POST("/api/satu-sehat/medication/update/:kode_brng", updateMedicationSatuSehat(db))
+	r.GET("/api/satu-sehat/medication-request", getMedicationRequestCandidates(db))
+	r.POST("/api/satu-sehat/medication-request/send/:no_resep", sendMedicationRequestSatuSehat(db))
+	r.POST("/api/satu-sehat/medication-request/update/:no_resep", updateMedicationRequestSatuSehat(db))
+	r.GET("/api/satu-sehat/medication-dispense", getMedicationDispenseCandidates(db))
+	r.POST("/api/satu-sehat/medication-dispense/send/*no_rawat", sendMedicationDispenseSatuSehat(db))
+	r.POST("/api/satu-sehat/medication-dispense/update/*no_rawat", updateMedicationDispenseSatuSehat(db))
+	r.GET("/api/satu-sehat/medication-statement", getMedicationStatementCandidates(db))
+	r.POST("/api/satu-sehat/medication-statement/send/:no_resep", sendMedicationStatementSatuSehat(db))
+	r.POST("/api/satu-sehat/medication-statement/update/:no_resep", updateMedicationStatementSatuSehat(db))
+	r.GET("/api/satu-sehat/allergy-intolerance", getAllergyIntoleranceCandidates(db))
+	r.POST("/api/satu-sehat/allergy-intolerance/send/*no_rawat", sendAllergyIntoleranceSatuSehat(db))
+	r.POST("/api/satu-sehat/allergy-intolerance/update/*no_rawat", updateAllergyIntoleranceSatuSehat(db))
+	r.GET("/api/satu-sehat/episode-of-care", getEpisodeOfCareCandidates(db))
+	r.POST("/api/satu-sehat/episode-of-care/send/*no_rawat", sendEpisodeOfCareSatuSehat(db))
+	r.POST("/api/satu-sehat/episode-of-care/update/*no_rawat", updateEpisodeOfCareSatuSehat(db))
+	r.GET("/api/satu-sehat/careplan", getCarePlanCandidates(db))
+	r.POST("/api/satu-sehat/careplan/send/*no_rawat", sendCarePlanSatuSehat(db))
+	r.POST("/api/satu-sehat/careplan/update/*no_rawat", updateCarePlanSatuSehat(db))
+	r.GET("/api/satu-sehat/qr-telaah-farmasi", getQRTelaahFarmasiCandidates(db))
+	r.POST("/api/satu-sehat/qr-telaah-farmasi/send/:no_resep", sendQRTelaahFarmasi(db))
+	r.POST("/api/satu-sehat/qr-telaah-farmasi/update/:no_resep", updateQRTelaahFarmasi(db))
+	r.GET("/api/satu-sehat/immunization", getImmunizationCandidates(db))
+	r.POST("/api/satu-sehat/immunization/send/*no_rawat", sendImmunizationSatuSehat(db))
+	r.POST("/api/satu-sehat/immunization/update/*no_rawat", updateImmunizationSatuSehat(db))
+	r.GET("/api/satu-sehat/composition", getCompositionCandidates(db))
+	r.POST("/api/satu-sehat/composition/send/*no_rawat", sendCompositionSatuSehat(db))
+	r.POST("/api/satu-sehat/composition/update/*no_rawat", updateCompositionSatuSehat(db))
+	r.GET("/api/satu-sehat/clinical-impression", getClinicalImpressionCandidates(db))
+	r.POST("/api/satu-sehat/clinical-impression/send/*no_rawat", sendClinicalImpressionSatuSehat(db))
+	r.POST("/api/satu-sehat/clinical-impression/update/*no_rawat", updateClinicalImpressionSatuSehat(db))
 	r.GET("/api/satu-sehat/imaging-study", getImagingStudyList(db))
 	r.POST("/api/satu-sehat/imaging-study/send/*noorder", sendImagingStudy(db))
+	r.POST("/api/satu-sehat/imaging-study/update/*noorder", updateImagingStudy(db))
 	r.GET("/api/satu-sehat/mapping/radiologi", getMappingRadiologi(db))
 	r.PUT("/api/satu-sehat/mapping/radiologi/:kd_jenis_prw", updateMappingRadiologi(db))
 	r.POST("/api/satu-sehat/mapping/import-khanza", importMappingFromKhanza(db))
@@ -3669,8 +3751,31 @@ func main() {
 	r.GET("/api/satu-sehat/mapping-lab/cari-template", cariTemplateBelumMappingLab(db))
 	r.PUT("/api/satu-sehat/mapping-lab/:id_template", saveMappingLabSatuSehat(db))
 	r.DELETE("/api/satu-sehat/mapping-lab/:id_template", deleteMappingLabSatuSehat(db))
+	r.GET("/api/satu-sehat/servicerequest-radiologi-candidates", getServiceRequestRadiologiCandidates(db))
 	r.POST("/api/satu-sehat/servicerequest-radiologi/send/*noorder", sendServiceRequestRadiologi(db))
+	r.POST("/api/satu-sehat/servicerequest-radiologi/update/*noorder", updateServiceRequestRadiologi(db))
 	r.GET("/api/satu-sehat/servicerequest-radiologi/*noorder", getServiceRequestRadiologi(db))
+	r.GET("/api/satu-sehat/servicerequest-lab/:jenis", getServiceRequestLabCandidates(db))
+	r.POST("/api/satu-sehat/servicerequest-lab/:jenis/send/*noorder", sendServiceRequestLab(db))
+	r.POST("/api/satu-sehat/servicerequest-lab/:jenis/update/*noorder", updateServiceRequestLab(db))
+	r.GET("/api/satu-sehat/specimen-radiologi", getSpecimenRadiologiCandidates(db))
+	r.POST("/api/satu-sehat/specimen-radiologi/send/*noorder", sendSpecimenRadiologi(db))
+	r.POST("/api/satu-sehat/specimen-radiologi/update/*noorder", updateSpecimenRadiologi(db))
+	r.GET("/api/satu-sehat/specimen-lab/:jenis", getSpecimenLabCandidates(db))
+	r.POST("/api/satu-sehat/specimen-lab/:jenis/send/*noorder", sendSpecimenLab(db))
+	r.POST("/api/satu-sehat/specimen-lab/:jenis/update/*noorder", updateSpecimenLab(db))
+	r.GET("/api/satu-sehat/observation-radiologi", getObservationRadiologiCandidates(db))
+	r.POST("/api/satu-sehat/observation-radiologi/send/*noorder", sendObservationRadiologi(db))
+	r.POST("/api/satu-sehat/observation-radiologi/update/*noorder", updateObservationRadiologi(db))
+	r.GET("/api/satu-sehat/observation-lab/:jenis", getObservationLabCandidates(db))
+	r.POST("/api/satu-sehat/observation-lab/:jenis/send/*noorder", sendObservationLab(db))
+	r.POST("/api/satu-sehat/observation-lab/:jenis/update/*noorder", updateObservationLab(db))
+	r.GET("/api/satu-sehat/diagnosticreport-radiologi", getDiagnosticReportRadiologiCandidates(db))
+	r.POST("/api/satu-sehat/diagnosticreport-radiologi/send/*noorder", sendDiagnosticReportRadiologi(db))
+	r.POST("/api/satu-sehat/diagnosticreport-radiologi/update/*noorder", updateDiagnosticReportRadiologi(db))
+	r.GET("/api/satu-sehat/diagnosticreport-lab/:jenis", getDiagnosticReportLabCandidates(db))
+	r.POST("/api/satu-sehat/diagnosticreport-lab/:jenis/send/*noorder", sendDiagnosticReportLab(db))
+	r.POST("/api/satu-sehat/diagnosticreport-lab/:jenis/update/*noorder", updateDiagnosticReportLab(db))
 	r.POST("/api/satu-sehat/mwl/send/*noorder", sendToMWL(db))
 	r.DELETE("/api/satu-sehat/mwl/*noorder", deleteMWLEntry(db))
 	r.GET("/api/satu-sehat/mwl/status/*noorder", getMWLStatus(db))
