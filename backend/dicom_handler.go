@@ -53,7 +53,7 @@ func (o *orthancClient) do(method, path string, body interface{}) ([]byte, int, 
 	return data, resp.StatusCode, nil
 }
 
-// orthancFindIDs/orthancFindExpanded — wrapper /tools/find yg SELALU cek
+// orthancFindIDs — wrapper /tools/find yg SELALU cek
 // status code (bukan cuma error jaringan). Sebelumnya status code dari
 // /tools/find dibuang begitu saja di semua pemanggil — kalau Orthanc menolak
 // request (401 salah username/password, 400 format query salah, dst),
@@ -84,19 +84,61 @@ func orthancFindIDs(orthanc *orthancClient, query map[string]interface{}) ([]str
 	return ids, nil
 }
 
-func orthancFindExpanded(orthanc *orthancClient, query map[string]interface{}) ([]map[string]interface{}, error) {
-	resp, status, err := orthanc.do("POST", "/tools/find", query)
+// legacyKhanzaAccessionCandidates — aplikasi ini masih berjalan berdampingan
+// dgn SIMRS Khanza versi Java lama (tool "Integrasi Orthanc" di
+// OrthancDICOM.java). Tool itu menyimpan AccessionNumber dgn format BEDA:
+// noorder (prefix "PR" dibuang) digabung kd_jenis_prw per pemeriksaan (lihat
+// OrthancDataACSN.java method tampil(), kolom 0). Kalau staf sempat set ACSN
+// studi lewat tool lama itu, exact-match noOrder polos (format app ini)
+// tidak akan ketemu. Fungsi ini generate semua kemungkinan ACSN format lama
+// utk noOrder ini, satu per kd_jenis_prw yg ada di order tsb.
+func legacyKhanzaAccessionCandidates(db *sql.DB, noOrder string) []string {
+	stripped := strings.ReplaceAll(noOrder, "PR", "")
+	rows, err := db.Query(`SELECT DISTINCT kd_jenis_prw FROM permintaan_pemeriksaan_radiologi WHERE noorder = ?`, noOrder)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var candidates []string
+	for rows.Next() {
+		var kd string
+		if rows.Scan(&kd) == nil && kd != "" {
+			candidates = append(candidates, stripped+kd)
+		}
+	}
+	return candidates
+}
+
+// orthancFindStudyByAccessionAnyFormat — coba exact-match AccessionNumber =
+// noOrder (format yg dipakai app ini sendiri) dulu; kalau nihil, coba tiap
+// kandidat format lama Khanza satu per satu (lihat legacyKhanzaAccessionCandidates).
+// Berhenti di percobaan pertama yg dapat hasil — supaya studi yg ACSN-nya
+// pernah diset lewat tool Khanza lama tetap ketemu tanpa perlu jatuh ke
+// pencarian ambigu by PatientID+tanggal.
+func orthancFindStudyByAccessionAnyFormat(orthanc *orthancClient, db *sql.DB, noOrder string) ([]string, error) {
+	studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
+		"Level": "Study",
+		"Query": map[string]string{"AccessionNumber": noOrder},
+	})
 	if err != nil {
 		return nil, err
 	}
-	if status != 200 {
-		return nil, fmt.Errorf("Orthanc HTTP %d saat /tools/find (cek URL/Username/Password Orthanc di tab Konfigurasi) — %s", status, truncateOrthancMsg(resp))
+	if len(studyIDs) > 0 {
+		return studyIDs, nil
 	}
-	var studies []map[string]interface{}
-	if err := json.Unmarshal(resp, &studies); err != nil {
-		return nil, fmt.Errorf("respons /tools/find tidak valid: %v", err)
+	for _, candidate := range legacyKhanzaAccessionCandidates(db, noOrder) {
+		legacyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
+			"Level": "Study",
+			"Query": map[string]string{"AccessionNumber": candidate},
+		})
+		if err != nil {
+			continue
+		}
+		if len(legacyIDs) > 0 {
+			return legacyIDs, nil
+		}
 	}
-	return studies, nil
+	return nil, nil
 }
 
 // lazyModifyPACS — sinkronisasi tag DICOM di Orthanc sebelum kirim ke Satu Sehat.
@@ -104,37 +146,32 @@ func orthancFindExpanded(orthanc *orthancClient, query map[string]interface{}) (
 func lazyModifyPACS(db *sql.DB, noOrder, noRkmMedis, nmPasien, tglLahir, jk, tglPermintaan, studyDesc string) string {
 	orthanc := newOrthancClient(db)
 
-	// Cari study by AccessionNumber = noorder
-	studies, err := orthancFindExpanded(orthanc, map[string]interface{}{
-		"Level":  "Study",
-		"Query":  map[string]string{"AccessionNumber": noOrder},
-		"Expand": true,
-		"Limit":  1,
-	})
+	// Cari study by AccessionNumber = noorder (coba format app ini, lalu
+	// format lama Khanza kalau nihil — lihat orthancFindStudyByAccessionAnyFormat)
+	studyIDs, err := orthancFindStudyByAccessionAnyFormat(orthanc, db, noOrder)
 	if err != nil {
 		return "PACS sync skip: " + err.Error()
 	}
 
 	// Fallback: cari by PatientID + StudyDate
-	if len(studies) == 0 {
+	if len(studyIDs) == 0 {
 		dicomDate := strings.ReplaceAll(tglPermintaan, "-", "")
-		studies2, err2 := orthancFindExpanded(orthanc, map[string]interface{}{
-			"Level":  "Study",
-			"Query":  map[string]string{"PatientID": noRkmMedis, "StudyDate": dicomDate},
-			"Expand": true,
-			"Limit":  1,
+		studyIDs2, err2 := orthancFindIDs(orthanc, map[string]interface{}{
+			"Level": "Study",
+			"Query": map[string]string{"PatientID": noRkmMedis, "StudyDate": dicomDate},
+			"Limit": 1,
 		})
 		if err2 != nil {
 			return "PACS sync skip: " + err2.Error()
 		}
-		studies = studies2
+		studyIDs = studyIDs2
 	}
 
-	if len(studies) == 0 {
+	if len(studyIDs) == 0 {
 		return "PACS sync skip: study belum ada di Orthanc"
 	}
 
-	studyID, _ := studies[0]["ID"].(string)
+	studyID := studyIDs[0]
 	if studyID == "" {
 		return "PACS sync skip: ID study tidak valid"
 	}
@@ -297,11 +334,10 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 		}
 		orthanc := newOrthancClient(db)
 
-		// Tahap 1 — sudah ada studi yg AccessionNumber-nya = noOrder?
-		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
-			"Level": "Study",
-			"Query": map[string]string{"AccessionNumber": noOrder},
-		})
+		// Tahap 1 — sudah ada studi yg AccessionNumber-nya = noOrder? (coba
+		// format app ini, lalu format lama Khanza kalau nihil — studi bisa
+		// saja sudah ditandai staf lewat tool Khanza lama)
+		studyIDs, err := orthancFindStudyByAccessionAnyFormat(orthanc, db, noOrder)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
@@ -401,12 +437,8 @@ func sendDicomToSatuSehat(db *sql.DB) gin.HandlerFunc {
 		}
 
 		// Step 2 — Cari study di Orthanc berdasarkan AccessionNumber = noorder
-		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
-			"Level": "Study",
-			"Query": map[string]string{
-				"AccessionNumber": noOrder,
-			},
-		})
+		// (coba format app ini, lalu format lama Khanza kalau nihil)
+		studyIDs, err := orthancFindStudyByAccessionAnyFormat(orthanc, db, noOrder)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
@@ -489,10 +521,7 @@ func getDicomStudies(db *sql.DB) gin.HandlerFunc {
 		noOrder := strings.TrimPrefix(c.Param("noorder"), "/")
 		orthanc := newOrthancClient(db)
 
-		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
-			"Level": "Study",
-			"Query": map[string]string{"AccessionNumber": noOrder},
-		})
+		studyIDs, err := orthancFindStudyByAccessionAnyFormat(orthanc, db, noOrder)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
@@ -554,20 +583,17 @@ func getDicomPreviewList(db *sql.DB) gin.HandlerFunc {
 		}
 		orthanc := newOrthancClient(db)
 
-		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
-			"Level": "Study",
-			"Query": map[string]string{"AccessionNumber": noOrder},
-		})
+		studyIDs, err := orthancFindStudyByAccessionAnyFormat(orthanc, db, noOrder)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
 		}
 
-		// Fallback: kalau AccessionNumber belum ketemu (mis. studi lama yg
-		// ACSN-nya belum pernah dibetulkan lewat "Kirim ACSN"), cari lebih
-		// longgar by PatientID = No.RM — persis pola tbListDicom di Khanza
-		// Java lama, yg nampilin SEMUA series pasien itu (lintas kunjungan)
-		// biar user pilih sendiri series yg benar dari daftar.
+		// Fallback: kalau AccessionNumber belum ketemu di format manapun (mis.
+		// studi lama yg ACSN-nya belum pernah dibetulkan lewat "Kirim ACSN"),
+		// cari lebih longgar by PatientID = No.RM — persis pola tbListDicom di
+		// Khanza Java lama, yg nampilin SEMUA series pasien itu (lintas
+		// kunjungan) biar user pilih sendiri series yg benar dari daftar.
 		searchMode := "accession_number"
 		if len(studyIDs) == 0 {
 			var noRkmMedis string
