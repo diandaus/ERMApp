@@ -53,13 +53,59 @@ func (o *orthancClient) do(method, path string, body interface{}) ([]byte, int, 
 	return data, resp.StatusCode, nil
 }
 
+// orthancFindIDs/orthancFindExpanded — wrapper /tools/find yg SELALU cek
+// status code (bukan cuma error jaringan). Sebelumnya status code dari
+// /tools/find dibuang begitu saja di semua pemanggil — kalau Orthanc menolak
+// request (401 salah username/password, 400 format query salah, dst),
+// responsnya BUKAN array JSON valid, jadi json.Unmarshal gagal diam-diam dan
+// hasilnya kebaca sbg "0 studi ditemukan" — padahal requestnya gagal total.
+// Ini bikin fitur pencarian ACSN/preview selalu bilang "belum ditemukan"
+// walau datanya jelas ada di Orthanc (mis. Username/Password Orthanc salah).
+func truncateOrthancMsg(b []byte) string {
+	s := string(b)
+	if len(s) > 200 {
+		return s[:200] + "..."
+	}
+	return s
+}
+
+func orthancFindIDs(orthanc *orthancClient, query map[string]interface{}) ([]string, error) {
+	resp, status, err := orthanc.do("POST", "/tools/find", query)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("Orthanc HTTP %d saat /tools/find (cek URL/Username/Password Orthanc di tab Konfigurasi) — %s", status, truncateOrthancMsg(resp))
+	}
+	var ids []string
+	if err := json.Unmarshal(resp, &ids); err != nil {
+		return nil, fmt.Errorf("respons /tools/find tidak valid: %v", err)
+	}
+	return ids, nil
+}
+
+func orthancFindExpanded(orthanc *orthancClient, query map[string]interface{}) ([]map[string]interface{}, error) {
+	resp, status, err := orthanc.do("POST", "/tools/find", query)
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("Orthanc HTTP %d saat /tools/find (cek URL/Username/Password Orthanc di tab Konfigurasi) — %s", status, truncateOrthancMsg(resp))
+	}
+	var studies []map[string]interface{}
+	if err := json.Unmarshal(resp, &studies); err != nil {
+		return nil, fmt.Errorf("respons /tools/find tidak valid: %v", err)
+	}
+	return studies, nil
+}
+
 // lazyModifyPACS — sinkronisasi tag DICOM di Orthanc sebelum kirim ke Satu Sehat.
 // Kegagalan TIDAK menghentikan proses; hanya mengembalikan pesan log.
 func lazyModifyPACS(db *sql.DB, noOrder, noRkmMedis, nmPasien, tglLahir, jk, tglPermintaan, studyDesc string) string {
 	orthanc := newOrthancClient(db)
 
 	// Cari study by AccessionNumber = noorder
-	findResp, _, err := orthanc.do("POST", "/tools/find", map[string]interface{}{
+	studies, err := orthancFindExpanded(orthanc, map[string]interface{}{
 		"Level":  "Study",
 		"Query":  map[string]string{"AccessionNumber": noOrder},
 		"Expand": true,
@@ -69,19 +115,19 @@ func lazyModifyPACS(db *sql.DB, noOrder, noRkmMedis, nmPasien, tglLahir, jk, tgl
 		return "PACS sync skip: " + err.Error()
 	}
 
-	var studies []map[string]interface{}
-	json.Unmarshal(findResp, &studies)
-
 	// Fallback: cari by PatientID + StudyDate
 	if len(studies) == 0 {
 		dicomDate := strings.ReplaceAll(tglPermintaan, "-", "")
-		findResp2, _, _ := orthanc.do("POST", "/tools/find", map[string]interface{}{
+		studies2, err2 := orthancFindExpanded(orthanc, map[string]interface{}{
 			"Level":  "Study",
 			"Query":  map[string]string{"PatientID": noRkmMedis, "StudyDate": dicomDate},
 			"Expand": true,
 			"Limit":  1,
 		})
-		json.Unmarshal(findResp2, &studies)
+		if err2 != nil {
+			return "PACS sync skip: " + err2.Error()
+		}
+		studies = studies2
 	}
 
 	if len(studies) == 0 {
@@ -252,7 +298,7 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 		orthanc := newOrthancClient(db)
 
 		// Tahap 1 — sudah ada studi yg AccessionNumber-nya = noOrder?
-		findResp, _, err := orthanc.do("POST", "/tools/find", map[string]interface{}{
+		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
 			"Level": "Study",
 			"Query": map[string]string{"AccessionNumber": noOrder},
 		})
@@ -260,8 +306,6 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
 		}
-		var studyIDs []string
-		json.Unmarshal(findResp, &studyIDs)
 		if len(studyIDs) > 0 {
 			result := applyAccessionTags(orthanc, studyIDs[0], noOrder, info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
 			c.JSON(http.StatusOK, gin.H{"message": result})
@@ -275,7 +319,7 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		dicomDate := strings.ReplaceAll(info.TglPermintaan, "-", "")
-		findResp2, _, err := orthanc.do("POST", "/tools/find", map[string]interface{}{
+		candidateIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
 			"Level": "Study",
 			"Query": map[string]string{"PatientID": info.NoRkmMedis, "StudyDate": dicomDate},
 		})
@@ -283,8 +327,6 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
 		}
-		var candidateIDs []string
-		json.Unmarshal(findResp2, &candidateIDs)
 
 		if len(candidateIDs) == 0 {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Studi utk pasien ini belum ditemukan di Orthanc (sudah dicoba by AccessionNumber & by No.RM+tanggal)"})
@@ -359,20 +401,16 @@ func sendDicomToSatuSehat(db *sql.DB) gin.HandlerFunc {
 		}
 
 		// Step 2 — Cari study di Orthanc berdasarkan AccessionNumber = noorder
-		findBody := map[string]interface{}{
+		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
 			"Level": "Study",
 			"Query": map[string]string{
 				"AccessionNumber": noOrder,
 			},
-		}
-		findResp, _, err := orthanc.do("POST", "/tools/find", findBody)
+		})
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
 		}
-
-		var studyIDs []string
-		json.Unmarshal(findResp, &studyIDs)
 
 		if len(studyIDs) == 0 {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -451,18 +489,14 @@ func getDicomStudies(db *sql.DB) gin.HandlerFunc {
 		noOrder := strings.TrimPrefix(c.Param("noorder"), "/")
 		orthanc := newOrthancClient(db)
 
-		findBody := map[string]interface{}{
+		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
 			"Level": "Study",
 			"Query": map[string]string{"AccessionNumber": noOrder},
-		}
-		findResp, _, err := orthanc.do("POST", "/tools/find", findBody)
+		})
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
-
-		var studyIDs []string
-		json.Unmarshal(findResp, &studyIDs)
 
 		type StudySummary struct {
 			OrthancID   string `json:"orthanc_id"`
@@ -520,7 +554,7 @@ func getDicomPreviewList(db *sql.DB) gin.HandlerFunc {
 		}
 		orthanc := newOrthancClient(db)
 
-		findResp, _, err := orthanc.do("POST", "/tools/find", map[string]interface{}{
+		studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
 			"Level": "Study",
 			"Query": map[string]string{"AccessionNumber": noOrder},
 		})
@@ -528,8 +562,6 @@ func getDicomPreviewList(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
 		}
-		var studyIDs []string
-		json.Unmarshal(findResp, &studyIDs)
 
 		// Fallback: kalau AccessionNumber belum ketemu (mis. studi lama yg
 		// ACSN-nya belum pernah dibetulkan lewat "Kirim ACSN"), cari lebih
@@ -546,14 +578,16 @@ func getDicomPreviewList(db *sql.DB) gin.HandlerFunc {
 				WHERE pr.noorder = ?
 			`, noOrder).Scan(&noRkmMedis)
 			if noRkmMedis != "" {
-				findResp2, _, err2 := orthanc.do("POST", "/tools/find", map[string]interface{}{
+				fallbackIDs, err2 := orthancFindIDs(orthanc, map[string]interface{}{
 					"Level": "Study",
 					"Query": map[string]string{"PatientID": noRkmMedis},
 				})
-				if err2 == nil {
-					json.Unmarshal(findResp2, &studyIDs)
-					searchMode = "patient_id"
+				if err2 != nil {
+					c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err2.Error()})
+					return
 				}
+				studyIDs = fallbackIDs
+				searchMode = "patient_id"
 			}
 		}
 
