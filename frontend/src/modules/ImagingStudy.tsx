@@ -7,11 +7,16 @@ const labelSm: React.CSSProperties = { display: 'block', fontSize: 11, fontWeigh
 // ── ImagingStudy — dua jalur kirim, tombol "Kirim via DICOM Router" (utama,
 // hijau) meneruskan studi ASLI dari Orthanc ke DICOM Router yang terdaftar di
 // Satu Sehat (lihat tab Konfigurasi) — Satu Sehat yang otomatis membentuk
-// resource ImagingStudy dari situ; status "terkirim"-nya ditandai
-// id_imagingstudy = 'via-dicom-router'. Tombol "Kirim Manual, Tanpa PACS"
-// (abu-abu) adalah fallback lama: bikin resource dari data lokal saja, UID
-// DICOM dikarang deterministik dari OrgID+noorder (BUKAN UID asli) — dipakai
-// kalau fasilitas belum/tidak punya PACS Orthanc yg terhubung.
+// resource ImagingStudy dari situ; status "terkirim"-nya ditandai sementara
+// id_imagingstudy = 'via-dicom-router' (backend TIDAK pernah tahu ID asli
+// dari jalur ini, krn Router yg POST ke Satu Sehat secara ASYNC di luar
+// aplikasi ini). Tombol biru "Cek Status di Satu Sehat" query langsung ke
+// Satu Sehat (GET ImagingStudy?identifier=acsn|noorder) utk konfirmasi
+// resource-nya benar sudah terbentuk, dan ganti sentinel itu dgn ID resmi.
+// Tombol "Kirim Manual, Tanpa PACS" (abu-abu) adalah fallback lama: bikin
+// resource dari data lokal saja, UID DICOM dikarang deterministik dari
+// OrgID+noorder (BUKAN UID asli) — dipakai kalau fasilitas belum/tidak
+// punya PACS Orthanc yg terhubung.
 type ImagingStudyPemeriksaan = {
   kd_jenis_prw: string; nm_perawatan: string; code: string | null; system: string | null;
   display: string | null; modality_code: string | null; modality_display: string | null;
@@ -70,6 +75,7 @@ export const ImagingStudySection: React.FC = () => {
 
   const selectedForKirim = list.filter((r) => selected.has(r.noorder) && !r.id_imagingstudy);
   const selectedForUpdate = list.filter((r) => selected.has(r.noorder) && !!r.id_imagingstudy);
+  const selectedForVerify = list.filter((r) => selected.has(r.noorder) && r.id_imagingstudy === 'via-dicom-router');
 
   const runBulk = async (rows: ImagingStudyRow[], endpoint: 'send' | 'update', label: string) => {
     setProcessing(true);
@@ -152,6 +158,35 @@ export const ImagingStudySection: React.FC = () => {
     runDicomRouter(selectedForKirim);
   };
 
+  const handleCekStatus = async () => {
+    if (selectedForVerify.length === 0) return;
+    setProcessing(true);
+    let found = 0;
+    let notFound = 0;
+    const failed: string[] = [];
+    for (const row of selectedForVerify) {
+      try {
+        const res = await fetch(`/api/satu-sehat/imaging-study/verify/${row.noorder}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal');
+        if (data.found) found++; else notFound++;
+      } catch (err) {
+        failed.push(`${row.noorder} (${row.nm_pasien}): ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
+      }
+    }
+    setProcessing(false);
+
+    const parts: string[] = [];
+    if (found > 0) parts.push(`${found} sudah ada ID resmi dari Satu Sehat`);
+    if (notFound > 0) parts.push(`${notFound} belum ditemukan (mungkin DICOM Router belum selesai memproses)`);
+    if (failed.length > 0) parts.push(`${failed.length} gagal dicek`);
+    Swal.fire({
+      icon: failed.length > 0 ? 'warning' : 'info', title: 'Selesai Dicek',
+      html: parts.join(', ') + (failed.length ? `:<br/><small>${failed.join('<br/>')}</small>` : ''),
+    });
+    fetchList(tglDari, tglSampai, statusFilter);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -198,6 +233,15 @@ export const ImagingStudySection: React.FC = () => {
           style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: selectedForUpdate.length === 0 || processing ? '#9ca3af' : '#374151', cursor: selectedForUpdate.length === 0 || processing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
         >
           {processing ? 'Memproses...' : `Update Manual (${selectedForUpdate.length})`}
+        </button>
+        <button
+          type="button"
+          onClick={handleCekStatus}
+          disabled={selectedForVerify.length === 0 || processing}
+          title="Cek langsung ke Satu Sehat apakah ImagingStudy sudah benar-benar terbentuk (dibuat DICOM Router secara async), lalu ganti status lokal dengan ID resmi"
+          style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #2563eb', background: '#ffffff', color: selectedForVerify.length === 0 || processing ? '#9ca3af' : '#2563eb', cursor: selectedForVerify.length === 0 || processing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
+        >
+          {processing ? 'Memproses...' : `Cek Status di Satu Sehat (${selectedForVerify.length})`}
         </button>
       </div>
 

@@ -10240,6 +10240,76 @@ func updateImagingStudy(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// POST /api/satu-sehat/imaging-study/verify/*noorder — cek langsung ke Satu
+// Sehat apakah ImagingStudy utk order ini SUDAH terbentuk (dipakai utk jalur
+// "Kirim via DICOM Router", karena Router yg POST ImagingStudy-nya sendiri ke
+// Satu Sehat secara async — backend ini cuma tahu file DICOM-nya berhasil
+// diteruskan, tidak pernah dapat ID ASLI resource yg terbentuk). Query pakai
+// identifier ACSN persis dokumentasi resmi Satu Sehat:
+// GET /ImagingStudy?identifier=http://sys-ids.kemkes.go.id/acsn/{OrgID}|{ACSN}
+// Kalau ketemu, ID ImagingStudy ASLI dari Satu Sehat disimpan menggantikan
+// sentinel lokal 'via-dicom-router', supaya status di UI akurat.
+func verifyImagingStudySatuSehat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noOrder := strings.TrimPrefix(c.Param("noorder"), "/")
+		if noOrder == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder wajib diisi"})
+			return
+		}
+		cfg, err := getSatuSehatConfig(db)
+		if err != nil || cfg.ClientID == "" || cfg.OrgID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Konfigurasi Satu Sehat belum lengkap"})
+			return
+		}
+		token, err := getSatuSehatToken(cfg)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal mendapatkan token: " + err.Error()})
+			return
+		}
+
+		identifier := "http://sys-ids.kemkes.go.id/acsn/" + cfg.OrgID + "|" + noOrder
+		apiURL := fmt.Sprintf("%s/ImagingStudy?identifier=%s", cfg.FhirURL, url.QueryEscape(identifier))
+		req, _ := http.NewRequest("GET", apiURL, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		client := &http.Client{Timeout: 20 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Satu Sehat: " + err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+
+		var bundle struct {
+			Entry []struct {
+				Resource struct {
+					ID string `json:"id"`
+				} `json:"resource"`
+			} `json:"entry"`
+		}
+		json.Unmarshal(respBody, &bundle)
+
+		if resp.StatusCode != 200 || len(bundle.Entry) == 0 {
+			c.JSON(http.StatusOK, gin.H{"found": false, "message": "Belum ditemukan di Satu Sehat (kemungkinan DICOM Router belum selesai memproses, coba cek lagi beberapa saat lagi)"})
+			return
+		}
+
+		realID := bundle.Entry[0].Resource.ID
+		if realID == "" {
+			c.JSON(http.StatusOK, gin.H{"found": false, "message": "Ditemukan tapi ID resource kosong"})
+			return
+		}
+
+		db.Exec(`
+			INSERT INTO satu_sehat_imagingstudy (noorder, id_imagingstudy) VALUES (?, ?)
+			ON DUPLICATE KEY UPDATE id_imagingstudy = VALUES(id_imagingstudy)
+		`, noOrder, realID)
+
+		c.JSON(http.StatusOK, gin.H{"found": true, "id_imagingstudy": realID})
+	}
+}
+
 // ─── Mapping Radiologi ────────────────────────────────────────────────────────
 
 // GET /api/satu-sehat/mapping/radiologi

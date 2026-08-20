@@ -1,6 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { MappingRadiologi } from './MappingSatuSehat';
+import { MappingRadiologi, LoincSearchBox } from './MappingSatuSehat';
 import { EncounterSection } from './Encounter';
 import { ConditionSection } from './Condition';
 import { ObservationSection } from './Observation';
@@ -2058,20 +2058,22 @@ const LabFormModal: React.FC<{
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <label style={labelSm}>Periksa Code</label>
-            <input type="text" value={v.code} onChange={(e) => set('code', e.target.value)} style={inputSm} />
-          </div>
-          <div>
-            <label style={labelSm}>Pemeriksaan System</label>
-            <input type="text" value={v.system} onChange={(e) => set('system', e.target.value)} style={inputSm} placeholder="http://..." />
-          </div>
-        </div>
         <div>
-          <label style={labelSm}>Pemeriksaan Display</label>
-          <input type="text" value={v.display} onChange={(e) => set('display', e.target.value)} style={inputSm} />
+          <label style={labelSm}>Cari Kode LOINC Pemeriksaan</label>
+          <LoincSearchBox
+            value={v.code}
+            display={v.display}
+            onChange={(code, display, system) => setV((prev) => ({ ...prev, code, display, system }))}
+            defaultQuery={selectedTemplate?.pemeriksaan}
+          />
         </div>
+        {v.code && (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151' }}>
+            <div><strong>Code:</strong> {v.code}</div>
+            <div><strong>System:</strong> {v.system}</div>
+            <div><strong>Display:</strong> {v.display}</div>
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div>
             <label style={labelSm}>Sampel Code</label>

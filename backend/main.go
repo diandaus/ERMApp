@@ -3774,6 +3774,7 @@ func main() {
 	r.GET("/api/satu-sehat/imaging-study", getImagingStudyList(db))
 	r.POST("/api/satu-sehat/imaging-study/send/*noorder", sendImagingStudy(db))
 	r.POST("/api/satu-sehat/imaging-study/update/*noorder", updateImagingStudy(db))
+	r.POST("/api/satu-sehat/imaging-study/verify/*noorder", verifyImagingStudySatuSehat(db))
 	r.GET("/api/satu-sehat/mapping/radiologi", getMappingRadiologi(db))
 	r.PUT("/api/satu-sehat/mapping/radiologi/:kd_jenis_prw", updateMappingRadiologi(db))
 	r.POST("/api/satu-sehat/mapping/import-khanza", importMappingFromKhanza(db))

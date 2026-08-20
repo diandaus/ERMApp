@@ -49,7 +49,7 @@ const TD: React.CSSProperties = {
 
 // ─── LOINC Search Dropdown ────────────────────────────────────────────────────
 
-function LoincSearchBox({ value, display, onChange, defaultQuery }: {
+export function LoincSearchBox({ value, display, onChange, defaultQuery }: {
   value: string;
   display: string;
   onChange: (code: string, display: string, system: string) => void;

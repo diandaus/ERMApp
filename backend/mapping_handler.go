@@ -60,7 +60,7 @@ func getMappingRadiologiSatuSehat(db *sql.DB) gin.HandlerFunc {
 				IFNULL(m.sampel_display,'') as sampel_display
 			FROM jns_perawatan_radiologi jpr
 			LEFT JOIN satu_sehat_mapping_radiologi m ON m.kd_jenis_prw = jpr.kd_jenis_prw
-			WHERE 1=1
+			WHERE jpr.status = '1'
 		`
 		args := []interface{}{}
 		if keyword != "" {

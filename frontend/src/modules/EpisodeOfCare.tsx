@@ -23,8 +23,26 @@ type EpisodeOfCareRow = {
   kd_penyakit: string; nama_penyakit: string; id_episodeofcare: string; status: string;
 };
 
-const todayISO = (): string => new Date().toISOString().slice(0, 10);
+const todayISO = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 const rowKey = (row: EpisodeOfCareRow): string => `${row.no_rawat}::${row.kd_penyakit}::${row.status}`;
+
+// tanggal_pulang dari backend sengaja format ISO8601 penuh
+// ("2026-08-20T09:15:00+07:00") krn dipakai apa adanya sbg period.start FHIR
+// saat dikirim ke Satu Sehat — di sini cuma dirapikan utk TAMPILAN tabel,
+// tidak mengubah data yang dikirim.
+const formatTanggalPulang = (iso: string): string => {
+  if (!iso) return iso;
+  const [datePart, rest] = iso.split('T');
+  if (!rest) return iso;
+  const timePart = rest.replace(/[+-]\d{2}:\d{2}$/, '').replace('Z', '');
+  return `${datePart} ${timePart}`;
+};
 
 export const EpisodeOfCareSection: React.FC = () => {
   const [tglDari, setTglDari] = React.useState(todayISO());
@@ -206,7 +224,7 @@ export const EpisodeOfCareSection: React.FC = () => {
                     </td>
                     <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kd_penyakit}</td>
                     <td style={{ padding: '6px 10px', color: '#374151' }}>{row.nama_penyakit}</td>
-                    <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.tanggal_pulang}</td>
+                    <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{formatTanggalPulang(row.tanggal_pulang)}</td>
                     <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>
                       {row.id_episodeofcare ? (
                         <span style={{ padding: '3px 8px', borderRadius: 999, background: '#ecfdf5', color: '#065f46', fontSize: 11, fontWeight: 600 }}>{row.id_episodeofcare}</span>
