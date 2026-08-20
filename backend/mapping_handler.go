@@ -8,11 +8,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// Kode LOINC test/observation asli selalu numerik dengan check-digit, mis. "26464-8".
+// ValueSet http://loinc.org/vs mencampur ini dengan kode Answer (LA-), Part (LP-),
+// Answer List (LL-), dst — yang bukan identitas pemeriksaan, jadi harus disaring.
+var loincTestCodePattern = regexp.MustCompile(`^[0-9]+-[0-9]$`)
 
 // ─── Structs ──────────────────────────────────────────────────────────────────
 
@@ -218,7 +224,7 @@ func searchLoinc(db *sql.DB) gin.HandlerFunc {
 						continue
 					}
 					code := strVal(entry, "code")
-					if code == "" {
+					if code == "" || !loincTestCodePattern.MatchString(code) {
 						continue
 					}
 					display := strVal(entry, "display")
