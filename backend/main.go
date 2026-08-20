@@ -3850,6 +3850,7 @@ func main() {
 	r.PUT("/api/mapping/radiologi/:kd_jenis_prw", saveMappingRadiologiSatuSehat(db))
 	r.DELETE("/api/mapping/radiologi/:kd_jenis_prw", deleteMappingRadiologiSatuSehat(db))
 	r.GET("/api/mapping/loinc/search", searchLoinc(db))
+	r.GET("/api/mapping/specimen-types", getSpecimenTypes)
 	r.GET("/api/mapping/loinc/config", getLoincConfig(db))
 	r.POST("/api/mapping/loinc/config", saveLoincConfig(db))
 

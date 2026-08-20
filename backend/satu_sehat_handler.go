@@ -11454,22 +11454,40 @@ func getMappingLabSatuSehat(db *sql.DB) gin.HandlerFunc {
 // GET /api/satu-sehat/mapping-lab/cari-template?q= — search-as-you-type item
 // template_laboratorium yg BELUM ada di satu_sehat_mapping_lab, dipakai picker
 // "Tambah Mapping" (sama alasan dgn cariObatBelumMappingVaksin/cariBarangBelumMappingObat).
+// cariTemplateBelumMappingLab — persis query tampil() di Java lama (JOIN
+// jns_perawatan_lab spy dapat kd_jenis_prw/nm_perawatan = "kelompok
+// pemeriksaan"nya, mis. "DARAH LENGKAP"), krn nama detail tes sendiri
+// (Pemeriksaan, mis. "Leukosit") sering muncul di BANYAK kelompok berbeda —
+// tanpa kolom kelompoknya user tidak bisa bedakan mau pilih yang mana.
+// Ditambah filter "belum mapping" (khusus kebutuhan modal Tambah Mapping
+// kita, tidak ada di Java aslinya) spy tidak menampilkan yg sudah dipetakan.
 func cariTemplateBelumMappingLab(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		keyword := strings.TrimSpace(c.Query("q"))
-		if keyword == "" {
-			c.JSON(http.StatusOK, gin.H{"list": []interface{}{}})
-			return
-		}
-		rows, err := db.Query(`
-			SELECT template_laboratorium.id_template, template_laboratorium.Pemeriksaan
+
+		query := `
+			SELECT
+				template_laboratorium.kd_jenis_prw,
+				jns_perawatan_lab.nm_perawatan,
+				template_laboratorium.id_template,
+				template_laboratorium.Pemeriksaan,
+				IFNULL(template_laboratorium.satuan,'')
 			FROM template_laboratorium
+			INNER JOIN jns_perawatan_lab ON jns_perawatan_lab.kd_jenis_prw = template_laboratorium.kd_jenis_prw
 			LEFT JOIN satu_sehat_mapping_lab ON template_laboratorium.id_template = satu_sehat_mapping_lab.id_template
-			WHERE satu_sehat_mapping_lab.id_template IS NULL
-				AND (template_laboratorium.id_template LIKE ? OR template_laboratorium.Pemeriksaan LIKE ?)
-			ORDER BY template_laboratorium.Pemeriksaan
-			LIMIT 30
-		`, "%"+keyword+"%", "%"+keyword+"%")
+			WHERE jns_perawatan_lab.status = '1'
+				AND satu_sehat_mapping_lab.id_template IS NULL
+		`
+		args := []interface{}{}
+		if keyword != "" {
+			query += ` AND (template_laboratorium.id_template LIKE ? OR template_laboratorium.Pemeriksaan LIKE ?
+				OR jns_perawatan_lab.nm_perawatan LIKE ? OR template_laboratorium.kd_jenis_prw LIKE ?)`
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw, kw, kw)
+		}
+		query += ` ORDER BY template_laboratorium.kd_jenis_prw, template_laboratorium.id_template, template_laboratorium.urut LIMIT 300`
+
+		rows, err := db.Query(query, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -11477,13 +11495,16 @@ func cariTemplateBelumMappingLab(db *sql.DB) gin.HandlerFunc {
 		defer rows.Close()
 
 		type TemplateItem struct {
+			KdJenisPrw  string `json:"kd_jenis_prw"`
+			NmPerawatan string `json:"nm_perawatan"`
 			IDTemplate  int    `json:"id_template"`
 			Pemeriksaan string `json:"pemeriksaan"`
+			Satuan      string `json:"satuan"`
 		}
 		list := []TemplateItem{}
 		for rows.Next() {
 			var o TemplateItem
-			if err := rows.Scan(&o.IDTemplate, &o.Pemeriksaan); err == nil {
+			if err := rows.Scan(&o.KdJenisPrw, &o.NmPerawatan, &o.IDTemplate, &o.Pemeriksaan, &o.Satuan); err == nil {
 				list = append(list, o)
 			}
 		}

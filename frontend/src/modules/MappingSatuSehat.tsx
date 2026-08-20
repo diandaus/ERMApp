@@ -159,6 +159,95 @@ export function LoincSearchBox({ value, display, onChange, defaultQuery }: {
   );
 }
 
+// ─── Specimen (SNOMED CT) Search Dropdown ──────────────────────────────────────
+// Beda dari LoincSearchBox (panggil API luar fhir.loinc.org), daftar jenis
+// spesimen ini statis/lokal di backend (specimen_types.go, ~127 jenis dari
+// ValueSet resmi HL7 FHIR IPS) — pencariannya langsung tanpa perlu API luar
+// atau kredensial tambahan.
+type SpecimenOption = { code: string; display: string };
+
+export function SpecimenSearchBox({ value, display, onChange }: {
+  value: string;
+  display: string;
+  onChange: (code: string, display: string, system: string) => void;
+}) {
+  const [all, setAll] = React.useState<SpecimenOption[]>([]);
+  const [query, setQuery] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    fetch('/api/mapping/specimen-types')
+      .then((r) => r.json())
+      .then((d) => setAll(Array.isArray(d.list) ? d.list : []))
+      .catch(() => setAll([]));
+  }, []);
+
+  const results = query.trim().length >= 2
+    ? all.filter((o) => o.display.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 20)
+    : [];
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {value && (
+        <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 10, background: '#dcfce7', color: '#16a34a', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
+            {value}
+          </span>
+          <span style={{ fontSize: 10, color: '#6b7280', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {display}
+          </span>
+          <button onClick={() => onChange('', '', '')}
+            style={{ border: 'none', background: 'none', color: '#dc2626', fontSize: 12, cursor: 'pointer', padding: '0 2px' }}>✕</button>
+        </div>
+      )}
+
+      <input
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        placeholder={value ? 'Cari ulang jenis spesimen...' : 'Cari jenis spesimen (mis. darah, urine, dahak)...'}
+        style={{ width: '100%', padding: '5px 10px', borderRadius: 7, fontSize: 12, border: '1px solid #d1d5db', outline: 'none', boxSizing: 'border-box' }}
+      />
+
+      {open && query.trim().length >= 2 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: '#fff', border: '1px solid #d1d5db', borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto',
+          marginTop: 2,
+        }}>
+          {results.length === 0 ? (
+            <div style={{ padding: 10, fontSize: 12, color: '#9ca3af' }}>
+              Tidak ada hasil — coba istilah bahasa Inggris (mis. "blood", "urine", "stool")
+            </div>
+          ) : (
+            results.map((o) => (
+              <div key={o.code}
+                onClick={() => { onChange(o.code, o.display, 'http://snomed.info/sct'); setQuery(''); setOpen(false); }}
+                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', fontSize: 12 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+              >
+                <span style={{ fontWeight: 700, color: '#2563eb', marginRight: 6 }}>{o.code}</span>
+                <span style={{ color: '#111827' }}>{o.display}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Add Mapping Modal ────────────────────────────────────────────────────────
 
 function AddMappingModal({ onClose, onSaved }: {
@@ -750,14 +839,17 @@ export function MappingRadiologi() {
                         value={ed.code || ''}
                         display={ed.display || ''}
                         onChange={(code, display, system) => {
+                          // PENTING: jangan salin code/display/system (LOINC,
+                          // jenis pemeriksaan) ke sampel_code/sampel_display/
+                          // sampel_system — itu field terpisah utk kode
+                          // SNOMED CT (jenis spesimen/struktur tubuh), bukan
+                          // LOINC. Dulu di sini ikut disalin, hasilnya field
+                          // Sampel selalu ketiban kode LOINC yg salah.
                           setEdits(prev => ({
                             ...prev,
                             [row.kd_jenis_prw]: {
                               ...prev[row.kd_jenis_prw],
                               code, display, system,
-                              sampel_code: code,
-                              sampel_system: system,
-                              sampel_display: display,
                             },
                           }));
                         }}

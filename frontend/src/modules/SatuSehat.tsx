@@ -1,6 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { MappingRadiologi, LoincSearchBox } from './MappingSatuSehat';
+import { MappingRadiologi, LoincSearchBox, SpecimenSearchBox } from './MappingSatuSehat';
 import { EncounterSection } from './Encounter';
 import { ConditionSection } from './Condition';
 import { ObservationSection } from './Observation';
@@ -1964,11 +1964,103 @@ type MappingLabRow = {
   periksa_code: string; pemeriksaan_system: string; id_template: number; detail_pemeriksaan: string;
   pemeriksaan_display: string; sampel_code: string; sampel_system: string; sampel_display: string;
 };
-type TemplateOption = { id_template: number; pemeriksaan: string };
+type TemplateOption = { kd_jenis_prw: string; nm_perawatan: string; id_template: number; pemeriksaan: string; satuan: string };
 
 type LabFormValues = {
   code: string; system: string; display: string;
   sampelCode: string; sampelSystem: string; sampelDisplay: string;
+};
+
+// TemplatePickerModal — modal terpisah (bukan dropdown kecil di bawah input)
+// utk pilih pemeriksaan lab, persis pola tabMode di Java lama: kolom ID
+// Periksa/Pemeriksaan (nama KELOMPOK, mis. "DARAH LENGKAP") ditampilkan
+// eksplisit, krn nama detail tes sendiri (mis. "Leukosit") sering muncul di
+// banyak kelompok berbeda — tanpa kolom kelompok user tidak bisa bedakan
+// mau pilih yang mana.
+const TemplatePickerModal: React.FC<{
+  onClose: () => void;
+  onPick: (t: TemplateOption) => void;
+}> = ({ onClose, onPick }) => {
+  const [search, setSearch] = React.useState('');
+  const [list, setList] = React.useState<TemplateOption[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/mapping-lab/cari-template?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setList(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10030 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, width: 820, maxWidth: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Pilih Pemeriksaan Laboratorium</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <input
+            type="text"
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari ID Periksa, nama kelompok, ID Detail, atau nama pemeriksaan..."
+            style={inputSm}
+          />
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{list.length} hasil (yang belum punya mapping)</div>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+                {['ID Periksa', 'Pemeriksaan', 'ID Detail', 'Detail Pemeriksaan', 'Satuan', ''].map((h) => (
+                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Mencari...</td></tr>
+              ) : list.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada hasil</td></tr>
+              ) : (
+                list.map((t) => (
+                  <tr
+                    key={t.id_template}
+                    onClick={() => { onPick(t); onClose(); }}
+                    style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                  >
+                    <td style={{ padding: '6px 12px', color: '#374151', whiteSpace: 'nowrap' }}>{t.kd_jenis_prw}</td>
+                    <td style={{ padding: '6px 12px', color: '#111827', fontWeight: 500 }}>{t.nm_perawatan}</td>
+                    <td style={{ padding: '6px 12px', color: '#374151', whiteSpace: 'nowrap' }}>{t.id_template}</td>
+                    <td style={{ padding: '6px 12px', color: '#111827' }}>{t.pemeriksaan}</td>
+                    <td style={{ padding: '6px 12px', color: '#374151', whiteSpace: 'nowrap' }}>{t.satuan}</td>
+                    <td style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 6, background: '#059669', color: '#fff', fontSize: 11, fontWeight: 600 }}>Pilih</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const LabFormModal: React.FC<{
@@ -1979,29 +2071,11 @@ const LabFormModal: React.FC<{
   onSave: (idTemplate: number, v: LabFormValues) => void;
   saving: boolean;
 }> = ({ title, fixedTemplate, initial, onClose, onSave, saving }) => {
-  const [templateSearch, setTemplateSearch] = React.useState('');
-  const [templateResults, setTemplateResults] = React.useState<TemplateOption[]>([]);
-  const [templateLoading, setTemplateLoading] = React.useState(false);
-  const [selectedTemplate, setSelectedTemplate] = React.useState<TemplateOption | null>(fixedTemplate ? { id_template: fixedTemplate.idTemplate, pemeriksaan: fixedTemplate.pemeriksaan } : null);
+  const [selectedTemplate, setSelectedTemplate] = React.useState<TemplateOption | null>(
+    fixedTemplate ? { kd_jenis_prw: '', nm_perawatan: '', id_template: fixedTemplate.idTemplate, pemeriksaan: fixedTemplate.pemeriksaan, satuan: '' } : null
+  );
+  const [showPicker, setShowPicker] = React.useState(false);
   const [v, setV] = React.useState<LabFormValues>(initial);
-
-  React.useEffect(() => {
-    if (fixedTemplate) return;
-    const t = setTimeout(async () => {
-      if (!templateSearch.trim()) { setTemplateResults([]); return; }
-      setTemplateLoading(true);
-      try {
-        const res = await fetch(`/api/satu-sehat/mapping-lab/cari-template?q=${encodeURIComponent(templateSearch.trim())}`);
-        const data = await res.json();
-        setTemplateResults(Array.isArray(data.list) ? data.list : []);
-      } catch {
-        setTemplateResults([]);
-      } finally {
-        setTemplateLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [templateSearch, fixedTemplate]);
 
   const set = (key: keyof LabFormValues, val: string) => setV((prev) => ({ ...prev, [key]: val }));
 
@@ -2021,41 +2095,27 @@ const LabFormModal: React.FC<{
         ) : (
           <div>
             <label style={labelSm}>Cari Pemeriksaan Laboratorium (ID atau nama)</label>
-            <input
-              type="text"
-              value={templateSearch}
-              onChange={(e) => { setTemplateSearch(e.target.value); setSelectedTemplate(null); }}
-              placeholder="Ketik nama atau ID pemeriksaan..."
-              style={inputSm}
-              autoFocus
-            />
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              style={{ ...inputSm, textAlign: 'left', cursor: 'pointer', background: '#ffffff', color: selectedTemplate ? '#111827' : '#9ca3af' }}
+            >
+              {selectedTemplate ? `${selectedTemplate.id_template} — ${selectedTemplate.pemeriksaan}` : 'Klik untuk cari & pilih pemeriksaan...'}
+            </button>
             {selectedTemplate && (
               <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#ecfdf5', border: '1px solid #a7f3d0', fontSize: 12, color: '#065f46' }}>
-                Terpilih: {selectedTemplate.id_template} — {selectedTemplate.pemeriksaan}
-              </div>
-            )}
-            {!selectedTemplate && templateSearch.trim() && (
-              <div style={{ marginTop: 6, border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 160, overflowY: 'auto' }}>
-                {templateLoading ? (
-                  <div style={{ padding: 10, fontSize: 12, color: '#6b7280' }}>Mencari...</div>
-                ) : templateResults.length === 0 ? (
-                  <div style={{ padding: 10, fontSize: 12, color: '#9ca3af' }}>Tidak ada hasil</div>
-                ) : (
-                  templateResults.map((o) => (
-                    <div
-                      key={o.id_template}
-                      onClick={() => { setSelectedTemplate(o); setTemplateSearch(''); }}
-                      style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <strong>{o.id_template}</strong> — {o.pemeriksaan}
-                    </div>
-                  ))
-                )}
+                Kelompok: <strong>{selectedTemplate.nm_perawatan || '—'}</strong> ({selectedTemplate.kd_jenis_prw || '—'})
+                {selectedTemplate.satuan && <> &middot; Satuan: {selectedTemplate.satuan}</>}
               </div>
             )}
           </div>
+        )}
+
+        {showPicker && (
+          <TemplatePickerModal
+            onClose={() => setShowPicker(false)}
+            onPick={(t) => setSelectedTemplate(t)}
+          />
         )}
 
         <div>
@@ -2074,20 +2134,21 @@ const LabFormModal: React.FC<{
             <div><strong>Display:</strong> {v.display}</div>
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <label style={labelSm}>Sampel Code</label>
-            <input type="text" value={v.sampelCode} onChange={(e) => set('sampelCode', e.target.value)} style={inputSm} />
-          </div>
-          <div>
-            <label style={labelSm}>Sampel System</label>
-            <input type="text" value={v.sampelSystem} onChange={(e) => set('sampelSystem', e.target.value)} style={inputSm} placeholder="http://..." />
-          </div>
-        </div>
         <div>
-          <label style={labelSm}>Sampel Display</label>
-          <input type="text" value={v.sampelDisplay} onChange={(e) => set('sampelDisplay', e.target.value)} style={inputSm} />
+          <label style={labelSm}>Cari Jenis Sampel (SNOMED CT)</label>
+          <SpecimenSearchBox
+            value={v.sampelCode}
+            display={v.sampelDisplay}
+            onChange={(sampelCode, sampelDisplay, sampelSystem) => setV((prev) => ({ ...prev, sampelCode, sampelDisplay, sampelSystem }))}
+          />
         </div>
+        {v.sampelCode && (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151' }}>
+            <div><strong>Code:</strong> {v.sampelCode}</div>
+            <div><strong>System:</strong> {v.sampelSystem}</div>
+            <div><strong>Display:</strong> {v.sampelDisplay}</div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
