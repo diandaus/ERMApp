@@ -22,6 +22,7 @@ import { CarePlanSection } from './CarePlan';
 import { EpisodeOfCareSection } from './EpisodeOfCare';
 import { PatientJourneySection } from './PatientJourney';
 import { AutoSendSection } from './AutoSend';
+import { ModalityWorklistSection } from './ModalityWorklist';
 
 // SatuSehat.tsx — shell sidebar modul SATUSEHAT (integrasi Kemenkes),
 // dibangun ulang dari kosong (sebelumnya file ini sengaja dikosongkan utk
@@ -54,6 +55,7 @@ type SatuSehatTab =
   | 'medication-dispense'
   | 'allergy-intolerance'
   | 'imaging-study'
+  | 'modality-worklist'
   | 'service-request'
   | 'clinical-impression'
   | 'immunization'
@@ -212,6 +214,18 @@ const MENU: { key: SatuSehatTab; label: string; icon: React.ReactNode }[] = [
         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
         <circle cx="9" cy="9" r="2"></circle>
         <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'modality-worklist',
+    label: 'Modality Worklist',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+        <line x1="8" y1="14" x2="16" y2="14"></line>
+        <line x1="8" y1="18" x2="13" y2="18"></line>
       </svg>
     ),
   },
@@ -2239,16 +2253,21 @@ type SatuSehatConfigForm = {
   org_id: string; client_id: string; client_secret: string;
   auth_url: string; fhir_url: string; is_production: boolean;
   orthanc_url: string; orthanc_worklist_dir: string;
+  orthanc_user: string; orthanc_pass: string;
+  dicom_router_name: string; dicom_router_host: string; dicom_router_port: string; dicom_router_aet: string;
 };
 
 const KonfigurasiSection: React.FC = () => {
   const [form, setForm] = React.useState<SatuSehatConfigForm>({
     org_id: '', client_id: '', client_secret: '', auth_url: '', fhir_url: '',
     is_production: false, orthanc_url: '', orthanc_worklist_dir: '',
+    orthanc_user: '', orthanc_pass: '',
+    dicom_router_name: '', dicom_router_host: '', dicom_router_port: '', dicom_router_aet: '',
   });
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
+  const [registering, setRegistering] = React.useState(false);
 
   const fetchConfig = React.useCallback(async () => {
     setLoading(true);
@@ -2260,6 +2279,9 @@ const KonfigurasiSection: React.FC = () => {
         auth_url: data.auth_url || '', fhir_url: data.fhir_url || '',
         is_production: !!data.is_production,
         orthanc_url: data.orthanc_url || '', orthanc_worklist_dir: data.orthanc_worklist_dir || '',
+        orthanc_user: data.orthanc_user || '', orthanc_pass: data.orthanc_pass || '',
+        dicom_router_name: data.dicom_router_name || '', dicom_router_host: data.dicom_router_host || '',
+        dicom_router_port: data.dicom_router_port || '', dicom_router_aet: data.dicom_router_aet || '',
       });
     } catch {
       // biarkan form kosong kalau gagal fetch
@@ -2309,6 +2331,24 @@ const KonfigurasiSection: React.FC = () => {
     }
   };
 
+  const handleRegisterRouter = async () => {
+    if (!form.dicom_router_name.trim() || !form.dicom_router_host.trim() || !form.dicom_router_aet.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Nama, Host, dan AET DICOM Router wajib diisi (simpan dulu sebelum daftarkan)' });
+      return;
+    }
+    setRegistering(true);
+    try {
+      const res = await fetch('/api/satu-sehat/dicom/register-router', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mendaftarkan DICOM Router');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: data.message || `DICOM Router '${form.dicom_router_name}' terdaftar di Orthanc` });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   if (loading) {
     return <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</div>;
   }
@@ -2353,15 +2393,68 @@ const KonfigurasiSection: React.FC = () => {
         Gunakan environment Production (bukan sandbox/dev)
       </label>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div>
-          <label style={labelSm}>Orthanc URL (opsional)</label>
-          <input type="text" value={form.orthanc_url} onChange={(e) => set('orthanc_url', e.target.value)} style={inputSm} />
+      <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Orthanc PACS</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+          Dipakai fitur "Kirim DICOM" di menu ImagingStudy — mesin modality (CT/USG/X-Ray) push hasil scan langsung ke Orthanc, lalu di sini diteruskan ke DICOM Router Satu Sehat.
         </div>
-        <div>
-          <label style={labelSm}>Orthanc Worklist Dir (opsional)</label>
-          <input type="text" value={form.orthanc_worklist_dir} onChange={(e) => set('orthanc_worklist_dir', e.target.value)} style={inputSm} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div>
+            <label style={labelSm}>Orthanc URL</label>
+            <input type="text" value={form.orthanc_url} onChange={(e) => set('orthanc_url', e.target.value)} style={inputSm} placeholder="http://192.168.1.10:8042" />
+          </div>
+          <div>
+            <label style={labelSm}>Orthanc Worklist Dir (opsional)</label>
+            <input type="text" value={form.orthanc_worklist_dir} onChange={(e) => set('orthanc_worklist_dir', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Orthanc Username</label>
+            <input type="text" value={form.orthanc_user} onChange={(e) => set('orthanc_user', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Orthanc Password</label>
+            <input
+              type="password"
+              value={form.orthanc_pass}
+              onChange={(e) => set('orthanc_pass', e.target.value)}
+              style={inputSm}
+              placeholder={form.orthanc_pass === '***' ? 'Sudah tersimpan — isi ulang untuk mengganti' : ''}
+            />
+          </div>
         </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>DICOM Router Satu Sehat</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+          Isi persis sesuai yang sudah didaftarkan di dashboard provider Satu Sehat, lalu simpan dan klik "Daftarkan DICOM Router" supaya Orthanc tahu ke mana harus meneruskan studi.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div>
+            <label style={labelSm}>Nama Modality (bebas, label lokal)</label>
+            <input type="text" value={form.dicom_router_name} onChange={(e) => set('dicom_router_name', e.target.value)} style={inputSm} placeholder="DICOM_ROUTER" />
+          </div>
+          <div>
+            <label style={labelSm}>AET DICOM Router</label>
+            <input type="text" value={form.dicom_router_aet} onChange={(e) => set('dicom_router_aet', e.target.value)} style={inputSm} placeholder="DICOMROUTER" />
+          </div>
+          <div>
+            <label style={labelSm}>Host DICOM Router</label>
+            <input type="text" value={form.dicom_router_host} onChange={(e) => set('dicom_router_host', e.target.value)} style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Port DICOM Router</label>
+            <input type="text" value={form.dicom_router_port} onChange={(e) => set('dicom_router_port', e.target.value)} style={inputSm} placeholder="11112" />
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={registering}
+          onClick={handleRegisterRouter}
+          style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #2563eb', background: '#ffffff', color: registering ? '#9ca3af' : '#2563eb', cursor: registering ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          {registering ? 'Mendaftarkan...' : 'Daftarkan DICOM Router ke Orthanc'}
+        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -2621,6 +2714,7 @@ export const SatuSehatView: React.FC<SatuSehatViewProps> = ({ onBack }) => {
           {activeTab === 'medication-dispense' && <MedicationDispenseSection />}
           {activeTab === 'allergy-intolerance' && <AllergyIntoleranceSection />}
           {activeTab === 'imaging-study' && <ImagingStudySection />}
+          {activeTab === 'modality-worklist' && <ModalityWorklistSection />}
           {activeTab === 'service-request' && <ServiceRequestSection />}
           {activeTab === 'clinical-impression' && <ClinicalImpressionSection />}
           {activeTab === 'immunization' && <ImmunizationSection />}

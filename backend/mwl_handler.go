@@ -40,6 +40,101 @@ type WLStep struct {
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
+type MWLCandidateRow struct {
+	NoOrder         string   `json:"noorder"`
+	NoRawat         string   `json:"no_rawat"`
+	TglPermintaan   string   `json:"tgl_permintaan"`
+	JamPermintaan   string   `json:"jam_permintaan"`
+	NmPasien        string   `json:"nm_pasien"`
+	NoRkmMedis      string   `json:"no_rkm_medis"`
+	NmDokter        string   `json:"nm_dokter"`
+	DiagnosaKlinis  string   `json:"diagnosa_klinis"`
+	Pemeriksaan     []string `json:"pemeriksaan"`
+	MWLStatus       string   `json:"mwl_status"`
+	AccessionNumber string   `json:"accession_number"`
+}
+
+// GET /api/satu-sehat/mwl?tgl_dari=&tgl_sampai=&q=&status= — daftar order
+// radiologi + status pengiriman ke Modality Worklist Orthanc. AccessionNumber
+// SELALU = noorder (diisi otomatis oleh sendToMWL, tidak pernah diketik
+// manual) — begitu modality query worklist Orthanc, ACSN sudah terisi sendiri.
+func getMWLCandidates(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tglDari := c.DefaultQuery("tgl_dari", time.Now().Format("2006-01-02"))
+		tglSampai := c.DefaultQuery("tgl_sampai", time.Now().Format("2006-01-02"))
+		keyword := strings.TrimSpace(c.Query("q"))
+		statusFilter := c.Query("status")
+
+		query := `
+			SELECT
+				pr.noorder, pr.no_rawat, IFNULL(pr.tgl_permintaan,''), IFNULL(pr.jam_permintaan,'') as jam_permintaan,
+				IFNULL(p.nm_pasien,'') as nm_pasien, IFNULL(rp.no_rkm_medis,'') as no_rkm_medis,
+				IFNULL(d.nm_dokter,'') as nm_dokter, IFNULL(pr.diagnosa_klinis,'') as diagnosa_klinis,
+				IFNULL(mwl.status,'') as mwl_status, IFNULL(mwl.accession_number,'') as accession_number
+			FROM permintaan_radiologi pr
+			LEFT JOIN reg_periksa rp ON pr.no_rawat = rp.no_rawat
+			LEFT JOIN pasien p ON rp.no_rkm_medis = p.no_rkm_medis
+			LEFT JOIN dokter d ON pr.dokter_perujuk = d.kd_dokter
+			LEFT JOIN satu_sehat_mwl_radiologi mwl ON mwl.noorder = pr.noorder
+			WHERE pr.tgl_permintaan BETWEEN ? AND ?
+		`
+		args := []interface{}{tglDari, tglSampai}
+		if keyword != "" {
+			query += ` AND (pr.noorder LIKE ? OR pr.no_rawat LIKE ? OR p.nm_pasien LIKE ?)`
+			kw := "%" + keyword + "%"
+			args = append(args, kw, kw, kw)
+		}
+		switch statusFilter {
+		case "terkirim":
+			query += ` AND mwl.status = 'terkirim'`
+		case "belum":
+			query += ` AND (mwl.status IS NULL OR mwl.status <> 'terkirim')`
+		}
+		query += " ORDER BY pr.tgl_permintaan DESC, pr.noorder DESC"
+
+		rows, err := db.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		list := []MWLCandidateRow{}
+		for rows.Next() {
+			var r MWLCandidateRow
+			if err := rows.Scan(&r.NoOrder, &r.NoRawat, &r.TglPermintaan, &r.JamPermintaan,
+				&r.NmPasien, &r.NoRkmMedis, &r.NmDokter, &r.DiagnosaKlinis,
+				&r.MWLStatus, &r.AccessionNumber); err != nil {
+				continue
+			}
+			list = append(list, r)
+		}
+		for i := range list {
+			pRows, err := db.Query(`
+				SELECT IFNULL(jpr.nm_perawatan, ppr.kd_jenis_prw)
+				FROM permintaan_pemeriksaan_radiologi ppr
+				LEFT JOIN jns_perawatan_radiologi jpr ON ppr.kd_jenis_prw = jpr.kd_jenis_prw
+				WHERE ppr.noorder = ?
+			`, list[i].NoOrder)
+			if err != nil {
+				list[i].Pemeriksaan = []string{}
+				continue
+			}
+			for pRows.Next() {
+				var nm string
+				pRows.Scan(&nm)
+				list[i].Pemeriksaan = append(list[i].Pemeriksaan, nm)
+			}
+			pRows.Close()
+			if list[i].Pemeriksaan == nil {
+				list[i].Pemeriksaan = []string{}
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"list": list, "total": len(list)})
+	}
+}
+
 // POST /api/satu-sehat/mwl/send/*noorder
 func sendToMWL(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

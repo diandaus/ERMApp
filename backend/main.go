@@ -3825,6 +3825,7 @@ func main() {
 	r.GET("/api/satu-sehat/diagnosticreport-lab/:jenis", getDiagnosticReportLabCandidates(db))
 	r.POST("/api/satu-sehat/diagnosticreport-lab/:jenis/send/*noorder", sendDiagnosticReportLab(db))
 	r.POST("/api/satu-sehat/diagnosticreport-lab/:jenis/update/*noorder", updateDiagnosticReportLab(db))
+	r.GET("/api/satu-sehat/mwl", getMWLCandidates(db))
 	r.POST("/api/satu-sehat/mwl/send/*noorder", sendToMWL(db))
 	r.DELETE("/api/satu-sehat/mwl/*noorder", deleteMWLEntry(db))
 	r.GET("/api/satu-sehat/mwl/status/*noorder", getMWLStatus(db))

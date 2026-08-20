@@ -114,15 +114,6 @@ const BRIDGING_DEFS: ServiceDef[] = [
     ],
   },
   {
-    kode: 'orthanc', nama: 'ORTHANC (PACS)', grp: 'orthanc',
-    fields: [
-      { key: 'URL', label: 'URL / Host', type: 'url', placeholder: 'http://localhost' },
-      { key: 'PORT', label: 'Port', type: 'port', placeholder: '8042' },
-      { key: 'USERNAME', label: 'Username', type: 'text' },
-      { key: 'PASSWORD', label: 'Password', type: 'secret' },
-    ],
-  },
-  {
     kode: 'sisrute', nama: 'SISRUTE', grp: 'kemkes',
     fields: [
       { key: 'URL', label: 'URL / Base URL', type: 'url' },
@@ -159,7 +150,6 @@ const BRIDGING_DEFS: ServiceDef[] = [
 const GROUPS = [
   { id: 'bpjs',      label: 'BPJS Kesehatan',  color: '#16a34a', icon: '🏥', bgLight: '#f0fdf4', borderColor: '#86efac' },
   { id: 'satusehat', label: 'Satu Sehat',       color: '#2563eb', icon: '🇮🇩', bgLight: '#eff6ff', borderColor: '#93c5fd' },
-  { id: 'orthanc',   label: 'ORTHANC (PACS)',   color: '#7c3aed', icon: '🩻', bgLight: '#f5f3ff', borderColor: '#c4b5fd' },
   { id: 'kemkes',    label: 'Kemkes Lainnya',   color: '#ea580c', icon: '🏛️', bgLight: '#fff7ed', borderColor: '#fed7aa' },
 ];
 

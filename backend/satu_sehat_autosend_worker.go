@@ -501,6 +501,13 @@ func processQuestionnaireResponseAutoSend(db *sql.DB, client *http.Client, baseU
 	)
 }
 
+// processImagingStudyAutoSend — beda dari resource lain, GET /imaging-study
+// mengembalikan array JSON polos (bukan {"list":...}), jadi tidak pakai
+// autoSendGetList. Kirim-nya juga BUKAN lewat /imaging-study/send (jalur
+// manual yg mengarang UID DICOM sendiri), tapi lewat /dicom/send — Orthanc
+// diteruskan ke DICOM Router Satu Sehat yg resmi, spy ImagingStudy yg
+// terbentuk di Satu Sehat berasal dari studi DICOM ASLI, bukan data karangan.
+// Lihat ImagingStudy.tsx utk penjelasan dua jalur ini di sisi UI.
 func processImagingStudyAutoSend(db *sql.DB, client *http.Client, baseURL, dari, sampai string, s autoSendSettings) (attempted, sent int) {
 	const key = "imagingstudy"
 	if !isResourceAutoSendEnabled(db, key) {
@@ -510,15 +517,21 @@ func processImagingStudyAutoSend(db *sql.DB, client *http.Client, baseURL, dari,
 		NoOrder        string `json:"noorder"`
 		IDImagingStudy string `json:"id_imagingstudy"`
 	}
-	if err := autoSendGetList(client, fmt.Sprintf("%s/api/satu-sehat/imaging-study?tgl_dari=%s&tgl_sampai=%s", baseURL, dari, sampai), &rows); err != nil {
+	resp, err := client.Get(fmt.Sprintf("%s/api/satu-sehat/imaging-study?tgl_dari=%s&tgl_sampai=%s", baseURL, dari, sampai))
+	if err != nil {
 		log.Printf("[auto-send] gagal ambil daftar imaging-study: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		log.Printf("[auto-send] gagal decode daftar imaging-study: %v", err)
 		return
 	}
 	return autoSendLoop(db, key, s, len(rows),
 		func(i int) string { return rows[i].NoOrder },
 		func(i int) bool { return rows[i].IDImagingStudy == "" },
 		func(i int) bool {
-			return autoSendPost(client, fmt.Sprintf("%s/api/satu-sehat/imaging-study/send/%s", baseURL, rows[i].NoOrder), nil)
+			return autoSendPost(client, fmt.Sprintf("%s/api/satu-sehat/dicom/send/%s", baseURL, rows[i].NoOrder), nil)
 		},
 	)
 }

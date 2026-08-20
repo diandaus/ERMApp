@@ -4,12 +4,14 @@ import Swal from 'sweetalert2';
 const inputSm: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' };
 const labelSm: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 };
 
-// ── ImagingStudy — jalur manual (fallback tanpa PACS/DICOM Router nyata).
-// Series/instance UID dibuat deterministik dari OrgID+noorder (bukan UID DICOM
-// asli dari Orthanc), supaya identitas resource tetap konsisten antara Kirim
-// dan Update. Untuk fasilitas dengan PACS Orthanc yang sudah terhubung ke
-// DICOM Router Satu Sehat, gunakan menu terpisah "Kirim DICOM" — jalur itu
-// mengirim gambar asli dan Satu Sehat yang otomatis membentuk ImagingStudy-nya.
+// ── ImagingStudy — dua jalur kirim, tombol "Kirim via DICOM Router" (utama,
+// hijau) meneruskan studi ASLI dari Orthanc ke DICOM Router yang terdaftar di
+// Satu Sehat (lihat tab Konfigurasi) — Satu Sehat yang otomatis membentuk
+// resource ImagingStudy dari situ; status "terkirim"-nya ditandai
+// id_imagingstudy = 'via-dicom-router'. Tombol "Kirim Manual, Tanpa PACS"
+// (abu-abu) adalah fallback lama: bikin resource dari data lokal saja, UID
+// DICOM dikarang deterministik dari OrgID+noorder (BUKAN UID asli) — dipakai
+// kalau fasilitas belum/tidak punya PACS Orthanc yg terhubung.
 type ImagingStudyPemeriksaan = {
   kd_jenis_prw: string; nm_perawatan: string; code: string | null; system: string | null;
   display: string | null; modality_code: string | null; modality_display: string | null;
@@ -115,6 +117,41 @@ export const ImagingStudySection: React.FC = () => {
     runBulk(selectedForUpdate, 'update', 'perbarui');
   };
 
+  const runDicomRouter = async (rows: ImagingStudyRow[]) => {
+    setProcessing(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const row of rows) {
+      try {
+        const res = await fetch(`/api/satu-sehat/dicom/send/${row.noorder}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal');
+        ok++;
+      } catch (err) {
+        failed.push(`${row.noorder} (${row.nm_pasien}): ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
+      }
+    }
+    setProcessing(false);
+
+    if (failed.length === 0) {
+      Swal.fire({ icon: 'success', title: 'Selesai', text: `${ok} studi berhasil diteruskan ke DICOM Router` });
+    } else {
+      Swal.fire({ icon: ok > 0 ? 'warning' : 'error', title: 'Selesai dengan catatan', html: `${ok} berhasil, ${failed.length} gagal:<br/><small>${failed.join('<br/>')}</small>` });
+    }
+    fetchList(tglDari, tglSampai, statusFilter);
+  };
+
+  const handleKirimDicom = async () => {
+    if (selectedForKirim.length === 0) return;
+    const confirm = await Swal.fire({
+      title: `Kirim ${selectedForKirim.length} studi via DICOM Router?`,
+      text: 'Orthanc akan dicek dulu apakah studi (AccessionNumber = No.Order) sudah ada, lalu diteruskan ke DICOM Router yang terdaftar di Satu Sehat. Satu Sehat akan otomatis membentuk resource ImagingStudy dari studi asli ini.',
+      icon: 'question', showCancelButton: true, confirmButtonText: 'Ya, Kirim', cancelButtonText: 'Batal', confirmButtonColor: '#059669',
+    });
+    if (!confirm.isConfirmed) return;
+    runDicomRouter(selectedForKirim);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -137,19 +174,30 @@ export const ImagingStudySection: React.FC = () => {
         <div style={{ flex: 1 }} />
         <button
           type="button"
-          onClick={handleKirimTerpilih}
+          onClick={handleKirimDicom}
           disabled={selectedForKirim.length === 0 || processing}
+          title="Ambil studi asli dari Orthanc lalu teruskan ke DICOM Router Satu Sehat"
           style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: selectedForKirim.length === 0 || processing ? '#9ca3af' : '#059669', color: '#fff', cursor: selectedForKirim.length === 0 || processing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
         >
-          {processing ? 'Memproses...' : `Kirim Terpilih (${selectedForKirim.length})`}
+          {processing ? 'Memproses...' : `Kirim via DICOM Router (${selectedForKirim.length})`}
+        </button>
+        <button
+          type="button"
+          onClick={handleKirimTerpilih}
+          disabled={selectedForKirim.length === 0 || processing}
+          title="Fallback tanpa PACS — resource dibuat dari data lokal, UID DICOM dikarang, bukan dari studi asli"
+          style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: selectedForKirim.length === 0 || processing ? '#9ca3af' : '#374151', cursor: selectedForKirim.length === 0 || processing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
+        >
+          {processing ? 'Memproses...' : `Kirim Manual, Tanpa PACS (${selectedForKirim.length})`}
         </button>
         <button
           type="button"
           onClick={handleUpdateTerpilih}
           disabled={selectedForUpdate.length === 0 || processing}
-          style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #2563eb', background: '#ffffff', color: selectedForUpdate.length === 0 || processing ? '#9ca3af' : '#2563eb', cursor: selectedForUpdate.length === 0 || processing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
+          title="Update ulang resource yang sebelumnya dikirim jalur manual"
+          style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: selectedForUpdate.length === 0 || processing ? '#9ca3af' : '#374151', cursor: selectedForUpdate.length === 0 || processing ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
         >
-          {processing ? 'Memproses...' : `Update Terpilih (${selectedForUpdate.length})`}
+          {processing ? 'Memproses...' : `Update Manual (${selectedForUpdate.length})`}
         </button>
       </div>
 
@@ -190,7 +238,9 @@ export const ImagingStudySection: React.FC = () => {
                   </td>
                   <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>
                     {row.id_imagingstudy ? (
-                      <span style={{ padding: '3px 8px', borderRadius: 999, background: '#ecfdf5', color: '#065f46', fontSize: 11, fontWeight: 600 }}>{row.id_imagingstudy}</span>
+                      <span style={{ padding: '3px 8px', borderRadius: 999, background: '#ecfdf5', color: '#065f46', fontSize: 11, fontWeight: 600 }}>
+                        {row.id_imagingstudy === 'via-dicom-router' ? 'Via DICOM Router' : row.id_imagingstudy}
+                      </span>
                     ) : (
                       <span style={{ padding: '3px 8px', borderRadius: 999, background: '#fef2f2', color: '#991b1b', fontSize: 11, fontWeight: 600 }}>Belum Terkirim</span>
                     )}

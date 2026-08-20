@@ -170,7 +170,7 @@ export const PatientJourneySection: React.FC = () => {
   }, [detail]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb' }}>
         {RAWAT_TABS.map((t) => {
           const active = rawatTab === t.key;
@@ -214,7 +214,7 @@ export const PatientJourneySection: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', maxHeight: 280 }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>

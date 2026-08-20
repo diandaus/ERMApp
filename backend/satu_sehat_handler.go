@@ -27,6 +27,12 @@ type SatuSehatConfig struct {
 	IsProduction       bool   `json:"is_production"`
 	OrthancURL         string `json:"orthanc_url"`
 	OrthancWorklistDir string `json:"orthanc_worklist_dir"`
+	OrthancUser        string `json:"orthanc_user"`
+	OrthancPass        string `json:"orthanc_pass"`
+	DicomRouterName    string `json:"dicom_router_name"`
+	DicomRouterHost    string `json:"dicom_router_host"`
+	DicomRouterPort    string `json:"dicom_router_port"`
+	DicomRouterAET     string `json:"dicom_router_aet"`
 }
 
 type ImagingStudyItem struct {
@@ -74,10 +80,13 @@ func getConfigSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		// Mask client secret
+		// Mask secret-ish fields
 		masked := cfg
 		if masked.ClientSecret != "" {
 			masked.ClientSecret = "***"
+		}
+		if masked.OrthancPass != "" {
+			masked.OrthancPass = "***"
 		}
 		c.JSON(http.StatusOK, masked)
 	}
@@ -105,9 +114,17 @@ func saveConfigSatuSehat(db *sql.DB) gin.HandlerFunc {
 			"is_production":        isProd,
 			"orthanc_url":          body.OrthancURL,
 			"orthanc_worklist_dir": body.OrthancWorklistDir,
+			"orthanc_user":         body.OrthancUser,
+			"dicom_router_name":    body.DicomRouterName,
+			"dicom_router_host":    body.DicomRouterHost,
+			"dicom_router_port":    body.DicomRouterPort,
+			"dicom_router_aet":     body.DicomRouterAET,
 		}
 		if body.ClientSecret != "" && body.ClientSecret != "***" {
 			updates["client_secret"] = body.ClientSecret
+		}
+		if body.OrthancPass != "" && body.OrthancPass != "***" {
+			updates["orthanc_pass"] = body.OrthancPass
 		}
 
 		for kode, nilai := range updates {
@@ -518,7 +535,7 @@ func getEncounterCandidates(db *sql.DB) gin.HandlerFunc {
 
 		query := `
 			SELECT
-				reg_periksa.tgl_registrasi,
+				IFNULL(reg_periksa.tgl_registrasi,''),
 				reg_periksa.no_rawat,
 				reg_periksa.no_rkm_medis,
 				pasien.nm_pasien,
@@ -1207,7 +1224,7 @@ func getConditionCandidates(db *sql.DB) gin.HandlerFunc {
 
 		query := `
 			SELECT
-				reg_periksa.tgl_registrasi,
+				IFNULL(reg_periksa.tgl_registrasi,''),
 				reg_periksa.no_rawat,
 				reg_periksa.no_rkm_medis,
 				pasien.nm_pasien,
@@ -1287,7 +1304,7 @@ func fetchConditionRowData(db *sql.DB, noRawat, kdPenyakit string) (conditionRow
 	var d conditionRowData
 	err := db.QueryRow(`
 		SELECT reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''), IFNULL(penyakit.nm_penyakit,''),
-			reg_periksa.status_lanjut, reg_periksa.tgl_registrasi, CONCAT(reg_periksa.tgl_registrasi,' ',reg_periksa.jam_reg)
+			reg_periksa.status_lanjut, IFNULL(reg_periksa.tgl_registrasi,''), CONCAT(reg_periksa.tgl_registrasi,' ',reg_periksa.jam_reg)
 		FROM diagnosa_pasien
 		INNER JOIN reg_periksa ON diagnosa_pasien.no_rawat = reg_periksa.no_rawat
 		INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -4164,7 +4181,7 @@ func getObservationTTVCandidates(db *sql.DB) gin.HandlerFunc {
 		fetchBranch := func(sumberTable, statusLiteral string) ([]ObservationTTVRow, error) {
 			query := fmt.Sprintf(`
 				SELECT
-					reg_periksa.tgl_registrasi,
+					IFNULL(reg_periksa.tgl_registrasi,''),
 					reg_periksa.no_rawat,
 					reg_periksa.no_rkm_medis,
 					pasien.nm_pasien,
@@ -4672,11 +4689,11 @@ func buildServiceRequestRadiologiPayload(db *sql.DB, cfg SatuSehatConfig, token,
 	)
 	err := db.QueryRow(`
 		SELECT
-			rp.no_rawat, rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''), p.tgl_lahir, p.jk,
+			rp.no_rawat, rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''), IFNULL(p.tgl_lahir,''), p.jk,
 			rp.kd_dokter, IFNULL(peg.nama,''), IFNULL(peg.no_ktp,''),
 			se.id_encounter,
-			pr.tgl_permintaan, IFNULL(pr.jam_permintaan,'00:00:00'), IFNULL(pr.diagnosa_klinis,''),
-			pr.tgl_sampel, pr.jam_sampel,
+			IFNULL(pr.tgl_permintaan,''), IFNULL(pr.jam_permintaan,'00:00:00'), IFNULL(pr.diagnosa_klinis,''),
+			IFNULL(pr.tgl_sampel,''), pr.jam_sampel,
 			IFNULL(jpr.nm_perawatan,''), IFNULL(m.code,''), IFNULL(m.system,''), IFNULL(m.display,'')
 		FROM permintaan_radiologi pr
 		INNER JOIN reg_periksa rp ON rp.no_rawat = pr.no_rawat
@@ -4805,7 +4822,7 @@ func getServiceRequestRadiologiCandidates(db *sql.DB) gin.HandlerFunc {
 				rp.no_rawat, rp.no_rkm_medis, p.nm_pasien,
 				IFNULL(peg.nama,'') as nama_dokter,
 				IFNULL(se.id_encounter,'') as id_encounter,
-				pr.noorder, pr.tgl_permintaan, IFNULL(pr.jam_permintaan,'00:00:00') as jam_permintaan,
+				pr.noorder, IFNULL(pr.tgl_permintaan,''), IFNULL(pr.jam_permintaan,'00:00:00') as jam_permintaan,
 				IFNULL(pr.diagnosa_klinis,'') as diagnosa_klinis,
 				ppr.kd_jenis_prw, IFNULL(jpr.nm_perawatan,'') as nm_perawatan,
 				IFNULL(sr.id_servicerequest,'') as id_servicerequest
@@ -5032,8 +5049,8 @@ func buildServiceRequestLabPayload(db *sql.DB, cfg SatuSehatConfig, token, jenis
 			rp.no_rawat, rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''),
 			rp.kd_dokter, IFNULL(peg.nama,''), IFNULL(peg.no_ktp,''),
 			se.id_encounter,
-			pl.tgl_permintaan, IFNULL(pl.jam_permintaan,'00:00:00'), IFNULL(pl.diagnosa_klinis,''),
-			pl.tgl_sampel, pl.jam_sampel,
+			IFNULL(pl.tgl_permintaan,''), IFNULL(pl.jam_permintaan,'00:00:00'), IFNULL(pl.diagnosa_klinis,''),
+			IFNULL(pl.tgl_sampel,''), pl.jam_sampel,
 			IFNULL(tl.Pemeriksaan,''), IFNULL(m.code,''), IFNULL(m.system,''), IFNULL(m.display,'')
 		FROM %s pl
 		INNER JOIN reg_periksa rp ON rp.no_rawat = pl.no_rawat
@@ -5145,7 +5162,7 @@ func getServiceRequestLabCandidates(db *sql.DB) gin.HandlerFunc {
 				rp.no_rawat, rp.no_rkm_medis, p.nm_pasien,
 				IFNULL(peg.nama,'') as nama_dokter,
 				IFNULL(se.id_encounter,'') as id_encounter,
-				pl.noorder, pl.tgl_permintaan, IFNULL(pl.jam_permintaan,'00:00:00') as jam_permintaan,
+				pl.noorder, IFNULL(pl.tgl_permintaan,''), IFNULL(pl.jam_permintaan,'00:00:00') as jam_permintaan,
 				IFNULL(pl.diagnosa_klinis,'') as diagnosa_klinis,
 				dpl.id_template, dpl.kd_jenis_prw, IFNULL(tl.Pemeriksaan,'') as nm_perawatan,
 				IFNULL(sr.id_servicerequest,'') as id_servicerequest
@@ -5478,7 +5495,7 @@ func buildSpecimenRadiologiPayload(db *sql.DB, cfg SatuSehatConfig, token, noOrd
 	)
 	err := db.QueryRow(`
 		SELECT rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''),
-			pr.tgl_sampel, pr.jam_sampel,
+			IFNULL(pr.tgl_sampel,''), pr.jam_sampel,
 			IFNULL(m.sampel_code,''), IFNULL(m.sampel_system,''), IFNULL(m.sampel_display,''),
 			IFNULL(sr.id_servicerequest,'')
 		FROM permintaan_radiologi pr
@@ -5777,7 +5794,7 @@ func buildSpecimenLabPayload(db *sql.DB, cfg SatuSehatConfig, token, jenis, noOr
 	)
 	query := fmt.Sprintf(`
 		SELECT rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''),
-			pl.tgl_sampel, pl.jam_sampel,
+			IFNULL(pl.tgl_sampel,''), pl.jam_sampel,
 			IFNULL(m.sampel_code,''), IFNULL(m.sampel_system,''), IFNULL(m.sampel_display,''),
 			IFNULL(sr.id_servicerequest,'')
 		FROM %s pl
@@ -6095,7 +6112,7 @@ func buildObservationRadiologiPayload(db *sql.DB, cfg SatuSehatConfig, token, no
 			reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 			periksa_radiologi.kd_dokter, IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''),
 			satu_sehat_encounter.id_encounter,
-			permintaan_radiologi.tgl_hasil, IFNULL(permintaan_radiologi.jam_hasil,'00:00:00'),
+			IFNULL(permintaan_radiologi.tgl_hasil,''), IFNULL(permintaan_radiologi.jam_hasil,'00:00:00'),
 			IFNULL(jns_perawatan_radiologi.nm_perawatan,''), IFNULL(satu_sehat_mapping_radiologi.code,''),
 			IFNULL(satu_sehat_mapping_radiologi.system,''), IFNULL(satu_sehat_mapping_radiologi.display,''),
 			hasil_radiologi.hasil, satu_sehat_specimen_radiologi.id_specimen
@@ -6420,7 +6437,7 @@ func buildObservationLabPayload(db *sql.DB, cfg SatuSehatConfig, token, jenis, n
 			rp.no_rawat, rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''),
 			periksa_lab.kd_dokter, IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''),
 			se.id_encounter,
-			pl.tgl_hasil, IFNULL(pl.jam_hasil,'00:00:00'),
+			IFNULL(pl.tgl_hasil,''), IFNULL(pl.jam_hasil,'00:00:00'),
 			IFNULL(tl.Pemeriksaan,''), IFNULL(m.code,''), IFNULL(m.system,''), IFNULL(m.display,''),
 			dpl.nilai, IFNULL(tl.satuan,''), dpl.nilai_rujukan, dpl.keterangan,
 			sp.id_specimen
@@ -6765,7 +6782,7 @@ func buildDiagnosticReportRadiologiPayload(db *sql.DB, cfg SatuSehatConfig, toke
 			reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 			periksa_radiologi.kd_dokter, IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''),
 			satu_sehat_encounter.id_encounter,
-			permintaan_radiologi.tgl_hasil, IFNULL(permintaan_radiologi.jam_hasil,'00:00:00'),
+			IFNULL(permintaan_radiologi.tgl_hasil,''), IFNULL(permintaan_radiologi.jam_hasil,'00:00:00'),
 			IFNULL(satu_sehat_mapping_radiologi.code,''), IFNULL(satu_sehat_mapping_radiologi.system,''), IFNULL(satu_sehat_mapping_radiologi.display,''),
 			satu_sehat_servicerequest_radiologi.id_servicerequest, satu_sehat_specimen_radiologi.id_specimen,
 			satu_sehat_observation_radiologi.id_observation, hasil_radiologi.hasil
@@ -7089,7 +7106,7 @@ func buildDiagnosticReportLabPayload(db *sql.DB, cfg SatuSehatConfig, token, jen
 			rp.no_rkm_medis, p.nm_pasien, IFNULL(p.no_ktp,''),
 			periksa_lab.kd_dokter, IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''),
 			se.id_encounter,
-			pl.tgl_hasil, IFNULL(pl.jam_hasil,'00:00:00'),
+			IFNULL(pl.tgl_hasil,''), IFNULL(pl.jam_hasil,'00:00:00'),
 			IFNULL(m.code,''), IFNULL(m.system,''), IFNULL(m.display,''),
 			sr.id_servicerequest, sp.id_specimen, ob.id_observation, IFNULL(skl.kesan,'')
 		FROM %s pl
@@ -7364,7 +7381,7 @@ func getClinicalImpressionCandidates(db *sql.DB) gin.HandlerFunc {
 					CONCAT(reg_periksa.tgl_registrasi,' ',reg_periksa.jam_reg) AS pulang,
 					satu_sehat_encounter.id_encounter,
 					pegawai.nama, IFNULL(pegawai.no_ktp,''),
-					pe.tgl_perawatan, pe.jam_rawat, pe.penilaian, IFNULL(pe.keluhan,''), IFNULL(pe.pemeriksaan,''),
+					IFNULL(pe.tgl_perawatan,''), pe.jam_rawat, pe.penilaian, IFNULL(pe.keluhan,''), IFNULL(pe.pemeriksaan,''),
 					satu_sehat_condition.kd_penyakit, IFNULL(penyakit.nm_penyakit,''), IFNULL(satu_sehat_condition.id_condition,''),
 					IFNULL(sci.id_clinicalimpression,'')
 				FROM reg_periksa
@@ -8209,10 +8226,10 @@ func getImmunizationCandidates(db *sql.DB) gin.HandlerFunc {
 
 		query := `
 			SELECT
-				reg_periksa.tgl_registrasi, reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
+				IFNULL(reg_periksa.tgl_registrasi,''), reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 				reg_periksa.stts, reg_periksa.status_lanjut, satu_sehat_encounter.id_encounter,
 				IFNULL(satu_sehat_mapping_vaksin.vaksin_display,''), satu_sehat_mapping_vaksin.kode_brng,
-				detail_pemberian_obat.no_batch, detail_pemberian_obat.tgl_perawatan, detail_pemberian_obat.jam,
+				detail_pemberian_obat.no_batch, IFNULL(detail_pemberian_obat.tgl_perawatan,''), detail_pemberian_obat.jam,
 				IFNULL(pegawai.nama,''), IFNULL(satu_sehat_immunization.id_immunization,''), detail_pemberian_obat.no_faktur
 			FROM reg_periksa
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -8641,7 +8658,7 @@ type qrTelaahFarmasiData struct {
 }
 
 const qrTelaahFarmasiSelectCols = `
-	reg_periksa.tgl_registrasi, reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
+	IFNULL(reg_periksa.tgl_registrasi,''), reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 	IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''), telaah_farmasi.nip,
 	satu_sehat_encounter.id_encounter, IFNULL(resep_obat.tgl_peresepan,''), IFNULL(resep_obat.jam_peresepan,'00:00:00'),
 	resep_obat.no_resep, IFNULL(satu_sehat_questionresponse_telaah_farmasi.id_questionresponse,''),
@@ -9019,10 +9036,10 @@ func getCarePlanCandidates(db *sql.DB) gin.HandlerFunc {
 		branchQuery := func(pemeriksaanTable, status string) (string, []interface{}) {
 			q := fmt.Sprintf(`
 				SELECT
-					CONCAT(reg_periksa.tgl_registrasi,' ',reg_periksa.jam_reg), reg_periksa.tgl_registrasi,
+					CONCAT(reg_periksa.tgl_registrasi,' ',reg_periksa.jam_reg), IFNULL(reg_periksa.tgl_registrasi,''),
 					reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 					satu_sehat_encounter.id_encounter, pe.rtl, IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''),
-					pe.tgl_perawatan, pe.jam_rawat, IFNULL(sc.id_careplan,'')
+					IFNULL(pe.tgl_perawatan,''), pe.jam_rawat, IFNULL(sc.id_careplan,'')
 				FROM reg_periksa
 				INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 				INNER JOIN satu_sehat_encounter ON satu_sehat_encounter.no_rawat = reg_periksa.no_rawat
@@ -9401,7 +9418,7 @@ func getEpisodeOfCareCandidates(db *sql.DB) gin.HandlerFunc {
 		// Ralan: tgl_perawatan pemeriksaan_ralan dipakai sbg rentang & akhir period.
 		queryRalan := `
 			SELECT
-				reg_periksa.tgl_registrasi, reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
+				IFNULL(reg_periksa.tgl_registrasi,''), reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 				reg_periksa.stts, reg_periksa.status_lanjut,
 				CONCAT(pemeriksaan_ralan.tgl_perawatan,'T',pemeriksaan_ralan.jam_rawat,'+07:00') as pulang,
 				satu_sehat_encounter.id_encounter, diagnosa_pasien.kd_penyakit, IFNULL(penyakit.nm_penyakit,''),
@@ -9451,7 +9468,7 @@ func getEpisodeOfCareCandidates(db *sql.DB) gin.HandlerFunc {
 		// Ranap: tgl_keluar kamar_inap dipakai sbg rentang & akhir period.
 		queryRanap := `
 			SELECT
-				reg_periksa.tgl_registrasi, reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
+				IFNULL(reg_periksa.tgl_registrasi,''), reg_periksa.no_rawat, reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 				reg_periksa.stts, reg_periksa.status_lanjut,
 				CONCAT(kamar_inap.tgl_keluar,'T',kamar_inap.jam_keluar,'+07:00') as pulang,
 				satu_sehat_encounter.id_encounter, diagnosa_pasien.kd_penyakit, IFNULL(penyakit.nm_penyakit,''),
@@ -9761,7 +9778,7 @@ func getMonitoringRadiologi(db *sql.DB) gin.HandlerFunc {
 			SELECT
 				pr.noorder,
 				pr.no_rawat,
-				pr.tgl_permintaan,
+				IFNULL(pr.tgl_permintaan,''),
 				IFNULL(p.nm_pasien,'') as nm_pasien,
 				IFNULL(rp.no_rkm_medis,'') as no_rkm_medis,
 				IFNULL(mwl.status,'') as mwl_status,
@@ -9845,7 +9862,7 @@ func getImagingStudyList(db *sql.DB) gin.HandlerFunc {
 			SELECT
 				pr.noorder,
 				pr.no_rawat,
-				pr.tgl_permintaan,
+				IFNULL(pr.tgl_permintaan,''),
 				IFNULL(pr.jam_permintaan, '') as jam_permintaan,
 				IFNULL(p.nm_pasien, '') as nm_pasien,
 				IFNULL(rp.no_rkm_medis, '') as no_rkm_medis,
@@ -9927,7 +9944,7 @@ func buildImagingStudyPayload(db *sql.DB, cfg SatuSehatConfig, noOrder string) (
 	var idEncounterStr string
 	err := db.QueryRow(`
 		SELECT
-			pr.noorder, pr.no_rawat, pr.tgl_permintaan,
+			pr.noorder, pr.no_rawat, IFNULL(pr.tgl_permintaan,''),
 			IFNULL(pr.jam_permintaan, '00:00:00') as jam_permintaan,
 			IFNULL(p.nm_pasien, '') as nm_pasien,
 			IFNULL(rp.no_rkm_medis, '') as no_rkm_medis,
@@ -10368,6 +10385,18 @@ func getSatuSehatConfig(db *sql.DB) (SatuSehatConfig, error) {
 			cfg.OrthancURL = nilai
 		case "orthanc_worklist_dir":
 			cfg.OrthancWorklistDir = nilai
+		case "orthanc_user":
+			cfg.OrthancUser = nilai
+		case "orthanc_pass":
+			cfg.OrthancPass = nilai
+		case "dicom_router_name":
+			cfg.DicomRouterName = nilai
+		case "dicom_router_host":
+			cfg.DicomRouterHost = nilai
+		case "dicom_router_port":
+			cfg.DicomRouterPort = nilai
+		case "dicom_router_aet":
+			cfg.DicomRouterAET = nilai
 		}
 	}
 

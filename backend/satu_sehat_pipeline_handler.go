@@ -134,7 +134,7 @@ func getSatuSehatPipelineList(db *sql.DB) gin.HandlerFunc {
 
 		query := `
 			SELECT
-				reg_periksa.tgl_registrasi, reg_periksa.jam_reg, reg_periksa.no_rawat,
+				IFNULL(reg_periksa.tgl_registrasi,''), reg_periksa.jam_reg, reg_periksa.no_rawat,
 				reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pegawai.nama,''),
 				IFNULL(poliklinik.nm_poli,''), reg_periksa.stts, reg_periksa.status_lanjut,
 				IFNULL(satu_sehat_encounter.id_encounter,'')
@@ -219,7 +219,7 @@ func getSatuSehatPipelineDetail(db *sql.DB) gin.HandlerFunc {
 				reg_periksa.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.no_ktp,''),
 				reg_periksa.kd_dokter, IFNULL(pegawai.nama,''), IFNULL(pegawai.no_ktp,''),
 				reg_periksa.kd_poli, IFNULL(poliklinik.nm_poli,''),
-				reg_periksa.tgl_registrasi, reg_periksa.jam_reg, reg_periksa.stts, reg_periksa.status_lanjut
+				IFNULL(reg_periksa.tgl_registrasi,''), reg_periksa.jam_reg, reg_periksa.stts, reg_periksa.status_lanjut
 			FROM reg_periksa
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN pegawai ON pegawai.nik = reg_periksa.kd_dokter
