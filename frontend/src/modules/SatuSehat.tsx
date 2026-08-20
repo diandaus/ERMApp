@@ -2128,10 +2128,20 @@ const LabFormModal: React.FC<{
           />
         </div>
         {v.code && (
-          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151' }}>
-            <div><strong>Code:</strong> {v.code}</div>
-            <div><strong>System:</strong> {v.system}</div>
-            <div><strong>Display:</strong> {v.display}</div>
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ color: '#9ca3af' }}>Bisa diedit manual jika hasil pencarian kurang tepat:</div>
+            <label>
+              <strong>Code:</strong>
+              <input type="text" value={v.code} onChange={(e) => set('code', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>System:</strong>
+              <input type="text" value={v.system} onChange={(e) => set('system', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>Display:</strong>
+              <input type="text" value={v.display} onChange={(e) => set('display', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
           </div>
         )}
         <div>
@@ -2143,10 +2153,20 @@ const LabFormModal: React.FC<{
           />
         </div>
         {v.sampelCode && (
-          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151' }}>
-            <div><strong>Code:</strong> {v.sampelCode}</div>
-            <div><strong>System:</strong> {v.sampelSystem}</div>
-            <div><strong>Display:</strong> {v.sampelDisplay}</div>
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ color: '#9ca3af' }}>Bisa diedit manual jika hasil pencarian kurang tepat:</div>
+            <label>
+              <strong>Code:</strong>
+              <input type="text" value={v.sampelCode} onChange={(e) => set('sampelCode', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>System:</strong>
+              <input type="text" value={v.sampelSystem} onChange={(e) => set('sampelSystem', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>Display:</strong>
+              <input type="text" value={v.sampelDisplay} onChange={(e) => set('sampelDisplay', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
           </div>
         )}
 
