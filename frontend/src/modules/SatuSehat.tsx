@@ -20,6 +20,8 @@ import { ImmunizationSection } from './Immunization';
 import { QuestionnaireResponseSection } from './QuestionnaireResponse';
 import { CarePlanSection } from './CarePlan';
 import { EpisodeOfCareSection } from './EpisodeOfCare';
+import { PatientJourneySection } from './PatientJourney';
+import { AutoSendSection } from './AutoSend';
 
 // SatuSehat.tsx — shell sidebar modul SATUSEHAT (integrasi Kemenkes),
 // dibangun ulang dari kosong (sebelumnya file ini sengaja dikosongkan utk
@@ -39,6 +41,8 @@ import { EpisodeOfCareSection } from './EpisodeOfCare';
 
 type SatuSehatTab =
   | 'dashboard'
+  | 'patient-journey'
+  | 'auto-send'
   | 'referensi'
   | 'encounter'
   | 'condition'
@@ -71,6 +75,24 @@ const MENU: { key: SatuSehatTab; label: string; icon: React.ReactNode }[] = [
         <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
         <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
         <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+      </svg>
+    ),
+  },
+  {
+    key: 'patient-journey',
+    label: 'Perjalanan Pasien',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 6l6 6-6 6"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'auto-send',
+    label: 'Kirim Otomatis',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path>
       </svg>
     ),
   },
@@ -2586,6 +2608,8 @@ export const SatuSehatView: React.FC<SatuSehatViewProps> = ({ onBack }) => {
           }}
         >
           {activeTab === 'dashboard' && <Placeholder title="Dashboard Satu Sehat" />}
+          {activeTab === 'patient-journey' && <PatientJourneySection />}
+          {activeTab === 'auto-send' && <AutoSendSection />}
           {activeTab === 'referensi' && <ReferensiSection />}
           {activeTab === 'encounter' && <EncounterSection />}
           {activeTab === 'condition' && <ConditionSection />}

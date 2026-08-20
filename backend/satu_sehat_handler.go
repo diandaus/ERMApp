@@ -851,6 +851,7 @@ func sendEncounterSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "encounter", noRawat, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -868,6 +869,7 @@ func sendEncounterSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Encounter terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "encounter", noRawat)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Encounter berhasil dikirim", "id_encounter": idEncounter})
 	}
@@ -1392,6 +1394,7 @@ func sendConditionSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "condition", noRawat+"|"+body.KdPenyakit, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -1409,6 +1412,7 @@ func sendConditionSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Condition terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "condition", noRawat+"|"+body.KdPenyakit)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Condition berhasil dikirim", "id_condition": idCondition})
 	}
@@ -1491,9 +1495,11 @@ func updateConditionSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "condition", noRawat+"|"+body.KdPenyakit, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "condition", noRawat+"|"+body.KdPenyakit)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Condition berhasil diperbarui", "id_condition": idCondition})
 	}
@@ -2620,6 +2626,7 @@ func sendMedicationDispenseSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "medication_dispense", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -2637,6 +2644,7 @@ func sendMedicationDispenseSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "MedicationDispense terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "medication_dispense", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur)
 
 		c.JSON(http.StatusOK, gin.H{"message": "MedicationDispense berhasil dikirim", "id_medicationdispense": idDispense})
 	}
@@ -2723,9 +2731,11 @@ func updateMedicationDispenseSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "medication_dispense", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "medication_dispense", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur)
 
 		c.JSON(http.StatusOK, gin.H{"message": "MedicationDispense berhasil diperbarui", "id_medicationdispense": idDispense})
 	}
@@ -3025,6 +3035,8 @@ func sendMedicationStatementSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no_resep dan kode_brng wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM resep_obat WHERE no_resep = ? LIMIT 1`, noResep).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" || cfg.OrgID == "" {
@@ -3073,6 +3085,7 @@ func sendMedicationStatementSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "medication_statement", noResep+"|"+body.KodeBrng+"|"+body.NoRacik, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -3098,6 +3111,7 @@ func sendMedicationStatementSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "MedicationStatement terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "medication_statement", noResep+"|"+body.KodeBrng+"|"+body.NoRacik)
 
 		c.JSON(http.StatusOK, gin.H{"message": "MedicationStatement berhasil dikirim", "id_medicationstatement": idStatement})
 	}
@@ -3119,6 +3133,8 @@ func updateMedicationStatementSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no_resep dan kode_brng wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM resep_obat WHERE no_resep = ? LIMIT 1`, noResep).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" || cfg.OrgID == "" {
@@ -3174,9 +3190,11 @@ func updateMedicationStatementSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "medication_statement", noResep+"|"+body.KodeBrng+"|"+body.NoRacik, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "medication_statement", noResep+"|"+body.KodeBrng+"|"+body.NoRacik)
 
 		c.JSON(http.StatusOK, gin.H{"message": "MedicationStatement berhasil diperbarui", "id_medicationstatement": idStatement})
 	}
@@ -3630,6 +3648,7 @@ func sendAllergyIntoleranceSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "allergy_intolerance", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -3647,6 +3666,7 @@ func sendAllergyIntoleranceSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "AllergyIntolerance terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "allergy_intolerance", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut)
 
 		c.JSON(http.StatusOK, gin.H{"message": "AllergyIntolerance berhasil dikirim", "id_allergy_intolerance": idAllergy})
 	}
@@ -3736,9 +3756,11 @@ func updateAllergyIntoleranceSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "allergy_intolerance", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "allergy_intolerance", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut)
 
 		c.JSON(http.StatusOK, gin.H{"message": "AllergyIntolerance berhasil diperbarui", "id_allergy_intolerance": idAllergy})
 	}
@@ -3958,6 +3980,7 @@ func sendProcedureSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "procedure", noRawat+"|"+body.KodeICD9+"|"+rowData.StatusLanjut, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -3975,6 +3998,7 @@ func sendProcedureSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Procedure terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "procedure", noRawat+"|"+body.KodeICD9+"|"+rowData.StatusLanjut)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Procedure berhasil dikirim", "id_procedure": idProcedure})
 	}
@@ -4054,9 +4078,11 @@ func updateProcedureSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "procedure", noRawat+"|"+body.KodeICD9+"|"+rowData.StatusLanjut, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "procedure", noRawat+"|"+body.KodeICD9+"|"+rowData.StatusLanjut)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Procedure berhasil diperbarui", "id_procedure": idProcedure})
 	}
@@ -4479,6 +4505,7 @@ func sendObservationTTV(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "observation_ttv_"+jenis, noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -4496,6 +4523,7 @@ func sendObservationTTV(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Observation terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "observation_ttv_"+jenis, noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Observation berhasil dikirim", "id_observation": idObservation})
 	}
@@ -4595,9 +4623,11 @@ func updateObservationTTV(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "observation_ttv_"+jenis, noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "observation_ttv_"+jenis, noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.StatusLanjut)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Observation berhasil diperbarui", "id_observation": idObservation})
 	}
@@ -4842,6 +4872,8 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -4874,6 +4906,7 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "servicerequest_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -4887,6 +4920,7 @@ func sendServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE id_servicerequest = VALUES(id_servicerequest)
 			`, noOrder, kdJenisPrw, idSR)
 		}
+		clearSatuSehatKirimError(db, "servicerequest_radiologi", noOrder+"|"+kdJenisPrw)
 
 		// Best-effort: sinkronisasi tag DICOM di Orthanc (kegagalan tidak menggagalkan proses)
 		pacsMsg := lazyModifyPACS(db, noOrder, built.NoRkmMedis, built.NmPasien, built.TglLahir, built.JK, built.TglPermintaan, built.NmPerawatan)
@@ -4908,6 +4942,8 @@ func updateServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -4949,9 +4985,11 @@ func updateServiceRequestRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "servicerequest_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "servicerequest_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "ServiceRequest berhasil diupdate", "id_servicerequest": idSR})
 	}
@@ -5182,6 +5220,9 @@ func sendServiceRequestLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + strconv.Itoa(idTemplate) + "|" + kdJenisPrw
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -5214,6 +5255,7 @@ func sendServiceRequestLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "servicerequest_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -5227,6 +5269,7 @@ func sendServiceRequestLab(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE id_servicerequest = VALUES(id_servicerequest)
 			`, def.TrackingTable), noOrder, idTemplate, kdJenisPrw, idSR)
 		}
+		clearSatuSehatKirimError(db, "servicerequest_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "ServiceRequest berhasil dikirim", "id_servicerequest": idSR})
 	}
@@ -5248,6 +5291,9 @@ func updateServiceRequestLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + strconv.Itoa(idTemplate) + "|" + kdJenisPrw
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -5290,9 +5336,11 @@ func updateServiceRequestLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "servicerequest_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "servicerequest_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "ServiceRequest berhasil diupdate", "id_servicerequest": idSR})
 	}
@@ -5497,6 +5545,8 @@ func sendSpecimenRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -5529,6 +5579,7 @@ func sendSpecimenRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "specimen_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -5542,6 +5593,7 @@ func sendSpecimenRadiologi(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE id_specimen = VALUES(id_specimen)
 			`, noOrder, kdJenisPrw, idSpecimen)
 		}
+		clearSatuSehatKirimError(db, "specimen_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Specimen berhasil dikirim", "id_specimen": idSpecimen})
 	}
@@ -5556,6 +5608,8 @@ func updateSpecimenRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -5597,9 +5651,11 @@ func updateSpecimenRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "specimen_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "specimen_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Specimen berhasil diupdate", "id_specimen": idSpecimen})
 	}
@@ -5796,6 +5852,9 @@ func sendSpecimenLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + kdJenisPrw + "|" + strconv.Itoa(idTemplate)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -5828,6 +5887,7 @@ func sendSpecimenLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "specimen_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -5841,6 +5901,7 @@ func sendSpecimenLab(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE id_specimen = VALUES(id_specimen)
 			`, def.TrackingTable), noOrder, kdJenisPrw, idTemplate, idSpecimen)
 		}
+		clearSatuSehatKirimError(db, "specimen_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Specimen berhasil dikirim", "id_specimen": idSpecimen})
 	}
@@ -5862,6 +5923,9 @@ func updateSpecimenLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + kdJenisPrw + "|" + strconv.Itoa(idTemplate)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -5904,9 +5968,11 @@ func updateSpecimenLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "specimen_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "specimen_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Specimen berhasil diupdate", "id_specimen": idSpecimen})
 	}
@@ -6101,6 +6167,8 @@ func sendObservationRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -6133,6 +6201,7 @@ func sendObservationRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "observation_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -6146,6 +6215,7 @@ func sendObservationRadiologi(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE id_observation = VALUES(id_observation)
 			`, noOrder, kdJenisPrw, idObservation)
 		}
+		clearSatuSehatKirimError(db, "observation_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Observation berhasil dikirim", "id_observation": idObservation})
 	}
@@ -6160,6 +6230,8 @@ func updateObservationRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -6201,9 +6273,11 @@ func updateObservationRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "observation_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "observation_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Observation berhasil diupdate", "id_observation": idObservation})
 	}
@@ -6439,6 +6513,9 @@ func sendObservationLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + kdJenisPrw + "|" + strconv.Itoa(idTemplate)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -6471,6 +6548,7 @@ func sendObservationLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "observation_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -6484,6 +6562,7 @@ func sendObservationLab(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE id_observation = VALUES(id_observation)
 			`, def.TrackingTable), noOrder, kdJenisPrw, idTemplate, idObservation)
 		}
+		clearSatuSehatKirimError(db, "observation_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Observation berhasil dikirim", "id_observation": idObservation})
 	}
@@ -6505,6 +6584,9 @@ func updateObservationLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + kdJenisPrw + "|" + strconv.Itoa(idTemplate)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -6547,9 +6629,11 @@ func updateObservationLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "observation_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "observation_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Observation berhasil diupdate", "id_observation": idObservation})
 	}
@@ -6753,6 +6837,8 @@ func sendDiagnosticReportRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -6785,6 +6871,7 @@ func sendDiagnosticReportRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "diagnosticreport_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -6798,6 +6885,7 @@ func sendDiagnosticReportRadiologi(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE id_diagnosticreport = VALUES(id_diagnosticreport)
 			`, noOrder, kdJenisPrw, idDR)
 		}
+		clearSatuSehatKirimError(db, "diagnosticreport_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "DiagnosticReport berhasil dikirim", "id_diagnosticreport": idDR})
 	}
@@ -6812,6 +6900,8 @@ func updateDiagnosticReportRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -6853,9 +6943,11 @@ func updateDiagnosticReportRadiologi(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "diagnosticreport_radiologi", noOrder+"|"+kdJenisPrw, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "diagnosticreport_radiologi", noOrder+"|"+kdJenisPrw)
 
 		c.JSON(http.StatusOK, gin.H{"message": "DiagnosticReport berhasil diupdate", "id_diagnosticreport": idDR})
 	}
@@ -7088,6 +7180,9 @@ func sendDiagnosticReportLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + kdJenisPrw + "|" + strconv.Itoa(idTemplate)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -7120,6 +7215,7 @@ func sendDiagnosticReportLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "diagnosticreport_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
@@ -7133,6 +7229,7 @@ func sendDiagnosticReportLab(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE id_diagnosticreport = VALUES(id_diagnosticreport)
 			`, def.TrackingTable), noOrder, kdJenisPrw, idTemplate, idDR)
 		}
+		clearSatuSehatKirimError(db, "diagnosticreport_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "DiagnosticReport berhasil dikirim", "id_diagnosticreport": idDR})
 	}
@@ -7154,6 +7251,9 @@ func updateDiagnosticReportLab(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder, id_template, dan kd_jenis_prw wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(fmt.Sprintf(`SELECT no_rawat FROM %s WHERE noorder = ? LIMIT 1`, def.PermintaanTable), noOrder).Scan(&noRawatLookup)
+		refKey := noOrder + "|" + kdJenisPrw + "|" + strconv.Itoa(idTemplate)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -7196,9 +7296,11 @@ func updateDiagnosticReportLab(db *sql.DB) gin.HandlerFunc {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "diagnosticreport_lab_"+jenis, refKey, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": string(respBody)})
 			return
 		}
+		clearSatuSehatKirimError(db, "diagnosticreport_lab_"+jenis, refKey)
 
 		c.JSON(http.StatusOK, gin.H{"message": "DiagnosticReport berhasil diupdate", "id_diagnosticreport": idDR})
 	}
@@ -7583,6 +7685,7 @@ func sendClinicalImpressionSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "clinical_impression", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -7601,6 +7704,7 @@ func sendClinicalImpressionSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "ClinicalImpression terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "clinical_impression", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status)
 
 		c.JSON(http.StatusOK, gin.H{"message": "ClinicalImpression berhasil dikirim", "id_clinicalimpression": idClinicalImpression})
 	}
@@ -7684,9 +7788,11 @@ func updateClinicalImpressionSatuSehat(db *sql.DB) gin.HandlerFunc {
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			var result map[string]interface{}
 			json.Unmarshal(respBody, &result)
+			logSatuSehatKirimError(db, "clinical_impression", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "clinical_impression", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status)
 
 		c.JSON(http.StatusOK, gin.H{"message": "ClinicalImpression berhasil diupdate", "id_clinicalimpression": idClinicalImpression})
 	}
@@ -7945,6 +8051,7 @@ func sendCompositionSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "composition", noRawat+"|"+body.Tanggal, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -7962,6 +8069,7 @@ func sendCompositionSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Composition terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "composition", noRawat+"|"+body.Tanggal)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Composition berhasil dikirim", "id_composition": idComposition})
 	}
@@ -8041,9 +8149,11 @@ func updateCompositionSatuSehat(db *sql.DB) gin.HandlerFunc {
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			var result map[string]interface{}
 			json.Unmarshal(respBody, &result)
+			logSatuSehatKirimError(db, "composition", noRawat+"|"+body.Tanggal, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "composition", noRawat+"|"+body.Tanggal)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Composition berhasil diupdate", "id_composition": idComposition})
 	}
@@ -8367,6 +8477,7 @@ func sendImmunizationSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "immunization", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -8385,6 +8496,7 @@ func sendImmunizationSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Immunization terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "immunization", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Immunization berhasil dikirim", "id_immunization": idImmunization})
 	}
@@ -8471,9 +8583,11 @@ func updateImmunizationSatuSehat(db *sql.DB) gin.HandlerFunc {
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			var result map[string]interface{}
 			json.Unmarshal(respBody, &result)
+			logSatuSehatKirimError(db, "immunization", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "immunization", noRawat+"|"+body.TglPerawatan+"|"+body.Jam+"|"+body.KodeBrng+"|"+body.NoBatch+"|"+body.NoFaktur)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Immunization berhasil diupdate", "id_immunization": idImmunization})
 	}
@@ -8766,6 +8880,7 @@ func sendQRTelaahFarmasi(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "questionnaire_response", noResep, d.NoRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -8783,6 +8898,7 @@ func sendQRTelaahFarmasi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "QuestionnaireResponse terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "questionnaire_response", noResep)
 
 		c.JSON(http.StatusOK, gin.H{"message": "QuestionnaireResponse berhasil dikirim", "id_questionresponse": idQR})
 	}
@@ -8851,9 +8967,11 @@ func updateQRTelaahFarmasi(db *sql.DB) gin.HandlerFunc {
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			var result map[string]interface{}
 			json.Unmarshal(respBody, &result)
+			logSatuSehatKirimError(db, "questionnaire_response", noResep, d.NoRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "questionnaire_response", noResep)
 
 		c.JSON(http.StatusOK, gin.H{"message": "QuestionnaireResponse berhasil diupdate", "id_questionresponse": idQR})
 	}
@@ -9113,6 +9231,7 @@ func sendCarePlanSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "careplan", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -9131,6 +9250,7 @@ func sendCarePlanSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "CarePlan terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "careplan", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status)
 
 		c.JSON(http.StatusOK, gin.H{"message": "CarePlan berhasil dikirim", "id_careplan": idCarePlan})
 	}
@@ -9213,9 +9333,11 @@ func updateCarePlanSatuSehat(db *sql.DB) gin.HandlerFunc {
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			var result map[string]interface{}
 			json.Unmarshal(respBody, &result)
+			logSatuSehatKirimError(db, "careplan", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "careplan", noRawat+"|"+body.TglPerawatan+"|"+body.JamRawat+"|"+body.Status)
 
 		c.JSON(http.StatusOK, gin.H{"message": "CarePlan berhasil diupdate", "id_careplan": idCarePlan})
 	}
@@ -9526,6 +9648,7 @@ func sendEpisodeOfCareSatuSehat(db *sql.DB) gin.HandlerFunc {
 		var result map[string]interface{}
 		json.Unmarshal(respBody, &result)
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "episode_of_care", noRawat+"|"+body.KdPenyakit+"|"+body.Status, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
@@ -9544,6 +9667,7 @@ func sendEpisodeOfCareSatuSehat(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "EpisodeOfCare terkirim tapi gagal menyimpan status lokal: " + err.Error()})
 			return
 		}
+		clearSatuSehatKirimError(db, "episode_of_care", noRawat+"|"+body.KdPenyakit+"|"+body.Status)
 
 		c.JSON(http.StatusOK, gin.H{"message": "EpisodeOfCare berhasil dikirim", "id_episodeofcare": idEOC})
 	}
@@ -9615,9 +9739,11 @@ func updateEpisodeOfCareSatuSehat(db *sql.DB) gin.HandlerFunc {
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
 			var result map[string]interface{}
 			json.Unmarshal(respBody, &result)
+			logSatuSehatKirimError(db, "episode_of_care", noRawat+"|"+body.KdPenyakit+"|"+body.Status, noRawat, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode), "details": result})
 			return
 		}
+		clearSatuSehatKirimError(db, "episode_of_care", noRawat+"|"+body.KdPenyakit+"|"+body.Status)
 
 		c.JSON(http.StatusOK, gin.H{"message": "EpisodeOfCare berhasil diupdate", "id_episodeofcare": idEOC})
 	}
@@ -9965,6 +10091,8 @@ func sendImagingStudy(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -10000,6 +10128,7 @@ func sendImagingStudy(db *sql.DB) gin.HandlerFunc {
 		respBody, _ := io.ReadAll(resp.Body)
 
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "imagingstudy", noOrder, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error":   fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode),
 				"details": string(respBody),
@@ -10016,6 +10145,7 @@ func sendImagingStudy(db *sql.DB) gin.HandlerFunc {
 				VALUES (?, ?) ON DUPLICATE KEY UPDATE id_imagingstudy = VALUES(id_imagingstudy)
 			`, noOrder, idImagingStudy)
 		}
+		clearSatuSehatKirimError(db, "imagingstudy", noOrder)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message":         "ImagingStudy berhasil dikirim",
@@ -10032,6 +10162,8 @@ func updateImagingStudy(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder wajib diisi"})
 			return
 		}
+		var noRawatLookup string
+		db.QueryRow(`SELECT no_rawat FROM permintaan_radiologi WHERE noorder = ? LIMIT 1`, noOrder).Scan(&noRawatLookup)
 
 		cfg, err := getSatuSehatConfig(db)
 		if err != nil || cfg.ClientID == "" {
@@ -10075,12 +10207,14 @@ func updateImagingStudy(db *sql.DB) gin.HandlerFunc {
 		respBody, _ := io.ReadAll(resp.Body)
 
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			logSatuSehatKirimError(db, "imagingstudy", noOrder, noRawatLookup, resp.StatusCode, respBody)
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error":   fmt.Sprintf("Satu Sehat HTTP %d", resp.StatusCode),
 				"details": string(respBody),
 			})
 			return
 		}
+		clearSatuSehatKirimError(db, "imagingstudy", noOrder)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message":         "ImagingStudy berhasil diupdate",

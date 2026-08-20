@@ -386,6 +386,34 @@ func ensureSatuSehatTables(db *sql.DB) error {
 			modality_code VARCHAR(20) DEFAULT '',
 			modality_display VARCHAR(100) DEFAULT ''
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		// satu_sehat_kirim_error — simpan pesan error TERAKHIR dari Satu Sehat
+		// per resource per instance (ref_key), supaya fitur Perjalanan Pasien
+		// bisa menampilkan alasan gagal kirim (bukan cuma "belum terkirim").
+		// no_rawat disimpan terpisah dari ref_key krn resource rantai
+		// Radiologi/Lab di-refer pakai noorder/id_template (bukan no_rawat
+		// langsung) — jadi butuh kolom no_rawat sendiri spy gampang dicari per
+		// kunjungan. Row lama otomatis ke-replace (ON DUPLICATE KEY) atau
+		// dihapus (clearSatuSehatKirimError) begitu kirim ulang berhasil.
+		`CREATE TABLE IF NOT EXISTS satu_sehat_kirim_error (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			resource_key VARCHAR(40) NOT NULL,
+			ref_key VARCHAR(120) NOT NULL,
+			no_rawat VARCHAR(20) NOT NULL DEFAULT '',
+			http_status INT NOT NULL DEFAULT 0,
+			response_body MEDIUMTEXT,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			UNIQUE KEY uq_resource_ref (resource_key, ref_key),
+			KEY idx_resource_norawat (resource_key, no_rawat)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		// satu_sehat_auto_send_config — saklar ON/OFF per jenis resource utk
+		// worker kirim-otomatis (satu_sehat_autosend_worker.go). Default OFF
+		// (enabled=0) di-seed di bawah — auto-send TIDAK aktif sampai sengaja
+		// dinyalakan satu-satu per resource_key. Saklar global terpisah ada di
+		// satu_sehat_konfigurasi (kode 'auto_send_enabled').
+		`CREATE TABLE IF NOT EXISTS satu_sehat_auto_send_config (
+			resource_key VARCHAR(40) PRIMARY KEY,
+			enabled TINYINT(1) NOT NULL DEFAULT 0
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
 	// Migrasi kolom yang mungkin belum ada di tabel lama
 	migrations := []string{
@@ -415,6 +443,26 @@ func ensureSatuSehatTables(db *sql.DB) error {
 			return err
 		}
 	}
+
+	// Seed satu_sehat_auto_send_config dgn semua resource_key, default OFF
+	// (enabled=0). INSERT IGNORE spy idempotent — baris yg sudah sengaja
+	// diubah user (dinyalakan) tidak ketimpa balik ke OFF tiap startup.
+	autoSendResourceKeys := []string{
+		"encounter", "condition", "observation_ttv_suhu", "observation_ttv_respirasi",
+		"observation_ttv_nadi", "observation_ttv_spo2", "observation_ttv_gcs",
+		"observation_ttv_kesadaran", "observation_ttv_tensi", "observation_ttv_tb",
+		"observation_ttv_bb", "observation_ttv_lp", "procedure", "allergy_intolerance",
+		"medication_dispense", "medication_statement", "composition", "careplan",
+		"episode_of_care", "immunization", "questionnaire_response", "imagingstudy",
+		"servicerequest_radiologi", "servicerequest_lab_pk", "servicerequest_lab_mb",
+		"clinical_impression", "specimen_radiologi", "specimen_lab_pk", "specimen_lab_mb",
+		"observation_radiologi", "observation_lab_pk", "observation_lab_mb",
+		"diagnosticreport_radiologi", "diagnosticreport_lab_pk", "diagnosticreport_lab_mb",
+	}
+	for _, key := range autoSendResourceKeys {
+		db.Exec(`INSERT IGNORE INTO satu_sehat_auto_send_config (resource_key, enabled) VALUES (?, 0)`, key)
+	}
+
 	return nil
 }
 
@@ -873,6 +921,7 @@ func main() {
 	if err := ensureSatuSehatTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel satu sehat: %v", err)
 	}
+	go startSatuSehatAutoSendWorker(db)
 
 	if err := ensureAntrianPoliTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel antrian_poli: %v", err)
@@ -3783,6 +3832,12 @@ func main() {
 	r.POST("/api/satu-sehat/dicom/send/*noorder", sendDicomToSatuSehat(db))
 	r.POST("/api/satu-sehat/dicom/register-router", registerDicomRouterToOrthanc(db))
 	r.GET("/api/satu-sehat/monitoring/radiologi", getMonitoringRadiologi(db))
+	r.GET("/api/satu-sehat/pipeline", getSatuSehatPipelineList(db))
+	r.GET("/api/satu-sehat/pipeline/detail/*no_rawat", getSatuSehatPipelineDetail(db))
+	r.GET("/api/satu-sehat/auto-send/settings", getAutoSendSettingsHandler(db))
+	r.PUT("/api/satu-sehat/auto-send/settings", updateAutoSendSettingsHandler(db))
+	r.PUT("/api/satu-sehat/auto-send/resource/:resource_key", updateAutoSendResourceHandler(db))
+	r.PUT("/api/satu-sehat/auto-send/resource-group/:group", updateAutoSendResourceGroupHandler(db))
 
 	// Mapping Satu Sehat
 	r.GET("/api/mapping/radiologi", getMappingRadiologiSatuSehat(db))
