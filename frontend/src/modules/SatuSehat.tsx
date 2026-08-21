@@ -2325,7 +2325,7 @@ const MappingLabSection: React.FC = () => {
 
 // ── Konfigurasi Satu Sehat — mengisi tabel satu_sehat_konfigurasi (kode/nilai:
 // org_id, client_id, client_secret, auth_url, fhir_url, is_production,
-// orthanc_url, orthanc_worklist_dir) lewat endpoint /api/satu-sehat/config
+// orthanc_url) lewat endpoint /api/satu-sehat/config
 // yg sudah ada di backend sejak lama tapi belum pernah dipasang di UI mana pun.
 // PENTING: ini TABEL BERBEDA dari "Pengaturan Bridging > Satu Sehat" di
 // Admin.tsx (yg nyimpen ke setting_bridging dgn key CLIENTIDSATUSEHAT dst) —
@@ -2335,7 +2335,7 @@ const MappingLabSection: React.FC = () => {
 type SatuSehatConfigForm = {
   org_id: string; client_id: string; client_secret: string;
   auth_url: string; fhir_url: string; is_production: boolean;
-  orthanc_url: string; orthanc_worklist_dir: string;
+  orthanc_url: string;
   orthanc_user: string; orthanc_pass: string;
   dicom_router_name: string; dicom_router_host: string; dicom_router_port: string; dicom_router_aet: string;
 };
@@ -2343,7 +2343,7 @@ type SatuSehatConfigForm = {
 const KonfigurasiSection: React.FC = () => {
   const [form, setForm] = React.useState<SatuSehatConfigForm>({
     org_id: '', client_id: '', client_secret: '', auth_url: '', fhir_url: '',
-    is_production: false, orthanc_url: '', orthanc_worklist_dir: '',
+    is_production: false, orthanc_url: '',
     orthanc_user: '', orthanc_pass: '',
     dicom_router_name: '', dicom_router_host: '', dicom_router_port: '', dicom_router_aet: '',
   });
@@ -2361,7 +2361,7 @@ const KonfigurasiSection: React.FC = () => {
         org_id: data.org_id || '', client_id: data.client_id || '', client_secret: data.client_secret || '',
         auth_url: data.auth_url || '', fhir_url: data.fhir_url || '',
         is_production: !!data.is_production,
-        orthanc_url: data.orthanc_url || '', orthanc_worklist_dir: data.orthanc_worklist_dir || '',
+        orthanc_url: data.orthanc_url || '',
         orthanc_user: data.orthanc_user || '', orthanc_pass: data.orthanc_pass || '',
         dicom_router_name: data.dicom_router_name || '', dicom_router_host: data.dicom_router_host || '',
         dicom_router_port: data.dicom_router_port || '', dicom_router_aet: data.dicom_router_aet || '',
@@ -2485,10 +2485,6 @@ const KonfigurasiSection: React.FC = () => {
           <div>
             <label style={labelSm}>Orthanc URL</label>
             <input type="text" value={form.orthanc_url} onChange={(e) => set('orthanc_url', e.target.value)} style={inputSm} placeholder="http://192.168.1.10:8042" />
-          </div>
-          <div>
-            <label style={labelSm}>Orthanc Worklist Dir (opsional)</label>
-            <input type="text" value={form.orthanc_worklist_dir} onChange={(e) => set('orthanc_worklist_dir', e.target.value)} style={inputSm} />
           </div>
           <div>
             <label style={labelSm}>Orthanc Username</label>

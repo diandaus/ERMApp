@@ -1,42 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
-// ─── Structs ──────────────────────────────────────────────────────────────────
-
-type WLData struct {
-	SopInstanceUID      string
-	StudyInstanceUID    string
-	AccessionNumber     string
-	PatientName         string
-	PatientID           string
-	PatientBirthDate    string // YYYYMMDD
-	PatientSex          string // M / F / O
-	Steps               []WLStep
-}
-
-type WLStep struct {
-	Modality            string
-	StationAETitle      string
-	StartDate           string // YYYYMMDD
-	StartTime           string // HHMMSS
-	PerformingPhysician string
-	Description         string
-	StepID              string
-}
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -136,7 +109,13 @@ func getMWLCandidates(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// POST /api/satu-sehat/mwl/send/*noorder
+// POST /api/satu-sehat/mwl/send/*noorder — bikin entry Modality Worklist lewat
+// REST API Orthanc (POST /worklists/create, plugin Worklists v0.9+ dgn
+// "SaveInOrthancDatabase": true di orthanc.json). Dulu ditulis sbg file .wl ke
+// filesystem lokal tempat backend Go ini jalan — pecah kalau Orthanc-nya di
+// server LAIN (kasus nyata di sini: app di 192.168.1.220, Orthanc di
+// 192.168.1.174, tidak ada network share). Lewat REST API, worklist tersimpan
+// langsung di database Orthanc, tidak butuh akses filesystem sama sekali.
 func sendToMWL(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noOrder := strings.TrimPrefix(c.Param("noorder"), "/")
@@ -144,8 +123,6 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder wajib diisi"})
 			return
 		}
-
-		worklistDir := getKonfigurasi(db, "orthanc_worklist_dir", "/etc/orthanc/worklists")
 
 		// Ambil data order + pasien
 		var (
@@ -193,17 +170,25 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 		}
 		defer rows.Close()
 
-		var steps []WLStep
+		type mwlStep struct {
+			Modality                           string `json:"Modality"`
+			ScheduledStationAETitle            string `json:"ScheduledStationAETitle"`
+			ScheduledProcedureStepStartDate    string `json:"ScheduledProcedureStepStartDate"`
+			ScheduledProcedureStepStartTime    string `json:"ScheduledProcedureStepStartTime"`
+			ScheduledProcedureStepDescription  string `json:"ScheduledProcedureStepDescription"`
+			ScheduledProcedureStepID           string `json:"ScheduledProcedureStepID"`
+		}
+		var steps []mwlStep
 		for rows.Next() {
 			var kdJenisPrw, nmPerawatan, modalityCode string
 			rows.Scan(&kdJenisPrw, &nmPerawatan, &modalityCode)
-			steps = append(steps, WLStep{
-				Modality:       modalityCode,
-				StationAETitle: "MODALITY",
-				StartDate:      strings.ReplaceAll(tglPermintaan, "-", ""),
-				StartTime:      jamPermintaan,
-				Description:    nmPerawatan,
-				StepID:         noOrder + "-" + kdJenisPrw,
+			steps = append(steps, mwlStep{
+				Modality:                          modalityCode,
+				ScheduledStationAETitle:           "MODALITY",
+				ScheduledProcedureStepStartDate:   strings.ReplaceAll(tglPermintaan, "-", ""),
+				ScheduledProcedureStepStartTime:   jamPermintaan,
+				ScheduledProcedureStepDescription: nmPerawatan,
+				ScheduledProcedureStepID:          noOrder + "-" + kdJenisPrw,
 			})
 		}
 		if len(steps) == 0 {
@@ -230,36 +215,33 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 
 		accessionNumber := khanzaAccessionNumber(db, noOrder)
 
-		wlData := WLData{
-			SopInstanceUID:   generateDicomUID(),
-			StudyInstanceUID: generateDicomUID(),
-			AccessionNumber:  accessionNumber,
-			PatientName:      nmPasien,
-			PatientID:        noRkmMedis,
-			PatientBirthDate: birthDate,
-			PatientSex:       sex,
-			Steps:            steps,
+		tags := map[string]interface{}{
+			"PatientID":                      noRkmMedis,
+			"PatientName":                    nmPasien,
+			"PatientBirthDate":               birthDate,
+			"PatientSex":                     sex,
+			"AccessionNumber":                accessionNumber,
+			"RequestedProcedureID":           accessionNumber,
+			"ScheduledProcedureStepSequence": steps,
 		}
 
-		// Buat file DICOM WL
-		wlBytes, err := createDicomWLFile(wlData)
+		orthanc := newOrthancClient(db)
+		resp, status, err := orthanc.do("POST", "/worklists/create", map[string]interface{}{"Tags": tags})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat file WL: " + err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
 			return
 		}
+		if status != 200 {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Orthanc HTTP %d saat /worklists/create — %s", status, truncateOrthancMsg(resp))})
+			return
+		}
+		var created struct {
+			ID string `json:"ID"`
+		}
+		json.Unmarshal(resp, &created)
 
-		// Tulis ke direktori Orthanc worklist
-		if err := os.MkdirAll(worklistDir, 0755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Direktori worklist tidak dapat diakses: " + err.Error()})
-			return
-		}
-		filename := filepath.Join(worklistDir, noOrder+".wl")
-		if err := os.WriteFile(filename, wlBytes, 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file WL: " + err.Error()})
-			return
-		}
-
-		// Simpan status ke DB
+		// Simpan status ke DB — worklist_file skrg nyimpen ID worklist Orthanc
+		// (dulu path file lokal), dipakai lagi utk DELETE /worklists/{id}.
 		db.Exec(`
 			INSERT INTO satu_sehat_mwl_radiologi (noorder, accession_number, worklist_file, status)
 			VALUES (?, ?, ?, 'terkirim')
@@ -268,25 +250,30 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 				worklist_file = VALUES(worklist_file),
 				status = 'terkirim',
 				updated_at = NOW()
-		`, noOrder, accessionNumber, filename)
+		`, noOrder, accessionNumber, created.ID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"message":          "Order berhasil dikirim ke MWL",
 			"noorder":          noOrder,
 			"accession_number": accessionNumber,
-			"filename":         filename,
+			"worklist_id":      created.ID,
 			"steps":            len(steps),
 		})
 	}
 }
 
-// DELETE /api/satu-sehat/mwl/*noorder — hapus dari worklist (cancel)
+// DELETE /api/satu-sehat/mwl/*noorder — hapus dari worklist (cancel), lewat
+// REST API Orthanc (worklist_file kolom nyimpen ID worklist Orthanc, bukan
+// path file lokal lagi — lihat sendToMWL).
 func deleteMWLEntry(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noOrder := strings.TrimPrefix(c.Param("noorder"), "/")
-		worklistDir := getKonfigurasi(db, "orthanc_worklist_dir", "/etc/orthanc/worklists")
-		filename := filepath.Join(worklistDir, noOrder+".wl")
-		os.Remove(filename)
+		var worklistID string
+		db.QueryRow(`SELECT worklist_file FROM satu_sehat_mwl_radiologi WHERE noorder=?`, noOrder).Scan(&worklistID)
+		if worklistID != "" {
+			orthanc := newOrthancClient(db)
+			orthanc.do("DELETE", "/worklists/"+worklistID, nil)
+		}
 		db.Exec(`UPDATE satu_sehat_mwl_radiologi SET status='dibatalkan' WHERE noorder=?`, noOrder)
 		c.JSON(http.StatusOK, gin.H{"message": "Worklist entry dihapus"})
 	}
@@ -307,131 +294,7 @@ func getMWLStatus(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// ─── DICOM WL File Creator ────────────────────────────────────────────────────
-
-type dcmWriter struct {
-	buf bytes.Buffer
-}
-
-func (d *dcmWriter) writeElement(group, elem uint16, vr string, val []byte) {
-	// Pad value to even length
-	padded := make([]byte, len(val))
-	copy(padded, val)
-	if len(padded)%2 != 0 {
-		if vr == "UI" {
-			padded = append(padded, 0x00)
-		} else {
-			padded = append(padded, 0x20)
-		}
-	}
-	binary.Write(&d.buf, binary.LittleEndian, group)
-	binary.Write(&d.buf, binary.LittleEndian, elem)
-	d.buf.WriteString(vr)
-	switch vr {
-	case "OB", "OD", "OF", "OL", "OW", "SQ", "UC", "UN", "UR", "UT":
-		d.buf.Write([]byte{0x00, 0x00}) // reserved
-		binary.Write(&d.buf, binary.LittleEndian, uint32(len(padded)))
-	default:
-		binary.Write(&d.buf, binary.LittleEndian, uint16(len(padded)))
-	}
-	d.buf.Write(padded)
-}
-
-func (d *dcmWriter) str(group, elem uint16, vr, val string) {
-	d.writeElement(group, elem, vr, []byte(val))
-}
-
-func (d *dcmWriter) uint32Val(group, elem uint16, val uint32) {
-	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, val)
-	d.writeElement(group, elem, "UL", b)
-}
-
-func (d *dcmWriter) sq(group, elem uint16, items [][]byte) {
-	binary.Write(&d.buf, binary.LittleEndian, group)
-	binary.Write(&d.buf, binary.LittleEndian, elem)
-	d.buf.WriteString("SQ")
-	d.buf.Write([]byte{0x00, 0x00})           // reserved
-	d.buf.Write([]byte{0xFF, 0xFF, 0xFF, 0xFF}) // undefined length
-
-	for _, item := range items {
-		// Item tag (FFFE,E000)
-		d.buf.Write([]byte{0xFE, 0xFF, 0x00, 0xE0})
-		binary.Write(&d.buf, binary.LittleEndian, uint32(len(item)))
-		d.buf.Write(item)
-	}
-
-	// Sequence delimiter (FFFE,E0DD)
-	d.buf.Write([]byte{0xFE, 0xFF, 0xDD, 0xE0, 0x00, 0x00, 0x00, 0x00})
-}
-
-func createDicomWLFile(data WLData) ([]byte, error) {
-	sopClass := "1.2.840.10008.5.1.4.31"
-	transferSyntax := "1.2.840.10008.1.2.1"
-	implUID := "1.2.3.999.1"
-
-	// ── Meta header ───────────────────────────────────────────────────────────
-	var meta dcmWriter
-	meta.writeElement(0x0002, 0x0001, "OB", []byte{0x00, 0x01}) // FileMetaVersion
-	meta.str(0x0002, 0x0002, "UI", sopClass)
-	meta.str(0x0002, 0x0003, "UI", data.SopInstanceUID)
-	meta.str(0x0002, 0x0010, "UI", transferSyntax)
-	meta.str(0x0002, 0x0012, "UI", implUID)
-	metaBytes := meta.buf.Bytes()
-
-	// (0002,0000) group length = byte count of everything after it in meta
-	var groupLen dcmWriter
-	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, uint32(len(metaBytes)))
-	groupLen.writeElement(0x0002, 0x0000, "UL", b)
-
-	// ── Dataset ───────────────────────────────────────────────────────────────
-	var ds dcmWriter
-	ds.str(0x0008, 0x0005, "CS", "ISO_IR 192")          // SpecificCharacterSet
-	ds.str(0x0008, 0x0050, "SH", data.AccessionNumber)  // AccessionNumber
-	ds.str(0x0010, 0x0010, "PN", data.PatientName)       // PatientName
-	ds.str(0x0010, 0x0020, "LO", data.PatientID)         // PatientID
-	ds.str(0x0010, 0x0030, "DA", data.PatientBirthDate)  // PatientBirthDate
-	ds.str(0x0010, 0x0040, "CS", data.PatientSex)        // PatientSex
-	ds.str(0x0020, 0x000D, "UI", data.StudyInstanceUID)  // StudyInstanceUID
-
-	// ScheduledProcedureStepSequence (0040,0100)
-	var items [][]byte
-	for _, step := range data.Steps {
-		var item dcmWriter
-		item.str(0x0008, 0x0060, "CS", step.Modality)
-		item.str(0x0040, 0x0001, "AE", step.StationAETitle)
-		item.str(0x0040, 0x0002, "DA", step.StartDate)
-		item.str(0x0040, 0x0003, "TM", step.StartTime)
-		item.str(0x0040, 0x0006, "PN", step.PerformingPhysician)
-		item.str(0x0040, 0x0007, "LO", step.Description)
-		item.str(0x0040, 0x0009, "SH", step.StepID)
-		items = append(items, item.buf.Bytes())
-	}
-	ds.sq(0x0040, 0x0100, items)
-	ds.str(0x0040, 0x1001, "SH", data.AccessionNumber) // RequestedProcedureID
-
-	// ── Assemble ──────────────────────────────────────────────────────────────
-	var file bytes.Buffer
-	file.Write(make([]byte, 128)) // Preamble
-	file.WriteString("DICM")     // Magic
-	file.Write(groupLen.buf.Bytes())
-	file.Write(metaBytes)
-	file.Write(ds.buf.Bytes())
-	return file.Bytes(), nil
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-func generateDicomUID() string {
-	t := time.Now().UnixNano()
-	r := rand.Int63n(1000000)
-	uid := fmt.Sprintf("2.25.%d%06d", t, r)
-	if len(uid) > 64 {
-		uid = uid[:64]
-	}
-	return uid
-}
 
 func getKonfigurasi(db *sql.DB, kode, defaultVal string) string {
 	var val string

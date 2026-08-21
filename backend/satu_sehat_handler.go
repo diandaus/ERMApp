@@ -26,7 +26,6 @@ type SatuSehatConfig struct {
 	FhirURL            string `json:"fhir_url"`
 	IsProduction       bool   `json:"is_production"`
 	OrthancURL         string `json:"orthanc_url"`
-	OrthancWorklistDir string `json:"orthanc_worklist_dir"`
 	OrthancUser        string `json:"orthanc_user"`
 	OrthancPass        string `json:"orthanc_pass"`
 	DicomRouterName    string `json:"dicom_router_name"`
@@ -107,18 +106,17 @@ func saveConfigSatuSehat(db *sql.DB) gin.HandlerFunc {
 		}
 
 		updates := map[string]string{
-			"org_id":               body.OrgID,
-			"client_id":            body.ClientID,
-			"auth_url":             body.AuthURL,
-			"fhir_url":             body.FhirURL,
-			"is_production":        isProd,
-			"orthanc_url":          body.OrthancURL,
-			"orthanc_worklist_dir": body.OrthancWorklistDir,
-			"orthanc_user":         body.OrthancUser,
-			"dicom_router_name":    body.DicomRouterName,
-			"dicom_router_host":    body.DicomRouterHost,
-			"dicom_router_port":    body.DicomRouterPort,
-			"dicom_router_aet":     body.DicomRouterAET,
+			"org_id":            body.OrgID,
+			"client_id":         body.ClientID,
+			"auth_url":          body.AuthURL,
+			"fhir_url":          body.FhirURL,
+			"is_production":     isProd,
+			"orthanc_url":       body.OrthancURL,
+			"orthanc_user":      body.OrthancUser,
+			"dicom_router_name": body.DicomRouterName,
+			"dicom_router_host": body.DicomRouterHost,
+			"dicom_router_port": body.DicomRouterPort,
+			"dicom_router_aet":  body.DicomRouterAET,
 		}
 		if body.ClientSecret != "" && body.ClientSecret != "***" {
 			updates["client_secret"] = body.ClientSecret
@@ -10457,8 +10455,6 @@ func getSatuSehatConfig(db *sql.DB) (SatuSehatConfig, error) {
 			cfg.IsProduction = nilai == "1"
 		case "orthanc_url":
 			cfg.OrthancURL = nilai
-		case "orthanc_worklist_dir":
-			cfg.OrthancWorklistDir = nilai
 		case "orthanc_user":
 			cfg.OrthancUser = nilai
 		case "orthanc_pass":
