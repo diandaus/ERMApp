@@ -551,10 +551,11 @@ func getPresensiRekap(db *sql.DB) gin.HandlerFunc {
 // ---------------------------------------------------------------------
 
 type JadwalHarianRow struct {
-	Tanggal   string `json:"tanggal"`
-	Shift     string `json:"shift"`
-	JamMasuk  string `json:"jam_masuk"`
-	JamPulang string `json:"jam_pulang"`
+	Tanggal         string `json:"tanggal"`
+	Shift           string `json:"shift"`
+	JamMasuk        string `json:"jam_masuk"`
+	JamPulang       string `json:"jam_pulang"`
+	KeteranganLibur string `json:"keterangan_libur"` // nama hari libur (Kalender Libur Otomatis) kalau tanggal ini hari libur, kosong kalau bukan
 }
 
 func getPresensiJadwal(db *sql.DB) gin.HandlerFunc {
@@ -592,6 +593,24 @@ func getPresensiJadwal(db *sql.DB) gin.HandlerFunc {
 		jamCache := map[string]jamShift{}
 		jumlahHari := time.Date(tahunI, time.Month(bulanI)+1, 0, 0, 0, 0, 0, time.Local).Day()
 
+		// Ambil semua hari libur bulan ini SEKALIGUS (bukan query per-tanggal
+		// dalam loop) — dipakai murni utk keterangan visual "tanggal merah"
+		// di tab Jadwal. Ditampilkan ke SEMUA pegawai apa adanya (termasuk
+		// staf shift/rotasi yg tetap masuk sesuai jadwalnya di hari itu) —
+		// beda dari getJadwalTetap yg cuma PENGARUHI shift pegawai reguler,
+		// ini cuma INFORMASI "hari ini tanggal merah", tidak mengubah shift.
+		liburBulanIni := map[string]string{}
+		liburRows, errLibur := db.Query(`SELECT DATE_FORMAT(tanggal,'%Y-%m-%d'), keterangan FROM hari_libur WHERE YEAR(tanggal) = ? AND MONTH(tanggal) = ?`, tahunI, bulanI)
+		if errLibur == nil {
+			defer liburRows.Close()
+			for liburRows.Next() {
+				var tglLibur, ket string
+				if liburRows.Scan(&tglLibur, &ket) == nil {
+					liburBulanIni[tglLibur] = ket
+				}
+			}
+		}
+
 		list := make([]JadwalHarianRow, 0, jumlahHari)
 		for d := 1; d <= jumlahHari; d++ {
 			shift := ""
@@ -602,9 +621,11 @@ func getPresensiJadwal(db *sql.DB) gin.HandlerFunc {
 			if shift == "" {
 				shift = getJadwalTetap(db, id, tglHari)
 			}
+			tglStr := fmt.Sprintf("%04d-%02d-%02d", tahunI, bulanI, d)
 			row := JadwalHarianRow{
-				Tanggal: fmt.Sprintf("%04d-%02d-%02d", tahunI, bulanI, d),
-				Shift:   shift,
+				Tanggal:         tglStr,
+				Shift:           shift,
+				KeteranganLibur: liburBulanIni[tglStr],
 			}
 			if shift != "" {
 				js, ok := jamCache[shift]

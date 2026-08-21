@@ -5,6 +5,9 @@ import '../../services/presensi_service.dart';
 
 const _kGreenDark = Color(0xFF059669);
 const _kBorder = Color(0xFFE5E7EB);
+const _kRedDark = Color(0xFFDC2626);
+const _kRedBg = Color(0xFFFEF2F2);
+const _kRedBadgeBg = Color(0xFFFEE2E2);
 
 const _kHariIndo = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
 const _kBulanIndo = [
@@ -93,12 +96,13 @@ class _JadwalRowTile extends StatelessWidget {
     final tgl = DateTime.tryParse(row.tanggal);
     final hariLabel = tgl != null ? '${tgl.day} ${_kHariIndo[tgl.weekday % 7]}' : row.tanggal;
     final adaJadwal = row.adaJadwal;
+    final tanggalMerah = row.isTanggalMerah;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isToday ? const Color(0xFFECFDF5) : Colors.white,
-        border: Border.all(color: isToday ? _kGreenDark : _kBorder),
+        color: isToday ? const Color(0xFFECFDF5) : (tanggalMerah ? _kRedBg : Colors.white),
+        border: Border.all(color: isToday ? _kGreenDark : (tanggalMerah ? _kRedDark : _kBorder)),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -110,7 +114,14 @@ class _JadwalRowTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(hariLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF111827))),
+                    Text(
+                      hariLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: tanggalMerah ? _kRedDark : const Color(0xFF111827),
+                      ),
+                    ),
                     if (isToday)
                       const Padding(
                         padding: EdgeInsets.only(left: 6),
@@ -118,6 +129,14 @@ class _JadwalRowTile extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (tanggalMerah)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      row.keteranganLibur,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _kRedDark),
+                    ),
+                  ),
                 if (adaJadwal)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -132,12 +151,18 @@ class _JadwalRowTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
-              color: adaJadwal ? const Color(0xFFD1FAE5) : const Color(0xFFF3F4F6),
+              color: adaJadwal
+                  ? const Color(0xFFD1FAE5)
+                  : (tanggalMerah ? _kRedBadgeBg : const Color(0xFFF3F4F6)),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
               adaJadwal ? row.shift : 'Libur',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: adaJadwal ? const Color(0xFF047857) : const Color(0xFF9CA3AF)),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: adaJadwal ? const Color(0xFF047857) : (tanggalMerah ? _kRedDark : const Color(0xFF9CA3AF)),
+              ),
             ),
           ),
         ],
