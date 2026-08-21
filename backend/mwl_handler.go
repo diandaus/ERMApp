@@ -56,8 +56,9 @@ type MWLCandidateRow struct {
 
 // GET /api/satu-sehat/mwl?tgl_dari=&tgl_sampai=&q=&status= — daftar order
 // radiologi + status pengiriman ke Modality Worklist Orthanc. AccessionNumber
-// SELALU = noorder (diisi otomatis oleh sendToMWL, tidak pernah diketik
-// manual) — begitu modality query worklist Orthanc, ACSN sudah terisi sendiri.
+// diisi otomatis oleh sendToMWL (tidak pernah diketik manual), formatnya
+// noorder+kd_jenis_prw kalau order cuma py 1 jenis pemeriksaan — lihat
+// khanzaAccessionNumber di dicom_handler.go.
 func getMWLCandidates(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tglDari := c.DefaultQuery("tgl_dari", time.Now().Format("2006-01-02"))
@@ -227,10 +228,12 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 			birthDate = strings.ReplaceAll(tglLahir.String, "-", "")
 		}
 
+		accessionNumber := khanzaAccessionNumber(db, noOrder)
+
 		wlData := WLData{
 			SopInstanceUID:   generateDicomUID(),
 			StudyInstanceUID: generateDicomUID(),
-			AccessionNumber:  noOrder,
+			AccessionNumber:  accessionNumber,
 			PatientName:      nmPasien,
 			PatientID:        noRkmMedis,
 			PatientBirthDate: birthDate,
@@ -261,16 +264,18 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 			INSERT INTO satu_sehat_mwl_radiologi (noorder, accession_number, worklist_file, status)
 			VALUES (?, ?, ?, 'terkirim')
 			ON DUPLICATE KEY UPDATE
+				accession_number = VALUES(accession_number),
 				worklist_file = VALUES(worklist_file),
 				status = 'terkirim',
 				updated_at = NOW()
-		`, noOrder, noOrder, filename)
+		`, noOrder, accessionNumber, filename)
 
 		c.JSON(http.StatusOK, gin.H{
-			"message":  "Order berhasil dikirim ke MWL",
-			"noorder":  noOrder,
-			"filename": filename,
-			"steps":    len(steps),
+			"message":          "Order berhasil dikirim ke MWL",
+			"noorder":          noOrder,
+			"accession_number": accessionNumber,
+			"filename":         filename,
+			"steps":            len(steps),
 		})
 	}
 }

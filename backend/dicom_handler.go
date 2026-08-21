@@ -94,43 +94,86 @@ func orthancFindIDs(orthanc *orthancClient, query map[string]interface{}) ([]str
 // utk noOrder ini, satu per kd_jenis_prw yg ada di order tsb.
 func legacyKhanzaAccessionCandidates(db *sql.DB, noOrder string) []string {
 	stripped := strings.ReplaceAll(noOrder, "PR", "")
+	var candidates []string
+	for _, kd := range legacyKhanzaExamCodes(db, noOrder) {
+		candidates = append(candidates, stripped+kd)
+	}
+	return candidates
+}
+
+// khanzaAccessionNumber — format ACSN standar aplikasi ini SEKARANG:
+// noorder (prefix "PR" dibuang) + kd_jenis_prw, PERSIS format Khanza lama
+// (OrthancDataACSN.java) — dikonfirmasi lewat data produksi riil yg sudah
+// terkirim ke Satu Sehat (mis. "202605250002THRX-1"). Cuma bisa dipakai
+// kalau order py TEPAT SATU jenis pemeriksaan (kd_jenis_prw) — 1 studi DICOM
+// cuma py 1 tag AccessionNumber, jadi kalau order py >1 jenis pemeriksaan
+// tidak ada satu nilai yg mewakili semuanya; fallback ke noOrder polos utk
+// kasus itu (MWL/PACS-sync msh granularitas per-order, beda dgn
+// ServiceRequest yg granularitas per-pemeriksaan & selalu bisa unambiguous).
+func khanzaAccessionNumber(db *sql.DB, noOrder string) string {
+	kds := legacyKhanzaExamCodes(db, noOrder)
+	if len(kds) == 1 {
+		return strings.ReplaceAll(noOrder, "PR", "") + kds[0]
+	}
+	return noOrder
+}
+
+func legacyKhanzaExamCodes(db *sql.DB, noOrder string) []string {
 	rows, err := db.Query(`SELECT DISTINCT kd_jenis_prw FROM permintaan_pemeriksaan_radiologi WHERE noorder = ?`, noOrder)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
-	var candidates []string
+	var kds []string
 	for rows.Next() {
 		var kd string
 		if rows.Scan(&kd) == nil && kd != "" {
-			candidates = append(candidates, stripped+kd)
+			kds = append(kds, kd)
 		}
 	}
-	return candidates
+	return kds
 }
 
-// orthancFindStudyByAccessionAnyFormat — coba exact-match AccessionNumber =
-// noOrder (format yg dipakai app ini sendiri) dulu; kalau nihil, coba tiap
-// kandidat format lama Khanza satu per satu (lihat legacyKhanzaAccessionCandidates).
-// Berhenti di percobaan pertama yg dapat hasil — supaya studi yg ACSN-nya
-// pernah diset lewat tool Khanza lama tetap ketemu tanpa perlu jatuh ke
-// pencarian ambigu by PatientID+tanggal.
+// orthancFindStudyByAccessionAnyFormat — coba exact-match ACSN standar app
+// ini (khanzaAccessionNumber, format noorder+kd_jenis_prw kalau order cuma
+// py 1 jenis pemeriksaan) dulu; kalau nihil, coba noOrder polos (data lama
+// sblm fix ini / order multi-pemeriksaan yg ditulis fallback polos); kalau
+// masih nihil, coba tiap kandidat noorder+kd_jenis_prw lain yg mungkin ada
+// utk order ini (lihat legacyKhanzaAccessionCandidates — order multi-
+// pemeriksaan yg ditandai staf via tool Khanza lama dgn salah satu kd
+// spesifiknya). Berhenti di percobaan pertama yg dapat hasil.
 func orthancFindStudyByAccessionAnyFormat(orthanc *orthancClient, db *sql.DB, noOrder string) ([]string, error) {
-	studyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
-		"Level": "Study",
-		"Query": map[string]string{"AccessionNumber": noOrder},
-	})
+	tried := map[string]bool{}
+	tryAccession := func(acsn string) ([]string, error) {
+		if tried[acsn] {
+			return nil, nil
+		}
+		tried[acsn] = true
+		return orthancFindIDs(orthanc, map[string]interface{}{
+			"Level": "Study",
+			"Query": map[string]string{"AccessionNumber": acsn},
+		})
+	}
+
+	primary := khanzaAccessionNumber(db, noOrder)
+	studyIDs, err := tryAccession(primary)
 	if err != nil {
 		return nil, err
 	}
 	if len(studyIDs) > 0 {
 		return studyIDs, nil
 	}
+
+	studyIDs, err = tryAccession(noOrder)
+	if err != nil {
+		return nil, err
+	}
+	if len(studyIDs) > 0 {
+		return studyIDs, nil
+	}
+
 	for _, candidate := range legacyKhanzaAccessionCandidates(db, noOrder) {
-		legacyIDs, err := orthancFindIDs(orthanc, map[string]interface{}{
-			"Level": "Study",
-			"Query": map[string]string{"AccessionNumber": candidate},
-		})
+		legacyIDs, err := tryAccession(candidate)
 		if err != nil {
 			continue
 		}
@@ -176,15 +219,16 @@ func lazyModifyPACS(db *sql.DB, noOrder, noRkmMedis, nmPasien, tglLahir, jk, tgl
 		return "PACS sync skip: ID study tidak valid"
 	}
 
-	return applyAccessionTags(orthanc, studyID, noOrder, noRkmMedis, nmPasien, tglLahir, jk, studyDesc)
+	return applyAccessionTags(orthanc, studyID, khanzaAccessionNumber(db, noOrder), noRkmMedis, nmPasien, tglLahir, jk, studyDesc)
 }
 
 // applyAccessionTags — bagian "tulis tag ke Orthanc" yg dipisah dari
 // lazyModifyPACS supaya bisa dipakai ulang oleh setAccessionNumberPACS
 // (jalur otomatis, cuma 1 studi kandidat) MAUPUN confirmAccessionNumberPACS
 // (jalur konfirmasi manual, user sudah pilih studyID-nya sendiri dari daftar
-// kandidat — lihat getAccessionCandidatesPACS).
-func applyAccessionTags(orthanc *orthancClient, studyID, noOrder, noRkmMedis, nmPasien, tglLahir, jk, studyDesc string) string {
+// kandidat — lihat getAccessionCandidatesPACS). accessionNumber HARUS sudah
+// diresolusi pemanggil (lihat khanzaAccessionNumber) — bukan noOrder mentah.
+func applyAccessionTags(orthanc *orthancClient, studyID, accessionNumber, noRkmMedis, nmPasien, tglLahir, jk, studyDesc string) string {
 	sex := "O"
 	switch strings.ToUpper(jk) {
 	case "L":
@@ -198,7 +242,7 @@ func applyAccessionTags(orthanc *orthancClient, studyID, noOrder, noRkmMedis, nm
 		"PatientName":      strings.ToUpper(nmPasien),
 		"PatientBirthDate": strings.ReplaceAll(tglLahir, "-", ""),
 		"PatientSex":       sex,
-		"AccessionNumber":  noOrder,
+		"AccessionNumber":  accessionNumber,
 		"StudyDescription": studyDesc,
 	}
 
@@ -213,7 +257,7 @@ func applyAccessionTags(orthanc *orthancClient, studyID, noOrder, noRkmMedis, nm
 	if status != 200 {
 		// Fallback: AccessionNumber + StudyDescription saja (tanpa patient tags)
 		orthanc.do("POST", "/studies/"+studyID+"/modify", map[string]interface{}{
-			"Replace":    map[string]string{"AccessionNumber": noOrder, "StudyDescription": studyDesc},
+			"Replace":    map[string]string{"AccessionNumber": accessionNumber, "StudyDescription": studyDesc},
 			"KeepSource": false,
 			"Force":      true,
 		})
@@ -343,7 +387,7 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		if len(studyIDs) > 0 {
-			result := applyAccessionTags(orthanc, studyIDs[0], noOrder, info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
+			result := applyAccessionTags(orthanc, studyIDs[0], khanzaAccessionNumber(db, noOrder), info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
 			c.JSON(http.StatusOK, gin.H{"message": result})
 			return
 		}
@@ -369,7 +413,7 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		if len(candidateIDs) == 1 {
-			result := applyAccessionTags(orthanc, candidateIDs[0], noOrder, info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
+			result := applyAccessionTags(orthanc, candidateIDs[0], khanzaAccessionNumber(db, noOrder), info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
 			c.JSON(http.StatusOK, gin.H{"message": result})
 			return
 		}
@@ -404,7 +448,7 @@ func confirmAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		orthanc := newOrthancClient(db)
-		result := applyAccessionTags(orthanc, studyID, noOrder, info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
+		result := applyAccessionTags(orthanc, studyID, khanzaAccessionNumber(db, noOrder), info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
 		if strings.HasPrefix(result, "PACS sync error") {
 			c.JSON(http.StatusBadGateway, gin.H{"error": result})
 			return

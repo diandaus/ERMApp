@@ -4660,13 +4660,16 @@ func updateObservationTTV(db *sql.DB) gin.HandlerFunc {
 //     reg_periksa.kd_dokter -> pegawai (nik=kd_dokter, no_ktp=NIK asli), persis
 //     pola resolveIHSDokter yg dipakai semua resource lain di file ini.
 //  2. Identifier: Java cuma kirim SATU identifier sistem "acsn", value =
-//     noorder (setelah "PR" dibuang) + kd_jenis_prw. Versi lama di sini malah
-//     kirim DUA identifier (salah satunya skema "servicerequest" yg ternyata
-//     punya Lab PK/MB, bukan Radiologi) dan value acsn-nya tidak dibedakan per
-//     kd_jenis_prw — kalau satu order py >1 pemeriksaan, identifier-nya bentrok.
+//     noorder (setelah "PR" dibuang) + kd_jenis_prw — DIKONFIRMASI ulang lewat
+//     data produksi riil di Orthanc yg sudah terkirim ke Satu Sehat (mis.
+//     "202605250002THRX-1"), jadi dipakai apa adanya (bukan noOrder polos
+//     seperti sebelumnya, lihat khanzaAccessionNumber di dicom_handler.go —
+//     ACSN ini HARUS sama persis dgn AccessionNumber tag di studi Orthanc
+//     supaya DICOM Router bisa menghubungkan ImagingStudy ke ServiceRequest).
 //  3. Granularitas: Java kirim SATU ServiceRequest per baris tabel (= per
 //     pemeriksaan), bukan sekali jalan utk semua pemeriksaan dlm satu order.
-//     Endpoint send/update di sini diubah jadi per (noorder, kd_jenis_prw).
+//     Endpoint send/update di sini diubah jadi per (noorder, kd_jenis_prw) —
+//     jadi ACSN per pemeriksaan selalu unambiguous (kdJenisPrw sudah pasti).
 type serviceRequestRadiologiPayloadResult struct {
 	Payload       map[string]interface{}
 	NoRkmMedis    string
@@ -4741,13 +4744,14 @@ func buildServiceRequestRadiologiPayload(db *sql.DB, cfg SatuSehatConfig, token,
 		occurrenceDateTime = fmt.Sprintf("%sT%s+07:00", sqlDateOnly(tglSampel.String), jamS)
 	}
 
-	// ACSN (system "acsn") = nomor order apa adanya, SAMA dgn identifier ACSN
-	// yg dipakai ImagingStudy utk order ini — supaya Satu Sehat bisa
-	// menghubungkan ServiceRequest ini ke ImagingStudy-nya. Identifier
-	// "servicerequest" (kunci unik lokal per-pemeriksaan) yg membedakan tiap
-	// ServiceRequest, krn satu order radiologi > 1 pemeriksaan = >1
-	// ServiceRequest yg boleh berbagi ACSN yg sama (dikonfirmasi lewat contoh
-	// GET Search by Identifier resmi: satu ACSN dipakai bersama 2 ServiceRequest).
+	// ACSN (system "acsn") = noorder (prefix "PR" dibuang) + kd_jenis_prw,
+	// SAMA persis dgn AccessionNumber tag yg ditulis ke studi Orthanc (lihat
+	// khanzaAccessionNumber di dicom_handler.go) — supaya Satu Sehat/DICOM
+	// Router bisa menghubungkan ServiceRequest ini ke ImagingStudy-nya.
+	// Karena kdJenisPrw di fungsi ini sudah spesifik per pemeriksaan, ACSN-nya
+	// selalu unambiguous walau satu order radiologi py >1 pemeriksaan.
+	// Identifier "servicerequest" = kunci unik lokal per-pemeriksaan (beda dari
+	// acsn, dipakai app ini sendiri utk tracking, bukan utk pencocokan Orthanc).
 	payload := map[string]interface{}{
 		"resourceType": "ServiceRequest",
 		"identifier": []map[string]interface{}{
@@ -4760,7 +4764,7 @@ func buildServiceRequestRadiologiPayload(db *sql.DB, cfg SatuSehatConfig, token,
 					},
 				},
 				"use":   "usual",
-				"value": noOrder,
+				"value": strings.ReplaceAll(noOrder, "PR", "") + kdJenisPrw,
 			},
 		},
 		"status":   "active",
@@ -10065,7 +10069,7 @@ func buildImagingStudyPayload(db *sql.DB, cfg SatuSehatConfig, noOrder string) (
 					},
 				},
 				"system": "http://sys-ids.kemkes.go.id/acsn/" + cfg.OrgID,
-				"value":  noOrder,
+				"value":  khanzaAccessionNumber(db, noOrder),
 			},
 			{
 				"system": "urn:dicom:uid",
@@ -10267,7 +10271,7 @@ func verifyImagingStudySatuSehat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		identifier := "http://sys-ids.kemkes.go.id/acsn/" + cfg.OrgID + "|" + noOrder
+		identifier := "http://sys-ids.kemkes.go.id/acsn/" + cfg.OrgID + "|" + khanzaAccessionNumber(db, noOrder)
 		apiURL := fmt.Sprintf("%s/ImagingStudy?identifier=%s", cfg.FhirURL, url.QueryEscape(identifier))
 		req, _ := http.NewRequest("GET", apiURL, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
