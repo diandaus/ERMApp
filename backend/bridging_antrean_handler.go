@@ -515,8 +515,16 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 				resp["estimasidilayani"] = estimasiDilayaniMillis(tglRegistrasi, jampraktek, angkaAntrean)
 				resp["sisakuotajkn"] = sisaKuota
 				resp["kuotajkn"] = kapasitas
+				// Khanza Java tidak membedakan kuota JKN vs Non JKN — kolom
+				// "Non JKN" diisi angka SAMA persis dgn kolom JKN
+				// (sisakuotanonjkn = kuota-nomorreg, kuotanonjkn = kuota,
+				// rumus identik), bukan dibiarkan kosong/nol.
+				resp["sisakuotanonjkn"] = sisaKuota
+				resp["kuotanonjkn"] = kapasitas
 			}
 		}
+		// Khanza Java selalu kirim keterangan tetap ini ke BPJS.
+		resp["keterangan"] = "Peserta harap 30 menit lebih awal guna pencatatan administrasi."
 
 		c.JSON(http.StatusOK, resp)
 	}
