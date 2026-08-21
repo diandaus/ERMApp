@@ -429,8 +429,16 @@ export const AntreanRsView: React.FC = () => {
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal mengambil pendaftaran antrean');
-      const rows: PendaftaranRow[] = data.pendaftaran?.list ?? [];
-      setPendaftaranRows(Array.isArray(rows) ? rows : []);
+      // pencarian per-kodebooking bisa jadi dibalas BPJS sbg objek tunggal
+      // (bukan dibungkus "list" spt endpoint per-tanggal/aktif/filter) —
+      // terima kedua bentuk supaya tidak salah tampil "tidak ditemukan"
+      // padahal datanya ada.
+      const raw = data.pendaftaran?.list ?? data.pendaftaran;
+      const rows: PendaftaranRow[] = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : [];
+      setPendaftaranRows(rows);
+      if (mode === 'kodebooking' && rows.length === 0) {
+        setPendaftaranError(`Kode booking "${kodeBooking}" tidak ditemukan di BPJS`);
+      }
     } catch (err: any) {
       setPendaftaranError(err.message || 'Terjadi kesalahan');
       setPendaftaranRows([]);
@@ -459,6 +467,21 @@ export const AntreanRsView: React.FC = () => {
   const openPendaftaranFilter = () => {
     setPendaftaranMode('filter');
     setPendaftaranKodeBooking(null);
+    setShowPendaftaran(true);
+    setPendaftaranRows([]);
+    setPendaftaranError(null);
+  };
+
+  // openPendaftaranKodeBooking — "Cek Kode Booking": pencarian LANGSUNG ke
+  // BPJS satu kodebooking spesifik (GET antrean/pendaftaran/kodebooking/{..}),
+  // padanan persis BPJSAntreanPerTanggal.java tapi per-booking, bukan per
+  // tanggal. Dipakai utk verifikasi manual — mis. antrean sudah tersimpan
+  // lokal (berarti BPJS sempat merespons sukses) tapi entah kenapa tidak
+  // muncul di listing "Cek Pendaftaran BPJS (Per Tanggal)", jadi perlu
+  // dicek satu-satu apakah booking itu benar ada di sisi BPJS.
+  const openPendaftaranKodeBooking = () => {
+    setPendaftaranMode('kodebooking');
+    setPendaftaranKodeBooking('');
     setShowPendaftaran(true);
     setPendaftaranRows([]);
     setPendaftaranError(null);
@@ -506,6 +529,13 @@ export const AntreanRsView: React.FC = () => {
             style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d97706', background: '#ffffff', color: '#d97706', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
           >
             Antrean Per Poli/Dokter/Jadwal
+          </button>
+          <button
+            type="button"
+            onClick={openPendaftaranKodeBooking}
+            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #7c3aed', background: '#ffffff', color: '#7c3aed', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            Cek Kode Booking
           </button>
           <button
             type="button"
@@ -983,14 +1013,31 @@ export const AntreanRsView: React.FC = () => {
                     </div>
                   </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => fetchPendaftaran(pendaftaranMode, pendaftaranKodeBooking || undefined)}
-                  disabled={pendaftaranLoading}
-                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: pendaftaranLoading ? '#9ca3af' : '#2563eb', color: '#fff', cursor: pendaftaranLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
-                >
-                  {pendaftaranLoading ? 'Memuat...' : 'Cari'}
-                </button>
+                {pendaftaranMode === 'kodebooking' && (
+                  <div>
+                    <label style={labelStyle}>Kode Booking</label>
+                    <input
+                      style={{ ...inputStyle, width: 220 }}
+                      value={pendaftaranKodeBooking || ''}
+                      onChange={(e) => setPendaftaranKodeBooking(e.target.value)}
+                      placeholder="mis. 20260820000001"
+                      autoFocus
+                    />
+                  </div>
+                )}
+                {(() => {
+                  const pendaftaranDisabled = pendaftaranLoading || (pendaftaranMode === 'kodebooking' && !pendaftaranKodeBooking);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => fetchPendaftaran(pendaftaranMode, pendaftaranKodeBooking || undefined)}
+                      disabled={pendaftaranDisabled}
+                      style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: pendaftaranDisabled ? '#9ca3af' : '#2563eb', color: '#fff', cursor: pendaftaranDisabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+                    >
+                      {pendaftaranLoading ? 'Memuat...' : 'Cari'}
+                    </button>
+                  );
+                })()}
                 {pendaftaranMode === 'tanggal' && pendaftaranRows.length > 0 && (
                   <>
                     <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a' }}>
