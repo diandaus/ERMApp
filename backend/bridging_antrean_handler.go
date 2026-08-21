@@ -1014,8 +1014,11 @@ func getAntreanPendaftaranKodeBooking(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
+		// Kode 204 di endpoint pencarian per-kodebooking ini artinya "dicari,
+		// tidak ketemu" (hasil kosong yg wajar), BUKAN error/penolakan —
+		// diterima sbg extraOkCode spy tidak salah tampil "HFIS menolak".
 		path := "antrean/pendaftaran/kodebooking/" + kodeBooking
-		result, err := hfisRequest(cfg, http.MethodGet, path, nil)
+		result, err := hfisRequest(cfg, http.MethodGet, path, nil, 204)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return

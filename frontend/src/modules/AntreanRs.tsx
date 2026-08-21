@@ -431,10 +431,12 @@ export const AntreanRsView: React.FC = () => {
       if (!res.ok) throw new Error(data.error || 'Gagal mengambil pendaftaran antrean');
       // pencarian per-kodebooking bisa jadi dibalas BPJS sbg objek tunggal
       // (bukan dibungkus "list" spt endpoint per-tanggal/aktif/filter) —
-      // terima kedua bentuk supaya tidak salah tampil "tidak ditemukan"
-      // padahal datanya ada.
+      // terima kedua bentuk. Objek KOSONG (kode 204 "tidak ketemu" diteruskan
+      // hfisRequest sbg map kosong {}) harus dianggap TIDAK ADA hasil, bukan
+      // "1 hasil ditemukan" — cek field kodebooking benar2 terisi dulu.
       const raw = data.pendaftaran?.list ?? data.pendaftaran;
-      const rows: PendaftaranRow[] = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : [];
+      const isSingleRecord = raw && typeof raw === 'object' && !Array.isArray(raw) && !!raw.kodebooking;
+      const rows: PendaftaranRow[] = Array.isArray(raw) ? raw : isSingleRecord ? [raw] : [];
       setPendaftaranRows(rows);
       if (mode === 'kodebooking' && rows.length === 0) {
         setPendaftaranError(`Kode booking "${kodeBooking}" tidak ditemukan di BPJS`);

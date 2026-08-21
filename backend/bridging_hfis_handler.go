@@ -38,7 +38,14 @@ func getHfisConfig(db *sql.DB) (*vclaimConfig, error) {
 // "response" pada body hasil — reuse vclaimSignature/vclaimDecrypt karena
 // skema kriptonya identik dengan VClaim, hanya bentuk amplop metadata-nya
 // yang berbeda.
-func hfisRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map[string]interface{}, error) {
+// hfisRequest — extraOkCodes opsional (default kosong, tidak mempengaruhi
+// pemanggil lama) dipakai endpoint yg kode "kosong/tidak ketemu"-nya BEDA
+// dari default {1,200,201} — mis. pencarian per-kodebooking yg pakai 204
+// (lihat getAntreanPendaftaranKodeBooking). Sengaja per-panggilan, BUKAN
+// ditambahkan ke daftar default global, krn utk endpoint TULIS (mis.
+// antrean/add) kode yg tidak terduga harus tetap dianggap gagal, bukan
+// diam2 dianggap sukses kosong.
+func hfisRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte, extraOkCodes ...int) (map[string]interface{}, error) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10) // Unix timestamp polos, sesuai skema resmi VClaim/HFIS
 	signature := vclaimSignature(cfg.ConsID, cfg.SecretKey, timestamp)
 
@@ -82,7 +89,14 @@ func hfisRequest(cfg *vclaimConfig, method, path string, bodyJSON []byte) (map[s
 	// juga bukan penolakan — artinya cuma tidak ada data untuk parameter yang
 	// diminta (mis. dashboard waktu tunggu tanpa antrean di tanggal itu),
 	// jadi diteruskan sebagai hasil kosong, bukan error.
-	if envelope.MetaData.Code != 1 && envelope.MetaData.Code != 200 && envelope.MetaData.Code != 201 {
+	ok := envelope.MetaData.Code == 1 || envelope.MetaData.Code == 200 || envelope.MetaData.Code == 201
+	for _, extra := range extraOkCodes {
+		if envelope.MetaData.Code == extra {
+			ok = true
+			break
+		}
+	}
+	if !ok {
 		return nil, fmt.Errorf("HFIS menolak: %s (kode %d)", envelope.MetaData.Message, envelope.MetaData.Code)
 	}
 
