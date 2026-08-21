@@ -73,9 +73,18 @@ export const ImagingStudySection: React.FC = () => {
     });
   };
 
+  // hasRealId — id_imagingstudy sudah berupa ID resmi dari Satu Sehat (bukan
+  // kosong, dan bukan sentinel lokal 'via-dicom-router').
+  const hasRealId = (r: ImagingStudyRow) => !!r.id_imagingstudy && r.id_imagingstudy !== 'via-dicom-router';
+
   const selectedForKirim = list.filter((r) => selected.has(r.noorder) && !r.id_imagingstudy);
   const selectedForUpdate = list.filter((r) => selected.has(r.noorder) && !!r.id_imagingstudy);
-  const selectedForVerify = list.filter((r) => selected.has(r.noorder) && r.id_imagingstudy === 'via-dicom-router');
+  // "Cek Status" juga harus bisa dipilih utk baris yg id_imagingstudy-nya
+  // masih KOSONG (bukan cuma 'via-dicom-router') — studi bisa saja sudah
+  // terkirim ke Satu Sehat lewat auto-forward Lua Orthanc (di luar aplikasi
+  // ini sama sekali, mis. lewat tool Khanza lama), jadi tracking lokal kita
+  // tidak pernah ke-update walau datanya sudah benar-benar ada di Satu Sehat.
+  const selectedForVerify = list.filter((r) => selected.has(r.noorder) && !hasRealId(r));
 
   const runBulk = async (rows: ImagingStudyRow[], endpoint: 'send' | 'update', label: string) => {
     setProcessing(true);
