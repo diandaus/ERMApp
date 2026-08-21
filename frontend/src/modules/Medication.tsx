@@ -110,7 +110,7 @@ export const MedicationSection: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <label style={labelSm}>Cari</label>
@@ -140,10 +140,10 @@ export const MedicationSection: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', width: 60 }}>
                 {list.length > 0 && (
                   <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />

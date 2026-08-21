@@ -395,7 +395,7 @@ const ReferensiPraktisiTab: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <input
           type="text"
@@ -415,10 +415,10 @@ const ReferensiPraktisiTab: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               {['Kode Praktisi', 'Nama Praktisi'].map((h) => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>{h}</th>
               ))}
@@ -471,7 +471,7 @@ const ReferensiPasienTab: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <input
           type="text"
@@ -491,10 +491,10 @@ const ReferensiPasienTab: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', maxWidth: 520 }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', maxWidth: 520, flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               {['Item', 'Data'].map((h) => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>{h}</th>
               ))}
@@ -702,7 +702,7 @@ const MappingOrganisasiSection: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input
           type="text"
@@ -720,10 +720,10 @@ const MappingOrganisasiSection: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>Kode Departemen</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>Nama Departemen</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>ID Organisasi Satu Sehat</th>
@@ -1071,16 +1071,16 @@ const MappingLokasiUnitTable: React.FC<{ kategori: LokasiKategoriUnit }> = ({ ka
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama unit, departemen..." style={{ ...inputSm, width: 320 }} />
         <button type="button" onClick={openTambah} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{labels.kode}</th>
               <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{labels.nama}</th>
               <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Lokasi Satu Sehat</th>
@@ -1222,15 +1222,15 @@ const MappingLokasiGlobalTable: React.FC<{ kategori: LokasiKategoriGlobal }> = (
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button type="button" onClick={openTambah} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>ID Lokasi Satu Sehat</th>
               <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Longitude</th>
               <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>Latitude</th>
@@ -1553,16 +1553,16 @@ const MappingVaksinSection: React.FC = () => {
   const emptyForm: VaksinFormValues = { vaksinCode: '', vaksinSystem: '', vaksinDisplay: '', routeCode: '', routeSystem: '', routeDisplay: '', doseCode: '', doseSystem: '', doseUnit: '' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama obat, vaksin code/display, route..." style={{ ...inputSm, width: 340 }} />
         <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               {['Vaksin Code', 'Vaksin System', 'Kode Vaksin', 'Nama Vaksin', 'Vaksin Display', 'Route Code', 'Route System', 'Route Display', 'Dose Code', 'Dose System', 'Dose Unit'].map((h) => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
@@ -1884,16 +1884,16 @@ const MappingObatSection: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama barang, obat code/display, form, route..." style={{ ...inputSm, width: 340 }} />
         <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               {['KFA Code', 'KFA System', 'Kode Barang', 'Nama Obat/Alkes/BHP', 'KFA Display', 'Form Code', 'Form System', 'Form Display', 'Numerator Code', 'Numerator System', 'Denominator Code', 'Denominator System', 'Route Code', 'Route System', 'Route Display'].map((h) => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
@@ -2261,16 +2261,16 @@ const MappingLabSection: React.FC = () => {
   const emptyForm: LabFormValues = { code: '', system: '', display: '', sampelCode: '', sampelSystem: '', sampelDisplay: '' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari ID/nama pemeriksaan, periksa code, display..." style={{ ...inputSm, width: 340 }} />
         <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
       </div>
 
-      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
               {['Periksa Code', 'Pemeriksaan System', 'ID Detail', 'Detail Pemeriksaan', 'Pemeriksaan Display', 'Sampel Code', 'Sampel System', 'Sampel Display'].map((h) => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
