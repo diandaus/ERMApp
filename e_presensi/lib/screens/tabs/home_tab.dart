@@ -10,6 +10,7 @@ import '../atur_jadwal_view.dart';
 import '../cuti_izin_view.dart';
 import '../farmasi_view.dart';
 import '../igd_view.dart';
+import '../kalender_libur_view.dart';
 import '../lapor_it_view.dart';
 import '../lembur_view.dart';
 import '../operasi_view.dart';
@@ -342,6 +343,10 @@ const _kLayananItemsInti = [
   // Departemen di dalam AturJadwalView sendiri: non-admin otomatis
   // terkunci ke departemen dia sendiri, admin bebas pilih semua.
   _LayananItem('Atur Jadwal', Icons.event_available_outlined),
+  // Kalender Libur: semua user bisa LIHAT (transparansi jadwal libur),
+  // tapi tombol Sinkron/Tambah/Hapus di dalam KalenderLiburView sendiri
+  // cuma tampil utk admin — pola sama spt gating _isAdmin di AturJadwalView.
+  _LayananItem('Kalender Libur', Icons.event_busy_outlined),
 ];
 
 const _kLayananItemsKlinis = [
@@ -452,6 +457,10 @@ void _onLayananTap(BuildContext context, AppUser user, String label) {
     case 'Atur Jadwal':
       Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => AturJadwalView(user: user)));
+      return;
+    case 'Kalender Libur':
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => KalenderLiburView(user: user)));
       return;
     default:
       ScaffoldMessenger.of(context).showSnackBar(

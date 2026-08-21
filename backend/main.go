@@ -987,6 +987,7 @@ func main() {
 	ensureRekapPresensiExtTable(db)
 	ensureShiftColumnsVarchar(db)
 	ensurePegawaiJadwalTetapTable(db)
+	ensureHariLiburTable(db)
 	ensurePengumumanTable(db)
 	ensurePengajuanLemburTable(db)
 	ensurePengajuanCutiExtTable(db)
@@ -1595,6 +1596,10 @@ func main() {
 	r.PUT("/api/pegawai-jadwal-tetap", setPegawaiJadwalTetapBulk(db))
 	r.DELETE("/api/pegawai-jadwal-tetap/:id", deletePegawaiJadwalTetap(db))
 	r.PUT("/api/pegawai-jadwal-tanggal", setJadwalPegawaiTanggalBulk(db))
+	r.GET("/api/hari-libur", getHariLiburList(db))
+	r.POST("/api/hari-libur/sync", syncHariLiburNasional(db))
+	r.POST("/api/hari-libur", tambahHariLibur(db))
+	r.DELETE("/api/hari-libur/:id", hapusHariLibur(db))
 
 	// GET /api/pegawai - Mengambil semua pegawai
 	r.GET("/api/pegawai", func(c *gin.Context) {

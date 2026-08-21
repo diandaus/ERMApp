@@ -112,9 +112,21 @@ func isoWeekday(t time.Time) int {
 // fallback saat jadwal_pegawai.h<tgl> kosong/tidak ada, HANYA kalau
 // tanggal `tgl` termasuk hari_aktif jadwal tetapnya (kalau tidak,
 // dianggap hari libur -> "").
+//
+// Kalender Libur Otomatis: kalau hari_aktif PERSIS Senin-Jumat (shift
+// reguler/kantor, lihat isHariAktifRegulerSeninJumat di
+// hari_libur_handler.go) DAN tanggal ini hari libur (nasional/cuti
+// bersama/perusahaan, tabel hari_libur), otomatis dianggap libur meski
+// jatuh di hari aktifnya. Pegawai shift/rotasi (hari_aktif 7 hari,
+// Senin-Sabtu, atau pola lain) TIDAK terpengaruh, tetap jalan sesuai
+// rotasi — override eksplisit di jadwal_pegawai.h<tgl> (dicek SEBELUM
+// fungsi ini dipanggil, lihat getShiftHariIni) tetap menang di atas semua ini.
 func getJadwalTetap(db *sql.DB, pegawaiID int, tgl time.Time) string {
 	var shift, hariAktif string
 	if err := db.QueryRow(`SELECT shift, hari_aktif FROM pegawai_jadwal_tetap WHERE id = ?`, pegawaiID).Scan(&shift, &hariAktif); err != nil {
+		return ""
+	}
+	if isHariAktifRegulerSeninJumat(hariAktif) && isHariLibur(db, tgl) {
 		return ""
 	}
 	hariIni := strconv.Itoa(isoWeekday(tgl))
