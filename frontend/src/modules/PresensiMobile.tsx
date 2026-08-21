@@ -1063,7 +1063,7 @@ const KehadiranTab: React.FC<{ nik: string }> = ({ nik }) => {
 // lewat HP.
 // ---------------------------------------------------------------------
 
-type JadwalRow = { tanggal: string; shift: string; jam_masuk: string; jam_pulang: string };
+type JadwalRow = { tanggal: string; shift: string; jam_masuk: string; jam_pulang: string; keterangan_libur?: string };
 
 const HARI_INDO = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
 
@@ -1097,21 +1097,27 @@ const JadwalTab: React.FC<{ nik: string }> = ({ nik }) => {
             const tglObj = new Date(r.tanggal + 'T00:00:00');
             const isToday = r.tanggal === todayStr;
             const adaJadwal = !!r.shift;
+            const tanggalMerah = !!r.keterangan_libur;
             return (
               <div
                 key={r.tanggal}
                 style={{
-                  background: isToday ? '#ecfdf5' : '#fff',
-                  border: isToday ? '1px solid #059669' : '1px solid #e5e7eb',
+                  background: isToday ? '#ecfdf5' : (tanggalMerah ? '#fef2f2' : '#fff'),
+                  border: isToday ? '1px solid #059669' : (tanggalMerah ? '1px solid #dc2626' : '1px solid #e5e7eb'),
                   borderRadius: 10, padding: '10px 12px',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: tanggalMerah ? '#dc2626' : '#111827' }}>
                     {tglObj.getDate()} {HARI_INDO[tglObj.getDay()]}
                     {isToday && <span style={{ marginLeft: 6, fontSize: 9, color: '#059669', fontWeight: 700 }}>HARI INI</span>}
                   </div>
+                  {tanggalMerah && (
+                    <div style={{ fontSize: 11, fontWeight: 500, color: '#dc2626', marginTop: 2 }}>
+                      {r.keterangan_libur}
+                    </div>
+                  )}
                   {adaJadwal && (
                     <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
                       {r.jam_masuk?.slice(0, 5)} – {r.jam_pulang?.slice(0, 5)}
@@ -1120,7 +1126,8 @@ const JadwalTab: React.FC<{ nik: string }> = ({ nik }) => {
                 </div>
                 <span style={{
                   padding: '3px 10px', borderRadius: 999, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
-                  background: adaJadwal ? '#d1fae5' : '#f3f4f6', color: adaJadwal ? '#047857' : '#9ca3af',
+                  background: adaJadwal ? '#d1fae5' : (tanggalMerah ? '#fee2e2' : '#f3f4f6'),
+                  color: adaJadwal ? '#047857' : (tanggalMerah ? '#dc2626' : '#9ca3af'),
                 }}>
                   {adaJadwal ? r.shift : 'Libur'}
                 </span>
