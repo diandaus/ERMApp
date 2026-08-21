@@ -209,13 +209,62 @@ export const AntreanRsView: React.FC = () => {
     setAntreanModalInitial({});
   };
 
-  // Dipakai saat BPJS menolak update (Waktu/Farmasi/List Task) dengan
-  // "Kode Booking tidak ditemukan" — narik data lokal (referensi_mobilejkn_bpjs,
-  // yang sudah pernah tersimpan saat antrean ini pertama dibuat, baik lewat
-  // klik manual maupun worker otomatis) dan mengisi modal "Tambah Antrean"
-  // supaya staf tinggal cek ulang lalu kirim lagi, tanpa mengetik dari nol.
+  // Dipakai saat BPJS menolak update (Waktu/Farmasi/List Task) dengan "Kode
+  // Booking tidak ditemukan" — isi ulang modal "Tambah Antrean" supaya staf
+  // tinggal cek ulang lalu kirim lagi, tanpa mengetik dari nol.
+  //
+  // Kodebooking antrean ON-SITE = no_rawat apa adanya (dgn "/") — utk kasus
+  // ini, ambil data FRESH dari endpoint prefill (reg_periksa/SEP/mapping
+  // BPJS/antrian_poli, lihat getAntreanPrefillByNoRawat), BUKAN dari
+  // referensi_mobilejkn_bpjs (tabel itu murni Mobile JKN, antrean on-site
+  // tidak pernah disimpan ke situ — lihat createAntreanRsBpjs). Kodebooking
+  // TANPA "/" dianggap Mobile JKN, tetap pakai lookup tabel lokal spt semula.
   const openModalFromLocal = async (kodeBooking: string) => {
     try {
+      if (kodeBooking.includes('/')) {
+        const res = await fetch(`/api/bridging/antrean/prefill/${encodeURIComponent(kodeBooking)}`);
+        const data = await res.json();
+        if (!res.ok) {
+          Swal.fire({ icon: 'warning', title: 'Data lokal tidak ditemukan', text: `Tidak ada catatan lokal untuk kunjungan ${kodeBooking}, silahkan isi manual.` });
+          setAntreanModalInitial({ kodebooking: kodeBooking, no_rawat: kodeBooking });
+          return;
+        }
+        setAntreanModalInitial({
+          kodebooking: data.kodebooking || kodeBooking,
+          no_rawat: data.no_rawat || kodeBooking,
+          jenispasien: data.jenispasien === 'JKN' ? 'JKN' : 'NON JKN',
+          nomorkartu: data.nomorkartu || '',
+          nik: data.nik || '',
+          nohp: data.nohp || '',
+          kodepoli: data.kodepoli || '',
+          namapoli: data.namapoli || '',
+          pasienbaru: data.pasienbaru === 1,
+          norm: data.norm || '',
+          tanggalperiksa: data.tanggalperiksa || localDateStr(),
+          kodedokter: data.kodedokter || '',
+          namadokter: data.namadokter || '',
+          jampraktek: data.jampraktek || '',
+          jeniskunjungan: Number(data.jeniskunjungan) || 1,
+          nomorreferensi: data.nomorreferensi || '',
+          nomorantrean: data.nomorantrean || '',
+          angkaantrean: data.angkaantrean ? String(data.angkaantrean) : '',
+          estimasidilayani: data.estimasidilayani ? epochMsToDatetimeLocal(Number(data.estimasidilayani)) : '',
+          sisakuotajkn: data.sisakuotajkn ? String(data.sisakuotajkn) : '',
+          kuotajkn: data.kuotajkn ? String(data.kuotajkn) : '',
+          sisakuotanonjkn: data.sisakuotanonjkn ? String(data.sisakuotanonjkn) : '',
+          kuotanonjkn: data.kuotanonjkn ? String(data.kuotanonjkn) : '',
+          keterangan: data.keterangan || '',
+        });
+        Swal.fire({
+          icon: 'info',
+          title: 'Terisi ulang dari data kunjungan',
+          text: data.warning || 'Mohon cek ulang semua field sebelum dikirim ke BPJS.',
+          timer: 3500,
+          showConfirmButton: false,
+        });
+        return;
+      }
+
       const res = await fetch(`/api/bridging/antrean/list?kodebooking=${encodeURIComponent(kodeBooking)}`);
       const data = await res.json();
       if (!res.ok || !Array.isArray(data) || data.length === 0) {

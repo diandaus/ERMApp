@@ -80,11 +80,13 @@ func processAntreanQueueBatch(db *sql.DB) {
 type antreanQueueRow struct {
 	NoRawat        string
 	NoRkmMedis     string
+	KdPoli         sql.NullString
 	KodePoliBpjs   sql.NullString
 	NamaPoliBpjs   sql.NullString
 	KodeDokterBpjs sql.NullString
 	NamaDokterBpjs sql.NullString
 	TglRegistrasi  string
+	JamReg         sql.NullString
 	StatusPoli     sql.NullString
 	NoPeserta      sql.NullString
 	NoRujukan      sql.NullString
@@ -105,11 +107,11 @@ func processAntreanQueueItem(db *sql.DB, id int) {
 
 	var q antreanQueueRow
 	err = db.QueryRow(`
-		SELECT no_rawat, no_rkm_medis, kodepoli_bpjs, namapoli_bpjs, kodedokter_bpjs, namadokter_bpjs,
-			tgl_registrasi, status_poli, no_peserta, no_rujukan, jeniskunjungan
+		SELECT no_rawat, no_rkm_medis, kd_poli, kodepoli_bpjs, namapoli_bpjs, kodedokter_bpjs, namadokter_bpjs,
+			tgl_registrasi, jam_reg, status_poli, no_peserta, no_rujukan, jeniskunjungan
 		FROM bridging_antrean_queue WHERE id = ?
-	`, id).Scan(&q.NoRawat, &q.NoRkmMedis, &q.KodePoliBpjs, &q.NamaPoliBpjs, &q.KodeDokterBpjs, &q.NamaDokterBpjs,
-		&q.TglRegistrasi, &q.StatusPoli, &q.NoPeserta, &q.NoRujukan, &q.JenisKunjungan)
+	`, id).Scan(&q.NoRawat, &q.NoRkmMedis, &q.KdPoli, &q.KodePoliBpjs, &q.NamaPoliBpjs, &q.KodeDokterBpjs, &q.NamaDokterBpjs,
+		&q.TglRegistrasi, &q.JamReg, &q.StatusPoli, &q.NoPeserta, &q.NoRujukan, &q.JenisKunjungan)
 	if err != nil {
 		markAntreanQueueError(db, id, "gagal baca data antrian: "+err.Error())
 		return
@@ -144,17 +146,23 @@ func processAntreanQueueItem(db *sql.DB, id int) {
 		return
 	}
 
-	var sudahAda int
-	db.QueryRow(`
-		SELECT COUNT(*) FROM referensi_mobilejkn_bpjs
-		WHERE kodedokter = ? AND tanggalperiksa = ? AND status <> 'Batal'
-	`, q.KodeDokterBpjs.String, q.TglRegistrasi).Scan(&sudahAda)
-	angkaAntrean := sudahAda + 1
+	// angkaAntrean = nomor antrian FISIK yg sudah dibuat saat registrasi
+	// (antrian_poli, lihat lookupNomorAntrianLokal di bridging_antrean_handler.go)
+	// — persis "nomorreg" Khanza Java, BUKAN dihitung ulang via COUNT(*)
+	// khusus BPJS (referensi_mobilejkn_bpjs sudah tidak diisi antrean
+	// on-site sama sekali lagi, jadi COUNT(*) ke situ tidak relevan lagi).
+	angkaAntrean, nomorAntreanLokal, foundAntrean := lookupNomorAntrianLokal(db, q.NoRkmMedis, q.KdPoli.String, q.TglRegistrasi, q.JamReg.String)
+	if !foundAntrean {
+		angkaAntrean = 1
+	}
 	sisaKuota := kapasitas - angkaAntrean
 	if sisaKuota < 0 {
 		sisaKuota = 0
 	}
-	nomorAntrean := fmt.Sprintf("%s-%03d", q.KodePoliBpjs.String, angkaAntrean)
+	nomorAntrean := nomorAntreanLokal
+	if nomorAntrean == "" {
+		nomorAntrean = fmt.Sprintf("%s-%03d", q.KodePoliBpjs.String, angkaAntrean)
+	}
 
 	pasienBaru := 0
 	if q.StatusPoli.Valid && q.StatusPoli.String == "Baru" {
@@ -162,10 +170,11 @@ func processAntreanQueueItem(db *sql.DB, id int) {
 	}
 
 	req := AntreanRs{
-		// kodebooking deterministik dari no_rawat ("2026/07/15/000015" ->
-		// "20260715000015") supaya unik per kunjungan tanpa perlu tabel
-		// sequence terpisah, dan mudah ditelusuri balik ke no_rawat asal.
-		KodeBooking:      strings.ReplaceAll(q.NoRawat, "/", ""),
+		// kodebooking = no_rawat APA ADANYA (dgn "/") — dikonfirmasi dari
+		// log produksi Khanza Java (SimpanAntrianOnSite & Update Waktu
+		// Antrean sama-sama kirim no_rawat mentah sbg kodebooking). Aman
+		// dikirim apa adanya krn tidak disimpan ke kolom lokal manapun lagi.
+		KodeBooking:      q.NoRawat,
 		JenisPasien:      "JKN",
 		NomorKartu:       q.NoPeserta.String,
 		Nik:              nik,
@@ -186,12 +195,14 @@ func processAntreanQueueItem(db *sql.DB, id int) {
 		EstimasiDilayani: estimasiDilayaniMillis(q.TglRegistrasi, jampraktek, angkaAntrean),
 		SisaKuotaJkn:     sisaKuota,
 		KuotaJkn:         kapasitas,
-		SisaKuotaNonJkn:  0,
-		KuotaNonJkn:      0,
-		Keterangan:       antreanQueueKeteranganUmum,
+		// Khanza Java tidak membedakan kuota JKN vs Non JKN — diisi angka
+		// SAMA persis dgn kolom JKN (rumus identik), bukan nol.
+		SisaKuotaNonJkn: sisaKuota,
+		KuotaNonJkn:     kapasitas,
+		Keterangan:      antreanQueueKeteranganUmum,
 	}
 
-	if _, err := createAntreanRsBpjs(db, cfg, req, kodeDokterInt); err != nil {
+	if _, err := createAntreanRsBpjs(cfg, req, kodeDokterInt); err != nil {
 		markAntreanQueueError(db, id, "BPJS menolak: "+err.Error())
 		return
 	}

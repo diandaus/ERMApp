@@ -14,18 +14,29 @@ import (
 )
 
 // ============================================================================
-// BRIDGING ANTREAN RS — Antrian RS/Mobile JKN. Memakai base URL & kredensial
-// "Mobile JKN (RS)" yang sama dengan HFIS (getHfisConfig/hfisRequest di
-// bridging_hfis_handler.go — skema signature & envelope-nya identik, jadi
-// direuse langsung di sini alih-alih diduplikasi).
+// BRIDGING ANTREAN RS — Antrian yg dibuat ON-SITE oleh RS/loket (worker
+// otomatis maupun manual lewat fitur "Tambah Antrean"). Memakai base URL &
+// kredensial "Mobile JKN (RS)" yang sama dengan HFIS (getHfisConfig/
+// hfisRequest di bridging_hfis_handler.go — skema signature & envelope-nya
+// identik, jadi direuse langsung di sini alih-alih diduplikasi).
 //
 //	Tambah Antrean   POST antrean/add
 //
-// Disimpan lokal ke tabel referensi_mobilejkn_bpjs, yang sudah ada di skema
-// Khanza dan field-nya persis cocok dengan payload Antrean RS (tabel ini juga
-// dipakai fitur Mobile JKN lain yang sudah punya tempat sendiri di sidebar
-// Bridging: referensi_mobilejkn_bpjs_batal untuk Batal Antrean,
-// referensi_mobilejkn_bpjs_taskid untuk Task Id Mobile JKN).
+// TIDAK disimpan ke referensi_mobilejkn_bpjs sama sekali, meski field-nya
+// kebetulan cocok — itu keliru di versi awal fitur ini. Ditelusuri dari
+// source Khanza Java asli (BPJSDataSEP.java method SimpanAntrianOnSite(), &
+// MobileJKNReferensiPendaftaran.java): TIDAK ADA satupun INSERT ke tabel
+// itu di seluruh source Khanza. Tabel itu murni utk antrean yg PASIEN buat
+// sendiri lewat aplikasi Mobile JKN (disinkron dari luar aplikasi desktop),
+// BUKAN utk antrean on-site — dikonfirmasi user lewat pengujian nyata
+// (antrean on-site salah muncul di tab "Referensi Pendaftaran Mobile JKN"
+// kalau ikut disimpan ke situ). createAntreanRsBpjs sekarang murni
+// meneruskan ke BPJS lalu return, persis SimpanAntrianOnSite() — tidak ada
+// state lokal tersisa utk antrean on-site (kodebooking = no_rawat apa
+// adanya, aman krn tidak perlu muat ke kolom lokal manapun; nomor antrian
+// diambil dari antrian_poli yg sudah ada, bukan dihitung ulang).
+// referensi_mobilejkn_bpjs (+ _batal, _taskid) tetap dipakai APA ADANYA
+// hanya utk data yg genuinely dari Mobile JKN.
 // ============================================================================
 
 type AntreanRs struct {
@@ -53,19 +64,6 @@ type AntreanRs struct {
 	SisaKuotaNonJkn  int    `json:"sisakuotanonjkn"`
 	KuotaNonJkn      int    `json:"kuotanonjkn"`
 	Keterangan       string `json:"keterangan"`
-}
-
-func jenisKunjunganEnumText(j int) string {
-	switch j {
-	case 2:
-		return "2 (Rujukan Internal)"
-	case 3:
-		return "3 (Kontrol)"
-	case 4:
-		return "4 (Rujukan Antar RS)"
-	default:
-		return "1 (Rujukan FKTP)"
-	}
 }
 
 // getAntreanRsList menampilkan data lokal antrean untuk tabel UI.
@@ -215,7 +213,7 @@ func addAntreanRs(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		result, err := createAntreanRsBpjs(db, cfg, req, kodeDokterInt)
+		result, err := createAntreanRsBpjs(cfg, req, kodeDokterInt)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if errors.Is(err, errAntreanBpjsGateway) {
@@ -234,11 +232,22 @@ func addAntreanRs(db *sql.DB) gin.HandlerFunc {
 // membedakan status HTTP yang tepat (502 vs 500) tanpa mengecek isi pesan.
 var errAntreanBpjsGateway = errors.New("bpjs gateway error")
 
-// createAntreanRsBpjs memanggil "Tambah Antrean" (POST antrean/add) ke BPJS
-// lalu menyimpan hasilnya ke referensi_mobilejkn_bpjs. Dipakai bersama oleh
-// handler manual (addAntreanRs, lewat form staf) dan worker antrean queue
-// otomatis (bridging_antrean_worker.go) supaya logikanya tidak dobel.
-func createAntreanRsBpjs(db *sql.DB, cfg *vclaimConfig, req AntreanRs, kodeDokterInt int) (map[string]interface{}, error) {
+// createAntreanRsBpjs memanggil "Tambah Antrean" (POST antrean/add) ke BPJS.
+// Dipakai bersama oleh handler manual (addAntreanRs, lewat form staf) dan
+// worker antrean queue otomatis (bridging_antrean_worker.go) supaya
+// logikanya tidak dobel.
+//
+// TIDAK menyimpan hasilnya kemanapun secara lokal — ditelusuri dari source
+// Khanza Java asli (BPJSDataSEP.java method SimpanAntrianOnSite()): TIDAK
+// ADA satupun INSERT ke tabel apapun di situ, cuma panggil BPJS lalu
+// return. Versi awal fitur ini sempat nyimpen ke referensi_mobilejkn_bpjs,
+// tapi itu SALAH — tabel itu murni utk antrean yg PASIEN buat sendiri lewat
+// aplikasi Mobile JKN (dikonfirmasi: tidak ada INSERT ke situ di seluruh
+// source Khanza, & user konfirmasi lewat pengujian nyata antrean on-site
+// salah muncul di tab "Referensi Pendaftaran Mobile JKN" kalau ikut
+// disimpan ke situ). kodebooking = no_rawat apa adanya (dgn "/") aman
+// dikirim krn tidak perlu muat ke kolom lokal manapun lagi.
+func createAntreanRsBpjs(cfg *vclaimConfig, req AntreanRs, kodeDokterInt int) (map[string]interface{}, error) {
 	payload := map[string]interface{}{
 		"kodebooking":      req.KodeBooking,
 		"jenispasien":      req.JenisPasien,
@@ -274,32 +283,6 @@ func createAntreanRsBpjs(db *sql.DB, cfg *vclaimConfig, req AntreanRs, kodeDokte
 		return nil, fmt.Errorf("%w: %s", errAntreanBpjsGateway, err.Error())
 	}
 
-	_, dbErr := db.Exec(`
-		INSERT INTO referensi_mobilejkn_bpjs (
-			nobooking, no_rawat, nomorkartu, nik, nohp, kodepoli, pasienbaru, norm,
-			tanggalperiksa, kodedokter, jampraktek, jeniskunjungan, nomorreferensi,
-			nomorantrean, angkaantrean, estimasidilayani, sisakuotajkn, kuotajkn,
-			sisakuotanonjkn, kuotanonjkn, status, validasi, statuskirim
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Belum', NOW(), 'Sudah')
-		ON DUPLICATE KEY UPDATE
-			no_rawat=COALESCE(VALUES(no_rawat), no_rawat), nomorkartu=VALUES(nomorkartu), nik=VALUES(nik), nohp=VALUES(nohp),
-			kodepoli=VALUES(kodepoli), pasienbaru=VALUES(pasienbaru), norm=VALUES(norm),
-			tanggalperiksa=VALUES(tanggalperiksa), kodedokter=VALUES(kodedokter), jampraktek=VALUES(jampraktek),
-			jeniskunjungan=VALUES(jeniskunjungan), nomorreferensi=VALUES(nomorreferensi),
-			nomorantrean=VALUES(nomorantrean), angkaantrean=VALUES(angkaantrean),
-			estimasidilayani=VALUES(estimasidilayani), sisakuotajkn=VALUES(sisakuotajkn), kuotajkn=VALUES(kuotajkn),
-			sisakuotanonjkn=VALUES(sisakuotanonjkn), kuotanonjkn=VALUES(kuotanonjkn), statuskirim='Sudah'
-	`,
-		req.KodeBooking, nullIfEmptyStr(req.NoRawat), req.NomorKartu, req.Nik, req.NoHp, req.KodePoli,
-		strconv.Itoa(req.PasienBaru), req.Norm, req.TanggalPeriksa, req.KodeDokter, req.JamPraktek,
-		jenisKunjunganEnumText(req.JenisKunjungan), req.NomorReferensi, req.NomorAntrean,
-		strconv.Itoa(req.AngkaAntrean), strconv.FormatInt(req.EstimasiDilayani, 10),
-		req.SisaKuotaJkn, req.KuotaJkn, req.SisaKuotaNonJkn, req.KuotaNonJkn,
-	)
-	if dbErr != nil {
-		return nil, dbErr
-	}
-
 	return result, nil
 }
 
@@ -332,6 +315,35 @@ func lookupJadwalLokal(db *sql.DB, kdDokter, kdPoli, tglRegistrasi string) (jamp
 		return "", 0, false
 	}
 	return jamMulai + "-" + jamSelesai, kuota, true
+}
+
+// lookupNomorAntrianLokal — ambil nomor antrian FISIK yg sudah dibuat
+// otomatis saat registrasi (tabel antrian_poli, trigger
+// trg_after_reg_periksa_insert di antrian_handler.go — no_antrian format
+// "{HurufPoli}-{urutan}", mis. "A-006"). Ini persis sumber "nomorreg" yg
+// dipakai Khanza Java sbg nomorantrean/angkaantrean saat Tambah Antrean —
+// nomor yg SAMA yg sudah dicetak di tiket antrian pasien, BUKAN dihitung
+// ulang terpisah khusus utk BPJS (beda dari pendekatan awal di sini yg
+// COUNT(*) baris referensi_mobilejkn_bpjs — sekarang tidak relevan lagi
+// krn tabel itu tidak lagi diisi antrean on-site sama sekali).
+func lookupNomorAntrianLokal(db *sql.DB, noRkmMedis, kdPoli, tglRegistrasi, jamReg string) (angka int, noAntrianLokal string, ok bool) {
+	err := db.QueryRow(`
+		SELECT no_antrian FROM antrian_poli
+		WHERE no_rkm_medis = ? AND kd_poli = ? AND tgl_antrian = ? AND jam_daftar = ?
+		ORDER BY id DESC LIMIT 1
+	`, noRkmMedis, kdPoli, tglRegistrasi, jamReg).Scan(&noAntrianLokal)
+	if err != nil || noAntrianLokal == "" {
+		return 0, "", false
+	}
+	parts := strings.SplitN(noAntrianLokal, "-", 2)
+	if len(parts) != 2 {
+		return 0, noAntrianLokal, false
+	}
+	n, errConv := strconv.Atoi(parts[1])
+	if errConv != nil {
+		return 0, noAntrianLokal, false
+	}
+	return n, noAntrianLokal, true
 }
 
 // deriveJenisKunjungan — padanan PERSIS logic penentuan jeniskunjungan di
@@ -378,16 +390,16 @@ func deriveJenisKunjungan(noRujukan, noSkdp, tujuanKunjungan, flagProsedur, penu
 // jampraktek/kuota diutamakan tabel jadwal LOKAL (persis Java), fallback ke
 // HFIS Jadwal Dokter live kalau jadwal lokal tidak ada.
 //
-// Kodebooking = no_rawat dgn "/" DIBUANG (bukan apa adanya). Source
-// SimpanAntrianOnSite() Khanza Java kirim no_rawat mentah (dgn "/") ke JSON
-// BPJS, TAPI itu cuma bagian requestJson-nya — bagian yg nyimpen ke tabel
-// LOKAL referensi_mobilejkn_bpjs tidak ikut ditunjukkan, dan kolom PK-nya
-// (nobooking) di skema Khanza asli cuma VARCHAR(15) — no_rawat dgn "/" 17
-// karakter TIDAK MUAT (Error 1406 "Data too long", dikonfirmasi user).
-// kodebooking dipakai jadi kunci lookup lokal utk Batal Antrean/Update
-// Waktu, jadi nilai yg dikirim ke BPJS & yg disimpan lokal HARUS sama —
-// dipilih versi tanpa "/" (14 karakter, muat) spy konsisten dgn worker
-// otomatis yg sudah ada & sudah terbukti diterima BPJS di production.
+// Kodebooking = no_rawat APA ADANYA (dgn "/") — dikonfirmasi 2x dari log
+// produksi nyata Khanza Java: SimpanAntrianOnSite() kirim TNoRw.getText()
+// (no_rawat mentah) sbg kodebooking ke /antrean/add, dan proses Update Waktu
+// Antrean jg kirim kodebooking dgn "/" yg sama. Sempat dicoba di-strip krn
+// disangka harus disimpan ke referensi_mobilejkn_bpjs (kolom nobooking-nya
+// cuma VARCHAR(15), no_rawat 17 karakter tidak muat) — tapi itu keliru:
+// SimpanAntrianOnSite() TIDAK PERNAH insert ke tabel manapun (ditelusuri di
+// seluruh source Khanza), tabel itu murni utk antrean Mobile JKN. Antrean
+// on-site sekarang tidak disimpan lokal sama sekali (createAntreanRsBpjs),
+// jadi kodebooking aman dipakai apa adanya, tidak perlu muat ke kolom manapun.
 func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
@@ -396,11 +408,11 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		var noRkmMedis, tglRegistrasi, statusPoli, kdPoliLokal, kdDokterLokal string
+		var noRkmMedis, tglRegistrasi, statusPoli, kdPoliLokal, kdDokterLokal, jamReg string
 		err := db.QueryRow(`
-			SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''), kd_poli, kd_dokter
+			SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''), kd_poli, kd_dokter, jam_reg
 			FROM reg_periksa WHERE no_rawat = ?
-		`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli, &kdPoliLokal, &kdDokterLokal)
+		`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli, &kdPoliLokal, &kdDokterLokal, &jamReg)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Kunjungan tidak ditemukan"})
 			return
@@ -455,7 +467,7 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 		}
 
 		resp := gin.H{
-			"kodebooking":      strings.ReplaceAll(noRawat, "/", ""),
+			"kodebooking":      noRawat,
 			"no_rawat":         noRawat,
 			"nama_pasien":      nmPasien,
 			"jenispasien":      jenisPasien,
@@ -499,18 +511,25 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 				}
 			}
 			if foundLokal {
-				var sudahAda int
-				db.QueryRow(`
-					SELECT COUNT(*) FROM referensi_mobilejkn_bpjs
-					WHERE kodedokter = ? AND tanggalperiksa = ? AND status <> 'Batal'
-				`, kodeDokterBpjs, tglRegistrasi).Scan(&sudahAda)
-				angkaAntrean := sudahAda + 1
+				// angkaAntrean = nomor antrian FISIK yg sudah dibuat saat
+				// registrasi (antrian_poli, lihat lookupNomorAntrianLokal) —
+				// persis "nomorreg" Khanza Java, BUKAN dihitung ulang via
+				// COUNT(*) khusus BPJS.
+				angkaAntrean, noAntrianLokal, foundAntrean := lookupNomorAntrianLokal(db, noRkmMedis, kdPoliLokal, tglRegistrasi, jamReg)
+				if !foundAntrean {
+					angkaAntrean = 1
+					resp["warning"] = "Nomor antrian lokal tidak ditemukan di antrian_poli, dipakai default 1 — cek manual"
+				}
 				sisaKuota := kapasitas - angkaAntrean
 				if sisaKuota < 0 {
 					sisaKuota = 0
 				}
 				resp["jampraktek"] = jampraktek
-				resp["nomorantrean"] = fmt.Sprintf("%s-%03d", kodePoliBpjs, angkaAntrean)
+				if noAntrianLokal != "" {
+					resp["nomorantrean"] = noAntrianLokal
+				} else {
+					resp["nomorantrean"] = fmt.Sprintf("%s-%03d", kodePoliBpjs, angkaAntrean)
+				}
 				resp["angkaantrean"] = angkaAntrean
 				resp["estimasidilayani"] = estimasiDilayaniMillis(tglRegistrasi, jampraktek, angkaAntrean)
 				resp["sisakuotajkn"] = sisaKuota
@@ -738,8 +757,16 @@ func updateWaktuAntrean(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		var noRawat string
-		db.QueryRow(`SELECT COALESCE(no_rawat,'') FROM referensi_mobilejkn_bpjs WHERE nobooking = ?`, req.KodeBooking).Scan(&noRawat)
+		// Kodebooking antrean on-site = no_rawat apa adanya (dgn "/") — kalau
+		// polanya cocok, pakai langsung tanpa query referensi_mobilejkn_bpjs
+		// (yg memang tidak pernah diisi antrean on-site). Kalau tidak ada
+		// "/", anggap kodebooking Mobile JKN, cari no_rawat via tabel itu
+		// spt sebelumnya.
+		noRawat := req.KodeBooking
+		if !strings.Contains(noRawat, "/") {
+			noRawat = ""
+			db.QueryRow(`SELECT COALESCE(no_rawat,'') FROM referensi_mobilejkn_bpjs WHERE nobooking = ?`, req.KodeBooking).Scan(&noRawat)
+		}
 
 		if errMsg := validateTaskIdSequence(db, noRawat, req.TaskId, req.Waktu); errMsg != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
