@@ -376,9 +376,18 @@ func deriveJenisKunjungan(noRujukan, noSkdp, tujuanKunjungan, flagProsedur, penu
 // lewat maping_poli_bpjs/maping_dokter_dpjpvclaim; jeniskunjungan dihitung
 // PERSIS logic Khanza Java (deriveJenisKunjungan) dari field bridging_sep;
 // jampraktek/kuota diutamakan tabel jadwal LOKAL (persis Java), fallback ke
-// HFIS Jadwal Dokter live kalau jadwal lokal tidak ada. Kodebooking = no_rawat
-// APA ADANYA (dgn "/"), persis yg dikirim Khanza Java ke BPJS — bukan
-// di-strip, terverifikasi dari source SimpanAntrianOnSite() production.
+// HFIS Jadwal Dokter live kalau jadwal lokal tidak ada.
+//
+// Kodebooking = no_rawat dgn "/" DIBUANG (bukan apa adanya). Source
+// SimpanAntrianOnSite() Khanza Java kirim no_rawat mentah (dgn "/") ke JSON
+// BPJS, TAPI itu cuma bagian requestJson-nya — bagian yg nyimpen ke tabel
+// LOKAL referensi_mobilejkn_bpjs tidak ikut ditunjukkan, dan kolom PK-nya
+// (nobooking) di skema Khanza asli cuma VARCHAR(15) — no_rawat dgn "/" 17
+// karakter TIDAK MUAT (Error 1406 "Data too long", dikonfirmasi user).
+// kodebooking dipakai jadi kunci lookup lokal utk Batal Antrean/Update
+// Waktu, jadi nilai yg dikirim ke BPJS & yg disimpan lokal HARUS sama —
+// dipilih versi tanpa "/" (14 karakter, muat) spy konsisten dgn worker
+// otomatis yg sudah ada & sudah terbukti diterima BPJS di production.
 func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
@@ -446,7 +455,7 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 		}
 
 		resp := gin.H{
-			"kodebooking":      noRawat,
+			"kodebooking":      strings.ReplaceAll(noRawat, "/", ""),
 			"no_rawat":         noRawat,
 			"nama_pasien":      nmPasien,
 			"jenispasien":      jenisPasien,
