@@ -303,23 +303,82 @@ func createAntreanRsBpjs(db *sql.DB, cfg *vclaimConfig, req AntreanRs, kodeDokte
 	return result, nil
 }
 
+// hariKerjaIndo — nama hari versi tabel `jadwal` (dipakai kolom hari_kerja,
+// enum AKHAD/SENIN/.../SABTU), padanan persis switch(Calendar.DAY_OF_WEEK)
+// di SimpanAntrianOnSite() Khanza Java. Index array = time.Weekday() Go
+// (Sunday=0..Saturday=6), urutannya sama dgn Java (SUNDAY=1..SATURDAY=7).
+var hariKerjaIndo = [7]string{"AKHAD", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU"}
+
+// lookupJadwalLokal — padanan persis query jadwal dokter di
+// SimpanAntrianOnSite() Khanza Java (SELECT jam_mulai,jam_selesai,kuota FROM
+// jadwal WHERE hari_kerja=? AND kd_poli=? AND kd_dokter=?), pakai kode
+// LOKAL (bukan versi BPJS) krn tabel jadwal memang tabel jadwal praktek
+// internal RS, bukan tabel BPJS. Diutamakan dari HFIS live krn tidak
+// tergantung koneksi luar & itulah yg dipakai aplikasi Khanza yg sudah
+// terbukti jalan di production.
+func lookupJadwalLokal(db *sql.DB, kdDokter, kdPoli, tglRegistrasi string) (jampraktek string, kuota int, ok bool) {
+	t, err := time.Parse("2006-01-02", tglRegistrasi)
+	if err != nil {
+		return "", 0, false
+	}
+	hari := hariKerjaIndo[int(t.Weekday())]
+	var jamMulai, jamSelesai string
+	err = db.QueryRow(`
+		SELECT TIME_FORMAT(jam_mulai,'%H:%i'), TIME_FORMAT(jam_selesai,'%H:%i'), COALESCE(kuota,0)
+		FROM jadwal WHERE hari_kerja = ? AND kd_poli = ? AND kd_dokter = ?
+		LIMIT 1
+	`, hari, kdPoli, kdDokter).Scan(&jamMulai, &jamSelesai, &kuota)
+	if err != nil || jamMulai == "" {
+		return "", 0, false
+	}
+	return jamMulai + "-" + jamSelesai, kuota, true
+}
+
+// deriveJenisKunjungan — padanan PERSIS logic penentuan jeniskunjungan di
+// SimpanAntrianOnSite() Khanza Java, pakai kode enum bridging_sep yg sudah
+// dikonfirmasi dari form SEP aplikasi ini sendiri (ModalPengajuanSEP.tsx):
+// tujuankunjungan 0=Normal/1=Prosedur/2=Konsul Dokter, asesmenpelayanan
+// 4=Atas Instruksi RS/5=Tujuan Kontrol, asal_rujukan 1=Faskes 1/2=Faskes 2(RS).
+func deriveJenisKunjungan(noRujukan, noSkdp, tujuanKunjungan, flagProsedur, penunjang, asesmenPelayanan, asalRujukan string) int {
+	if noRujukan == "" && noSkdp == "" {
+		return 1 // tidak ada rujukan/SKDP sama sekali — default aman
+	}
+	if tujuanKunjungan == "0" && flagProsedur == "" && penunjang == "" && asesmenPelayanan == "" {
+		if asalRujukan == "1" {
+			return 1 // Rujukan FKTP
+		}
+		if noSkdp != "" {
+			return 3 // Kontrol
+		}
+		return 4 // Rujukan Antar RS
+	}
+	if tujuanKunjungan == "2" && flagProsedur == "" && penunjang == "" && asesmenPelayanan == "5" {
+		return 3
+	}
+	if tujuanKunjungan == "0" && flagProsedur == "" && penunjang == "" && asesmenPelayanan == "4" {
+		return 2 // Rujukan Internal
+	}
+	if tujuanKunjungan == "2" && asesmenPelayanan == "5" {
+		return 3
+	}
+	return 2
+}
+
 // getAntreanPrefillByNoRawat menyiapkan data awal utk modal "Tambah Antrean"
 // manual — dipicu dari Registrasi > [BPJS] > Tambah Antrean, dipakai staf
 // utk kunjungan yg antrean BPJS-nya gagal/belum sempat dibuat otomatis oleh
 // worker (mis. SEP diinput sebelum trigger ada, HFIS sempat down, atau
 // pasien NON JKN yg memang tidak lewat trigger SEP sama sekali).
 //
-// Tahap 1: kalau baris bridging_antrean_queue sudah ada (dibuat trigger
-// trg_after_bridging_sep_insert_antrean_bpjs saat SEP disimpan, mungkin
-// berstatus 'error'), pakai field yg SUDAH diresolve di situ — paling
-// akurat krn identik dgn yg dipakai worker otomatis (bridging_antrean_worker.go).
-// Tahap 2 (fallback, kalau baris queue belum ada — mis. pasien NON JKN):
-// resolve langsung dari reg_periksa + pasien + tabel mapping BPJS.
-// Tahap 3: best-effort lengkapi jampraktek/kuota/no.antrean dari HFIS
-// Jadwal Dokter + hitung lokal, pola SAMA PERSIS dgn processAntreanQueueItem
-// (lookupJadwalDokterHfis, estimasiDilayaniMillis di bridging_antrean_worker.go)
-// — kegagalan di tahap ini TIDAK menggagalkan prefill, field terkait
-// dibiarkan kosong utk diisi manual staf.
+// Field diresolve dgn urutan: identitas dasar dari reg_periksa+pasien;
+// kode poli/dokter versi BPJS diutamakan dari bridging_antrean_queue kalau
+// baris trigger-nya sudah ada (paling akurat), fallback resolve langsung
+// lewat maping_poli_bpjs/maping_dokter_dpjpvclaim; jeniskunjungan dihitung
+// PERSIS logic Khanza Java (deriveJenisKunjungan) dari field bridging_sep;
+// jampraktek/kuota diutamakan tabel jadwal LOKAL (persis Java), fallback ke
+// HFIS Jadwal Dokter live kalau jadwal lokal tidak ada. Kodebooking = no_rawat
+// APA ADANYA (dgn "/"), persis yg dikirim Khanza Java ke BPJS — bukan
+// di-strip, terverifikasi dari source SimpanAntrianOnSite() production.
 func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
@@ -328,41 +387,47 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		var (
-			noRkmMedis, tglRegistrasi, statusPoli                     string
-			kodePoliBpjs, namaPoliBpjs, kodeDokterBpjs, namaDokterBpjs string
-			noKartu, noRujukan                                        string
-			jenisKunjungan                                            = 1
-		)
+		var noRkmMedis, tglRegistrasi, statusPoli, kdPoliLokal, kdDokterLokal string
+		err := db.QueryRow(`
+			SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''), kd_poli, kd_dokter
+			FROM reg_periksa WHERE no_rawat = ?
+		`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli, &kdPoliLokal, &kdDokterLokal)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Kunjungan tidak ditemukan"})
+			return
+		}
 
+		var kodePoliBpjs, namaPoliBpjs, kodeDokterBpjs, namaDokterBpjs, noKartu, noRujukan string
+		var jenisKunjungan int
 		errQ := db.QueryRow(`
-			SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''),
-				COALESCE(kodepoli_bpjs,''), COALESCE(namapoli_bpjs,''),
+			SELECT COALESCE(kodepoli_bpjs,''), COALESCE(namapoli_bpjs,''),
 				COALESCE(kodedokter_bpjs,''), COALESCE(namadokter_bpjs,''),
 				COALESCE(no_peserta,''), COALESCE(no_rujukan,''), jeniskunjungan
 			FROM bridging_antrean_queue WHERE no_rawat = ?
-		`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli,
-			&kodePoliBpjs, &namaPoliBpjs, &kodeDokterBpjs, &namaDokterBpjs,
-			&noKartu, &noRujukan, &jenisKunjungan)
+		`, noRawat).Scan(&kodePoliBpjs, &namaPoliBpjs, &kodeDokterBpjs, &namaDokterBpjs, &noKartu, &noRujukan, &jenisKunjungan)
+
+		var noSkdp, tujuanKunjungan, flagProsedur, penunjang, asesmenPelayanan, asalRujukan string
+		errSep := db.QueryRow(`
+			SELECT COALESCE(no_kartu,''), COALESCE(no_rujukan,''), COALESCE(noskdp,''),
+				COALESCE(tujuankunjungan,''), COALESCE(flagprosedur,''), COALESCE(penunjang,''),
+				COALESCE(asesmenpelayanan,''), COALESCE(asal_rujukan,'')
+			FROM bridging_sep WHERE no_rawat = ?
+		`, noRawat).Scan(&noKartu, &noRujukan, &noSkdp, &tujuanKunjungan, &flagProsedur, &penunjang, &asesmenPelayanan, &asalRujukan)
+		// asal_rujukan di bridging_sep tersimpan spt "1. Faskes 1" (label
+		// penuh, beda dari kolom lain yg cuma kode) — ambil digit pertamanya
+		// saja spy cocok dgn kode "1"/"2" yg dipakai deriveJenisKunjungan.
+		if len(asalRujukan) > 0 {
+			asalRujukan = asalRujukan[:1]
+		}
+		if errSep == nil {
+			jenisKunjungan = deriveJenisKunjungan(noRujukan, noSkdp, tujuanKunjungan, flagProsedur, penunjang, asesmenPelayanan, asalRujukan)
+		} else if errQ != nil {
+			jenisKunjungan = 1
+		}
 
 		if errQ != nil {
-			var kdPoli, kdDokter string
-			err := db.QueryRow(`
-				SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''), kd_poli, kd_dokter
-				FROM reg_periksa WHERE no_rawat = ?
-			`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli, &kdPoli, &kdDokter)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Kunjungan tidak ditemukan"})
-				return
-			}
-			db.QueryRow(`SELECT kd_poli_bpjs, nm_poli_bpjs FROM maping_poli_bpjs WHERE kd_poli_rs = ?`, kdPoli).Scan(&kodePoliBpjs, &namaPoliBpjs)
-			db.QueryRow(`SELECT kd_dokter_bpjs, nm_dokter_bpjs FROM maping_dokter_dpjpvclaim WHERE kd_dokter = ?`, kdDokter).Scan(&kodeDokterBpjs, &namaDokterBpjs)
-			db.QueryRow(`SELECT COALESCE(no_kartu,''), COALESCE(no_rujukan,'') FROM bridging_sep WHERE no_rawat = ?`, noRawat).Scan(&noKartu, &noRujukan)
-			if noRujukan != "" {
-				jenisKunjungan = 1
-			} else {
-				jenisKunjungan = 3
-			}
+			db.QueryRow(`SELECT kd_poli_bpjs, nm_poli_bpjs FROM maping_poli_bpjs WHERE kd_poli_rs = ?`, kdPoliLokal).Scan(&kodePoliBpjs, &namaPoliBpjs)
+			db.QueryRow(`SELECT kd_dokter_bpjs, nm_dokter_bpjs FROM maping_dokter_dpjpvclaim WHERE kd_dokter = ?`, kdDokterLokal).Scan(&kodeDokterBpjs, &namaDokterBpjs)
 		}
 
 		var nmPasien, nik, nohp, noPeserta string
@@ -381,7 +446,7 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 		}
 
 		resp := gin.H{
-			"kodebooking":      strings.ReplaceAll(noRawat, "/", ""),
+			"kodebooking":      noRawat,
 			"no_rawat":         noRawat,
 			"nama_pasien":      nmPasien,
 			"jenispasien":      jenisPasien,
@@ -413,8 +478,18 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 			resp["warning"] = "Kode poli belum terpetakan ke BPJS (cek Pengaturan > Bridging BPJS > Mapping Poli)"
 		} else if kodeDokterBpjs == "" {
 			resp["warning"] = "Kode dokter belum terpetakan ke BPJS (cek Pengaturan > Bridging BPJS > Mapping Dokter)"
-		} else if cfg, errCfg := getHfisConfig(db); errCfg == nil {
-			if jampraktek, kapasitas, errJ := lookupJadwalDokterHfis(cfg, kodePoliBpjs, tglRegistrasi, kodeDokterBpjs); errJ == nil {
+		} else {
+			jampraktek, kapasitas, foundLokal := lookupJadwalLokal(db, kdDokterLokal, kdPoliLokal, tglRegistrasi)
+			if !foundLokal {
+				if cfg, errCfg := getHfisConfig(db); errCfg == nil {
+					if jp, kap, errJ := lookupJadwalDokterHfis(cfg, kodePoliBpjs, tglRegistrasi, kodeDokterBpjs); errJ == nil {
+						jampraktek, kapasitas, foundLokal = jp, kap, true
+					} else {
+						resp["warning"] = "Jampraktek/kuota tidak bisa diambil otomatis: " + errJ.Error()
+					}
+				}
+			}
+			if foundLokal {
 				var sudahAda int
 				db.QueryRow(`
 					SELECT COUNT(*) FROM referensi_mobilejkn_bpjs
@@ -431,8 +506,6 @@ func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
 				resp["estimasidilayani"] = estimasiDilayaniMillis(tglRegistrasi, jampraktek, angkaAntrean)
 				resp["sisakuotajkn"] = sisaKuota
 				resp["kuotajkn"] = kapasitas
-			} else {
-				resp["warning"] = "Jampraktek/kuota tidak bisa diambil otomatis: " + errJ.Error()
 			}
 		}
 
