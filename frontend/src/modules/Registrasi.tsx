@@ -4,6 +4,7 @@ import { ModalRegistrasi } from '../components/ModalRegistrasi';
 import { ModalPengajuanSEP, type SepItem } from '../components/ModalPengajuanSEP';
 import { HistoriPelayananBpjsModal } from '../components/HistoriPelayananBpjsModal';
 import { SepPrintView } from '../components/SepPrintView';
+import { TambahAntreanModal, epochMsToDatetimeLocal, type AntreanFormState } from './TambahAntreanModal';
 import { localDateStr } from '../utils/date';
 
 type Patient = {
@@ -91,6 +92,12 @@ export const RegistrasiView: React.FC = () => {
   // (patient.no_sep terisi, data lengkap di-fetch dulu by no_rawat), mode
   // 'new' kalau belum, prefill dari data baris + mapping DPJP BPJS.
   const [sepModal, setSepModal] = React.useState<{ mode: 'new'; initialData: Partial<SepItem> } | { mode: 'edit'; item: SepItem } | null>(null);
+  // antreanModal — "[BPJS] > Tambah Antrean": dipakai staf utk kunjungan yg
+  // antrean BPJS-nya gagal/belum sempat dibuat otomatis oleh worker. Prefill
+  // diambil dari GET /api/bridging/antrean/prefill/{no_rawat} (reg_periksa +
+  // SEP + mapping BPJS + best-effort jadwal dokter HFIS), staf tinggal cek
+  // ulang lalu kirim.
+  const [antreanModal, setAntreanModal] = React.useState<{ initial: Partial<AntreanFormState>; warning?: string } | null>(null);
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -189,6 +196,54 @@ export const RegistrasiView: React.FC = () => {
           nmdpdjp,
         },
       });
+    } catch (err) {
+      Swal.close();
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  // handleOpenAntrean — dipicu "[BPJS] > Tambah Antrean". Ambil prefill dari
+  // reg_periksa/SEP/mapping BPJS (lihat getAntreanPrefillByNoRawat di backend),
+  // staf tinggal cek ulang field yang tidak bisa dipastikan otomatis (mis.
+  // kalau poli/dokter belum di-mapping) lalu kirim.
+  const handleOpenAntrean = async (patient: Patient) => {
+    setShowBpjsDropdown(null);
+    Swal.fire({ title: 'Menyiapkan data antrean...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const res = await fetch(`/api/bridging/antrean/prefill/${encodeURIComponent(patient.no_rawat)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyiapkan data antrean');
+      Swal.close();
+      // Backend kirim angka mentah (pasienbaru 0/1, kuota/angka sbg number,
+      // estimasidilayani epoch ms) — AntreanFormState (form terkontrol
+      // TambahAntreanModal) butuh boolean/string, sama seperti yg dipakai
+      // openModalFromLocal di AntreanRs.tsx.
+      const initial: Partial<AntreanFormState> = {
+        kodebooking: data.kodebooking || '',
+        no_rawat: data.no_rawat || '',
+        jenispasien: data.jenispasien === 'JKN' ? 'JKN' : 'NON JKN',
+        nomorkartu: data.nomorkartu || '',
+        nik: data.nik || '',
+        nohp: data.nohp || '',
+        kodepoli: data.kodepoli || '',
+        namapoli: data.namapoli || '',
+        pasienbaru: data.pasienbaru === 1,
+        norm: data.norm || '',
+        tanggalperiksa: data.tanggalperiksa || '',
+        kodedokter: data.kodedokter || '',
+        namadokter: data.namadokter || '',
+        jampraktek: data.jampraktek || '',
+        jeniskunjungan: Number(data.jeniskunjungan) || 1,
+        nomorreferensi: data.nomorreferensi || '',
+        nomorantrean: data.nomorantrean || '',
+        angkaantrean: data.angkaantrean ? String(data.angkaantrean) : '',
+        estimasidilayani: data.estimasidilayani ? epochMsToDatetimeLocal(Number(data.estimasidilayani)) : '',
+        sisakuotajkn: data.sisakuotajkn ? String(data.sisakuotajkn) : '',
+        kuotajkn: data.kuotajkn ? String(data.kuotajkn) : '',
+        sisakuotanonjkn: data.sisakuotanonjkn ? String(data.sisakuotanonjkn) : '',
+        kuotanonjkn: data.kuotanonjkn ? String(data.kuotanonjkn) : '',
+      };
+      setAntreanModal({ initial, warning: data.warning || undefined });
     } catch (err) {
       Swal.close();
       Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
@@ -911,6 +966,20 @@ export const RegistrasiView: React.FC = () => {
                                   </svg>
                                   <span>Riwayat Kunjungan</span>
                                 </button>
+                                <button
+                                  onClick={() => handleOpenAntrean(patient)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 'none', background: 'transparent', color: '#374151', fontSize: 12, textAlign: 'left', cursor: 'pointer' }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.color = '#2563eb'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151'; }}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M16 3.128a4 4 0 0 1 0 7.744"></path>
+                                    <path d="M12 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                                  </svg>
+                                  <span>Tambah Antrean</span>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -969,6 +1038,13 @@ export const RegistrasiView: React.FC = () => {
       )}
       {sepPrintNoRawat && (
         <SepPrintView noRawat={sepPrintNoRawat} onClose={() => setSepPrintNoRawat(null)} />
+      )}
+      {antreanModal && (
+        <TambahAntreanModal
+          initial={antreanModal.initial}
+          warning={antreanModal.warning}
+          onClose={() => setAntreanModal(null)}
+        />
       )}
     </>
   );

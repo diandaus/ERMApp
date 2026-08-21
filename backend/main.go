@@ -3484,6 +3484,7 @@ func main() {
 	// Bridging Antrean RS / Mobile JKN (BPJS)
 	r.GET("/api/bridging/antrean/list", getAntreanRsList(db))
 	r.POST("/api/bridging/antrean", addAntreanRs(db))
+	r.GET("/api/bridging/antrean/prefill/*no_rawat", getAntreanPrefillByNoRawat(db))
 	r.GET("/api/bridging/antrean-farmasi/list", getAntreanFarmasiList(db))
 	r.POST("/api/bridging/antrean-farmasi", addAntreanFarmasi(db))
 	r.POST("/api/bridging/antrean/update-waktu", updateWaktuAntrean(db))

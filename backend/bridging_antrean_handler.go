@@ -303,6 +303,143 @@ func createAntreanRsBpjs(db *sql.DB, cfg *vclaimConfig, req AntreanRs, kodeDokte
 	return result, nil
 }
 
+// getAntreanPrefillByNoRawat menyiapkan data awal utk modal "Tambah Antrean"
+// manual — dipicu dari Registrasi > [BPJS] > Tambah Antrean, dipakai staf
+// utk kunjungan yg antrean BPJS-nya gagal/belum sempat dibuat otomatis oleh
+// worker (mis. SEP diinput sebelum trigger ada, HFIS sempat down, atau
+// pasien NON JKN yg memang tidak lewat trigger SEP sama sekali).
+//
+// Tahap 1: kalau baris bridging_antrean_queue sudah ada (dibuat trigger
+// trg_after_bridging_sep_insert_antrean_bpjs saat SEP disimpan, mungkin
+// berstatus 'error'), pakai field yg SUDAH diresolve di situ — paling
+// akurat krn identik dgn yg dipakai worker otomatis (bridging_antrean_worker.go).
+// Tahap 2 (fallback, kalau baris queue belum ada — mis. pasien NON JKN):
+// resolve langsung dari reg_periksa + pasien + tabel mapping BPJS.
+// Tahap 3: best-effort lengkapi jampraktek/kuota/no.antrean dari HFIS
+// Jadwal Dokter + hitung lokal, pola SAMA PERSIS dgn processAntreanQueueItem
+// (lookupJadwalDokterHfis, estimasiDilayaniMillis di bridging_antrean_worker.go)
+// — kegagalan di tahap ini TIDAK menggagalkan prefill, field terkait
+// dibiarkan kosong utk diisi manual staf.
+func getAntreanPrefillByNoRawat(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+			return
+		}
+
+		var (
+			noRkmMedis, tglRegistrasi, statusPoli                     string
+			kodePoliBpjs, namaPoliBpjs, kodeDokterBpjs, namaDokterBpjs string
+			noKartu, noRujukan                                        string
+			jenisKunjungan                                            = 1
+		)
+
+		errQ := db.QueryRow(`
+			SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''),
+				COALESCE(kodepoli_bpjs,''), COALESCE(namapoli_bpjs,''),
+				COALESCE(kodedokter_bpjs,''), COALESCE(namadokter_bpjs,''),
+				COALESCE(no_peserta,''), COALESCE(no_rujukan,''), jeniskunjungan
+			FROM bridging_antrean_queue WHERE no_rawat = ?
+		`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli,
+			&kodePoliBpjs, &namaPoliBpjs, &kodeDokterBpjs, &namaDokterBpjs,
+			&noKartu, &noRujukan, &jenisKunjungan)
+
+		if errQ != nil {
+			var kdPoli, kdDokter string
+			err := db.QueryRow(`
+				SELECT no_rkm_medis, DATE_FORMAT(tgl_registrasi, '%Y-%m-%d'), COALESCE(status_poli,''), kd_poli, kd_dokter
+				FROM reg_periksa WHERE no_rawat = ?
+			`, noRawat).Scan(&noRkmMedis, &tglRegistrasi, &statusPoli, &kdPoli, &kdDokter)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Kunjungan tidak ditemukan"})
+				return
+			}
+			db.QueryRow(`SELECT kd_poli_bpjs, nm_poli_bpjs FROM maping_poli_bpjs WHERE kd_poli_rs = ?`, kdPoli).Scan(&kodePoliBpjs, &namaPoliBpjs)
+			db.QueryRow(`SELECT kd_dokter_bpjs, nm_dokter_bpjs FROM maping_dokter_dpjpvclaim WHERE kd_dokter = ?`, kdDokter).Scan(&kodeDokterBpjs, &namaDokterBpjs)
+			db.QueryRow(`SELECT COALESCE(no_kartu,''), COALESCE(no_rujukan,'') FROM bridging_sep WHERE no_rawat = ?`, noRawat).Scan(&noKartu, &noRujukan)
+			if noRujukan != "" {
+				jenisKunjungan = 1
+			} else {
+				jenisKunjungan = 3
+			}
+		}
+
+		var nmPasien, nik, nohp, noPeserta string
+		db.QueryRow(`SELECT nm_pasien, COALESCE(no_ktp,''), COALESCE(no_tlp,''), COALESCE(no_peserta,'') FROM pasien WHERE no_rkm_medis = ?`, noRkmMedis).
+			Scan(&nmPasien, &nik, &nohp, &noPeserta)
+		if noKartu == "" {
+			noKartu = noPeserta
+		}
+		jenisPasien := "NON JKN"
+		if noKartu != "" {
+			jenisPasien = "JKN"
+		}
+		pasienBaru := 0
+		if statusPoli == "Baru" {
+			pasienBaru = 1
+		}
+
+		resp := gin.H{
+			"kodebooking":      strings.ReplaceAll(noRawat, "/", ""),
+			"no_rawat":         noRawat,
+			"nama_pasien":      nmPasien,
+			"jenispasien":      jenisPasien,
+			"nomorkartu":       noKartu,
+			"nik":              nik,
+			"nohp":             nohp,
+			"kodepoli":         kodePoliBpjs,
+			"namapoli":         namaPoliBpjs,
+			"pasienbaru":       pasienBaru,
+			"norm":             noRkmMedis,
+			"tanggalperiksa":   tglRegistrasi,
+			"kodedokter":       kodeDokterBpjs,
+			"namadokter":       namaDokterBpjs,
+			"jeniskunjungan":   jenisKunjungan,
+			"nomorreferensi":   noRujukan,
+			"jampraktek":       "",
+			"nomorantrean":     "",
+			"angkaantrean":     0,
+			"estimasidilayani": int64(0),
+			"sisakuotajkn":     0,
+			"kuotajkn":         0,
+			"sisakuotanonjkn":  0,
+			"kuotanonjkn":      0,
+			"keterangan":       "",
+			"warning":          "",
+		}
+
+		if kodePoliBpjs == "" {
+			resp["warning"] = "Kode poli belum terpetakan ke BPJS (cek Pengaturan > Bridging BPJS > Mapping Poli)"
+		} else if kodeDokterBpjs == "" {
+			resp["warning"] = "Kode dokter belum terpetakan ke BPJS (cek Pengaturan > Bridging BPJS > Mapping Dokter)"
+		} else if cfg, errCfg := getHfisConfig(db); errCfg == nil {
+			if jampraktek, kapasitas, errJ := lookupJadwalDokterHfis(cfg, kodePoliBpjs, tglRegistrasi, kodeDokterBpjs); errJ == nil {
+				var sudahAda int
+				db.QueryRow(`
+					SELECT COUNT(*) FROM referensi_mobilejkn_bpjs
+					WHERE kodedokter = ? AND tanggalperiksa = ? AND status <> 'Batal'
+				`, kodeDokterBpjs, tglRegistrasi).Scan(&sudahAda)
+				angkaAntrean := sudahAda + 1
+				sisaKuota := kapasitas - angkaAntrean
+				if sisaKuota < 0 {
+					sisaKuota = 0
+				}
+				resp["jampraktek"] = jampraktek
+				resp["nomorantrean"] = fmt.Sprintf("%s-%03d", kodePoliBpjs, angkaAntrean)
+				resp["angkaantrean"] = angkaAntrean
+				resp["estimasidilayani"] = estimasiDilayaniMillis(tglRegistrasi, jampraktek, angkaAntrean)
+				resp["sisakuotajkn"] = sisaKuota
+				resp["kuotajkn"] = kapasitas
+			} else {
+				resp["warning"] = "Jampraktek/kuota tidak bisa diambil otomatis: " + errJ.Error()
+			}
+		}
+
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
 // ============================================================================
 // ANTREAN FARMASI — antrean pengambilan obat (POST antrean/farmasi/add).
 // Tidak ada tabel Khanza siap pakai untuk ini (beda dari antrean utama yang
