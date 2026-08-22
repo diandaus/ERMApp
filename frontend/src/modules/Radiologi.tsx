@@ -239,7 +239,17 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
                   </td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>{row.jam_sampel}</td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>
-                    {row.tgl_hasil || (
+                    {row.tgl_hasil ? (
+                      <>
+                        <div>{row.tgl_hasil}</div>
+                        <button
+                          type="button" onClick={() => setHasilNoOrder(row.noorder)}
+                          style={{ marginTop: 2, padding: '3px 8px', borderRadius: 2, border: 'none', background: '#059669', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Lihat Hasil
+                        </button>
+                      </>
+                    ) : (
                       <button
                         type="button" onClick={() => setHasilNoOrder(row.noorder)}
                         style={{ padding: '4px 10px', borderRadius: 2, border: 'none', background: '#2563eb', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}

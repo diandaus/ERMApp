@@ -133,6 +133,18 @@ func getPermintaanRadiologiDetail(db *sql.DB) gin.HandlerFunc {
 			LIMIT 1
 		`).Scan(&kdDokterPj, &nmDokterPj)
 
+		// Hasil terakhir — dipakai tombol "Lihat Hasil" di Radiologi.tsx
+		// supaya modal langsung menampilkan bacaan yg sudah pernah diisi
+		// (bukan textarea kosong), diambil dari hasil_radiologi berdasarkan
+		// no_rawat, baris terbaru.
+		var hasilTerakhir string
+		if sudahAdaHasil {
+			db.QueryRow(`
+				SELECT hasil FROM hasil_radiologi WHERE no_rawat = ?
+				ORDER BY tgl_periksa DESC, jam DESC LIMIT 1
+			`, noRawat).Scan(&hasilTerakhir)
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"noorder": noOrder, "no_rawat": noRawat, "no_rkm_medis": noRkmMedis, "nm_pasien": nmPasien,
 			"dokter_perujuk": dokterPerujuk, "nm_dokter": nmDokter, "status": status,
@@ -140,6 +152,7 @@ func getPermintaanRadiologiDetail(db *sql.DB) gin.HandlerFunc {
 			"sudah_ada_hasil": sudahAdaHasil,
 			"pemeriksaan": exams,
 			"kd_dokter_pj": kdDokterPj, "nm_dokter_pj": nmDokterPj,
+			"hasil_terakhir": hasilTerakhir,
 		})
 	}
 }
