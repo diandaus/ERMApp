@@ -670,6 +670,11 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
     if (!selectedObatRacikan) return;
 
+    if (!inputObatRacikanForm.jml || inputObatRacikanForm.jml <= 0) {
+      Swal.fire({ icon: 'warning', title: 'Jumlah belum diisi', text: 'Isi Kandungan (untuk hitung otomatis) atau isi Jumlah secara langsung.' });
+      return;
+    }
+
     const newDetail: RacikanDetail = {
       kode_brng: selectedObatRacikan.kode_brng,
       nama_brng: selectedObatRacikan.nama_brng,
@@ -1562,12 +1567,15 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               <div className="obat-racikan-name">{selectedObatRacikan.nama_brng}</div>
               <div className="obat-racikan-details">
                 <span>Stok: <strong>{selectedObatRacikan.stok}</strong> {selectedObatRacikan.kode_sat}</span>
+                {selectedObatRacikan.kapasitas && (
+                  <span> &middot; Kapasitas: <strong>{selectedObatRacikan.kapasitas}</strong></span>
+                )}
               </div>
             </div>
             <form onSubmit={confirmTambahObatRacikan}>
               <div className="row g-2 align-items-end">
                 <div className="col-auto" style={{ width: 150 }}>
-                  <label className="form-label mb-1">Kandungan <span className="text-danger">*</span></label>
+                  <label className="form-label mb-1">Kandungan</label>
                   <input
                     type="text"
                     className="form-control"
@@ -1577,20 +1585,22 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       hitungJumlahObatRacikan(e.target.value);
                     }}
                     placeholder="200 atau 2/3"
-                    required
                     autoFocus
                   />
                 </div>
                 <div className="col-auto" style={{ width: 150 }}>
-                  <label className="form-label mb-1">Jumlah <span className="text-muted">(otomatis)</span></label>
+                  <label className="form-label mb-1">Jumlah <span className="text-muted">(TAB, dst)</span></label>
                   <input
                     type="number"
                     className="form-control"
-                    value={inputObatRacikanForm.jml}
+                    value={inputObatRacikanForm.jml === 0 ? '' : inputObatRacikanForm.jml}
                     min="0.1"
                     step="0.1"
-                    readOnly
-                    style={{ backgroundColor: '#f8f9fa' }}
+                    placeholder="4"
+                    onChange={(e) => {
+                      const jml = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      setInputObatRacikanForm(prev => ({ ...prev, jml: isNaN(jml) ? 0 : jml }));
+                    }}
                   />
                 </div>
                 <div className="col-auto">
@@ -1603,6 +1613,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     ❌ Batal
                   </button>
                 </div>
+              </div>
+              <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Isi Kandungan untuk hitung Jumlah otomatis, atau langsung isi Jumlah (mis. 4 tablet) tanpa Kandungan.
               </div>
             </form>
           </div>
