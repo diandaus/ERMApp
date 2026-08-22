@@ -216,7 +216,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
         : '';
       const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
-        .filter(Boolean).join(', ');
+        .filter(Boolean).join('<br/>');
 
       const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
         + ' ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -245,15 +245,15 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
               body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 16px; color: #000; }
               table.tbl_form td { border: 0; vertical-align: middle; }
               hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
-              table.info { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
+              table.info { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
               table.info td { padding: 2px 4px; vertical-align: top; }
-              table.info td.label { width: 110px; white-space: nowrap; }
-              table.info td.sep { width: 12px; }
+              table.info td.label { white-space: nowrap; }
+              table.info td.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
               .hasil-box { border: 1px solid #333; border-radius: 4px; padding: 10px; min-height: 100px; margin-top: 6px; font-size: 11pt; line-height: 1.6; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
-              .rs-nama { font-size: 12pt; font-weight: bold; }
+              .rs-nama { font-size: 12pt; }
               .rs-alamat { font-size: 9pt; }
-              .judul { font-size: 12pt; font-weight: bold; }
+              .judul { font-size: 12pt; }
             </style>
           </head>
           <body>
@@ -273,6 +273,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
             <center><div class="judul">HASIL PEMERIKSAAN RADIOLOGI</div></center>
 
             <table class="info">
+              <colgroup>
+                <col style="width:14%"><col style="width:2%"><col style="width:34%">
+                <col style="width:21%"><col style="width:2%"><col style="width:27%">
+              </colgroup>
               <tr>
                 <td class="label">No.RM</td><td class="sep">:</td><td>${data.no_rm}</td>
                 <td class="label">Penanggung Jawab</td><td class="sep">:</td><td>${data.penanggung_jawab || '-'}</td>
@@ -286,7 +290,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                 <td class="label">Tgl.Pemeriksaan</td><td class="sep">:</td><td>${data.tgl_pemeriksaan}</td>
               </tr>
               <tr>
-                <td class="label">Alamat</td><td class="sep">:</td><td>${data.alamat || '-'}</td>
+                <td class="label">Alamat</td><td class="sep">:</td><td class="truncate" title="${data.alamat || '-'}">${data.alamat || '-'}</td>
                 <td class="label">Jam Pemeriksaan</td><td class="sep">:</td><td>${data.jam_pemeriksaan}</td>
               </tr>
               <tr>
@@ -298,21 +302,24 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
               </tr>
             </table>
 
-            <div style="margin-top:14px; font-weight:bold;">Hasil Pemeriksaan :</div>
+            <div style="margin-top:14px;">Hasil Pemeriksaan :</div>
             <div class="hasil-box">${hasilHtml}</div>
 
-            <table width="100%" style="margin-top:40px;">
+            <table width="100%" style="margin-top:24px;">
+              <tr>
+                <td></td>
+                <td class="ttd">Tgl.Cetak : ${tanggalCetak}</td>
+              </tr>
               <tr>
                 <td class="ttd">
                   <div>Penanggung Jawab</div>
                   ${qrPj ? `<img src="${qrPj}" width="65" height="65" style="margin:8px 0;" />` : '<div style="height:65px;"></div>'}
-                  <div style="font-weight:bold; text-decoration:underline;">${data.penanggung_jawab || '-'}</div>
+                  <div>${data.penanggung_jawab || '-'}</div>
                 </td>
                 <td class="ttd">
-                  <div>Tgl.Cetak : ${tanggalCetak}</div>
-                  <div style="margin-top:2px;">Petugas Radiologi</div>
+                  <div>Petugas Radiologi</div>
                   ${qrPetugas ? `<img src="${qrPetugas}" width="65" height="65" style="margin:8px 0;" />` : '<div style="height:65px;"></div>'}
-                  <div style="font-weight:bold; text-decoration:underline;">${data.petugas_nama || '-'}</div>
+                  <div>${data.petugas_nama || '-'}</div>
                 </td>
               </tr>
             </table>
