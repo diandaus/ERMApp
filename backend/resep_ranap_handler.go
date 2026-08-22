@@ -96,10 +96,15 @@ type SaveResepRanapPayload struct {
 
 // kdApotek mengembalikan depo obat tempat stok ranap diambil. Diresolve
 // dulu lewat Pengaturan Depo Ranap (set_depo_ranap, berdasarkan bangsal
-// aktif pasien) kalau noRawat dikirim dan sudah diatur — baru fallback ke
-// logika lama (pilih AP/GD dengan stok terbanyak) kalau belum diatur.
+// aktif pasien) kalau noRawat dikirim dan sudah diatur, lalu Lokasi Stok
+// Utama Obat (set_lokasi, kalau admin sudah eksplisit mengatur) — baru
+// fallback ke logika lama (pilih AP/GD dengan stok terbanyak) kalau
+// keduanya belum diatur.
 func kdApotek(db *sql.DB, noRawat string) string {
 	if kd := resolveDepoRanap(db, noRawat); kd != "" {
+		return kd
+	}
+	if kd := resolveLokasiUtamaObat(db); kd != "" {
 		return kd
 	}
 	var kd string

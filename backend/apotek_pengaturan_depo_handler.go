@@ -28,8 +28,28 @@ import (
 // resolveDepoRalan/resolveDepoRanap — dipakai fitur resep (resep_handler.go,
 // resep_ranap_handler.go) untuk benar-benar membaca Pengaturan Depo saat
 // mencari stok obat, alih-alih hardcode "AP". Balik "" kalau no_rawat kosong
-// atau belum ada pengaturan untuk poli/bangsal kunjungan itu — caller yang
-// menentukan fallback (biasanya "AP").
+// atau belum ada pengaturan untuk poli/bangsal kunjungan itu — caller
+// selanjutnya fallback ke resolveLokasiUtamaObat, baru "AP" sbg jaring
+// pengaman terakhir.
+
+// resolveLokasiUtamaObat membaca kd_bangsal dari Pengaturan Lokasi (set_lokasi
+// tab 1, menu Apotek > Pengaturan > "Lokasi Stok Utama Obat"). Ini SATU-
+// SATUNYA sumber kebenaran default depo obat rawat jalan/inap kalau
+// poli/bangsal kunjungan belum dipetakan eksplisit di Depo Ralan/Ranap —
+// sebelumnya beberapa handler resep hardcode literal "AP" di sini, yang
+// salah kalau admin sudah mengatur lokasi utama ke depo lain (poli yang
+// TIDAK dipetakan jadi baca stok dari depo yang salah/kosong, sementara
+// poli yang SUDAH dipetakan eksplisit tetap benar — gejala "poli A ada
+// stok, poli B kosong padahal sama-sama tidak dipetakan"). Balik "" kalau
+// belum pernah diatur sama sekali — caller fallback ke "AP" sbg jaring
+// pengaman terakhir, sama seperti sebelumnya.
+func resolveLokasiUtamaObat(db *sql.DB) string {
+	var kdBangsal string
+	if err := db.QueryRow(`SELECT kd_bangsal FROM set_lokasi LIMIT 1`).Scan(&kdBangsal); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(kdBangsal)
+}
 
 // resolveDepoRalan mencari depo obat rawat jalan lewat poliklinik kunjungan
 // (reg_periksa.kd_poli -> set_depo_ralan.kd_bangsal).

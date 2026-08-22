@@ -34,10 +34,14 @@ func searchObat(db *sql.DB) gin.HandlerFunc {
 		query := c.DefaultQuery("query", c.DefaultQuery("q", ""))
 		// kd_bangsal (depo obat) diresolve lewat Pengaturan Depo Ralan
 		// (set_depo_ralan, berdasarkan poliklinik kunjungan) kalau tidak
-		// dikirim eksplisit — baru fallback ke "AP" kalau belum diatur.
+		// dikirim eksplisit — baru fallback ke Lokasi Stok Utama Obat
+		// (set_lokasi), baru "AP" kalau itu jg belum pernah diatur.
 		kdBangsal := c.Query("kd_bangsal")
 		if kdBangsal == "" {
 			kdBangsal = resolveDepoRalan(db, c.Query("no_rawat"))
+		}
+		if kdBangsal == "" {
+			kdBangsal = resolveLokasiUtamaObat(db)
 		}
 		if kdBangsal == "" {
 			kdBangsal = "AP"

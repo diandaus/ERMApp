@@ -226,6 +226,9 @@ func getPermintaanResepRalanItems(db *sql.DB) gin.HandlerFunc {
 			result.KdBangsal = resolveDepoRalan(db, result.NoRawat)
 		}
 		if result.KdBangsal == "" {
+			result.KdBangsal = resolveLokasiUtamaObat(db)
+		}
+		if result.KdBangsal == "" {
 			result.KdBangsal = "AP"
 		}
 		db.QueryRow(`SELECT COALESCE(nm_bangsal,'') FROM bangsal WHERE kd_bangsal=?`, result.KdBangsal).Scan(&result.NmBangsal)
@@ -437,6 +440,9 @@ func submitPermintaanResepValidasi(db *sql.DB) gin.HandlerFunc {
 		kdBangsal := strings.TrimSpace(body.KdBangsal)
 		if kdBangsal == "" {
 			kdBangsal = resolveDepoRalan(db, noRawat)
+		}
+		if kdBangsal == "" {
+			kdBangsal = resolveLokasiUtamaObat(db)
 		}
 		if kdBangsal == "" {
 			kdBangsal = "AP"
