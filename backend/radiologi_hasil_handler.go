@@ -25,7 +25,7 @@ import (
 // bukan dari modul Radiologi.tsx.
 
 type radiologiPermintaanDetailExam struct {
-	KdJenisPrw string `json:"kd_jenis_prw"`
+	KdJenisPrw  string `json:"kd_jenis_prw"`
 	NmPerawatan string `json:"nm_perawatan"`
 }
 
@@ -150,8 +150,8 @@ func getPermintaanRadiologiDetail(db *sql.DB) gin.HandlerFunc {
 			"dokter_perujuk": dokterPerujuk, "nm_dokter": nmDokter, "status": status,
 			"diagnosa_klinis": diagnosaKlinis, "informasi_tambahan": informasiTambahan,
 			"sudah_ada_hasil": sudahAdaHasil,
-			"pemeriksaan": exams,
-			"kd_dokter_pj": kdDokterPj, "nm_dokter_pj": nmDokterPj,
+			"pemeriksaan":     exams,
+			"kd_dokter_pj":    kdDokterPj, "nm_dokter_pj": nmDokterPj,
 			"hasil_terakhir": hasilTerakhir,
 		})
 	}
@@ -278,5 +278,144 @@ func saveHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Hasil pemeriksaan radiologi berhasil disimpan"})
+	}
+}
+
+// GET /api/radiologi/cetak/:noorder — data cetak "HASIL PEMERIKSAAN
+// RADIOLOGI", padanan BtnPrint1ActionPerformed di
+// DlgCariPeriksaRadiologi.java (Khanza Desktop). Berbeda dari Khanza (yg
+// user pilih baris periksa_radiologi spesifik dari tabel), di sini SELALU
+// ambil sesi periksa TERBARU (tgl_periksa+jam terakhir) utk no_rawat itu —
+// konsisten dgn konsep "hasil_terakhir" yg sudah dipakai tombol Lihat
+// Hasil. Layout PDF-nya (kop RS, info 2 kolom, kotak hasil, tanda tangan
+// 2 kolom dgn QR) dirender di frontend (window.print(), reuse pola
+// DetailPemberianObat.tsx) — endpoint ini cuma nyediakan datanya.
+func getCetakHasilRadiologi(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noOrder := c.Param("noorder")
+		if noOrder == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder wajib diisi"})
+			return
+		}
+
+		var noRawat, dokterPerujukOrder string
+		if err := db.QueryRow(`SELECT no_rawat, dokter_perujuk FROM permintaan_radiologi WHERE noorder = ?`, noOrder).
+			Scan(&noRawat, &dokterPerujukOrder); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Permintaan radiologi tidak ditemukan"})
+			return
+		}
+
+		// DATE_FORMAT di SQL, bukan bandingkan/parse string tanggal mentah di
+		// Go — koneksi DB ini pakai parseTime=true, kolom DATE mentah datang
+		// sbg time.Time (bukan literal "YYYY-MM-DD"), bikin tglPeriksa salah
+		// format terus kalau di-scan langsung ke string. Sama persis bug yg
+		// sudah diperbaiki di getPermintaanRadiologiList/Detail.
+		var tglPeriksa, jam string
+		if err := db.QueryRow(`
+			SELECT DATE_FORMAT(tgl_periksa,'%Y-%m-%d'), jam FROM periksa_radiologi WHERE no_rawat = ?
+			ORDER BY tgl_periksa DESC, jam DESC LIMIT 1
+		`, noRawat).Scan(&tglPeriksa, &jam); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Belum ada hasil pemeriksaan untuk order ini"})
+			return
+		}
+
+		rows, err := db.Query(`
+			SELECT jpr.nm_perawatan, pr.kd_dokter, IFNULL(dpj.nm_dokter,''), pr.nip,
+				pr.dokter_perujuk, IFNULL(dperujuk.nm_dokter,'')
+			FROM periksa_radiologi pr
+			LEFT JOIN jns_perawatan_radiologi jpr ON pr.kd_jenis_prw = jpr.kd_jenis_prw
+			LEFT JOIN dokter dpj ON pr.kd_dokter = dpj.kd_dokter
+			LEFT JOIN dokter dperujuk ON pr.dokter_perujuk = dperujuk.kd_dokter
+			WHERE pr.no_rawat = ? AND pr.tgl_periksa = ? AND pr.jam = ?
+		`, noRawat, tglPeriksa, jam)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		var pemeriksaanList []string
+		var kdDokterPj, nmDokterPj, nip, dokterPerujuk, nmDokterPerujuk string
+		for rows.Next() {
+			var nmPerawatan string
+			if rows.Scan(&nmPerawatan, &kdDokterPj, &nmDokterPj, &nip, &dokterPerujuk, &nmDokterPerujuk) == nil {
+				if nmPerawatan != "" {
+					pemeriksaanList = append(pemeriksaanList, nmPerawatan)
+				}
+			}
+		}
+		rows.Close()
+		if len(pemeriksaanList) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Belum ada hasil pemeriksaan untuk order ini"})
+			return
+		}
+		// dokter_perujuk bisa kosong di periksa_radiologi lama — fallback ke
+		// punya permintaan_radiologi (dokterPerujukOrder), lookup ulang namanya.
+		if dokterPerujuk == "" {
+			dokterPerujuk = dokterPerujukOrder
+			db.QueryRow(`SELECT IFNULL(nm_dokter,'') FROM dokter WHERE kd_dokter = ?`, dokterPerujuk).Scan(&nmDokterPerujuk)
+		}
+
+		var nmPetugas string
+		db.QueryRow(`SELECT IFNULL(nama,'') FROM petugas WHERE nip = ?`, nip).Scan(&nmPetugas)
+
+		var hasil string
+		db.QueryRow(`SELECT hasil FROM hasil_radiologi WHERE no_rawat = ? AND tgl_periksa = ? AND jam = ?`, noRawat, tglPeriksa, jam).Scan(&hasil)
+
+		var noRkmMedis, nmPasien, jk, tglLahir, alamat string
+		db.QueryRow(`
+			SELECT pasien.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.jk,''), IFNULL(pasien.tgl_lahir,''),
+				CONCAT_WS(', ', NULLIF(pasien.alamat,''), kelurahan.nm_kel, kecamatan.nm_kec, kabupaten.nm_kab)
+			FROM reg_periksa
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			LEFT JOIN kelurahan ON pasien.kd_kel = kelurahan.kd_kel
+			LEFT JOIN kecamatan ON pasien.kd_kec = kecamatan.kd_kec
+			LEFT JOIN kabupaten ON pasien.kd_kab = kabupaten.kd_kab
+			WHERE reg_periksa.no_rawat = ?
+		`, noRawat).Scan(&noRkmMedis, &nmPasien, &jk, &tglLahir, &alamat)
+
+		// Poli/Ruang — persis pola CASE WHEN di getPermintaanRadiologiList
+		// (ralan: poliklinik registrasi, ranap: kamar+bangsal terbaru).
+		var poli string
+		var statusLanjut string
+		db.QueryRow(`SELECT status_lanjut FROM reg_periksa WHERE no_rawat = ?`, noRawat).Scan(&statusLanjut)
+		if strings.EqualFold(statusLanjut, "ranap") {
+			var kdKamar, nmBangsal string
+			db.QueryRow(`SELECT kd_kamar FROM kamar_inap WHERE no_rawat = ? ORDER BY tgl_masuk DESC, jam_masuk DESC LIMIT 1`, noRawat).Scan(&kdKamar)
+			if kdKamar != "" {
+				db.QueryRow(`SELECT nm_bangsal FROM bangsal INNER JOIN kamar ON bangsal.kd_bangsal = kamar.kd_bangsal WHERE kamar.kd_kamar = ?`, kdKamar).Scan(&nmBangsal)
+				poli = strings.TrimSpace(kdKamar + " " + nmBangsal)
+			} else {
+				poli = "Ranap Gabung"
+			}
+		} else {
+			db.QueryRow(`
+				SELECT IFNULL(poliklinik.nm_poli,'') FROM reg_periksa
+				LEFT JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
+				WHERE reg_periksa.no_rawat = ?
+			`, noRawat).Scan(&poli)
+		}
+
+		tglFormatted := tglPeriksa
+		if t, err := time.Parse("2006-01-02", tglPeriksa); err == nil {
+			tglFormatted = t.Format("02-01-2006")
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"no_periksa":          noOrder,
+			"no_rm":               noRkmMedis,
+			"nama_pasien":         nmPasien,
+			"jk":                  jk,
+			"tgl_lahir":           tglLahir,
+			"alamat":              alamat,
+			"pemeriksaan":         strings.Join(pemeriksaanList, ", "),
+			"penanggung_jawab":    nmDokterPj,
+			"kd_penanggung_jawab": kdDokterPj,
+			"dokter_pengirim":     nmDokterPerujuk,
+			"tgl_pemeriksaan":     tglFormatted,
+			"jam_pemeriksaan":     jam,
+			"poli":                poli,
+			"hasil":               hasil,
+			"petugas_nip":         nip,
+			"petugas_nama":        nmPetugas,
+		})
 	}
 }

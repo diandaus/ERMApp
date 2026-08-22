@@ -3324,6 +3324,7 @@ func main() {
 	r.GET("/api/radiologi/permintaan/:noorder", getPermintaanRadiologiDetail(db))
 	r.POST("/api/radiologi/hasil", saveHasilRadiologi(db))
 	r.POST("/api/radiologi/sampel/:noorder", setSampelRadiologi(db))
+	r.GET("/api/radiologi/cetak/:noorder", getCetakHasilRadiologi(db))
 
 	// Riwayat Perawatan endpoint
 	r.GET("/api/riwayat-perawatan/:no_rkm_medis", getRiwayatPerawatan(db))

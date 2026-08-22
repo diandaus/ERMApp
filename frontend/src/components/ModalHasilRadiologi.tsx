@@ -1,5 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
+import QRCode from 'qrcode';
 
 // ModalHasilRadiologi — "Input Data Hasil Periksa Radiologi", padanan
 // header form DlgPeriksaRadiologi.java (Khanza Desktop): No.Rawat/No.RM/
@@ -74,6 +75,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   const [previewFoto, setPreviewFoto] = React.useState<string | null>(null);
 
   const [saving, setSaving] = React.useState(false);
+  const [printing, setPrinting] = React.useState(false);
 
   const todayStr = () => {
     const d = new Date();
@@ -162,6 +164,169 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
 
   const updateExam = (idx: number, patch: Partial<ExamForm>) => {
     setExams((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
+  };
+
+  // umurDariTglLahir — padanan persis calculateAgeDetails() di
+  // ModalCariPasien.tsx, diformat "X Th Y Bl Z Hr" spt pasien.umur Khanza
+  // (bukan cuma "X th" spt tampilan lain di app ini).
+  const umurDariTglLahir = (tglLahir: string): string => {
+    if (!tglLahir || tglLahir === '0000-00-00') return '-';
+    const birth = new Date(tglLahir);
+    const today = new Date();
+    let years = today.getFullYear() - birth.getFullYear();
+    let months = today.getMonth() - birth.getMonth();
+    let days = today.getDate() - birth.getDate();
+    if (days < 0) {
+      months--;
+      days += new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+    return `${years} Th ${months} Bl ${days} Hr`;
+  };
+
+  // handleCetak — "HASIL PEMERIKSAAN RADIOLOGI", padanan
+  // BtnPrint1ActionPerformed di DlgCariPeriksaRadiologi.java (kop RS, info
+  // pasien+pemeriksaan 2 kolom, kotak Hasil Pemeriksaan, tanda tangan
+  // elektronik 2 kolom dgn QR code). Pola cetak SAMA dgn
+  // DetailPemberianObat.tsx: buka jendela baru, tulis HTML siap-print,
+  // window.print() bawaan browser (user pilih "Simpan sebagai PDF") —
+  // proyek ini belum punya library PDF sisi server. Datanya dari
+  // GET /api/radiologi/cetak/:noorder (backend ambil sesi periksa_radiologi
+  // TERBARU utk no_rawat ini, bukan cuma apa yg sedang diketik di form —
+  // jadi tombol ini cuma aktif kalau hasilnya SUDAH tersimpan).
+  const handleCetak = async () => {
+    setPrinting(true);
+    try {
+      const [dataRes, settingsRes] = await Promise.all([
+        fetch(`/api/radiologi/cetak/${encodeURIComponent(noorder)}`),
+        fetch('/api/admin/settings'),
+      ]);
+      const data = await dataRes.json();
+      if (!dataRes.ok) throw new Error(data.error || 'Gagal memuat data cetak');
+      let settings = { nama_instansi: '', alamat: '', logo_url: '', kota_rs: '', kontak: '', email_rs: '' };
+      if (settingsRes.ok) settings = await settingsRes.json();
+
+      const printWindow = window.open('', '_blank', 'width=900,height=1000');
+      if (!printWindow) return;
+
+      const logoSrc = settings.logo_url
+        ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
+        : '';
+      const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+        .filter(Boolean).join(', ');
+
+      const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        + ' ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      const fingerPj =
+        `Dikeluarkan di ${settings.nama_instansi}, Kabupaten/Kota ${settings.kota_rs}\n` +
+        `Ditandatangani secara elektronik oleh ${data.penanggung_jawab || '-'}\n` +
+        `ID ${data.kd_penanggung_jawab || '-'}\n${tanggalCetak}`;
+      const fingerPetugas =
+        `Dikeluarkan di ${settings.nama_instansi}, Kabupaten/Kota ${settings.kota_rs}\n` +
+        `Ditandatangani secara elektronik oleh ${data.petugas_nama || '-'}\n` +
+        `ID ${data.petugas_nip || '-'}\n${tanggalCetak}`;
+
+      let qrPj = '';
+      let qrPetugas = '';
+      try { qrPj = await QRCode.toDataURL(fingerPj, { width: 80, margin: 1 }); } catch { /* lanjut tanpa QR */ }
+      try { qrPetugas = await QRCode.toDataURL(fingerPetugas, { width: 80, margin: 1 }); } catch { /* lanjut tanpa QR */ }
+
+      const hasilHtml = (data.hasil || '-').split('\n').map((line: string) => `<div>${line || '&nbsp;'}</div>`).join('');
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Hasil Pemeriksaan Radiologi - ${data.no_periksa}</title>
+            <style>
+              body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 16px; color: #000; }
+              table.tbl_form td { border: 0; vertical-align: middle; }
+              hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
+              table.info { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
+              table.info td { padding: 2px 4px; vertical-align: top; }
+              table.info td.label { width: 110px; white-space: nowrap; }
+              table.info td.sep { width: 12px; }
+              .hasil-box { border: 1px solid #333; border-radius: 4px; padding: 10px; min-height: 100px; margin-top: 6px; font-size: 11pt; line-height: 1.6; }
+              .ttd { width: 45%; text-align: center; font-size: 11pt; }
+              .rs-nama { font-size: 12pt; font-weight: bold; }
+              .rs-alamat { font-size: 9pt; }
+              .judul { font-size: 12pt; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
+              <tr>
+                <td width="15%">${logoSrc ? `<img width="50" height="50" src="${logoSrc}" />` : ''}</td>
+                <td width="70%">
+                  <center>
+                    <div class="rs-nama">${settings.nama_instansi}</div>
+                    <div class="rs-alamat">${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}</div>
+                  </center>
+                </td>
+                <td width="15%"></td>
+              </tr>
+            </table>
+            <hr/>
+            <center><div class="judul">HASIL PEMERIKSAAN RADIOLOGI</div></center>
+
+            <table class="info">
+              <tr>
+                <td class="label">No.RM</td><td class="sep">:</td><td>${data.no_rm}</td>
+                <td class="label">Penanggung Jawab</td><td class="sep">:</td><td>${data.penanggung_jawab || '-'}</td>
+              </tr>
+              <tr>
+                <td class="label">Nama Pasien</td><td class="sep">:</td><td>${data.nama_pasien}</td>
+                <td class="label">Dokter Pengirim</td><td class="sep">:</td><td>${data.dokter_pengirim || '-'}</td>
+              </tr>
+              <tr>
+                <td class="label">JK/Umur</td><td class="sep">:</td><td>${data.jk || '-'} / ${umurDariTglLahir(data.tgl_lahir)}</td>
+                <td class="label">Tgl.Pemeriksaan</td><td class="sep">:</td><td>${data.tgl_pemeriksaan}</td>
+              </tr>
+              <tr>
+                <td class="label">Alamat</td><td class="sep">:</td><td>${data.alamat || '-'}</td>
+                <td class="label">Jam Pemeriksaan</td><td class="sep">:</td><td>${data.jam_pemeriksaan}</td>
+              </tr>
+              <tr>
+                <td class="label">No.Periksa</td><td class="sep">:</td><td>${data.no_periksa}</td>
+                <td class="label">Poli</td><td class="sep">:</td><td>${data.poli || '-'}</td>
+              </tr>
+              <tr>
+                <td class="label">Pemeriksaan</td><td class="sep">:</td><td colspan="4">${data.pemeriksaan}</td>
+              </tr>
+            </table>
+
+            <div style="margin-top:14px; font-weight:bold;">Hasil Pemeriksaan :</div>
+            <div class="hasil-box">${hasilHtml}</div>
+
+            <table width="100%" style="margin-top:40px;">
+              <tr>
+                <td class="ttd">
+                  <div>Penanggung Jawab</div>
+                  ${qrPj ? `<img src="${qrPj}" width="65" height="65" style="margin:8px 0;" />` : '<div style="height:65px;"></div>'}
+                  <div style="font-weight:bold; text-decoration:underline;">${data.penanggung_jawab || '-'}</div>
+                </td>
+                <td class="ttd">
+                  <div>Tgl.Cetak : ${tanggalCetak}</div>
+                  <div style="margin-top:2px;">Petugas Radiologi</div>
+                  ${qrPetugas ? `<img src="${qrPetugas}" width="65" height="65" style="margin:8px 0;" />` : '<div style="height:65px;"></div>'}
+                  <div style="font-weight:bold; text-decoration:underline;">${data.petugas_nama || '-'}</div>
+                </td>
+              </tr>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = () => printWindow.print();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -422,9 +587,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
                   type="button"
-                  onClick={() => Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Fitur cetak hasil pemeriksaan radiologi akan dikembangkan.' })}
-                  title="Cetak Hasil Pemeriksaan (segera hadir)"
-                  style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={handleCetak}
+                  disabled={printing}
+                  title="Cetak Hasil Pemeriksaan Radiologi"
+                  style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: printing ? '#9ca3af' : '#374151', cursor: printing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="6 9 6 2 18 2 18 9"></polyline>
