@@ -249,6 +249,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
               table.info td { padding: 2px 4px; vertical-align: top; }
               table.info td.label { white-space: nowrap; }
               table.info td.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+              table.info td.nowrap { white-space: nowrap; }
               .hasil-box { border: 1px solid #333; border-radius: 4px; padding: 10px; min-height: 100px; margin-top: 6px; font-size: 11pt; line-height: 1.6; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
               .rs-nama { font-size: 12pt; }
@@ -275,15 +276,15 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
             <table class="info">
               <colgroup>
                 <col style="width:14%"><col style="width:2%"><col style="width:34%">
-                <col style="width:21%"><col style="width:2%"><col style="width:27%">
+                <col style="width:20%"><col style="width:2%"><col style="width:32%">
               </colgroup>
               <tr>
                 <td class="label">No.RM</td><td class="sep">:</td><td>${data.no_rm}</td>
-                <td class="label">Penanggung Jawab</td><td class="sep">:</td><td>${data.penanggung_jawab || '-'}</td>
+                <td class="label">Penanggung Jawab</td><td class="sep">:</td><td class="nowrap">${data.penanggung_jawab || '-'}</td>
               </tr>
               <tr>
                 <td class="label">Nama Pasien</td><td class="sep">:</td><td>${data.nama_pasien}</td>
-                <td class="label">Dokter Pengirim</td><td class="sep">:</td><td>${data.dokter_pengirim || '-'}</td>
+                <td class="label">Dokter Pengirim</td><td class="sep">:</td><td class="nowrap">${data.dokter_pengirim || '-'}</td>
               </tr>
               <tr>
                 <td class="label">JK/Umur</td><td class="sep">:</td><td>${data.jk || '-'} / ${umurDariTglLahir(data.tgl_lahir)}</td>
