@@ -275,8 +275,8 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
 
             <table class="info">
               <colgroup>
-                <col style="width:14%"><col style="width:2%"><col style="width:39%">
-                <col style="width:20%"><col style="width:2%"><col style="width:23%">
+                <col style="width:14%"><col style="width:2%"><col style="width:36%">
+                <col style="width:20%"><col style="width:2%"><col style="width:26%">
               </colgroup>
               <tr>
                 <td class="label">No.RM</td><td class="sep">:</td><td>${data.no_rm}</td>
