@@ -3315,6 +3315,11 @@ func main() {
 	// Antrean permintaan radiologi lintas pasien — dipakai mobile quick-view.
 	r.GET("/api/radiologi/list", getPermintaanRadiologiList(db))
 
+	// Modul Radiologi.tsx (worklist departemen radiologi)
+	r.GET("/api/radiologi/permintaan/:noorder", getPermintaanRadiologiDetail(db))
+	r.POST("/api/radiologi/hasil", saveHasilRadiologi(db))
+	r.POST("/api/radiologi/sampel/:noorder", setSampelRadiologi(db))
+
 	// Riwayat Perawatan endpoint
 	r.GET("/api/riwayat-perawatan/:no_rkm_medis", getRiwayatPerawatan(db))
 	// Delete permintaan radiologi

@@ -242,22 +242,40 @@ func createPermintaanRadiologi(db *sql.DB) gin.HandlerFunc {
 }
 
 type permintaanRadiologiQueueRow struct {
-	NoOrder         string `json:"noorder"`
-	TglPermintaan   string `json:"tgl_permintaan"`
-	JamPermintaan   string `json:"jam_permintaan"`
-	NoRawat         string `json:"no_rawat"`
-	NoRkmMedis      string `json:"no_rkm_medis"`
-	NmPasien        string `json:"nm_pasien"`
-	KdDokter        string `json:"kd_dokter"`
-	NmDokter        string `json:"nm_dokter"`
-	Status          string `json:"status"`
-	DiagnosisKlinis string `json:"diagnosa_klinis"`
+	NoOrder           string `json:"noorder"`
+	TglPermintaan     string `json:"tgl_permintaan"`
+	JamPermintaan     string `json:"jam_permintaan"`
+	NoRawat           string `json:"no_rawat"`
+	NoRkmMedis        string `json:"no_rkm_medis"`
+	NmPasien          string `json:"nm_pasien"`
+	KdDokter          string `json:"kd_dokter"`
+	NmDokter          string `json:"nm_dokter"`
+	Status            string `json:"status"`
+	DiagnosisKlinis   string `json:"diagnosa_klinis"`
+	Rawat             string `json:"rawat"` // 'ralan'/'ranap' — permintaan_radiologi.status mentah
+	TglSampel         string `json:"tgl_sampel"`
+	JamSampel         string `json:"jam_sampel"`
+	KdPj              string `json:"kd_pj"`
+	PngJawab          string `json:"png_jawab"`
+	InformasiTambahan string `json:"informasi_tambahan"`
+	Ruang             string `json:"ruang"` // poli (ralan) atau kamar+bangsal (ranap)
+	TglHasil          string `json:"tgl_hasil"`
+	JamHasil          string `json:"jam_hasil"`
+	Pemeriksaan       string `json:"pemeriksaan"` // nama jenis pemeriksaan, digabung koma
 }
 
-// getPermintaanRadiologiList — antrean permintaan radiologi lintas pasien
-// (padanan getPermintaanResepRalan/getPermintaanLabList, dipakai utk
-// tampilan mobile "Radiologi" quick-view). "Belum Diperiksa"/"Sudah
-// Diperiksa" dihitung dari tgl_hasil='0000-00-00', persis pola Lab/Resep.
+// getPermintaanRadiologiList — antrean permintaan radiologi lintas pasien.
+// Padanan tampil()/tampil3() di DlgCariPermintaanRadiologi.java (Khanza
+// Desktop) yg punya 2 tab terpisah Rawat Jalan/Rawat Inap — di sini
+// disatukan jadi SATU query dgn kolom "ruang" yg computed beda sumber
+// tergantung pr.status (poliklinik utk ralan, kamar_inap TERBARU+bangsal
+// utk ranap, fallback 'Ranap Gabung' kalau kamar tidak ketemu — sama
+// persis pola ki_last/ranap_gabung Khanza), supaya tidak perlu duplikasi
+// query spt aslinya. Filter `rawat=ralan|ranap` opsional (dipakai tab
+// Radiologi.tsx); kalau kosong, kembalikan KEDUANYA gabung — perilaku lama
+// yg masih dipakai PresensiMobile.tsx "Radiologi" quick-view (tanpa
+// query param sama sekali). "Belum Diperiksa"/"Sudah Diperiksa" dihitung
+// dari tgl_hasil='0000-00-00', persis pola Lab/Resep.
 func getPermintaanRadiologiList(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tgl1 := c.Query("tgl1")
@@ -270,25 +288,51 @@ func getPermintaanRadiologiList(db *sql.DB) gin.HandlerFunc {
 		}
 		status := c.Query("status")
 		search := c.Query("search")
+		rawat := c.Query("rawat")
 
 		query := `
-			SELECT pr.noorder, pr.tgl_permintaan, IF(pr.jam_permintaan='00:00:00','',pr.jam_permintaan),
+			SELECT pr.noorder, DATE_FORMAT(pr.tgl_permintaan,'%Y-%m-%d'), IF(pr.jam_permintaan='00:00:00','',pr.jam_permintaan),
 				pr.no_rawat, pasien.no_rkm_medis, pasien.nm_pasien,
 				pr.dokter_perujuk, IFNULL(dokter.nm_dokter,'-'),
 				IF(pr.tgl_hasil='0000-00-00','Belum Diperiksa','Sudah Diperiksa') AS status,
-				IFNULL(pr.diagnosa_klinis,'')
+				IFNULL(pr.diagnosa_klinis,''), pr.status,
+				IF(pr.tgl_sampel='0000-00-00','',DATE_FORMAT(pr.tgl_sampel,'%Y-%m-%d')), IF(pr.jam_sampel='00:00:00','',pr.jam_sampel),
+				reg_periksa.kd_pj, IFNULL(penjab.png_jawab,''), IFNULL(pr.informasi_tambahan,''),
+				CASE WHEN pr.status='ranap' THEN CONCAT(IFNULL(ki_last.kd_kamar,''),' ',IFNULL(bangsal.nm_bangsal,'Ranap Gabung'))
+					ELSE IFNULL(poliklinik.nm_poli,'') END AS ruang,
+				IF(pr.tgl_hasil='0000-00-00','',DATE_FORMAT(pr.tgl_hasil,'%Y-%m-%d')), IF(pr.jam_hasil='00:00:00','',pr.jam_hasil),
+				IFNULL(prw.pemeriksaan,'')
 			FROM permintaan_radiologi pr
 			INNER JOIN reg_periksa ON pr.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN dokter ON pr.dokter_perujuk = dokter.kd_dokter
+			LEFT JOIN penjab ON reg_periksa.kd_pj = penjab.kd_pj
+			LEFT JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
+			LEFT JOIN (
+				SELECT kamar_inap.no_rawat, kamar_inap.kd_kamar FROM kamar_inap
+				INNER JOIN (SELECT no_rawat, MAX(CONCAT(tgl_masuk,' ',jam_masuk)) AS max_masuk FROM kamar_inap GROUP BY no_rawat) latest
+					ON kamar_inap.no_rawat = latest.no_rawat AND CONCAT(kamar_inap.tgl_masuk,' ',kamar_inap.jam_masuk) = latest.max_masuk
+			) ki_last ON reg_periksa.no_rawat = ki_last.no_rawat
+			LEFT JOIN kamar ON ki_last.kd_kamar = kamar.kd_kamar
+			LEFT JOIN bangsal ON kamar.kd_bangsal = bangsal.kd_bangsal
+			LEFT JOIN (
+				SELECT ppr.noorder, GROUP_CONCAT(IFNULL(jpr.nm_perawatan, ppr.kd_jenis_prw) SEPARATOR ', ') AS pemeriksaan
+				FROM permintaan_pemeriksaan_radiologi ppr
+				LEFT JOIN jns_perawatan_radiologi jpr ON ppr.kd_jenis_prw = jpr.kd_jenis_prw
+				GROUP BY ppr.noorder
+			) prw ON pr.noorder = prw.noorder
 			WHERE pr.tgl_permintaan BETWEEN ? AND ?
 		`
 		args := []interface{}{tgl1, tgl2}
+		if rawat == "ralan" || rawat == "ranap" {
+			query += " AND pr.status = ?"
+			args = append(args, rawat)
+		}
 		if search != "" {
 			query += ` AND (pr.noorder LIKE ? OR pr.no_rawat LIKE ? OR pasien.no_rkm_medis LIKE ?
-				OR pasien.nm_pasien LIKE ? OR dokter.nm_dokter LIKE ?)`
+				OR pasien.nm_pasien LIKE ? OR dokter.nm_dokter LIKE ? OR pr.diagnosa_klinis LIKE ?)`
 			pattern := "%" + search + "%"
-			args = append(args, pattern, pattern, pattern, pattern, pattern)
+			args = append(args, pattern, pattern, pattern, pattern, pattern, pattern)
 		}
 		query += " ORDER BY pr.tgl_permintaan DESC, pr.jam_permintaan DESC"
 
@@ -302,7 +346,9 @@ func getPermintaanRadiologiList(db *sql.DB) gin.HandlerFunc {
 		for rows.Next() {
 			var r permintaanRadiologiQueueRow
 			if rows.Scan(&r.NoOrder, &r.TglPermintaan, &r.JamPermintaan, &r.NoRawat, &r.NoRkmMedis, &r.NmPasien,
-				&r.KdDokter, &r.NmDokter, &r.Status, &r.DiagnosisKlinis) == nil {
+				&r.KdDokter, &r.NmDokter, &r.Status, &r.DiagnosisKlinis, &r.Rawat,
+				&r.TglSampel, &r.JamSampel, &r.KdPj, &r.PngJawab, &r.InformasiTambahan, &r.Ruang,
+				&r.TglHasil, &r.JamHasil, &r.Pemeriksaan) == nil {
 				if status == "" || status == r.Status {
 					list = append(list, r)
 				}

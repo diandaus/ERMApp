@@ -8,6 +8,7 @@ import { CasemixView } from './Casemix';
 import { BridgingView } from './Bridging';
 import { ApotekView } from './Apotek';
 import { JadwalOperasiView } from './JadwalOperasi';
+import { RadiologiView } from './Radiologi';
 import { RegistrasiView } from './Registrasi';
 import { IGDKView } from './IGDK';
 import { DisplayAntrianView } from './DisplayAntrian';
@@ -1100,12 +1101,7 @@ export const App: React.FC = () => {
       case 'bridging':
         return <BridgingView key={bridgingResetKey} />;
       case 'radiologi':
-        return (
-          <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
-            <h2 style={{ marginTop: 0 }}>Radiologi</h2>
-            <p style={{ color: '#6b7280' }}>Permintaan & hasil pemeriksaan radiologi</p>
-          </section>
-        );
+        return <RadiologiView user={user} />;
       case 'laboratorium':
         return (
           <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
