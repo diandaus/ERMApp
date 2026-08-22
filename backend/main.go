@@ -2399,12 +2399,15 @@ func main() {
 				reg_periksa.status_poli,
 				reg_periksa.kd_pj,
 				reg_periksa.kd_poli,
-				pasien.no_tlp
+				pasien.no_tlp,
+				bridging_sep.no_sep,
+				COALESCE(NULLIF(bridging_sep.no_kartu, ''), NULLIF(pasien.no_peserta, '')) as no_kartu
 			FROM reg_periksa
 			INNER JOIN dokter ON reg_periksa.kd_dokter=dokter.kd_dokter
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis=pasien.no_rkm_medis
 			INNER JOIN poliklinik ON reg_periksa.kd_poli=poliklinik.kd_poli
 			INNER JOIN penjab ON reg_periksa.kd_pj=penjab.kd_pj
+			LEFT JOIN bridging_sep ON bridging_sep.no_rawat = reg_periksa.no_rawat
 			WHERE reg_periksa.tgl_registrasi BETWEEN ? AND ?
 			  AND reg_periksa.status_lanjut='Ralan'
 			  AND poliklinik.kd_poli <> 'IGDK'
@@ -2428,12 +2431,13 @@ func main() {
 			var umur sql.NullString
 			var kdPj, kdPoli string
 			var noTlp sql.NullString
+			var noSep, noKartu sql.NullString
 
 			if err := rows.Scan(
 				&noReg, &noRawat, &tglReg, &jamReg, &kdDokter, &nmDokter,
 				&noRkm, &nmPasien, &nmPoli, &pjawab, &almtPj, &hubunganPj,
 				&biayaReg, &stts, &pngJawab, &umur, &statusBayar, &statusPoli,
-				&kdPj, &kdPoli, &noTlp,
+				&kdPj, &kdPoli, &noTlp, &noSep, &noKartu,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -2461,6 +2465,8 @@ func main() {
 				"kd_pj":          kdPj,
 				"kd_poli":        kdPoli,
 				"no_tlp":         noTlp.String,
+				"no_sep":         noSep.String,
+				"no_kartu":       noKartu.String,
 			})
 		}
 
@@ -2492,7 +2498,8 @@ func main() {
 				reg_periksa.kd_pj,
 				pasien.no_tlp,
 				reg_periksa.status_bayar,
-				reg_periksa.status_poli
+				reg_periksa.status_poli,
+				NULLIF(pasien.no_peserta, '') as no_kartu
 			FROM reg_periksa
 			INNER JOIN rujukan_internal_poli ON rujukan_internal_poli.no_rawat=reg_periksa.no_rawat
 			INNER JOIN dokter ON rujukan_internal_poli.kd_dokter=dokter.kd_dokter
@@ -2522,12 +2529,13 @@ func main() {
 			var umur sql.NullString
 			var noTlp sql.NullString
 			var statusBayar, statusPoli string
+			var noKartu sql.NullString
 
 			if err := rows.Scan(
 				&noRawat, &tglReg, &jamReg, &kdDokter, &nmDokter,
 				&noRkm, &nmPasien, &nmPoli, &pjawab, &almtPj, &hubunganPj,
 				&stts, &pngJawab, &kdPoli, &umur, &kdPj, &noTlp,
-				&statusBayar, &statusPoli,
+				&statusBayar, &statusPoli, &noKartu,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -2553,6 +2561,8 @@ func main() {
 				"no_tlp":         noTlp.String,
 				"status_bayar":   statusBayar,
 				"status_poli":    statusPoli,
+				"no_sep":         "",
+				"no_kartu":       noKartu.String,
 			})
 		}
 
