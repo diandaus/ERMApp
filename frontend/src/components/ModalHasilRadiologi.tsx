@@ -242,7 +242,8 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           <head>
             <title>Hasil Pemeriksaan Radiologi - ${data.no_periksa}</title>
             <style>
-              body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 16px; color: #000; }
+              @page { margin-top: 14px; }
+              body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 0 16px 16px; color: #000; }
               table.tbl_form td { border: 0; vertical-align: middle; }
               hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
               table.info { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
@@ -252,7 +253,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
               table.info td.nowrap { white-space: nowrap; }
               .hasil-box { border: 1px solid #333; border-radius: 4px; padding: 10px; min-height: 100px; margin-top: 6px; font-size: 11pt; line-height: 1.6; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
-              .rs-nama { font-size: 12pt; }
+              .rs-nama { font-size: 14pt; }
               .rs-alamat { font-size: 9pt; }
               .judul { font-size: 12pt; }
             </style>
@@ -260,7 +261,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           <body>
             <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
               <tr>
-                <td width="15%">${logoSrc ? `<img width="50" height="50" src="${logoSrc}" />` : ''}</td>
+                <td width="15%">${logoSrc ? `<img width="65" height="65" src="${logoSrc}" />` : ''}</td>
                 <td width="70%">
                   <center>
                     <div class="rs-nama">${settings.nama_instansi}</div>
