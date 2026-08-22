@@ -156,7 +156,7 @@ export const AutoSendSection: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', padding: 16, background: '#ffffff' }}>
+      <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', padding: 16, background: '#ffffff', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Saklar Global</div>
@@ -167,32 +167,32 @@ export const AutoSendSection: React.FC = () => {
           <ToggleSwitch on={data.enabled} onChange={toggleGlobal} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
-          <div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ width: 120 }}>
             <label style={labelSm}>Interval (detik)</label>
             <input type="number" min={5} value={draft.interval_detik} onChange={(e) => setDraft({ ...draft, interval_detik: Number(e.target.value) })} style={inputSm} />
           </div>
-          <div>
-            <label style={labelSm}>Jendela Tanggal (hari)</label>
+          <div style={{ width: 120 }}>
+            <label style={labelSm}>(hari)</label>
             <input type="number" min={1} value={draft.window_hari} onChange={(e) => setDraft({ ...draft, window_hari: Number(e.target.value) })} style={inputSm} />
           </div>
-          <div>
-            <label style={labelSm}>Cooldown Gagal (menit)</label>
+          <div style={{ width: 120 }}>
+            <label style={labelSm}>(menit)</label>
             <input type="number" min={1} value={draft.cooldown_menit} onChange={(e) => setDraft({ ...draft, cooldown_menit: Number(e.target.value) })} style={inputSm} />
           </div>
-          <div>
+          <div style={{ width: 120 }}>
             <label style={labelSm}>Maks per Siklus</label>
             <input type="number" min={1} value={draft.max_per_siklus} onChange={(e) => setDraft({ ...draft, max_per_siklus: Number(e.target.value) })} style={inputSm} />
           </div>
+          <button
+            type="button"
+            onClick={() => saveGlobal()}
+            disabled={savingGlobal}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: savingGlobal ? '#9ca3af' : '#059669', color: '#fff', cursor: savingGlobal ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}
+          >
+            {savingGlobal ? 'Menyimpan...' : 'Simpan Parameter'}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => saveGlobal()}
-          disabled={savingGlobal}
-          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: savingGlobal ? '#9ca3af' : '#059669', color: '#fff', cursor: savingGlobal ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
-        >
-          {savingGlobal ? 'Menyimpan...' : 'Simpan Parameter'}
-        </button>
       </div>
 
       {grouped.map(({ group, items }) => {
