@@ -71,6 +71,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
 
   const [foto, setFoto] = React.useState<{ instances: DicomInstance[]; series: DicomSeries[] }>({ instances: [], series: [] });
   const [loadingFoto, setLoadingFoto] = React.useState(false);
+  const [previewFoto, setPreviewFoto] = React.useState<string | null>(null);
 
   const [saving, setSaving] = React.useState(false);
 
@@ -367,28 +368,27 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                   ) : foto.instances.length === 0 ? (
                     <div style={{ padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Belum ada gambar di Orthanc untuk order ini</div>
                   ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
-                      {foto.instances.map((inst) => (
-                        <div key={inst.id} style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid #374151' }}>
-                          <img
-                            src={`/api/satu-sehat/dicom/preview-image/${inst.id}`}
-                            alt={inst.modality || 'DICOM'}
-                            style={{ width: '100%', display: 'block', aspectRatio: '1 / 1', objectFit: 'contain', background: '#111827' }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                          />
-                        </div>
-                      ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                      {foto.instances.map((inst) => {
+                        const src = `/api/satu-sehat/dicom/preview-image/${inst.id}`;
+                        return (
+                          <div
+                            key={inst.id}
+                            onClick={() => setPreviewFoto(src)}
+                            style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid #374151', cursor: 'zoom-in' }}
+                          >
+                            <img
+                              src={src}
+                              alt={inst.modality || 'DICOM'}
+                              style={{ width: '100%', display: 'block', aspectRatio: '1 / 1', objectFit: 'contain', background: '#111827' }}
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
-                {foto.series.length > 0 && (
-                  <a
-                    href={foto.series[0].webviewer_url} target="_blank" rel="noopener noreferrer"
-                    style={{ alignSelf: 'flex-start', fontSize: 11, color: '#2563eb', textDecoration: 'none' }}
-                  >
-                    Buka di Orthanc Viewer ↗
-                  </a>
-                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -444,6 +444,27 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           </div>
         )}
       </div>
+
+      {/* Preview foto ukuran penuh — klik gambar mana pun di grid utk lihat, ganti klik foto lain utk ganti tampilan (sebelumnya cuma bisa lihat foto pertama lewat link Orthanc Viewer) */}
+      {previewFoto && (
+        <div
+          onClick={() => setPreviewFoto(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, cursor: 'zoom-out' }}
+        >
+          <img
+            src={previewFoto}
+            alt="Foto DICOM"
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setPreviewFoto(null)}
+            style={{ position: 'fixed', top: 20, right: 20, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   );
 };
