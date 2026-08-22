@@ -270,6 +270,10 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
   const [itemsDetail, setItemsDetail] = React.useState<Record<string, ResepItems>>({});
   const [loadingDetail, setLoadingDetail] = React.useState<string | null>(null);
   const [validasiRow, setValidasiRow] = React.useState<ResepRalanRow | null>(null);
+  // telaahRow — dibuka OTOMATIS setelah validasi (Cetak Etiket & Validasi
+  // ATAU Validasi tanpa Cetak) berhasil, langsung lanjut ke Telaah Resep
+  // tanpa staf perlu cari & klik baris itu lagi manual.
+  const [telaahRow, setTelaahRow] = React.useState<ResepRalanRow | null>(null);
   const [showCariDokter, setShowCariDokter] = React.useState(false);
   const [poliOptions, setPoliOptions] = React.useState<{ kd_poli: string; nm_poli: string }[]>([]);
   // Sub-tab dalam Rawat Jalan — padanan TabRawatJalan.addTab("Detail Rawat
@@ -899,7 +903,16 @@ const TabResepRalan: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
         </div>
       )}
 
-      <ModalValidasiObat resep={validasiRow} onClose={() => setValidasiRow(null)} onValidated={fetchData} />
+      <ModalValidasiObat
+        resep={validasiRow}
+        onClose={() => setValidasiRow(null)}
+        onValidated={() => {
+          fetchData();
+          if (validasiRow) setTelaahRow(validasiRow);
+        }}
+      />
+
+      <ModalTelaahResep resep={telaahRow} onClose={() => setTelaahRow(null)} onSaved={fetchData} />
 
       <ModalPenyerahanResep resep={penyerahanRow} onClose={() => setPenyerahanRow(null)} onSaved={fetchData} />
 
@@ -1020,6 +1033,9 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
   const [resepLoadingDetail, setResepLoadingDetail] = React.useState<string | null>(null);
   const [resepLoadingAllDetail, setResepLoadingAllDetail] = React.useState(false);
   const [validasiRow, setValidasiRow] = React.useState<ResepRanapRow | null>(null);
+  // telaahRow — dibuka OTOMATIS setelah validasi (Cetak Etiket & Validasi
+  // ATAU Validasi tanpa Cetak) berhasil, sama pola dgn TabResepRalan.
+  const [telaahRow, setTelaahRow] = React.useState<ResepRanapRow | null>(null);
 
   const fetchResep = React.useCallback(async () => {
     setResepLoading(true);
@@ -2051,8 +2067,13 @@ const TabResepRanap: React.FC<{ onSelectPasien: (p: PasienRingkas) => void; onSe
             : null
         }
         onClose={() => setValidasiRow(null)}
-        onValidated={fetchResep}
+        onValidated={() => {
+          fetchResep();
+          if (validasiRow) setTelaahRow(validasiRow);
+        }}
       />
+
+      <ModalTelaahResep resep={telaahRow} onClose={() => setTelaahRow(null)} onSaved={fetchResep} />
 
       <ModalCariDokter isOpen={showCariDokter} onClose={() => setShowCariDokter(false)} onSelect={(_kode, nama) => setDokter(nama)} />
     </div>
@@ -2961,6 +2982,25 @@ export const PermintaanResepView: React.FC<PermintaanResepViewProps> = ({ onClos
   const [selectedResep, setSelectedResep] = React.useState<SelectedResep | null>(null);
   const [showObatTervalidasiModal, setShowObatTervalidasiModal] = React.useState(false);
 
+  // Badge merah "Rawat Jalan (n)"/"Rawat Inap (n)" — jumlah resep yang
+  // masih berstatus "Belum Terlayani", sama pola & endpoint dengan badge
+  // "Permintaan Resep" di sidebar Apotek.tsx. Auto-refresh tiap 10 detik
+  // supaya badge tetap akurat selagi modal ini terbuka.
+  const [resepRalanBelumCount, setResepRalanBelumCount] = React.useState(0);
+  const [resepRanapBelumCount, setResepRanapBelumCount] = React.useState(0);
+  React.useEffect(() => {
+    const fetchCount = () => {
+      const statusQS = `status=${encodeURIComponent('Belum Terlayani')}`;
+      fetch(`/api/permintaan-resep/ralan?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => [])
+        .then((data) => setResepRalanBelumCount(Array.isArray(data) ? data.length : 0));
+      fetch(`/api/permintaan-resep/ranap?${statusQS}`).then((res) => (res.ok ? res.json() : [])).catch(() => [])
+        .then((data) => setResepRanapBelumCount(Array.isArray(data) ? data.length : 0));
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleObatTervalidasiClick = () => {
     if (!selectedResep) {
       Swal.fire({ icon: 'warning', title: 'Belum ada resep dipilih', text: 'Silahkan klik salah satu baris resep di Daftar Resep Dokter (Rawat Jalan/Rawat Inap) terlebih dahulu.' });
@@ -3087,8 +3127,8 @@ export const PermintaanResepView: React.FC<PermintaanResepViewProps> = ({ onClos
                   {active && daftarResepExpanded && (
                     <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 6 }}>
                       {([
-                        { key: 'ralan', label: 'Rawat Jalan' },
-                        { key: 'ranap', label: 'Rawat Inap' },
+                        { key: 'ralan', label: 'Rawat Jalan', badgeCount: resepRalanBelumCount },
+                        { key: 'ranap', label: 'Rawat Inap', badgeCount: resepRanapBelumCount },
                       ] as const).map((sub) => {
                         const subActive = daftarResepSub === sub.key;
                         return (
@@ -3115,7 +3155,27 @@ export const PermintaanResepView: React.FC<PermintaanResepViewProps> = ({ onClos
                                 <polyline points="9 6 15 12 9 18"></polyline>
                               </svg>
                             )}
-                            {sub.label}
+                            <span style={{ flex: 1 }}>{sub.label}</span>
+                            {sub.badgeCount > 0 && (
+                              <span
+                                style={{
+                                  minWidth: 18,
+                                  height: 18,
+                                  padding: '0 5px',
+                                  borderRadius: 9,
+                                  background: '#dc2626',
+                                  color: '#ffffff',
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {sub.badgeCount}
+                              </span>
+                            )}
                           </button>
                         );
                       })}

@@ -1,6 +1,14 @@
 import React from 'react';
 import Swal from 'sweetalert2';
+import * as qz from 'qz-tray';
+import JsBarcode from 'jsbarcode';
 import { getCurrentPetugas } from '../utils/currentUser';
+import { filterLokasiApotek } from '../utils/apotekLokasi';
+
+// Kunci localStorage yang sama dipakai ApotekPengaturanPrinter.tsx (Apotek >
+// Pengaturan > Pengaturan Printer) — printer etiket obat khusus per-komputer
+// (QZ Tray cuma bisa lihat printer yang terpasang di komputer itu sendiri).
+const PRINTER_ETIKET_STORAGE_KEY = 'ermapp_apotek_printer_etiket';
 
 // ============================================================================
 // MODAL VALIDASI OBAT — dipakai dari tab "Daftar Resep Dokter" (Permintaan
@@ -241,9 +249,31 @@ export const ModalValidasiObat: React.FC<ModalValidasiObatProps> = ({ resep, onC
       .catch(() => setMetodeRacikOptions([]));
     fetch('/api/apotek/pengaturan/depo/opsi')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setDepoOptions(Array.isArray(data?.bangsal) ? data.bangsal : []))
+      .then((data) => setDepoOptions(filterLokasiApotek(Array.isArray(data?.bangsal) ? data.bangsal : [])))
       .catch(() => setDepoOptions([]));
   }, []);
+
+  // Data instansi (nama RS/alamat/kontak/logo) & bio pasien (jk/tgl lahir/
+  // umur) — CUMA dipakai buat kop & identitas etiket obat, tidak
+  // ditampilkan di form validasi itu sendiri. Instansi diambil sekali
+  // (system-wide, jarang berubah); bio pasien di-refetch tiap ganti resep.
+  const [instansi, setInstansi] = React.useState<{ nama_instansi: string; alamat: string; kontak: string; logo_url: string } | null>(null);
+  const [patientBio, setPatientBio] = React.useState<{ jk: string; tgl_lahir: string; umur: string } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setInstansi(data); })
+      .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    if (!resep?.no_rkm_medis) { setPatientBio(null); return; }
+    fetch(`/api/pendaftaran/pasien/${encodeURIComponent(resep.no_rkm_medis)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setPatientBio({ jk: data.jk || '', tgl_lahir: data.tgl_lahir || '', umur: data.umur || '' }); })
+      .catch(() => setPatientBio(null));
+  }, [resep?.no_rkm_medis]);
 
   // Reset Tarif/Depo ke default tiap kali modal dibuka utk resep berbeda —
   // efek fetch di bawah (deps [resep, tarif, depoSelected]) yang benar-benar
@@ -775,17 +805,147 @@ export const ModalValidasiObat: React.FC<ModalValidasiObatProps> = ({ resep, onC
 
   if (!resep) return null;
 
+  // buildEtiketPrintData — satu etiket per baris Non Racikan + satu etiket
+  // per header Racikan (aturan pakai racikan berlaku utk racikan sbg satu
+  // kesatuan, bukan per-item penyusunnya). Ukuran 5x3cm cocok label etiket
+  // obat standar apotek, disesuaikan lagi nanti kalau printernya beda.
+  // generateBarcodeDataUrl — Code128 dirender ke <canvas> lepas (tidak
+  // ditempel ke DOM) lewat JsBarcode, lalu diambil sbg PNG data-URI utk
+  // ditempel ke HTML etiket (QZ Tray print job type:'html' tidak bisa
+  // render <canvas> langsung, jadi harus sudah jadi gambar).
+  const generateBarcodeDataUrl = (value: string): string => {
+    const canvas = document.createElement('canvas');
+    try {
+      JsBarcode(canvas, value || '-', { format: 'CODE128', displayValue: false, width: 1.4, height: 26, margin: 0 });
+      return canvas.toDataURL('image/png');
+    } catch {
+      return '';
+    }
+  };
+
+  const formatTglLahir = (iso: string): string => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : '-';
+  };
+
+  const escapeHtml = (s: string): string =>
+    (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  // buildEtiketPrintData — kop RS + identitas pasien + barcode no_resep
+  // persis contoh cetakan nyata (etiket RS SIMRS Khanza, kertas 65x40mm),
+  // satu etiket per baris Non Racikan + satu per header Racikan (aturan
+  // pakai racikan berlaku utk racikan sbg satu kesatuan, bukan per-item
+  // penyusunnya — kolom kiri/kanan bawah persis pola contoh: "RACIKAN" /
+  // "<jml_dr> <metode_racik>", mis. "RACIKAN" / "7 Puyer").
+  const buildEtiketPrintData = (): { type: 'html'; format: 'plain'; data: string }[] => {
+    if (!resep || !detail) return [];
+
+    const now = new Date();
+    const tglCetak = `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()} ${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+    const namaInstansi = instansi?.nama_instansi || '';
+    const alamatInstansi = instansi?.alamat || '';
+    const kontakInstansi = instansi?.kontak || '';
+    const logoUrl = instansi?.logo_url ? (instansi.logo_url.startsWith('http') ? instansi.logo_url : `${window.location.origin}${instansi.logo_url}`) : '';
+    const logoImg = logoUrl ? `<img src="${logoUrl}" style="height:26px;width:26px;object-fit:contain;flex-shrink:0;" />` : '';
+    const umurSingkat = (patientBio?.umur || '').split(' ').slice(0, 2).join(' ') || '-';
+    const barcodeDataUrl = generateBarcodeDataUrl(resep.no_resep);
+    const noResep = resep.no_resep;
+    const noRkmMedis = resep.no_rkm_medis;
+    const namaPasien = resep.nm_pasien;
+    const noRawat = detail.no_rawat;
+
+    const wrap = (namaItem: string, jumlahLabel: string, aturanPakai: string) => `
+      <div style="width:65mm;height:40mm;box-sizing:border-box;padding:1.5mm;font-family:Arial,sans-serif;">
+        <div style="border:1.5pt solid #0f766e;border-radius:2px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:4px;padding:2px 4px;border-bottom:1.5pt solid #0f766e;">
+            ${logoImg}
+            <div style="flex:1;min-width:0;text-align:center;line-height:1.15;">
+              <div style="font-size:10px;font-weight:700;">${escapeHtml(namaInstansi)}</div>
+              <div style="font-size:7px;">${escapeHtml(alamatInstansi)}</div>
+              <div style="font-size:7px;">${escapeHtml(kontakInstansi)}</div>
+            </div>
+          </div>
+          <div style="padding:2px 4px;border-bottom:1px solid #000;">
+            <div style="text-align:center;font-size:8.5px;font-weight:700;margin-bottom:2px;">INSTALASI FARMASI</div>
+            <div style="display:flex;gap:5px;">
+              <div style="flex-shrink:0;text-align:center;">
+                ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" style="height:22px;display:block;" />` : ''}
+                <div style="font-size:6px;">${escapeHtml(noResep)}</div>
+              </div>
+              <div style="flex:1;min-width:0;font-size:7.5px;line-height:1.3;">
+                <div style="display:flex;justify-content:space-between;"><span>${tglCetak}</span><span>${escapeHtml(noRawat)}</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>No.RM : ${escapeHtml(noRkmMedis)}</span><span>Tgl.Lahir : ${formatTglLahir(patientBio?.tgl_lahir || '')}</span></div>
+                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Nama : ${escapeHtml(namaPasien)} / ${escapeHtml(patientBio?.jk || '-')} / ${escapeHtml(umurSingkat)}</div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1;padding:3px 4px;display:flex;flex-direction:column;justify-content:center;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;">
+              <span>${escapeHtml(namaItem)}</span><span>${escapeHtml(jumlahLabel)}</span>
+            </div>
+            <div style="text-align:center;font-size:11px;font-weight:700;margin-top:3px;">${escapeHtml(aturanPakai?.trim() || '-')}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const etiketList: { type: 'html'; format: 'plain'; data: string }[] = [];
+    for (const it of detail.non_racikan) {
+      etiketList.push({ type: 'html', format: 'plain', data: wrap(it.nama_brng, `${it.jml} ${it.kode_sat}`, it.aturan_pakai) });
+    }
+    for (const rc of detail.racikan) {
+      etiketList.push({ type: 'html', format: 'plain', data: wrap('RACIKAN', `${rc.jml_dr} ${rc.metode_racik}`, rc.aturan_pakai) });
+    }
+    return etiketList;
+  };
+
+  // handleCetakEtiket — dipanggil SETELAH validasi berhasil (stok sudah
+  // terpotong), jadi kegagalan cetak di sini TIDAK boleh mengulang/
+  // membatalkan validasi yang sudah terjadi — cukup diberi tahu supaya
+  // staf bisa cetak ulang manual nanti.
+  const handleCetakEtiket = async () => {
+    const printerName = localStorage.getItem(PRINTER_ETIKET_STORAGE_KEY);
+    if (!printerName) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Printer etiket belum diatur',
+        html: 'Resep sudah tervalidasi, tapi etiket <strong>tidak tercetak</strong> karena printer belum diatur di komputer ini. Atur lewat <strong>Apotek &gt; Pengaturan &gt; Pengaturan Printer</strong>.',
+      });
+      return;
+    }
+    try {
+      if (!qz.websocket.isActive()) {
+        await qz.websocket.connect();
+      }
+      const etiketData = buildEtiketPrintData();
+      if (etiketData.length === 0) return;
+      const config = qz.configs.create(printerName);
+      await qz.print(config, etiketData);
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Resep tervalidasi, tapi gagal mencetak etiket',
+        text: err instanceof Error ? err.message : 'Pastikan aplikasi QZ Tray berjalan & printer terhubung.',
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     const confirm = await Swal.fire({
-      title: 'Serahkan obat untuk resep ini?',
+      title: 'Validasi obat untuk resep ini?',
       text: 'Stok akan langsung dikurangi sesuai jumlah yang diresepkan. Tindakan ini tidak bisa dibatalkan.',
       icon: 'question',
+      showDenyButton: true,
       showCancelButton: true,
-      confirmButtonText: 'Serahkan & Validasi',
+      confirmButtonText: 'Cetak Etiket & Validasi',
+      denyButtonText: 'Validasi tanpa Cetak',
       cancelButtonText: 'Batal',
       confirmButtonColor: '#2563eb',
+      denyButtonColor: '#059669',
+      cancelButtonColor: '#6b7280',
+      customClass: { actions: 'mvo-serahkan-actions' },
     });
-    if (!confirm.isConfirmed) return;
+    if (!confirm.isConfirmed && !confirm.isDenied) return;
 
     // Kolom "K" — cuma berlaku Non Racikan: jumlah yang dikirim ke backend
     // selalu dalam satuan dasar, kalau K dicentang jumlah yang diinput
@@ -822,6 +982,9 @@ export const ModalValidasiObat: React.FC<ModalValidasiObatProps> = ({ resep, onC
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal memvalidasi resep');
+      if (confirm.isConfirmed) {
+        await handleCetakEtiket();
+      }
       onValidated();
       onClose();
       Swal.fire({ icon: 'success', title: 'Obat berhasil diserahkan, resep tervalidasi', timer: 2200, showConfirmButton: false });
@@ -834,6 +997,20 @@ export const ModalValidasiObat: React.FC<ModalValidasiObatProps> = ({ resep, onC
 
   return (
     <>
+    {/* Tombol konfirmasi "Serahkan obat" (Cetak Etiket & Validasi / Validasi
+        tanpa Cetak / Batal) sengaja ditumpuk vertikal, bukan sebaris —
+        3 pilihan dgn label panjang terlalu sempit kalau dipaksa satu baris. */}
+    <style>{`
+      .mvo-serahkan-actions {
+        flex-direction: column !important;
+        align-items: center !important;
+        width: 100%;
+      }
+      .mvo-serahkan-actions button {
+        width: 60% !important;
+        margin: 4px 0 !important;
+      }
+    `}</style>
     <div
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: 20 }}
       onClick={() => !saving && onClose()}

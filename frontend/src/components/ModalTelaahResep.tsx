@@ -1,6 +1,5 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import type { ResepRalanRow } from '../modules/PermintaanResep';
 import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { ModalCariPetugas } from './ModalCariPetugas';
 
@@ -101,8 +100,14 @@ const StepperIcon: React.FC = () => (
   </div>
 );
 
+// Cuma 3 field ini yang benar-benar dipakai di modal — dilonggarkan dari
+// ResepRalanRow (modules/PermintaanResep.tsx) jadi bentuk minimal supaya
+// bisa dipakai juga dari alur Ranap (ResepRanapRow, field poli/dokternya
+// beda nama) tanpa perlu casting/adaptasi di pemanggil.
+type ResepTelaahRingkas = { no_resep: string; nm_pasien: string; no_rkm_medis: string };
+
 type ModalTelaahResepProps = {
-  resep: ResepRalanRow | null;
+  resep: ResepTelaahRingkas | null;
   onClose: () => void;
   onSaved: () => void;
 };
