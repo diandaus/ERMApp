@@ -1673,9 +1673,9 @@ func main() {
 		var err error
 
 		if search != "" {
-			rows, err = db.Query(`SELECT kd_poli, nm_poli FROM poliklinik WHERE kd_poli LIKE ? OR nm_poli LIKE ? ORDER BY nm_poli LIMIT 50`, "%"+search+"%", "%"+search+"%")
+			rows, err = db.Query(`SELECT kd_poli, nm_poli FROM poliklinik WHERE status = '1' AND kd_poli <> '-' AND (kd_poli LIKE ? OR nm_poli LIKE ?) ORDER BY nm_poli LIMIT 50`, "%"+search+"%", "%"+search+"%")
 		} else {
-			rows, err = db.Query(`SELECT kd_poli, nm_poli FROM poliklinik ORDER BY nm_poli LIMIT 50`)
+			rows, err = db.Query(`SELECT kd_poli, nm_poli FROM poliklinik WHERE status = '1' AND kd_poli <> '-' ORDER BY nm_poli LIMIT 50`)
 		}
 
 		if err != nil {
