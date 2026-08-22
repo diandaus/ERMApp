@@ -1656,6 +1656,7 @@ func main() {
 	r.GET("/api/admin/bridging", getBridgingConfigs(db))
 	r.POST("/api/admin/bridging", saveBridgingConfig(db))
 	r.DELETE("/api/admin/bridging/:kode", deleteBridgingConfig(db))
+	r.GET("/api/bpjs/icare-riwayat", getIcareRiwayat(db))
 
 	r.GET("/api/pegawai/list", getPegawaiList(db))
 	r.GET("/api/pegawai/departemen", getPegawaiDepartemen(db))
@@ -3337,6 +3338,11 @@ func main() {
 	r.GET("/api/pemeriksaan/prosedur/*no_rawat", getProsedurPasien(db))
 	r.POST("/api/pemeriksaan/prosedur", saveProsedurPasien(db))
 	r.DELETE("/api/pemeriksaan/prosedur", deleteProsedurPasien(db))
+
+	// Catatan Dokter — tab "Catatan Dokter" di Pemeriksaan
+	r.GET("/api/pemeriksaan/catatan-dokter/*no_rawat", getCatatanDokter(db))
+	r.POST("/api/pemeriksaan/catatan-dokter", saveCatatanDokter(db))
+	r.DELETE("/api/pemeriksaan/catatan-dokter", deleteCatatanDokter(db))
 
 	// Pemeriksaan Rawat Inap endpoints
 	r.GET("/api/pemeriksaan-ranap/*no_rawat", getPemeriksaanRanap(db))

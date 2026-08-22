@@ -7,8 +7,10 @@ import { LabTab } from '../components/LabTab';
 import { RadTab } from '../components/RadTab';
 import { UploadTab } from '../components/UploadTab';
 import { RujukanInternalModal } from '../components/RujukanInternalModal';
+import { IcareRiwayatModal } from '../components/IcareRiwayatModal';
 import { TindakanTab } from '../components/TindakanTab';
 import { DiagnosaTab } from '../components/DiagnosaTab';
+import { CatatanDokterTab } from '../components/CatatanDokterTab';
 
 type SoapViewProps = {
   patient: any;
@@ -47,7 +49,7 @@ const InfoItem: React.FC<{ label: string; value: string; icon?: React.ReactNode;
 );
 
 export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) => {
-  const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'diagnosa' | 'upload'>('soap');
+  const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'diagnosa' | 'catatan_dokter' | 'upload'>('soap');
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [editingItem, setEditingItem] = React.useState<any>(null); // Menyimpan item yang sedang diedit
   const [loading, setLoading] = React.useState(false);
@@ -62,6 +64,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
   const [showRiwayatSoapieModal, setShowRiwayatSoapieModal] = React.useState(false);
   const [showRujukanInternalModal, setShowRujukanInternalModal] = React.useState(false);
+  const [showIcareModal, setShowIcareModal] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null); // Ref untuk form input
   const [patientData, setPatientData] = React.useState<any>(patient); // State untuk data pasien lengkap
 
@@ -1781,6 +1784,22 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             DIAGNOSA
           </button>
           <button
+            onClick={() => setActiveTab('catatan_dokter')}
+            style={{
+              padding: '10px 20px',
+              border: 'none',
+              background: activeTab === 'catatan_dokter' ? '#e0f2fe' : 'transparent',
+              borderBottom: activeTab === 'catatan_dokter' ? '3px solid #1AB1E5' : '3px solid transparent',
+              color: activeTab === 'catatan_dokter' ? '#1AB1E5' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: activeTab === 'catatan_dokter' ? 600 : 400,
+              transition: 'all 0.2s'
+            }}
+          >
+            CATATAN DOKTER
+          </button>
+          <button
             onClick={() => setActiveTab('upload')}
             style={{
               padding: '10px 20px',
@@ -2831,6 +2850,30 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                     </button>
                     <button
                       type="button"
+                      onClick={() => setShowIcareModal(true)}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 4,
+                        border: 'none',
+                        background: '#6b7280',
+                        color: '#ffffff',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                      </svg>
+                      ICare
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleKeluar}
                       style={{
                         padding: '10px 16px',
@@ -3435,6 +3478,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
 
             {activeTab === 'diagnosa' && <DiagnosaTab patient={patient} />}
 
+            {activeTab === 'catatan_dokter' && <CatatanDokterTab patient={patient} />}
+
             {activeTab === 'upload' && <UploadTab patient={patient} />}
           </div>
         </div>
@@ -3495,6 +3540,16 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             // Refresh data jika perlu
             console.log('Rujukan internal berhasil disimpan');
           }}
+        />
+      )}
+
+      {/* Modal Riwayat Pelayanan I-Care BPJS */}
+      {showIcareModal && (
+        <IcareRiwayatModal
+          noRkmMedis={patient.no_rkm_medis}
+          kdDokter={patient.kd_dokter}
+          namaPasien={patientData.nm_pasien}
+          onClose={() => setShowIcareModal(false)}
         />
       )}
     </section>

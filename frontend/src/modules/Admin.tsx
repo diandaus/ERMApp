@@ -75,11 +75,18 @@ const BRIDGING_DEFS: ServiceDef[] = [
     ],
   },
   {
+    // I-Care BPJS ternyata API bersignature (sama skema dgn VClaim/HFIS —
+    // URL+Consumer ID+Secret Key+User Key), BUKAN portal login manual.
+    // Padanan entry Khanza: URLAPIICARE/CONSIDAPIICARE/SECRETKEYAPIICARE/
+    // USERKEYAPIICARE — key di sini disederhanakan tanpa suffix "APIICARE"
+    // krn sudah discope lewat kode 'bpjs_icare' (konvensi sama dgn
+    // bpjs_vclaim/bpjs_aplicare/bpjs_mobilejkn di atas).
     kode: 'bpjs_icare', nama: 'I-Care BPJS', grp: 'bpjs',
     fields: [
-      { key: 'URL', label: 'URL / Base URL', type: 'url', placeholder: 'https://icare.bpjs-kesehatan.go.id/' },
-      { key: 'USERNAME', label: 'Username', type: 'text' },
-      { key: 'PASSWORD', label: 'Password', type: 'secret' },
+      { key: 'URL', label: 'URL / Base URL', type: 'url', placeholder: 'https://apijkn-dev.bpjs-kesehatan.go.id/ihs_dev/api/rs' },
+      { key: 'CONSID', label: 'Consumer ID', type: 'text' },
+      { key: 'SECRETKEY', label: 'Secret Key', type: 'secret' },
+      { key: 'USERKEY', label: 'User Key', type: 'secret' },
     ],
   },
   {
