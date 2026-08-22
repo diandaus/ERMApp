@@ -1434,7 +1434,7 @@ func main() {
 			rows, err = db.Query(`
 				SELECT kd_dokter, nm_dokter
 				FROM dokter
-				WHERE status = '1' AND (kd_dokter LIKE ? OR nm_dokter LIKE ?)
+				WHERE status = '1' AND kd_dokter <> '-' AND (kd_dokter LIKE ? OR nm_dokter LIKE ?)
 				ORDER BY nm_dokter
 				LIMIT 100
 			`, "%"+search+"%", "%"+search+"%")
@@ -1442,7 +1442,7 @@ func main() {
 			rows, err = db.Query(`
 				SELECT kd_dokter, nm_dokter
 				FROM dokter
-				WHERE status = '1'
+				WHERE status = '1' AND kd_dokter <> '-'
 				ORDER BY nm_dokter
 				LIMIT 100
 			`)
