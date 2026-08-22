@@ -12,6 +12,7 @@ import { ApotekKonversiSatuanView } from './ApotekKonversiSatuan';
 import { ApotekJenisView } from './ApotekJenis';
 import { ApotekKategoriView } from './ApotekKategori';
 import { ApotekGolonganView } from './ApotekGolongan';
+import { ApotekPengaturanPrinterView } from './ApotekPengaturanPrinter';
 
 // ============================================================================
 // APOTEK — Pengaturan (footer tab). 13 sub-menu master data direncanakan;
@@ -36,7 +37,8 @@ type SettingKey =
   | 'konversi-satuan'
   | 'jenis'
   | 'kategori'
-  | 'golongan';
+  | 'golongan'
+  | 'printer';
 
 const SETTING_LIST: { key: SettingKey; label: string; ready: boolean }[] = [
   { key: 'depo', label: 'Pengaturan Depo', ready: true },
@@ -52,6 +54,7 @@ const SETTING_LIST: { key: SettingKey; label: string; ready: boolean }[] = [
   { key: 'jenis', label: 'Jenis Obat/Alkes/BHP', ready: true },
   { key: 'kategori', label: 'Kategori Obat/Alkes/BHP', ready: true },
   { key: 'golongan', label: 'Golongan Obat/Alkes/BHP', ready: true },
+  { key: 'printer', label: 'Pengaturan Printer', ready: true },
 ];
 
 const pillSelectStyle: React.CSSProperties = {
@@ -726,6 +729,8 @@ export const ApotekPengaturanView: React.FC = () => {
             <ApotekKategoriView />
           ) : activeItem.key === 'golongan' ? (
             <ApotekGolonganView />
+          ) : activeItem.key === 'printer' ? (
+            <ApotekPengaturanPrinterView />
           ) : null
         ) : (
           <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 16, background: '#f9fafb' }}>
