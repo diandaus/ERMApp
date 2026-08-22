@@ -4,6 +4,7 @@ import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { localDateStr } from '../utils/date';
 import { ModalCariPasienRingkas } from '../components/ModalCariPasienRingkas';
 import { ModalCariPetugas } from '../components/ModalCariPetugas';
+import { filterLokasiApotek } from '../utils/apotekLokasi';
 
 // ============================================================================
 // APOTEK — Input Penjualan Obat & BHP (tab utama modul Apotek). Cocok
@@ -1092,7 +1093,7 @@ export const ApotekPenjualanView: React.FC = () => {
   React.useEffect(() => {
     fetch('/api/apotek/pengaturan/depo/opsi')
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => setBangsal(data.bangsal || []))
+      .then((data) => setBangsal(filterLokasiApotek(data.bangsal || [])))
       .catch(() => {});
   }, []);
 

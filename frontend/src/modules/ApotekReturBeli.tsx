@@ -2,6 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 import { localDateStr } from '../utils/date';
+import { filterLokasiApotek } from '../utils/apotekLokasi';
 import { ModalCariPetugas } from '../components/ModalCariPetugas';
 
 // ============================================================================
@@ -659,7 +660,7 @@ export const ApotekReturBeliView: React.FC = () => {
   React.useEffect(() => {
     fetch('/api/apotek/pengaturan/depo/opsi')
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => setBangsal(data.bangsal || []))
+      .then((data) => setBangsal(filterLokasiApotek(data.bangsal || [])))
       .catch(() => {});
   }, []);
 

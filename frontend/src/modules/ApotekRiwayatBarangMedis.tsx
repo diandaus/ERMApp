@@ -1,5 +1,6 @@
 import React from 'react';
 import { localDateStr } from '../utils/date';
+import { filterLokasiApotek } from '../utils/apotekLokasi';
 
 // ============================================================================
 // APOTEK — Riwayat Obat, Alkes & BHP (tab utama modul Apotek). Cocok
@@ -144,7 +145,7 @@ export const ApotekRiwayatBarangMedisView: React.FC = () => {
   React.useEffect(() => {
     fetch('/api/apotek/pengaturan/depo/opsi')
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => setBangsal(data.bangsal || []))
+      .then((data) => setBangsal(filterLokasiApotek(data.bangsal || [])))
       .catch(() => {});
     fetch('/api/admin/settings')
       .then((res) => (res.ok ? res.json() : null))
