@@ -266,6 +266,29 @@ func applyAccessionTags(orthanc *orthancClient, studyID, accessionNumber, noRkmM
 	return "PACS sync OK: tag DICOM diperbarui (" + studyID[:8] + "...)"
 }
 
+// applyAccessionNumberOnly — dipakai KHUSUS tombol "Kirim ACSN ke PACS
+// Orthanc" (setAccessionNumberPACS/confirmAccessionNumberPACS): studinya
+// sudah datang dari modality dgn tag pasien (PatientID/Name/BirthDate/Sex)
+// & StudyDescription apa adanya dari alat — tombol ini cuma menambal
+// AccessionNumber yg belum/salah, TIDAK menimpa tag lain yg sudah benar.
+// Beda dgn applyAccessionTags (dipakai lazyModifyPACS, sinkron penuh
+// otomatis saat kirim ServiceRequest — studinya belum tentu py tag pasien
+// yg benar krn sumbernya beda alur).
+func applyAccessionNumberOnly(orthanc *orthancClient, studyID, accessionNumber string) string {
+	_, status, err := orthanc.do("POST", "/studies/"+studyID+"/modify", map[string]interface{}{
+		"Replace":    map[string]string{"AccessionNumber": accessionNumber},
+		"KeepSource": false,
+		"Force":      true,
+	})
+	if err != nil {
+		return "PACS sync error: " + err.Error()
+	}
+	if status != 200 {
+		return fmt.Sprintf("PACS sync error: Orthanc HTTP %d", status)
+	}
+	return "PACS sync OK: AccessionNumber diperbarui (" + studyID[:8] + "...)"
+}
+
 // POST /api/satu-sehat/dicom/set-accession/*noorder — tombol "Kirim ACSN ke
 // PACS Orthanc" berdiri sendiri (sebelumnya lazyModifyPACS cuma jalan diam-
 // diam sbg efek samping saat kirim ServiceRequest). No.Permintaan Radiologi
@@ -364,6 +387,24 @@ func buildAccessionCandidates(db *sql.DB, orthanc *orthancClient, studyIDs []str
 	return candidates
 }
 
+// upsertAccessionNumberMWL menyimpan AccessionNumber yg baru diterapkan ke
+// PACS (lewat tombol "Kirim ACSN") ke kolom accession_number di
+// satu_sehat_mwl_radiologi — supaya tabel Modality Worklist di frontend
+// ikut menampilkan nilai ACSN terbaru (sebelumnya kolom ini cuma terisi
+// dari jalur "Kirim Terpilih"/sendToMWL, jadi setelah pakai "Kirim ACSN"
+// kolomnya tetap kosong/nilai lama — user melihatnya seolah ACSN yg
+// dikirim masih sama dgn No.Order). Status BARU (row belum ada) sengaja
+// diisi 'belum', BUKAN 'terkirim' — jalur ini cuma menandai tag ACSN di
+// studi Orthanc langsung, bukan bikin entri Modality Worklist; kalau row
+// sudah ada (pernah dikirim via MWL), status lama dipertahankan apa adanya.
+func upsertAccessionNumberMWL(db *sql.DB, noOrder, accessionNumber string) {
+	db.Exec(`
+		INSERT INTO satu_sehat_mwl_radiologi (noorder, accession_number, status)
+		VALUES (?, ?, 'belum')
+		ON DUPLICATE KEY UPDATE accession_number = VALUES(accession_number), updated_at = NOW()
+	`, noOrder, accessionNumber)
+}
+
 func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noOrder := strings.TrimPrefix(c.Param("noorder"), "/")
@@ -387,7 +428,11 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		if len(studyIDs) > 0 {
-			result := applyAccessionTags(orthanc, studyIDs[0], khanzaAccessionNumber(db, noOrder), info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
+			acsn := khanzaAccessionNumber(db, noOrder)
+			result := applyAccessionNumberOnly(orthanc, studyIDs[0], acsn)
+			if !strings.HasPrefix(result, "PACS sync error") {
+				upsertAccessionNumberMWL(db, noOrder, acsn)
+			}
 			c.JSON(http.StatusOK, gin.H{"message": result})
 			return
 		}
@@ -413,7 +458,11 @@ func setAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		if len(candidateIDs) == 1 {
-			result := applyAccessionTags(orthanc, candidateIDs[0], khanzaAccessionNumber(db, noOrder), info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
+			acsn := khanzaAccessionNumber(db, noOrder)
+			result := applyAccessionNumberOnly(orthanc, candidateIDs[0], acsn)
+			if !strings.HasPrefix(result, "PACS sync error") {
+				upsertAccessionNumberMWL(db, noOrder, acsn)
+			}
 			c.JSON(http.StatusOK, gin.H{"message": result})
 			return
 		}
@@ -442,17 +491,18 @@ func confirmAccessionNumberPACS(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder dan study_id wajib diisi"})
 			return
 		}
-		info, err := fetchRadiologyOrderInfo(db, noOrder)
-		if err != nil {
+		if _, err := fetchRadiologyOrderInfo(db, noOrder); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Order radiologi tidak ditemukan"})
 			return
 		}
 		orthanc := newOrthancClient(db)
-		result := applyAccessionTags(orthanc, studyID, khanzaAccessionNumber(db, noOrder), info.NoRkmMedis, info.NmPasien, info.TglLahir, info.JK, info.StudyDesc)
+		acsn := khanzaAccessionNumber(db, noOrder)
+		result := applyAccessionNumberOnly(orthanc, studyID, acsn)
 		if strings.HasPrefix(result, "PACS sync error") {
 			c.JSON(http.StatusBadGateway, gin.H{"error": result})
 			return
 		}
+		upsertAccessionNumberMWL(db, noOrder, acsn)
 		c.JSON(http.StatusOK, gin.H{"message": result})
 	}
 }

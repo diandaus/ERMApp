@@ -177,6 +177,7 @@ export const ModalityWorklistSection: React.FC = () => {
     if (ambiguous.length > 0) {
       setAmbiguousQueue(ambiguous);
     }
+    fetchList(tglDari, tglSampai, search, statusFilter);
   };
 
   const handleKirimTerpilih = async () => {
