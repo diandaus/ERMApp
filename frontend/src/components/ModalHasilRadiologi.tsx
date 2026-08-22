@@ -448,7 +448,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       {/* Preview foto ukuran penuh — klik gambar mana pun di grid utk lihat, ganti klik foto lain utk ganti tampilan (sebelumnya cuma bisa lihat foto pertama lewat link Orthanc Viewer) */}
       {previewFoto && (
         <div
-          onClick={() => setPreviewFoto(null)}
+          onClick={(e) => { e.stopPropagation(); setPreviewFoto(null); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, cursor: 'zoom-out' }}
         >
           <img
@@ -458,7 +458,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
             onClick={(e) => e.stopPropagation()}
           />
           <button
-            onClick={() => setPreviewFoto(null)}
+            onClick={(e) => { e.stopPropagation(); setPreviewFoto(null); }}
             style={{ position: 'fixed', top: 20, right: 20, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
           >
             &times;
