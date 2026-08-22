@@ -988,6 +988,7 @@ func main() {
 	ensureShiftColumnsVarchar(db)
 	ensurePegawaiJadwalTetapTable(db)
 	ensureHariLiburTable(db)
+	ensureTroliEmergensiTable(db)
 	ensurePengumumanTable(db)
 	ensurePengajuanLemburTable(db)
 	ensurePengajuanCutiExtTable(db)
@@ -3704,6 +3705,12 @@ func main() {
 
 	// Apotek — Obat Kadaluarsa
 	r.GET("/api/apotek/obat-kadaluarsa", getObatKadaluarsa(db))
+
+	// Apotek — Troli Emergensi
+	r.GET("/api/apotek/troli-emergensi", getTroliEmergensiLokasi(db))
+	r.POST("/api/apotek/troli-emergensi", tambahTroliEmergensiLokasi(db))
+	r.DELETE("/api/apotek/troli-emergensi", hapusTroliEmergensiLokasi(db))
+	r.GET("/api/apotek/troli-emergensi/stok", getTroliEmergensiStok(db))
 
 	// Permintaan Resep — Dashboard (Resep Ralan)
 	r.GET("/api/permintaan-resep/ralan", getPermintaanResepRalan(db))

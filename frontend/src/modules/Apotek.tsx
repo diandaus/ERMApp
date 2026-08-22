@@ -15,10 +15,11 @@ import { ApotekReturJualView } from './ApotekReturJual';
 import { ApotekRiwayatBarangMedisView } from './ApotekRiwayatBarangMedis';
 import { ApotekDaruratStokView } from './ApotekDaruratStok';
 import { ApotekObatKadaluarsaView } from './ApotekObatKadaluarsa';
+import { ApotekTroliEmergensiView } from './ApotekTroliEmergensi';
 import { DetailPemberianObatView } from './DetailPemberianObat';
 import { PermintaanResepView } from './PermintaanResep';
 
-type ApotekTab = 'overview' | 'data-barang' | 'stok-opname' | 'mutasi' | 'permintaan' | 'permintaan-resep' | 'penerimaan' | 'pengadaan' | 'pemesanan' | 'penggunaan-obat' | 'penjualan' | 'retur-beli' | 'retur-jual' | 'darurat-stok' | 'obat-kadaluarsa' | 'riwayat-barang-medis' | 'detail-pemberian-obat' | 'pengaturan';
+type ApotekTab = 'overview' | 'data-barang' | 'stok-opname' | 'mutasi' | 'permintaan' | 'permintaan-resep' | 'penerimaan' | 'pengadaan' | 'pemesanan' | 'penggunaan-obat' | 'penjualan' | 'retur-beli' | 'retur-jual' | 'darurat-stok' | 'obat-kadaluarsa' | 'troli-emergensi' | 'riwayat-barang-medis' | 'detail-pemberian-obat' | 'pengaturan';
 
 const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
   {
@@ -182,6 +183,18 @@ const MENU: { key: ApotekTab; label: string; icon: React.ReactNode }[] = [
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9"></circle>
         <path d="M12 7v5l3.5 2"></path>
+      </svg>
+    ),
+  },
+  {
+    key: 'troli-emergensi',
+    label: 'Troli Emergensi',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="19" r="1.5"></circle>
+        <circle cx="17" cy="19" r="1.5"></circle>
+        <path d="M2 4h2l1.6 10.6a2 2 0 0 0 2 1.4h9.4a2 2 0 0 0 2-1.6L21 8H6"></path>
+        <path d="M9 4V2h4v2"></path>
       </svg>
     ),
   },
@@ -552,6 +565,7 @@ export const ApotekView: React.FC<ApotekViewProps> = ({ onBack }) => {
           {activeTab === 'retur-jual' && <ApotekReturJualView />}
           {activeTab === 'darurat-stok' && <ApotekDaruratStokView />}
           {activeTab === 'obat-kadaluarsa' && <ApotekObatKadaluarsaView />}
+          {activeTab === 'troli-emergensi' && <ApotekTroliEmergensiView />}
           {activeTab === 'riwayat-barang-medis' && <ApotekRiwayatBarangMedisView />}
           {activeTab === 'detail-pemberian-obat' && <DetailPemberianObatView />}
           {activeTab === 'pengaturan' && <ApotekPengaturanView />}
