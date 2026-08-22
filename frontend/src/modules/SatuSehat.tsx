@@ -1,6 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { MappingRadiologi, LoincSearchBox, SpecimenSearchBox } from './MappingSatuSehat';
+import { LoincSearchBox, SpecimenSearchBox } from './MappingSatuSehat';
 import { EncounterSection } from './Encounter';
 import { ConditionSection } from './Condition';
 import { ObservationSection } from './Observation';
@@ -546,7 +546,7 @@ const ReferensiSection: React.FC = () => {
         })}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {sub === 'praktisi' && <ReferensiPraktisiTab />}
         {sub === 'pasien' && <ReferensiPasienTab />}
       </div>
@@ -556,10 +556,15 @@ const ReferensiSection: React.FC = () => {
 
 // ── Pengaturan Satu Sehat — 6 kategori mapping lokal <-> referensi Satu
 // Sehat, tab horizontal terpisah dari sidebar utama (persis pola tab
-// header di MappingSatuSehatView). "Mapping Tindakan Radiologi" reuse
-// komponen MappingRadiologi yg sudah ada & teruji (dipakai jg di menu
-// "Mapping Satu Sehat" lama) — 5 kategori lain masih placeholder,
-// menyusul dibangun satu per satu.
+// header di MappingSatuSehatView). "Mapping Tindakan Radiologi" pakai
+// MappingRadiologiSection (di bawah) — dibangun ulang total mengikuti
+// pola/desain MappingLabSection (search + tombol "+ Tambah Mapping" +
+// picker modal khusus item yg belum mapping), menggantikan komponen
+// MappingRadiologi lama (masih dipakai di menu legacy "Mapping Satu
+// Sehat" / MappingSatuSehat.tsx, sengaja tidak disentuh). Kredensial
+// LOINC yg dulu nempel di komponen lama itu sekarang pindah permanen ke
+// tab Konfigurasi (KonfigurasiSection) — satu tempat utk semua kredensial
+// Satu Sehat.
 type PengaturanSubTab =
   | 'konfigurasi'
   | 'organisasi'
@@ -1307,7 +1312,7 @@ const MappingLokasiSection: React.FC = () => {
         })}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {LOKASI_UNIT_KATEGORI.has(sub) ? (
           <MappingLokasiUnitTable kategori={sub as LokasiKategoriUnit} />
         ) : (
@@ -1956,6 +1961,367 @@ const MappingObatSection: React.FC = () => {
   );
 };
 
+// ── Mapping Tindakan Radiologi — padanan SatuSehatMapingRadiologi.java:
+// tabel satu_sehat_mapping_radiologi LEFT JOIN jns_perawatan_radiologi
+// (kd_jenis_prw langsung jadi kunci, tidak ada lapisan id_template spt
+// Lab). Endpoint GET /api/mapping/radiologi mengembalikan SEMUA jenis
+// pemeriksaan (sudah + belum mapping) — di sini difilter di klien: tabel
+// utama hanya tampilkan yg SUDAH mapping (kolom code terisi, konsisten
+// dgn tampilan MappingLabSection), picker "Tambah Mapping" hanya
+// tampilkan yg BELUM. "Sampel" di sini kode SNOMED CT (jenis spesimen
+// utk resource Specimen radiologi, lihat getSpecimenRadiologiCandidates
+// di backend) — dulu di komponen lama cuma input teks manual, sekarang
+// pakai SpecimenSearchBox yg sama dgn Lab spy konsisten & tidak salah isi.
+type MappingRadiologiRow = {
+  kd_jenis_prw: string; nm_perawatan: string; code: string; system: string; display: string;
+  sampel_code: string; sampel_system: string; sampel_display: string;
+};
+type RadiologiTemplateOption = { kd_jenis_prw: string; nm_perawatan: string };
+type RadiologiFormValues = {
+  code: string; system: string; display: string;
+  sampelCode: string; sampelSystem: string; sampelDisplay: string;
+};
+
+const RadiologiTemplatePickerModal: React.FC<{
+  onClose: () => void;
+  onPick: (t: RadiologiTemplateOption) => void;
+}> = ({ onClose, onPick }) => {
+  const [search, setSearch] = React.useState('');
+  const [all, setAll] = React.useState<MappingRadiologiRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  const fetchAll = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/mapping/radiologi?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setAll(Array.isArray(data.list) ? data.list : []);
+    } catch {
+      setAll([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchAll(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchAll]);
+
+  const list = all.filter((r) => !r.code);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10030 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, width: 680, maxWidth: '95%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Pilih Pemeriksaan Radiologi</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <input
+            type="text"
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari kode atau nama pemeriksaan radiologi..."
+            style={inputSm}
+          />
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{list.length} hasil (yang belum punya mapping)</div>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+                {['Kode', 'Nama Pemeriksaan', ''].map((h) => (
+                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Mencari...</td></tr>
+              ) : list.length === 0 ? (
+                <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Tidak ada hasil</td></tr>
+              ) : (
+                list.map((r) => (
+                  <tr
+                    key={r.kd_jenis_prw}
+                    onClick={() => { onPick({ kd_jenis_prw: r.kd_jenis_prw, nm_perawatan: r.nm_perawatan }); onClose(); }}
+                    style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                  >
+                    <td style={{ padding: '6px 12px', color: '#374151', whiteSpace: 'nowrap' }}>{r.kd_jenis_prw}</td>
+                    <td style={{ padding: '6px 12px', color: '#111827', fontWeight: 500 }}>{r.nm_perawatan}</td>
+                    <td style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 6, background: '#059669', color: '#fff', fontSize: 11, fontWeight: 600 }}>Pilih</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RadiologiFormModal: React.FC<{
+  title: string;
+  fixedTemplate?: { kdJenisPrw: string; nmPerawatan: string }; // mode edit: pemeriksaan sudah tetap
+  initial: RadiologiFormValues;
+  onClose: () => void;
+  onSave: (kdJenisPrw: string, v: RadiologiFormValues) => void;
+  saving: boolean;
+}> = ({ title, fixedTemplate, initial, onClose, onSave, saving }) => {
+  const [selected, setSelected] = React.useState<RadiologiTemplateOption | null>(
+    fixedTemplate ? { kd_jenis_prw: fixedTemplate.kdJenisPrw, nm_perawatan: fixedTemplate.nmPerawatan } : null
+  );
+  const [showPicker, setShowPicker] = React.useState(false);
+  const [v, setV] = React.useState<RadiologiFormValues>(initial);
+
+  const set = (key: keyof RadiologiFormValues, val: string) => setV((prev) => ({ ...prev, [key]: val }));
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10020 }} onClick={onClose}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 480, maxWidth: '90%', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{title}</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
+        </div>
+
+        {fixedTemplate ? (
+          <div>
+            <label style={labelSm}>Kode / Nama Pemeriksaan</label>
+            <input type="text" readOnly value={`${fixedTemplate.kdJenisPrw} — ${fixedTemplate.nmPerawatan}`} style={{ ...inputSm, background: '#f9fafb', color: '#6b7280' }} />
+          </div>
+        ) : (
+          <div>
+            <label style={labelSm}>Cari Pemeriksaan Radiologi (kode atau nama)</label>
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              style={{ ...inputSm, textAlign: 'left', cursor: 'pointer', background: '#ffffff', color: selected ? '#111827' : '#9ca3af' }}
+            >
+              {selected ? `${selected.kd_jenis_prw} — ${selected.nm_perawatan}` : 'Klik untuk cari & pilih pemeriksaan...'}
+            </button>
+          </div>
+        )}
+
+        {showPicker && (
+          <RadiologiTemplatePickerModal
+            onClose={() => setShowPicker(false)}
+            onPick={(t) => setSelected(t)}
+          />
+        )}
+
+        <div>
+          <label style={labelSm}>Cari Kode LOINC Pemeriksaan</label>
+          <LoincSearchBox
+            value={v.code}
+            display={v.display}
+            onChange={(code, display, system) => setV((prev) => ({ ...prev, code, display, system }))}
+            defaultQuery={selected?.nm_perawatan}
+          />
+        </div>
+        {v.code && (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ color: '#9ca3af' }}>Bisa diedit manual jika hasil pencarian kurang tepat:</div>
+            <label>
+              <strong>Code:</strong>
+              <input type="text" value={v.code} onChange={(e) => set('code', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>System:</strong>
+              <input type="text" value={v.system} onChange={(e) => set('system', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>Display:</strong>
+              <input type="text" value={v.display} onChange={(e) => set('display', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+          </div>
+        )}
+        <div>
+          <label style={labelSm}>Cari Jenis Sampel (SNOMED CT)</label>
+          <SpecimenSearchBox
+            value={v.sampelCode}
+            display={v.sampelDisplay}
+            onChange={(sampelCode, sampelDisplay, sampelSystem) => setV((prev) => ({ ...prev, sampelCode, sampelDisplay, sampelSystem }))}
+          />
+        </div>
+        <div style={{ fontSize: 10, color: '#9ca3af' }}>
+          Kosongkan jika tidak yakin — otomatis disamakan dengan kode LOINC di atas saat disimpan.
+        </div>
+        {v.sampelCode && (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 11, color: '#374151', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ color: '#9ca3af' }}>Bisa diedit manual jika hasil pencarian kurang tepat:</div>
+            <label>
+              <strong>Code:</strong>
+              <input type="text" value={v.sampelCode} onChange={(e) => set('sampelCode', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>System:</strong>
+              <input type="text" value={v.sampelSystem} onChange={(e) => set('sampelSystem', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+            <label>
+              <strong>Display:</strong>
+              <input type="text" value={v.sampelDisplay} onChange={(e) => set('sampelDisplay', e.target.value)} style={{ ...inputSm, marginTop: 2 }} />
+            </label>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
+          <button
+            type="button"
+            disabled={saving || !v.code.trim() || !selected}
+            onClick={() => selected && onSave(selected.kd_jenis_prw, v)}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#059669', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MappingRadiologiSection: React.FC = () => {
+  const [list, setList] = React.useState<MappingRadiologiRow[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [modal, setModal] = React.useState<{ mode: 'tambah' | 'edit'; row?: MappingRadiologiRow } | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchList = React.useCallback(async (q: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/mapping/radiologi?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      const rows: MappingRadiologiRow[] = Array.isArray(data.list) ? data.list : [];
+      setList(rows.filter((r) => !!r.code));
+    } catch {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchList(search), 300);
+    return () => clearTimeout(t);
+  }, [search, fetchList]);
+
+  const handleSave = async (kdJenisPrw: string, v: RadiologiFormValues) => {
+    if (!v.code.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Kode LOINC wajib diisi' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/mapping/radiologi/${kdJenisPrw}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kd_jenis_prw: kdJenisPrw,
+          code: v.code, system: v.system, display: v.display,
+          sampel_code: v.sampelCode, sampel_system: v.sampelSystem, sampel_display: v.sampelDisplay,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan mapping radiologi');
+      setModal(null);
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (row: MappingRadiologiRow) => {
+    const confirm = await Swal.fire({
+      title: 'Hapus Mapping Radiologi?',
+      html: `Mapping pemeriksaan <strong>${row.nm_perawatan}</strong> akan dihapus.`,
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/mapping/radiologi/${row.kd_jenis_prw}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus mapping');
+      fetchList(search);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const emptyForm: RadiologiFormValues = { code: '', system: '', display: '', sampelCode: '', sampelSystem: '', sampelDisplay: '' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kode/nama pemeriksaan, kode LOINC, display..." style={{ ...inputSm, width: 340 }} />
+        <button type="button" onClick={() => setModal({ mode: 'tambah' })} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+ Tambah Mapping</button>
+      </div>
+
+      <div style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
+              {['Kode', 'Nama Pemeriksaan', 'Kode LOINC', 'Pemeriksaan System', 'Pemeriksaan Display', 'Sampel Code', 'Sampel System', 'Sampel Display'].map((h) => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+              <th style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600, width: 140 }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Memuat...</td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={9} style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Belum ada mapping tindakan radiologi</td></tr>
+            ) : (
+              list.map((row) => (
+                <tr key={row.kd_jenis_prw} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.kd_jenis_prw}</td>
+                  <td style={{ padding: '6px 10px', color: '#111827' }}>{row.nm_perawatan}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.display}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{row.sampel_code}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.sampel_system}</td>
+                  <td style={{ padding: '6px 10px', color: '#374151' }}>{row.sampel_display}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                      <button type="button" onClick={() => setModal({ mode: 'edit', row })} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
+                      <button type="button" onClick={() => handleDelete(row)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <RadiologiFormModal
+          title={modal.mode === 'tambah' ? 'Tambah Mapping Tindakan Radiologi' : 'Edit Mapping Tindakan Radiologi'}
+          fixedTemplate={modal.mode === 'edit' ? { kdJenisPrw: modal.row!.kd_jenis_prw, nmPerawatan: modal.row!.nm_perawatan } : undefined}
+          initial={modal.mode === 'edit' ? {
+            code: modal.row!.code, system: modal.row!.system, display: modal.row!.display,
+            sampelCode: modal.row!.sampel_code, sampelSystem: modal.row!.sampel_system, sampelDisplay: modal.row!.sampel_display,
+          } : emptyForm}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+};
+
 // ── Mapping Tindakan Laboratorium PK & MB — padanan SatuSehatMapingLab.java:
 // tabel satu_sehat_mapping_lab INNER JOIN template_laboratorium (id_template
 // PK/FK). Sama pola dgn Mapping Vaksin/Obat (template_laboratorium 2000+
@@ -2352,6 +2718,49 @@ const KonfigurasiSection: React.FC = () => {
   const [testing, setTesting] = React.useState(false);
   const [registering, setRegistering] = React.useState(false);
 
+  // Kredensial LOINC API — dipakai fitur pencarian kode LOINC di Mapping
+  // Tindakan Radiologi & Mapping Tindakan Laboratorium PK & MB (LoincSearchBox).
+  // Dulu nempel di komponen mapping radiologi lama, sekarang dipusatkan di
+  // sini spy satu tempat utk semua kredensial Satu Sehat.
+  const [loincUser, setLoincUser] = React.useState('');
+  const [loincPass, setLoincPass] = React.useState('');
+  const [loincOk, setLoincOk] = React.useState(false);
+  const [savingLoinc, setSavingLoinc] = React.useState(false);
+
+  const fetchLoincConfig = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/mapping/loinc/config');
+      const data = await res.json();
+      setLoincUser(data.loinc_username || '');
+      setLoincOk(!!data.loinc_password_ok);
+    } catch {
+      // biarkan kosong kalau gagal fetch
+    }
+  }, []);
+
+  const handleSaveLoinc = async () => {
+    if (!loincUser.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Data belum lengkap', text: 'Username LOINC wajib diisi' });
+      return;
+    }
+    setSavingLoinc(true);
+    try {
+      const res = await fetch('/api/mapping/loinc/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loinc_username: loincUser, loinc_password: loincPass }),
+      });
+      if (!res.ok) throw new Error('Gagal menyimpan kredensial LOINC');
+      Swal.fire({ icon: 'success', title: 'Tersimpan', text: 'Kredensial LOINC berhasil disimpan', timer: 1500, showConfirmButton: false });
+      setLoincOk(true);
+      setLoincPass('');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSavingLoinc(false);
+    }
+  };
+
   const fetchConfig = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -2373,7 +2782,7 @@ const KonfigurasiSection: React.FC = () => {
     }
   }, []);
 
-  React.useEffect(() => { fetchConfig(); }, [fetchConfig]);
+  React.useEffect(() => { fetchConfig(); fetchLoincConfig(); }, [fetchConfig, fetchLoincConfig]);
 
   const set = (key: keyof SatuSehatConfigForm, val: string | boolean) => setForm((prev) => ({ ...prev, [key]: val }));
 
@@ -2475,6 +2884,42 @@ const KonfigurasiSection: React.FC = () => {
         <input type="checkbox" checked={form.is_production} onChange={(e) => set('is_production', e.target.checked)} />
         Gunakan environment Production (bukan sandbox/dev)
       </label>
+
+      <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Kredensial LOINC API</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+          Dipakai fitur pencarian kode LOINC di menu Mapping Tindakan Radiologi &amp; Mapping Tindakan Laboratorium PK &amp; MB. Daftar akun gratis di <strong>loinc.org</strong> → My LOINC → API Access.
+        </div>
+        {loincOk && (
+          <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, marginBottom: 8 }}>
+            ✓ LOINC API terhubung{loincUser ? ` (${loincUser})` : ''}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div>
+            <label style={labelSm}>Username LOINC</label>
+            <input type="text" value={loincUser} onChange={(e) => setLoincUser(e.target.value)} placeholder="email@example.com" style={inputSm} />
+          </div>
+          <div>
+            <label style={labelSm}>Password LOINC</label>
+            <input
+              type="password"
+              value={loincPass}
+              onChange={(e) => setLoincPass(e.target.value)}
+              style={inputSm}
+              placeholder={loincOk ? '(tidak diubah)' : 'Password'}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={savingLoinc || !loincUser.trim()}
+          onClick={handleSaveLoinc}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: savingLoinc || !loincUser.trim() ? '#9ca3af' : '#059669', color: '#fff', cursor: savingLoinc || !loincUser.trim() ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+        >
+          {savingLoinc ? 'Menyimpan...' : 'Simpan Kredensial LOINC'}
+        </button>
+      </div>
 
       <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 4 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 4 }}>Orthanc PACS</div>
@@ -2589,13 +3034,13 @@ const PengaturanSection: React.FC = () => {
         })}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {sub === 'konfigurasi' && <KonfigurasiSection />}
         {sub === 'organisasi' && <MappingOrganisasiSection />}
         {sub === 'lokasi' && <MappingLokasiSection />}
         {sub === 'vaksin' && <MappingVaksinSection />}
         {sub === 'obat-alkes-bhp' && <MappingObatSection />}
-        {sub === 'tindakan-radiologi' && <MappingRadiologi />}
+        {sub === 'tindakan-radiologi' && <MappingRadiologiSection />}
         {sub === 'tindakan-laboratorium' && <MappingLabSection />}
       </div>
     </div>
