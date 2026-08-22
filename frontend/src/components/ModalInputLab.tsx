@@ -101,14 +101,20 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
   // Muat ulang Detail Pemeriksaan (template_laboratorium) tiap kali daftar
   // pemeriksaan PK yang dicentang berubah — gabungan (union) parameter dari
   // SEMUA panel yang sedang dicentang, padanan tampil() di Java yang
-  // dipanggil ulang tiap klik baris tbTarifPK. Checkbox detail yang sudah
-  // dicentang dipertahankan (bukan direset) selama id_template-nya masih
-  // ada di hasil gabungan baru.
+  // dipanggil ulang tiap klik baris tbTarifPK. Parameter yang BARU muncul
+  // (pemeriksaan baru dicentang) otomatis tercentang semua by default —
+  // dokter biasanya memang mau semua parameternya, tinggal uncek yang tidak
+  // perlu. Parameter yang SUDAH pernah muncul sebelumnya (baik masih
+  // tercentang maupun sudah sengaja di-uncek manual) dipertahankan apa
+  // adanya, dilacak lewat prevDetailIdsRef supaya uncek manual tidak
+  // ke-reset tiap kali daftar pemeriksaan berubah.
+  const prevDetailIdsRef = React.useRef<Set<string>>(new Set());
   React.useEffect(() => {
     if (activeLabTab !== 'pk') return;
     if (selectedPemeriksaanPK.length === 0) {
       setDetailPKList([]);
       setSelectedDetailPK([]);
+      prevDetailIdsRef.current = new Set();
       return;
     }
     let cancelled = false;
@@ -124,7 +130,14 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
         if (cancelled) return;
         const merged = results.flat().filter(Boolean);
         setDetailPKList(merged);
-        setSelectedDetailPK((prev) => prev.filter((id) => merged.some((t: any) => t.id_template === id)));
+        const mergedIds: string[] = merged.map((t: any) => t.id_template);
+        const mergedIdSet = new Set(mergedIds);
+        const newlyAppeared = mergedIds.filter((id) => !prevDetailIdsRef.current.has(id));
+        setSelectedDetailPK((prev) => {
+          const kept = prev.filter((id) => mergedIdSet.has(id));
+          return Array.from(new Set([...kept, ...newlyAppeared]));
+        });
+        prevDetailIdsRef.current = mergedIdSet;
       })
       .finally(() => {
         if (!cancelled) setLoadingDetailPK(false);
