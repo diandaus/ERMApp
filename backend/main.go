@@ -1658,6 +1658,11 @@ func main() {
 	r.DELETE("/api/admin/bridging/:kode", deleteBridgingConfig(db))
 	r.GET("/api/bpjs/icare-riwayat", getIcareRiwayat(db))
 
+	// WhatsApp Gateway (servis Node.js/Baileys terpisah, lihat wa-gateway/)
+	r.GET("/api/wa-gateway/status", getWaGatewayStatus(db))
+	r.GET("/api/wa-gateway/qr", getWaGatewayQR(db))
+	r.POST("/api/wa-gateway/logout", postWaGatewayLogout(db))
+
 	r.GET("/api/pegawai/list", getPegawaiList(db))
 	r.GET("/api/pegawai/departemen", getPegawaiDepartemen(db))
 	r.PUT("/api/pegawai/status", updatePegawaiStatus(db))

@@ -152,12 +152,26 @@ const BRIDGING_DEFS: ServiceDef[] = [
       { key: 'PASSWORD', label: 'Password', type: 'secret' },
     ],
   },
+  {
+    // wa-gateway/ — servis Node.js/Baileys terpisah (WhatsApp Web tidak
+    // resmi, gratis — bukan WhatsApp Business API resmi), lihat
+    // backend/wa_gateway_handler.go. URL = alamat servis itu (mis.
+    // http://localhost:3200), API Key harus sama persis dgn API_KEY di
+    // wa-gateway/.env. Setelah diisi & disimpan, pairing (scan QR) dilakukan
+    // lewat halaman terpisah (belum ada tab-nya di sini).
+    kode: 'wa_gateway', nama: 'WhatsApp Gateway', grp: 'lainnya',
+    fields: [
+      { key: 'URL', label: 'URL Servis wa-gateway', type: 'url', placeholder: 'http://localhost:3200' },
+      { key: 'APIKEY', label: 'API Key', type: 'secret' },
+    ],
+  },
 ];
 
 const GROUPS = [
   { id: 'bpjs',      label: 'BPJS Kesehatan',  color: '#16a34a', icon: '🏥', bgLight: '#f0fdf4', borderColor: '#86efac' },
   { id: 'satusehat', label: 'Satu Sehat',       color: '#2563eb', icon: '🇮🇩', bgLight: '#eff6ff', borderColor: '#93c5fd' },
   { id: 'kemkes',    label: 'Kemkes Lainnya',   color: '#ea580c', icon: '🏛️', bgLight: '#fff7ed', borderColor: '#fed7aa' },
+  { id: 'lainnya',   label: 'Integrasi Lainnya', color: '#0d9488', icon: '🔌', bgLight: '#f0fdfa', borderColor: '#5eead4' },
 ];
 
 // Set Penggunaan Tarif — padanan setting/DlgSetTarif.java. 11 saklar
@@ -220,6 +234,13 @@ export const AdminView: React.FC = () => {
   const [savingBridging, setSavingBridging]     = React.useState<string | null>(null);
   const [expandedService, setExpandedService]   = React.useState<Set<string>>(new Set());
   const [showSecret, setShowSecret]             = React.useState<Record<string, boolean>>({});
+
+  // WhatsApp Gateway pairing state — modal scan QR (lihat renderWaPairingModal)
+  const [showWaPairing, setShowWaPairing] = React.useState(false);
+  const [waStatus, setWaStatus] = React.useState<{ state: string; connected: boolean; number: string | null } | null>(null);
+  const [waQr, setWaQr] = React.useState<string | null>(null);
+  const [waError, setWaError] = React.useState('');
+  const [loadingWa, setLoadingWa] = React.useState(false);
 
   // Set Penggunaan Tarif state — padanan set_tarif.java, 11 saklar Yes/No.
   const [setTarif, setSetTarif] = React.useState<Record<SetTarifKey, 'Yes' | 'No'>>(SET_TARIF_DEFAULT);
@@ -342,6 +363,61 @@ export const AdminView: React.FC = () => {
   React.useEffect(() => {
     if (activeTab === 'settings') void loadSettings();
   }, [activeTab]);
+
+  // WhatsApp Gateway pairing — poll status+QR tiap 3 detik selama modal
+  // terbuka & belum terhubung, biar QR yg tampil selalu yg terbaru (Baileys
+  // ganti QR tiap ~20 detik kalau belum di-scan) dan berhenti otomatis begitu
+  // status jadi connected.
+  React.useEffect(() => {
+    if (!showWaPairing) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const [statusRes, qrRes] = await Promise.all([
+          fetch('/api/wa-gateway/status'),
+          fetch('/api/wa-gateway/qr'),
+        ]);
+        const statusData = await statusRes.json();
+        const qrData = await qrRes.json();
+        if (cancelled) return;
+        if (!statusRes.ok) {
+          setWaError(statusData.error || 'Gagal menghubungi WhatsApp Gateway');
+          setWaStatus(null);
+          setWaQr(null);
+          return;
+        }
+        setWaError('');
+        setWaStatus(statusData);
+        setWaQr(qrData.qr || null);
+      } catch {
+        if (!cancelled) setWaError('Gagal menghubungi server');
+      } finally {
+        if (!cancelled) setLoadingWa(false);
+      }
+    };
+    setLoadingWa(true);
+    void poll();
+    const interval = setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [showWaPairing]);
+
+  const handleWaLogout = async () => {
+    const confirm = await Swal.fire({
+      title: 'Putuskan sesi WhatsApp?',
+      text: 'Nomor yang terhubung akan logout, perlu scan QR baru untuk pairing ulang.',
+      icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Putuskan', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch('/api/wa-gateway/logout', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memutuskan sesi');
+      setWaStatus(null);
+      setWaQr(null);
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan' });
+    }
+  };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -561,8 +637,16 @@ export const AdminView: React.FC = () => {
               </div>
             )}
 
-            {/* Save button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+            {/* Save button (+ Pairing khusus WhatsApp Gateway) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              {def.kode === 'wa_gateway' && (
+                <button
+                  onClick={() => setShowWaPairing(true)}
+                  style={{ padding: '7px 20px', borderRadius: 8, border: `1px solid ${grp.color}`, background: '#fff', color: grp.color, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Pairing (Scan QR)
+                </button>
+              )}
               <button
                 onClick={() => void handleSaveBridging(def.kode)}
                 disabled={saving}
@@ -752,6 +836,67 @@ export const AdminView: React.FC = () => {
         setError={setError}
         editUser={editingUser}
       />
+
+      {/* Modal Pairing WhatsApp Gateway — scan QR spt WhatsApp Web */}
+      {showWaPairing && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 20 }}
+          onClick={() => setShowWaPairing(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '95%', display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Pairing WhatsApp Gateway</span>
+              <button
+                type="button" onClick={() => setShowWaPairing(false)}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                  background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {waError ? (
+              <div style={{ fontSize: 12, color: '#991b1b', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, width: '100%', boxSizing: 'border-box' }}>
+                {waError}. Pastikan URL & API Key sudah diisi benar di atas dan servis wa-gateway sedang berjalan.
+              </div>
+            ) : loadingWa && !waStatus ? (
+              <div style={{ padding: 30, color: '#6b7280', fontSize: 13 }}>Memuat...</div>
+            ) : waStatus?.connected ? (
+              <>
+                <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6 9 17l-5-5"></path>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>Terhubung</div>
+                {waStatus.number && <div style={{ fontSize: 12, color: '#6b7280' }}>Nomor: {waStatus.number}</div>}
+                <button
+                  type="button" onClick={handleWaLogout}
+                  style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #dc2626', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                >
+                  Putuskan / Ganti Nomor
+                </button>
+              </>
+            ) : waQr ? (
+              <>
+                <img src={waQr} alt="QR WhatsApp" style={{ width: 240, height: 240, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center' }}>
+                  Buka WhatsApp di HP → Perangkat Tertaut → Tautkan Perangkat, lalu scan QR ini.
+                </div>
+              </>
+            ) : (
+              <div style={{ padding: 30, color: '#6b7280', fontSize: 13 }}>Menunggu QR dari WhatsApp Gateway...</div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tab: Settings */}
       {activeTab === 'settings' && (
