@@ -64,6 +64,13 @@ type LoginViewProps = {
   onShowRegister: () => void;
 };
 
+// Auto-logout setelah 12 jam tanpa aktivitas — lihat handleLogin/handleLogout
+// & effect pelacak aktivitas di komponen App.
+const BATAS_TIDAK_AKTIF_MS = 12 * 60 * 60 * 1000;
+const catatAktivitas = () => {
+  window.sessionStorage.setItem('ermapp_last_activity', String(Date.now()));
+};
+
 type InstansiSettings = {
   nama_instansi: string;
   logo_url: string;
@@ -894,20 +901,67 @@ export const App: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    // "Ingat saya" dicentang -> disimpan di localStorage (tetap login
-    // setelah browser ditutup). Tidak dicentang -> sessionStorage saja
-    // (hilang begitu tab/browser ditutup).
-    const stored = window.localStorage.getItem('ermapp_user') || window.sessionStorage.getItem('ermapp_user');
+    // Sesi lama dari sebelum perubahan ini mungkin masih ada di
+    // localStorage — sengaja TIDAK dipakai lagi (localStorage bertahan
+    // lintas restart komputer, yang justru mau dihindari), langsung
+    // dibuang. Sesi yang valid sekarang cuma dari sessionStorage.
+    window.localStorage.removeItem('ermapp_user');
+    const stored = window.sessionStorage.getItem('ermapp_user');
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as AppUser;
-        setUser(parsed);
+        // Cek 12 jam tanpa aktivitas dulu sebelum melanjutkan sesi —
+        // tab yang dibiarkan terbuka lama tanpa disentuh tetap harus
+        // login ulang, bukan cuma dipertahankan krn browsernya belum
+        // ditutup.
+        const lastActivity = Number(window.sessionStorage.getItem('ermapp_last_activity') || '0');
+        if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
+          window.sessionStorage.removeItem('ermapp_user');
+          window.sessionStorage.removeItem('ermapp_last_activity');
+        } else {
+          setUser(parsed);
+          catatAktivitas();
+        }
       } catch {
-        window.localStorage.removeItem('ermapp_user');
         window.sessionStorage.removeItem('ermapp_user');
       }
     }
   }, []);
+
+  // Auto-logout setelah 12 jam tanpa aktivitas (mouse/keyboard/tap/scroll).
+  // Waktu aktivitas terakhir disimpan di sessionStorage (bukan state React)
+  // supaya tidak trigger re-render tiap gerakan mouse — throttle 30 detik
+  // saat menulis, tapi pengecekan timeout jalan tiap menit lewat interval.
+  React.useEffect(() => {
+    if (!user) return;
+
+    let lastWrite = 0;
+    const catat = () => {
+      const now = Date.now();
+      if (now - lastWrite < 30_000) return;
+      lastWrite = now;
+      catatAktivitas();
+    };
+    catat();
+
+    const events: Array<keyof WindowEventMap> = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((ev) => window.addEventListener(ev, catat, { passive: true }));
+
+    const cekTimeout = () => {
+      const lastActivity = Number(window.sessionStorage.getItem('ermapp_last_activity') || '0');
+      if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
+        handleLogout();
+        Swal.fire({ icon: 'info', title: 'Sesi Berakhir', text: 'Anda otomatis keluar karena 12 jam tidak ada aktivitas.', confirmButtonColor: '#2563eb' });
+      }
+    };
+    const interval = window.setInterval(cekTimeout, 60_000);
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, catat));
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Handle click outside user menu
   React.useEffect(() => {
@@ -926,21 +980,23 @@ export const App: React.FC = () => {
     };
   }, [showUserMenu]);
 
-  const handleLogin = (u: AppUser, remember: boolean) => {
+  // Sesi login SELALU di sessionStorage (bukan localStorage) — supaya
+  // otomatis hilang begitu browser/komputer ditutup (satu komputer bisa
+  // dipakai gantian oleh beberapa dokter). "Ingat saya" cuma memengaruhi
+  // ermapp_remembered_username (auto-isi username di form login), TIDAK
+  // lagi bikin sesi login bertahan lintas restart.
+  const handleLogin = (u: AppUser, _remember: boolean) => {
     setUser(u);
-    if (remember) {
-      window.localStorage.setItem('ermapp_user', JSON.stringify(u));
-      window.sessionStorage.removeItem('ermapp_user');
-    } else {
-      window.sessionStorage.setItem('ermapp_user', JSON.stringify(u));
-      window.localStorage.removeItem('ermapp_user');
-    }
+    window.sessionStorage.setItem('ermapp_user', JSON.stringify(u));
+    window.localStorage.removeItem('ermapp_user');
+    catatAktivitas();
   };
 
   const handleLogout = () => {
     setUser(null);
     window.localStorage.removeItem('ermapp_user');
     window.sessionStorage.removeItem('ermapp_user');
+    window.sessionStorage.removeItem('ermapp_last_activity');
   };
 
   const canAccessMenu = (menu: MenuKey, role: AppUser['role']) => {
