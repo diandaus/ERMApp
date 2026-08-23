@@ -27,11 +27,12 @@ func ensurePreviewBillingPengaturanTable(db *sql.DB) error {
 }
 
 // fixedPreviewBillingKategori adalah kategori biaya di Preview Billing yang
-// BUKAN berasal dari tabel kategori_perawatan (Registrasi, Kamar Inap,
-// Pemeriksaan Lab/Radiologi, Obat & BHP) — lihat computeBillingPreview di
+// BUKAN berasal dari tabel kategori_perawatan (Kamar Inap, Pemeriksaan
+// Lab/Radiologi, Obat & BHP) — lihat computeBillingPreview di
 // biaya_handler.go utk urutan & label persis yang dipakai di sana.
+// ("Registrasi" & "No.Nota" sudah dihapus permanen dari Preview Billing,
+// tidak lagi lewat toggle.)
 var fixedPreviewBillingKategori = []string{
-	"Registrasi",
 	"Kamar Inap",
 	"Pemeriksaan Lab",
 	"Pemeriksaan Radiologi",

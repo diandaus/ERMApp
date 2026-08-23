@@ -1,4 +1,5 @@
 import React from 'react';
+import * as XLSX from 'xlsx';
 import { localDateStr } from '../utils/date';
 import { PreviewBilling } from '../components/PreviewBilling';
 import { ModalDetailPemberianObat } from '../components/ModalDetailPemberianObat';
@@ -22,6 +23,7 @@ type KlaimItem = {
 };
 
 const formatRupiah = (n: number) => `Rp ${Math.round(n || 0).toLocaleString('id-ID')}`;
+const formatAngkaExport = (n: number) => Math.round(n || 0).toLocaleString('id-ID');
 
 type AppUser = {
   username: string;
@@ -66,6 +68,8 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
   const [tglPulangDari, setTglPulangDari] = React.useState<string>(localDateStr());
   const [tglPulangSampai, setTglPulangSampai] = React.useState<string>(localDateStr());
   const dpjpDropdownRef = React.useRef<HTMLDivElement>(null);
+  const [showExportDropdown, setShowExportDropdown] = React.useState<boolean>(false);
+  const exportDropdownRef = React.useRef<HTMLDivElement>(null);
 
   const fetchItems = React.useCallback(async () => {
     setLoading(true);
@@ -152,11 +156,31 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
     return items.filter((item) => (item.nm_dokter || 'Tanpa DPJP') === dpjpFilter);
   }, [items, dpjpFilter]);
 
-  // Ekspor CSV — isinya sama persis dengan data yang lagi ditampilkan di
-  // tabel (sudah kena filter DPJP/tanggal/pencarian), dikelompokkan per
-  // dokter DPJP sama seperti tampilan, tapi diratakan jadi satu tabel (kolom
-  // DPJP ditambahkan) karena CSV tidak punya konsep header grup. Dibuka
-  // dengan Excel/Sheets tanpa perlu dependency tambahan (Blob + CSV biasa).
+  // Ekspor (CSV/XLSX/PDF) — isinya sama persis dengan data yang lagi
+  // ditampilkan di tabel (sudah kena filter DPJP/tanggal/pencarian),
+  // dikelompokkan per dokter DPJP sama seperti tampilan, tapi diratakan
+  // jadi satu tabel (kolom DPJP ditambahkan) karena CSV/XLSX tidak punya
+  // konsep header grup di baris tabelnya.
+  const exportHeader = [
+    'No.Rawat', 'No.RM', 'Nama Pasien', 'DPJP', 'Diagnosa',
+    'Biaya Obat', 'Laboratorium', 'Radiologi', 'Pelayanan Darah', 'Gizi', 'Jasa Medis',
+    'Billing', 'Selisih', 'Klaim INACBG',
+  ];
+
+  const buildExportRows = (): (string | number)[][] => {
+    const rows: (string | number)[][] = [];
+    groupedByDokter(filteredItems).forEach(([dokter, list]) => {
+      list.forEach((item) => {
+        rows.push([
+          item.no_rawat, item.no_rkm_medis, item.nm_pasien, dokter, item.diagnosa || '-',
+          item.biaya_obat, item.biaya_lab, item.biaya_radiologi, item.biaya_darah, item.biaya_gizi, item.biaya_jasa_medis,
+          item.billing, item.selisih, item.klaim_inacbg,
+        ]);
+      });
+    });
+    return rows;
+  };
+
   const csvEscape = (value: string | number): string => {
     const s = String(value ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -169,24 +193,12 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
   // adanya (No.Rawat aman karena sudah ada "/" sehingga tidak dianggap angka).
   const csvForceText = (value: string): string => `="${value}"`;
 
-  const handleExport = () => {
-    const header = [
-      'No.Rawat', 'No.RM', 'Nama Pasien', 'DPJP', 'Diagnosa',
-      'Biaya Obat', 'Laboratorium', 'Radiologi', 'Pelayanan Darah', 'Gizi', 'Jasa Medis',
-      'Billing', 'Selisih', 'Klaim INACBG',
-    ];
-    const rows: (string | number)[][] = [];
-    groupedByDokter(filteredItems).forEach(([dokter, list]) => {
-      list.forEach((item) => {
-        rows.push([
-          item.no_rawat, csvForceText(item.no_rkm_medis), item.nm_pasien, dokter, item.diagnosa || '-',
-          item.biaya_obat, item.biaya_lab, item.biaya_radiologi, item.biaya_darah, item.biaya_gizi, item.biaya_jasa_medis,
-          item.billing, item.selisih, item.klaim_inacbg,
-        ]);
-      });
-    });
-
-    const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n');
+  const handleExportCsv = () => {
+    setShowExportDropdown(false);
+    const rows = buildExportRows().map((row) =>
+      row.map((cell, idx) => (idx === 1 ? csvForceText(String(cell)) : cell))
+    );
+    const csv = [exportHeader, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -196,6 +208,129 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // XLSX ditulis langsung sbg file .xlsx asli (bukan CSV berekstensi xlsx),
+  // jadi No.RM tidak perlu trik ="..." spt CSV — SheetJS menyimpan tipe sel
+  // eksplisit (string), Excel tidak menebak2 & tidak membuang nol di depan.
+  const handleExportXlsx = () => {
+    setShowExportDropdown(false);
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet([exportHeader, ...rows]);
+    rows.forEach((_, i) => {
+      const cellRef = XLSX.utils.encode_cell({ r: i + 1, c: 1 });
+      if (ws[cellRef]) { ws[cellRef].t = 's'; ws[cellRef].z = '@'; }
+    });
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 10 }, { wch: 24 }, { wch: 20 }, { wch: 28 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Klaim INACBG');
+    XLSX.writeFile(wb, `Monitoring_Biaya_Klaim_BPJS_${localDateStr()}.xlsx`);
+  };
+
+  // PDF — pola cetak baku (window.open + document.write + print bawaan
+  // browser, bukan library PDF), kop/font/ukuran kertas mengikuti
+  // CETAK_STANDAR.md. Landscape A4 krn kolomnya banyak (14 kolom).
+  const handleExportPdf = async () => {
+    setShowExportDropdown(false);
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) return;
+
+    let settings = { nama_instansi: '', alamat: '', logo_url: '', kota_rs: '', kontak: '', email_rs: '' };
+    try {
+      const res = await fetch('/api/admin/settings');
+      if (res.ok) settings = await res.json();
+    } catch { /* lanjut cetak tanpa kop lengkap */ }
+
+    const logoSrc = settings.logo_url
+      ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
+      : '';
+    const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+      .filter(Boolean).join('<br/>');
+
+    const rowsHtml = groupedByDokter(filteredItems).map(([dokter, list]) => {
+      const bodyRows = list.map((item) => `
+        <tr>
+          <td class="nowrap">${item.no_rawat}</td>
+          <td class="nowrap">${item.no_rkm_medis}</td>
+          <td>${item.nm_pasien}</td>
+          <td>${item.diagnosa || '-'}</td>
+          <td style="text-align:right">${formatAngkaExport(item.biaya_obat)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.biaya_lab)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.biaya_radiologi)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.biaya_darah)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.biaya_gizi)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.biaya_jasa_medis)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.billing)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.selisih)}</td>
+          <td style="text-align:right">${formatAngkaExport(item.klaim_inacbg)}</td>
+        </tr>
+      `).join('');
+      return `
+        <tr><td colspan="13" class="dpjp-row">DPJP : ${dokter}</td></tr>
+        ${bodyRows}
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Monitoring Biaya & Klaim INACBG - ${localDateStr()}</title>
+          <style>
+            @page { size: 297mm 210mm; margin-top: 14px; }
+            body { font-family: Tahoma, Arial, sans-serif; font-size: 8pt; padding: 0 16px 16px; color: #000; }
+            table.tbl_form td { border: 0; vertical-align: middle; }
+            hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
+            table.rincian { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 10px; }
+            table.rincian th, table.rincian td { padding: 3px 4px; vertical-align: top; border-bottom: 1px solid #e0e0e0; }
+            table.rincian th { text-align: left; border-bottom: 2px solid #333; }
+            table.rincian td.nowrap { white-space: nowrap; }
+            table.rincian td.dpjp-row { font-weight: 700; background: #f3f4f6; border-top: 2px solid #333; }
+            .rs-nama { font-size: 14pt; }
+            .rs-alamat { font-size: 9pt; }
+            .judul { font-size: 12pt; }
+          </style>
+        </head>
+        <body>
+          <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="15%">${logoSrc ? `<img width="65" height="65" src="${logoSrc}" />` : ''}</td>
+              <td width="70%">
+                <center>
+                  <div class="rs-nama">${settings.nama_instansi}</div>
+                  <div class="rs-alamat">${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}</div>
+                </center>
+              </td>
+              <td width="15%"></td>
+            </tr>
+          </table>
+          <hr/>
+          <center><div class="judul">MONITORING BIAYA &amp; KLAIM INACBG</div></center>
+
+          <table class="rincian">
+            <thead>
+              <tr>
+                <th>No.Rawat</th><th>No.RM</th><th>Nama Pasien</th><th>Diagnosa</th>
+                <th style="text-align:right">Obat</th><th style="text-align:right">Lab</th>
+                <th style="text-align:right">Radiologi</th><th style="text-align:right">Darah</th>
+                <th style="text-align:right">Gizi</th><th style="text-align:right">Jasa Medis</th>
+                <th style="text-align:right">Billing</th><th style="text-align:right">Selisih</th>
+                <th style="text-align:right">Klaim INACBG</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = () => printWindow.print();
   };
 
   React.useEffect(() => {
@@ -211,6 +346,20 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
       };
     }
   }, [showDpjpDropdown]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setShowExportDropdown(false);
+      }
+    };
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showExportDropdown]);
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -304,32 +453,78 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
           </div>
           ) : <div />}
 
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={filteredItems.length === 0}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 4,
-              border: filteredItems.length === 0 ? '1px solid #9ca3af' : '1px solid #059669',
-              background: filteredItems.length === 0 ? '#9ca3af' : '#059669',
-              color: '#ffffff',
-              cursor: filteredItems.length === 0 ? 'default' : 'pointer',
-              fontSize: 12,
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Ekspor
-          </button>
+          <div ref={exportDropdownRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setShowExportDropdown((v) => !v)}
+              disabled={filteredItems.length === 0}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 4,
+                border: filteredItems.length === 0 ? '1px solid #9ca3af' : '1px solid #059669',
+                background: filteredItems.length === 0 ? '#9ca3af' : '#059669',
+                color: '#ffffff',
+                cursor: filteredItems.length === 0 ? 'default' : 'pointer',
+                fontSize: 12,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Ekspor
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            {showExportDropdown && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: 4,
+                  padding: 4,
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 4,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  zIndex: 100,
+                  minWidth: 140,
+                }}
+              >
+                {[
+                  { label: 'CSV', onClick: handleExportCsv },
+                  { label: 'XLSX (Excel)', onClick: handleExportXlsx },
+                  { label: 'PDF', onClick: handleExportPdf },
+                ].map((opt) => (
+                  <div
+                    key={opt.label}
+                    onClick={opt.onClick}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: '#374151',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#f3f4f6'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Baris 2 — Basis tanggal, padanan radio button "Belum Pulang /

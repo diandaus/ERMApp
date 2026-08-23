@@ -41,7 +41,6 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
   const [rawatTab, setRawatTab] = React.useState<RawatTab>('ralan');
   const [tgl1, setTgl1] = React.useState(todayStr());
   const [tgl2, setTgl2] = React.useState(todayStr());
-  const [status, setStatus] = React.useState<'' | 'Belum Diperiksa' | 'Sudah Diperiksa'>('');
   const [search, setSearch] = React.useState('');
   const [rows, setRows] = React.useState<QueueRow[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -59,7 +58,6 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
     setError('');
     try {
       const params = new URLSearchParams({ tgl1, tgl2, rawat: rawatTab });
-      if (status) params.set('status', status);
       if (search.trim()) params.set('search', search.trim());
       const res = await fetch(`/api/radiologi/list?${params}`);
       const data = await res.json();
@@ -71,7 +69,7 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  }, [rawatTab, tgl1, tgl2, status, search]);
+  }, [rawatTab, tgl1, tgl2, search]);
 
   React.useEffect(() => {
     const t = setTimeout(() => fetchData(), 300);
@@ -167,13 +165,6 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
           <div>
             <input type="date" style={inputStyle} value={tgl2} onChange={(e) => setTgl2(e.target.value)} />
           </div>
-          <div style={{ minWidth: 180 }}>
-            <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="">Semua</option>
-              <option value="Belum Diperiksa">Belum Diperiksa</option>
-              <option value="Sudah Diperiksa">Sudah Diperiksa</option>
-            </select>
-          </div>
           <div style={{ minWidth: 220, position: 'relative' }}>
             <div style={{
               position: 'absolute', left: 12, top: '50%',
@@ -249,14 +240,14 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
                           Lihat Hasil
                         </button>
                       </>
-                    ) : (
+                    ) : row.tgl_sampel ? (
                       <button
                         type="button" onClick={() => setHasilNoOrder(row.noorder)}
                         style={{ padding: '4px 10px', borderRadius: 2, border: 'none', background: '#2563eb', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
                       >
                         + Hasil
                       </button>
-                    )}
+                    ) : null}
                   </td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>{row.jam_hasil}</td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>{row.nm_dokter || '-'}</td>

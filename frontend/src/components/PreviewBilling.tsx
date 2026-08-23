@@ -101,7 +101,7 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
             table.tbl_form td { border: 0; vertical-align: middle; }
             hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
             table.rincian { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 10px; }
-            table.rincian td { padding: 4px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
+            table.rincian td { padding: 1px 4px; vertical-align: top; border-bottom: 1px solid #e0e0e0; }
             table.rincian tr.total td { font-weight: 700; background: #f3f4f6; border-top: 2px solid #333; }
             .rs-nama { font-size: 14pt; }
             .rs-alamat { font-size: 9pt; }

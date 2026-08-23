@@ -304,7 +304,6 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 		items = append(items, BillingRow{No: label, NmPerawatan: ": " + value})
 	}
 
-	addInfo("No.Nota", "-")
 	addInfo("Bangsal/Kamar", bangsalKamar)
 	keluarStr := "-"
 	if tglKeluar.Valid && jamKeluar.Valid {
@@ -324,10 +323,6 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 	}
 	addSubtotal := func(label string, total float64) {
 		items = append(items, BillingRow{No: "", NmPerawatan: "Total " + label + " : " + formatRupiahText(total)})
-	}
-
-	if !hidden["Registrasi"] && biayaReg.Valid && biayaReg.Float64 != 0 {
-		items = append(items, BillingRow{No: "Registrasi", NmPerawatan: ":", TotalBiaya: biayaReg.Float64})
 	}
 
 	// Ruang / Kamar — lama & ttl_biaya DIHITUNG REAL-TIME dari selisih
