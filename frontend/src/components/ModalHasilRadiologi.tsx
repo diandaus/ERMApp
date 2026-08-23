@@ -242,7 +242,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           <head>
             <title>Hasil Pemeriksaan Radiologi - ${data.no_periksa}</title>
             <style>
-              @page { margin-top: 14px; }
+              @page { size: 210mm 297mm; margin-top: 14px; }
               body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 0 16px 16px; color: #000; }
               table.tbl_form td { border: 0; vertical-align: middle; }
               hr { border: none; border-top: 1px solid #000; margin: 8px 0; }

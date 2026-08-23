@@ -48,12 +48,25 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
 
   const total = rows.reduce((sum, r) => sum + (r.totalbiaya || 0), 0);
 
-  // Cetak — buka jendela baru berisi tabel yang sama persis (row info,
+  // Cetak — buka jendela baru berisi kop + tabel yang sama persis (row info,
   // subtotal, item) lalu panggil print bawaan browser, supaya tidak perlu
   // menambah CSS @media print global yang bisa mempengaruhi halaman lain.
-  const handleCetak = () => {
-    const printWindow = window.open('', '_blank', 'width=800,height=900');
+  // Ukuran kertas/font/kop mengikuti CETAK_STANDAR.md.
+  const handleCetak = async () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=1000');
     if (!printWindow) return;
+
+    let settings = { nama_instansi: '', alamat: '', logo_url: '', kota_rs: '', kontak: '', email_rs: '' };
+    try {
+      const res = await fetch('/api/admin/settings');
+      if (res.ok) settings = await res.json();
+    } catch { /* lanjut cetak tanpa kop lengkap */ }
+
+    const logoSrc = settings.logo_url
+      ? (settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url)
+      : '';
+    const kontakEmail = [settings.kontak, settings.email_rs ? `E-mail : ${settings.email_rs}` : '']
+      .filter(Boolean).join('<br/>');
 
     const rowsHtml = rows.map((row, index) => {
       const noTrim = (row.no || '').trim();
@@ -83,16 +96,35 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
         <head>
           <title>Preview Billing - ${noRawat}</title>
           <style>
-            body { font-family: Tahoma, Arial, sans-serif; font-size: 12px; padding: 16px; color: #000; }
-            h2 { font-size: 14px; margin: 0 0 12px; }
-            table { width: 100%; border-collapse: collapse; }
-            td { padding: 4px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
-            tr.total td { font-weight: 700; font-size: 13px; background: #f3f4f6; border-top: 2px solid #333; }
+            @page { size: 210mm 297mm; margin-top: 14px; }
+            body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 0 16px 16px; color: #000; }
+            table.tbl_form td { border: 0; vertical-align: middle; }
+            hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
+            table.rincian { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 10px; }
+            table.rincian td { padding: 4px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
+            table.rincian tr.total td { font-weight: 700; background: #f3f4f6; border-top: 2px solid #333; }
+            .rs-nama { font-size: 14pt; }
+            .rs-alamat { font-size: 9pt; }
+            .judul { font-size: 12pt; }
           </style>
         </head>
         <body>
-          <h2>Billing</h2>
-          <table>
+          <table width="100%" align="center" border="0" class="tbl_form" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="15%">${logoSrc ? `<img width="65" height="65" src="${logoSrc}" />` : ''}</td>
+              <td width="70%">
+                <center>
+                  <div class="rs-nama">${settings.nama_instansi}</div>
+                  <div class="rs-alamat">${settings.alamat}${kontakEmail ? `<br/>${kontakEmail}` : ''}</div>
+                </center>
+              </td>
+              <td width="15%"></td>
+            </tr>
+          </table>
+          <hr/>
+          <center><div class="judul">PREVIEW BILLING</div></center>
+
+          <table class="rincian">
             <tbody>
               ${rowsHtml}
               <tr class="total">
@@ -106,7 +138,7 @@ export const PreviewBilling: React.FC<PreviewBillingProps> = ({ noRawat, onClose
     `);
     printWindow.document.close();
     printWindow.focus();
-    printWindow.print();
+    printWindow.onload = () => printWindow.print();
   };
 
   return (

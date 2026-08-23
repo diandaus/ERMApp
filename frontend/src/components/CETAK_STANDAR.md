@@ -77,9 +77,14 @@ body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; color: #000; }
 ## 4. Margin halaman (kertas ke tulisan pertama)
 
 ```css
-@page { margin-top: 14px; }
+@page { size: 210mm 297mm; margin-top: 14px; }
 body { padding: 0 16px 16px; }
 ```
+
+- **Ukuran kertas dikunci ke A4 (`size: 210mm 297mm`)** — supaya konsisten
+  di semua mesin/browser, tidak bergantung pada default printer/OS yang
+  bisa beda-beda (mis. Letter di sebagian setup Windows/US). Selalu
+  set ini eksplisit di form cetak baru, jangan andalkan default sistem.
 
 ⚠️ **Jangan atur margin kertas lewat `padding` di `<body>`** — percobaan
 awal (`body { padding-top: ... }`) ternyata "tidak terasa" bedanya, karena
