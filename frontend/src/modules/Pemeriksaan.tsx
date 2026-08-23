@@ -48,6 +48,15 @@ const InfoItem: React.FC<{ label: string; value: string; icon?: React.ReactNode;
   </div>
 );
 
+// Lebar sidebar kiri (Informasi Pasien) & card kanan (Kunjungan Terakhir)
+// dibuat responsif pakai clamp(min, vw, max) — dulu fixed px (280/300)
+// yang kelihatan kecil sekali di monitor 24"/27" karena form tengah
+// (flex:1) menyerap semua sisa lebar layar. vw dipilih supaya kedua
+// panel ikut melebar proporsional di layar besar, tapi tidak menyusut
+// di bawah batas minimum di layar kecil/laptop.
+const SIDEBAR_WIDTH = 'clamp(280px, 16vw, 380px)';
+const LAST_VISIT_CARD_WIDTH = 'clamp(300px, 17vw, 400px)';
+
 export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) => {
   const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'diagnosa' | 'catatan_dokter' | 'upload'>('soap');
   const [isEditMode, setIsEditMode] = React.useState(false);
@@ -1344,7 +1353,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
       {/* Sidebar - Info Pasien */}
       <aside
         style={{
-          width: 280,
+          width: SIDEBAR_WIDTH,
           background: '#ffffff',
           borderRight: '1px solid #e5e7eb',
           display: 'flex',
@@ -3035,7 +3044,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                 </div>
 
                 {/* Right: Card Last SOAPIE */}
-                <div style={{ width: 300, flexShrink: 0, minWidth: 0 }}>
+                <div style={{ width: LAST_VISIT_CARD_WIDTH, flexShrink: 0, minWidth: 0 }}>
                   {loadingLastSoapie ? (
                     <div style={{
                       background: '#ffffff',
@@ -3057,7 +3066,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       position: 'fixed',
                       top: 120,
                       right: 20,
-                      width: 300,
+                      width: LAST_VISIT_CARD_WIDTH,
                       height: 'calc(100vh - 160px)',
                       overflow: 'auto',
                       display: 'flex',
