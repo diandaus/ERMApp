@@ -688,6 +688,11 @@ export const App: React.FC = () => {
   // Presensi Mandiri mobile penuh layar, bukan shell SIMRS desktop.
   const isMobileLogin = useMediaQuery(640);
   const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(false);
+  // Collapse sidebar sticky di layar desktop (bukan drawer overlay compact
+  // di atas — itu dikontrol sidebarOpen). Toggle-nya lewat tombol hamburger
+  // di topbar (menggantikan kolom "Cari menu" yang sebelumnya tidak
+  // berfungsi apa-apa).
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = React.useState<boolean>(false);
   const [showUserMenu, setShowUserMenu] = React.useState<boolean>(false);
   const [showGantiPassword, setShowGantiPassword] = React.useState<boolean>(false);
   const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -760,7 +765,7 @@ export const App: React.FC = () => {
     },
     {
       key: 'rawat-jalan',
-      label: 'Rawat Jalan',
+      label: 'Poliklinik',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -1184,13 +1189,15 @@ export const App: React.FC = () => {
       {/* Sidebar 2901,2996*/}
       <aside
         style={{
-          width: 200,
+          width: !isCompact && desktopSidebarCollapsed ? 0 : 200,
           background: '#F9FAFB',
           color: '#000000',
           display: 'flex',
           flexDirection: 'column',
-          padding: '16px 14px',
+          padding: !isCompact && desktopSidebarCollapsed ? 0 : '16px 14px',
           height: '100vh',
+          overflow: 'hidden',
+          flexShrink: 0,
           ...(isCompact
             ? {
                 position: 'fixed' as const,
@@ -1203,7 +1210,8 @@ export const App: React.FC = () => {
               }
             : {
                 position: 'sticky' as const,
-                top: 0
+                top: 0,
+                transition: 'width 0.2s ease, padding 0.2s ease'
               })
         }}
       >
@@ -1310,57 +1318,32 @@ export const App: React.FC = () => {
             gap: 12
           }}
         >
-          {isCompact && (
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Buka menu"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 4,
-                display: 'flex',
-                alignItems: 'center',
-                flexShrink: 0
-              }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="4" y1="7" x2="20" y2="7"></line>
-                <line x1="4" y1="12" x2="20" y2="12"></line>
-                <line x1="4" y1="17" x2="20" y2="17"></line>
-              </svg>
-            </button>
-          )}
-          <div style={{ position: 'relative', width: 250 }}>
-            <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Cari menu"
-              style={{
-                width: '100%',
-                padding: '6px 12px 6px 34px',
-                borderRadius: 25,
-                border: '1px solid #d1d5db',
-                fontSize: 12,
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = '#2563eb';
-                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = '#d1d5db';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
-          </div>
+          {/* Hamburger — dulu di sini ada kolom "Cari menu" yang tidak
+              tersambung ke apa-apa (tidak ada onChange/filter), diganti
+              tombol untuk buka/tutup sidebar. Di layar compact toggle
+              drawer overlay (sidebarOpen), di desktop toggle collapse
+              sidebar sticky (desktopSidebarCollapsed). */}
+          <button
+            type="button"
+            onClick={() => (isCompact ? setSidebarOpen((v) => !v) : setDesktopSidebarCollapsed((v) => !v))}
+            aria-label={isCompact ? (sidebarOpen ? 'Tutup menu' : 'Buka menu') : (desktopSidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar')}
+            title={isCompact ? (sidebarOpen ? 'Tutup menu' : 'Buka menu') : (desktopSidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0
+            }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="7" x2="20" y2="7"></line>
+              <line x1="4" y1="12" x2="20" y2="12"></line>
+              <line x1="4" y1="17" x2="20" y2="17"></line>
+            </svg>
+          </button>
 
           <div
             style={{

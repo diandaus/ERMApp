@@ -46,6 +46,8 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
 
+  const [belumSampelCount, setBelumSampelCount] = React.useState<{ ralan: number; ranap: number }>({ ralan: 0, ranap: 0 });
+
   const [hasilNoOrder, setHasilNoOrder] = React.useState<string | null>(null);
   const [sampelRow, setSampelRow] = React.useState<QueueRow | null>(null);
   const [sampelTgl, setSampelTgl] = React.useState('');
@@ -75,6 +77,29 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
     const t = setTimeout(() => fetchData(), 300);
     return () => clearTimeout(t);
   }, [fetchData]);
+
+  // Badge "belum ada sampel" di switch tab — dihitung terpisah dari
+  // fetchData (yang cuma memuat data tab aktif) supaya kedua tab bisa
+  // sama-sama tampilkan jumlahnya sekaligus, tanpa perlu pindah tab dulu.
+  const fetchBelumSampelCounts = React.useCallback(async () => {
+    try {
+      const countFor = async (rawat: RawatTab) => {
+        const params = new URLSearchParams({ tgl1, tgl2, rawat });
+        if (search.trim()) params.set('search', search.trim());
+        const res = await fetch(`/api/radiologi/list?${params}`);
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) return 0;
+        return data.filter((r: QueueRow) => !r.tgl_sampel).length;
+      };
+      const [ralan, ranap] = await Promise.all([countFor('ralan'), countFor('ranap')]);
+      setBelumSampelCount({ ralan, ranap });
+    } catch { /* badge opsional — biarkan diam kalau gagal */ }
+  }, [tgl1, tgl2, search]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchBelumSampelCounts(), 300);
+    return () => clearTimeout(t);
+  }, [fetchBelumSampelCounts, rows]);
 
   const openSampelModal = (row: QueueRow) => {
     const now = new Date();
@@ -134,28 +159,46 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0, height: '100%' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', flexShrink: 0 }}>
         <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
-          {RAWAT_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setRawatTab(tab.key)}
-              style={{
-                padding: '6px 24px',
-                borderRadius: 8,
-                border: rawatTab === tab.key ? '1px solid #d1d5db' : 'none',
-                background: rawatTab === tab.key ? '#ffffff' : 'transparent',
-                color: rawatTab === tab.key ? '#111827' : '#6b7280',
-                cursor: 'pointer',
-                fontSize: 13,
-                fontWeight: rawatTab === tab.key ? 600 : 400,
-                transition: 'all 0.2s ease',
-                boxShadow: rawatTab === tab.key ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {RAWAT_TABS.map((tab) => {
+            const belumSampel = belumSampelCount[tab.key];
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setRawatTab(tab.key)}
+                style={{
+                  position: 'relative',
+                  padding: '6px 24px',
+                  borderRadius: 8,
+                  border: rawatTab === tab.key ? '1px solid #d1d5db' : 'none',
+                  background: rawatTab === tab.key ? '#ffffff' : 'transparent',
+                  color: rawatTab === tab.key ? '#111827' : '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 400,
+                  transition: 'all 0.2s ease',
+                  boxShadow: rawatTab === tab.key ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {tab.label}
+                {belumSampel > 0 && (
+                  <span
+                    title={`${belumSampel} permintaan belum ada sampel`}
+                    style={{
+                      position: 'absolute', top: -6, right: -6,
+                      minWidth: 18, height: 18, padding: '0 4px',
+                      borderRadius: 9, background: '#ef4444', color: '#ffffff',
+                      fontSize: 10, fontWeight: 700, lineHeight: '18px',
+                      textAlign: 'center', boxShadow: '0 0 0 2px #f3f4f6',
+                    }}
+                  >
+                    {belumSampel}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginLeft: 'auto' }}>
           <div>
@@ -165,7 +208,7 @@ export const RadiologiView: React.FC<RadiologiViewProps> = ({ user }) => {
           <div>
             <input type="date" style={inputStyle} value={tgl2} onChange={(e) => setTgl2(e.target.value)} />
           </div>
-          <div style={{ minWidth: 220, position: 'relative' }}>
+          <div style={{ minWidth: 300, position: 'relative' }}>
             <div style={{
               position: 'absolute', left: 12, top: '50%',
               transform: 'translateY(-50%)', pointerEvents: 'none',

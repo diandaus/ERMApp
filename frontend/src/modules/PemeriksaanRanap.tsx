@@ -118,6 +118,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   // Di layar 1366px ke atas (laptop/desktop umum), Panel Info Pasien tetap permanen
   // seperti semula — drawer hanya dipakai di bawah itu (tablet, dsb).
   const isPermanentSidebar = !useMediaQuery(1365);
+  // Kartu Grafik TTV di sisa ruang kanan tab SOAP/CPPT cuma muat kalau ada
+  // ruang ekstra di luar sidebar(~300) + form(900) + gap — baru ditampilkan
+  // di layar lebar (>1600px), di bawah itu disembunyikan drpd overflow.
+  const showVitalChart = !useMediaQuery(1600);
   const [showPatientInfo, setShowPatientInfo] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -604,6 +608,87 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
     return `${d} ${t}`;
   };
 
+  // ── Grafik TTV (kartu di sisa ruang kanan tab SOAP/CPPT) ────────────────────
+  // Sumber data sama dengan tabel "Rincian Riwayat" (soapHistory), cuma
+  // diurutkan kronologis lama→baru (API-nya balikin terbaru dulu) supaya
+  // grafik terbaca kiri-ke-kanan, lalu diambil beberapa entri terakhir saja
+  // biar tetap kebaca di kartu yang sempit.
+  const toDateTime = (tgl: string, jam: string): Date | null => {
+    if (!tgl) return null;
+    if (tgl.includes('T')) return new Date(tgl);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tgl)) return new Date(`${tgl}T${jam || '00:00:00'}`);
+    if (tgl.includes('/')) {
+      const [d, m, y] = tgl.split('/');
+      return new Date(`${y}-${m}-${d}T${jam || '00:00:00'}`);
+    }
+    return null;
+  };
+
+  const vitalTrend = React.useMemo(() => {
+    const parsed = soapHistory
+      .map((item) => {
+        const dt = toDateTime(item.tgl_perawatan || '', item.jam_rawat || '');
+        if (!dt || Number.isNaN(dt.getTime())) return null;
+        const [sistolStr, diastolStr] = String(item.tensi || '').split('/');
+        const sistol = parseFloat(sistolStr);
+        const diastol = parseFloat(diastolStr);
+        const suhu = parseFloat(item.suhu_tubuh);
+        const nadi = parseFloat(item.nadi);
+        const respirasi = parseFloat(item.respirasi);
+        return {
+          time: dt.getTime(),
+          label: `${dt.getDate()}/${dt.getMonth() + 1}`,
+          sistol: Number.isFinite(sistol) ? sistol : null,
+          diastol: Number.isFinite(diastol) ? diastol : null,
+          suhu: Number.isFinite(suhu) ? suhu : null,
+          nadi: Number.isFinite(nadi) ? nadi : null,
+          respirasi: Number.isFinite(respirasi) ? respirasi : null,
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .sort((a, b) => a.time - b.time);
+    return parsed.slice(-8);
+  }, [soapHistory]);
+
+  // Mini line chart tanpa library — tiap vital tanda punya skala sendiri
+  // (bukan digabung 1 sumbu, kecuali Sistol/Diastol yg satuannya sama),
+  // garis tipis 2px + titik data, tanpa grid/axis (recessive by design,
+  // ruang kartu terlalu sempit utk label sumbu).
+  const renderVitalChart = (series: { color: string; values: (number | null)[] }[]) => {
+    const width = 260;
+    const height = 56;
+    const padY = 8;
+    const allValues = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
+    if (allValues.length === 0) {
+      return <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: '14px 0' }}>-</div>;
+    }
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const span = max - min || 1;
+    const n = vitalTrend.length;
+    const stepX = n > 1 ? (width - 16) / (n - 1) : 0;
+    const scaleY = (v: number) => height - padY - ((v - min) / span) * (height - padY * 2);
+    return (
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
+        {series.map((s, si) => {
+          let d = '';
+          s.values.forEach((v, i) => {
+            if (v === null) return;
+            d += (d === '' ? 'M' : 'L') + `${8 + i * stepX},${scaleY(v)} `;
+          });
+          return (
+            <g key={si}>
+              <path d={d} fill="none" stroke={s.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              {s.values.map((v, i) => (v === null ? null : (
+                <circle key={i} cx={8 + i * stepX} cy={scaleY(v)} r={2.5} fill={s.color} />
+              )))}
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
   // ── Reusable dropdown renderer ────────────────────────────────────────────────
 
   const Dropdown = ({ items, onSelect, maxH = 200 }: { items: string[]; onSelect: (v: string) => void; maxH?: number }) => (
@@ -809,8 +894,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
             {activeTab === 'soap' && (
               <div style={{ display: 'flex', gap: 20, minWidth: 0 }}>
 
-                {/* Form area */}
-                <div style={{ flex: 1, minWidth: 0 }}>
+                {/* Form area — maxWidth 900 disamakan dengan tab ADIME GIZI,
+                    supaya ukuran input/textarea-nya tidak melebar
+                    berlebihan di layar besar (dulu cuma flex:1 tanpa batas). */}
+                <div style={{ flex: 1, minWidth: 0, maxWidth: 900 }}>
                   {isEditMode && (
                     <div style={{ background: '#cffafe', border: '1px solid #1AB1E5', borderRadius: 8, padding: 12, marginBottom: 16, color: '#0e7490' }}>
                       <strong>✏️ Mode Edit</strong> — Anda sedang mengedit SOAP yang sudah ada.
@@ -1155,6 +1242,77 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                     </div>
                   )}
                 </div>
+
+                {/* Grafik TTV — mengisi sisa ruang kanan setelah form
+                    dibatasi maxWidth 900, cuma tampil di layar lebar
+                    (>1600px) supaya tidak bikin overflow horizontal di
+                    layar sedang. Sticky supaya tetap kelihatan walau form
+                    di kiri di-scroll panjang. */}
+                {showVitalChart && (
+                  <div style={{ width: 300, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
+                    <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+                      <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Grafik TTV</span>
+                      </div>
+                      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {vitalTrend.length === 0 ? (
+                          <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>
+                            Belum ada riwayat SOAP untuk digrafikkan
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Tekanan Darah</span>
+                                <span style={{ fontSize: 10, color: '#9ca3af' }}>mmHg</span>
+                              </div>
+                              {renderVitalChart([
+                                { color: '#2563eb', values: vitalTrend.map((p) => p.sistol) },
+                                { color: '#06b6d4', values: vitalTrend.map((p) => p.diastol) },
+                              ])}
+                              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                                <span style={{ fontSize: 10, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', display: 'inline-block' }} />Sistol
+                                </span>
+                                <span style={{ fontSize: 10, color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#06b6d4', display: 'inline-block' }} />Diastol
+                                </span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Suhu</span>
+                                <span style={{ fontSize: 10, color: '#9ca3af' }}>°C</span>
+                              </div>
+                              {renderVitalChart([{ color: '#f59e0b', values: vitalTrend.map((p) => p.suhu) }])}
+                            </div>
+
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Nadi</span>
+                                <span style={{ fontSize: 10, color: '#9ca3af' }}>/mnt</span>
+                              </div>
+                              {renderVitalChart([{ color: '#ef4444', values: vitalTrend.map((p) => p.nadi) }])}
+                            </div>
+
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Respirasi</span>
+                                <span style={{ fontSize: 10, color: '#9ca3af' }}>/mnt</span>
+                              </div>
+                              {renderVitalChart([{ color: '#8b5cf6', values: vitalTrend.map((p) => p.respirasi) }])}
+                            </div>
+
+                            <div style={{ fontSize: 9, color: '#9ca3af', textAlign: 'center', borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
+                              {vitalTrend.length} data terakhir &middot; {vitalTrend[0]?.label} &ndash; {vitalTrend[vitalTrend.length - 1]?.label}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               </div>
             )}

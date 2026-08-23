@@ -1342,6 +1342,8 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
   return (
     <section
       style={{
+        fontFamily: 'Tahoma, Geneva, sans-serif',
+        fontSize: 14,
         background: '#f3f4f6',
         borderRadius: 0,
         padding: 0,
@@ -2755,7 +2757,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                             <polyline points="17 21 17 13 7 13 7 21"></polyline>
                             <polyline points="7 3 7 8 15 8"></polyline>
                           </svg>
-                          {isEditMode ? 'Update SOAP' : 'Simpan SOAP'}
+                          {isEditMode ? 'Update SOAP' : 'SIMPAN'}
                         </>
                       )}
                     </button>
@@ -2806,7 +2808,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         <line x1="16" y1="17" x2="8" y2="17"></line>
                         <polyline points="10 9 9 9 8 9"></polyline>
                       </svg>
-                      Riwayat SOAPIE
+                      SOAPIE
                     </button>
                     <button
                       type="button"
