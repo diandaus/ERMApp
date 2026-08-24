@@ -29,6 +29,10 @@ import (
 type BerkasKlaimPdfItem struct {
 	Label string `json:"label"`
 	Url   string `json:"url"`
+	// Tag — label pendek per JENIS berkas (bukan per halaman), dipakai
+	// frontend utk deretan pill "SEP / SPRI / Awal_Medis_IGD / Lab-.../
+	// dst" di atas card Halaman PDF.
+	Tag string `json:"tag"`
 }
 
 // jenisBerkasKlaim — urutan & prefix nama file PERSIS array jenisBerkas
@@ -69,7 +73,7 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 
 		items := []BerkasKlaimPdfItem{}
 
-		checkAndAdd := func(label, fileName string) {
+		checkAndAdd := func(label, tag, fileName string) {
 			if cfg.IsRemote {
 				url := baseURL + "/" + fileName
 				req, err := http.NewRequest(http.MethodHead, url, nil)
@@ -82,7 +86,7 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode == http.StatusOK && resp.ContentLength >= 100 {
-					items = append(items, BerkasKlaimPdfItem{Label: label, Url: url})
+					items = append(items, BerkasKlaimPdfItem{Label: label, Url: url, Tag: tag})
 				}
 				return
 			}
@@ -93,7 +97,7 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 			if err != nil || info.Size() < 100 {
 				return
 			}
-			items = append(items, BerkasKlaimPdfItem{Label: label, Url: "/berkasrawat/pages/upload/" + fileName})
+			items = append(items, BerkasKlaimPdfItem{Label: label, Url: "/berkasrawat/pages/upload/" + fileName, Tag: tag})
 		}
 
 		for _, jenis := range jenisBerkasKlaim {
@@ -104,7 +108,14 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 				fileName = jenis + noRawatFormatted + "_signed.pdf"
 			}
 			label := strings.TrimSpace(strings.ReplaceAll(jenis, "_", " ")) + " " + noRawat
-			checkAndAdd(label, fileName)
+			// Tag pendek — "Lab_" khusus dpt akhiran "-" (nyambung ke
+			// noorder pada hasil lab per-order di bawah), jenis lain cuma
+			// buang underscore trailing.
+			tag := strings.TrimSuffix(jenis, "_")
+			if jenis == "Lab_" {
+				tag = "Lab-"
+			}
+			checkAndAdd(label, tag, fileName)
 
 			// Sesudah Lab_ generic, muat lab per-order (tracking_dokumen_ttd)
 			// — persis posisi & logic blok "if (jenis.equals("Lab_"))" di Java.
@@ -123,7 +134,7 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 						afterPrefix := strings.TrimPrefix(namaDokumen, "Hasil_Lab_")
 						noorder := strings.TrimSuffix(afterPrefix, "_"+noRawatNoSlash+".pdf")
 						signedFileName := "Lab_" + noRawatFormatted + "_" + noorder + "_signed.pdf"
-						checkAndAdd("Hasil Lab - No. "+noorder, signedFileName)
+						checkAndAdd("Hasil Lab - No. "+noorder, "Lab-"+noorder, signedFileName)
 					}
 					rows.Close()
 				}

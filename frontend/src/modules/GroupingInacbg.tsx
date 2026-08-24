@@ -30,12 +30,13 @@ type BerkasRawatItem = {
   no_rawat: string; kode: string; nama_berkas: string;
   lokasi_file: string; nama_file: string; ekstensi: string;
 };
-type BerkasTteItem = { label: string; url: string };
+type BerkasTteItem = { label: string; url: string; tag: string };
 type MasterBerkas = { kode: string; nama: string };
 
 type PdfPageItem = {
   id: string;
   sourceKey: string; // dipakai cari bytes asli pas digabung (Map sourceBytes)
+  sourceTag: string; // label pendek per FILE sumber, dipakai deretan pill di atas card
   pageIndex: number; // 0-based di dalam source; 0 utk gambar (1 "halaman")
   isImage: boolean;
   label: string;
@@ -50,7 +51,7 @@ const berkasRawatUrl = (lokasiFile: string) => encodeURI('/berkasrawat/' + lokas
 // halaman jadi thumbnail PNG kecil (scale 0.4, cukup utk grid), simpan
 // byte aslinya ke sourceBytes (dipakai lagi pas gabung PDF final).
 async function renderPagesFromUrl(
-  url: string, label: string, isImage: boolean, ekstensi: string,
+  url: string, label: string, tag: string, isImage: boolean, ekstensi: string,
   sourceBytes: Map<string, Uint8Array>,
 ): Promise<PdfPageItem[]> {
   const res = await fetch(url);
@@ -61,7 +62,7 @@ async function renderPagesFromUrl(
   if (isImage) {
     const b64 = btoa(buf.reduce((s, b) => s + String.fromCharCode(b), ''));
     return [{
-      id: `${url}-0`, sourceKey: url, pageIndex: 0, isImage: true, label,
+      id: `${url}-0`, sourceKey: url, sourceTag: tag, pageIndex: 0, isImage: true, label,
       thumbnail: `data:image/${ekstensi === 'jpg' ? 'jpeg' : ekstensi};base64,${b64}`, rotation: 0,
     }];
   }
@@ -80,7 +81,7 @@ async function renderPagesFromUrl(
     const ctx = canvas.getContext('2d');
     if (ctx) await page.render({ canvasContext: ctx, viewport, canvas }).promise;
     pages.push({
-      id: `${url}-${i}`, sourceKey: url, pageIndex: i - 1, isImage: false,
+      id: `${url}-${i}`, sourceKey: url, sourceTag: tag, pageIndex: i - 1, isImage: false,
       label: pdf.numPages > 1 ? `${label} (hal. ${i}/${pdf.numPages})` : label,
       thumbnail: canvas.toDataURL('image/png'), rotation: 0,
     });
@@ -108,16 +109,16 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
     ])
       .then(async ([tte, upload]: [BerkasTteItem[], BerkasRawatItem[]]) => {
         const sources = [
-          ...((Array.isArray(tte) ? tte : []).map((t) => ({ url: t.url, label: t.label, isImage: false, ekstensi: 'pdf' }))),
+          ...((Array.isArray(tte) ? tte : []).map((t) => ({ url: t.url, label: t.label, tag: t.tag, isImage: false, ekstensi: 'pdf' }))),
           ...((Array.isArray(upload) ? upload : []).map((u) => ({
-            url: berkasRawatUrl(u.lokasi_file), label: u.nama_berkas || u.nama_file,
+            url: berkasRawatUrl(u.lokasi_file), label: u.nama_berkas || u.nama_file, tag: u.nama_berkas || u.nama_file,
             isImage: IMAGE_EXT.includes(u.ekstensi), ekstensi: u.ekstensi,
           }))),
         ];
         const allPages: PdfPageItem[] = [];
         for (const s of sources) {
           try {
-            allPages.push(...await renderPagesFromUrl(s.url, s.label, s.isImage, s.ekstensi, sourceBytesRef.current));
+            allPages.push(...await renderPagesFromUrl(s.url, s.label, s.tag, s.isImage, s.ekstensi, sourceBytesRef.current));
           } catch {
             // Satu file gagal dirender (corrupt/format tak didukung) — lewati,
             // jangan gagalkan seluruh grid.
@@ -143,7 +144,7 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
       const ekstensi = isImage ? (file.name.split('.').pop() || '').toLowerCase() : 'pdf';
       try {
         const blobUrl = URL.createObjectURL(new Blob([buf.slice() as BlobPart], { type: file.type }));
-        const rendered = await renderPagesFromUrl(blobUrl, file.name, isImage, ekstensi, new Map());
+        const rendered = await renderPagesFromUrl(blobUrl, file.name, file.name, isImage, ekstensi, new Map());
         added.push(...rendered.map((p) => ({ ...p, sourceKey: localUrl })));
         URL.revokeObjectURL(blobUrl);
       } catch {
@@ -228,8 +229,41 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
   if (error) return <div style={{ ...centerStyle, color: '#dc2626' }}>{error}</div>;
   if (pages === null) return <div style={centerStyle}>Memuat & merender halaman PDF...</div>;
 
+  // Deretan pill jenis berkas yg tampil (bukan per halaman, per FILE
+  // sumber) — urutan kemunculan pertama, tanpa duplikat, radius 0 (selaras
+  // tombol lain di tab ini). Klik pill loncat ke halaman pertama file itu.
+  const distinctTags: string[] = [];
+  const firstPageIdByTag: Record<string, string> = {};
+  pages.forEach((p) => {
+    if (!p.sourceTag) return;
+    if (!(p.sourceTag in firstPageIdByTag)) {
+      distinctTags.push(p.sourceTag);
+      firstPageIdByTag[p.sourceTag] = p.id;
+    }
+  });
+  const scrollToTag = (tag: string) => {
+    document.getElementById(`page-${firstPageIdByTag[tag]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   return (
     <div style={{ padding: 20 }}>
+      {distinctTags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          {distinctTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => scrollToTag(tag)}
+              style={{
+                padding: '5px 12px', borderRadius: 0, border: '1px solid #d1d5db', background: '#ffffff',
+                color: '#374151', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ background: '#ffffff', borderRadius: 0, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         {/* Header hijau — persis referensi: judul+badge jumlah halaman, Tambah Halaman, Simpan PDF */}
         <div style={{ background: '#16a34a', color: '#ffffff', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -275,6 +309,7 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
             {pages.map((p, i) => (
               <div
                 key={p.id}
+                id={`page-${p.id}`}
                 draggable
                 onDragStart={() => handleDragStart(i)}
                 onDragOver={handleDragOver}
