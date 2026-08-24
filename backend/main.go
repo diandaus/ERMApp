@@ -3396,6 +3396,7 @@ func main() {
 	r.GET("/api/berkas-rawat/list/*no_rawat", listBerkasRawat(db))
 	r.POST("/api/berkas-rawat/upload", uploadBerkasRawat(db, khanzaCfg))
 	r.DELETE("/api/berkas-rawat", deleteBerkasRawat(db, khanzaCfg))
+	r.GET("/api/casemix/berkas-klaim-tte/*no_rawat", getBerkasKlaimTte(db, khanzaCfg))
 
 	// Tindakan Rawat Jalan endpoint
 	r.GET("/api/tindakan-ralan/*no_rawat", getTindakanRalan(db))

@@ -4,71 +4,80 @@ import React from 'react';
 // BARU header (Data Pasien/Registrasi/Kunjungan, lihat
 // backend/grouping_inacbg_handler.go) — bagian proses grouping (pilih
 // diagnosa/prosedur, kirim ke aplikasi INA-CBG) menyusul, belum dibangun.
-// Tab "Berkas Klaim" pakai BerkasKlaimGabungView (di bawah) — padanan
-// PERSIS berkasrawat/pages/tampilpdf.php di webapps Khanza (dikonfirmasi
-// dari folder lokal SIMRS-Khanza/webapps, BUKAN dari kode desktop Java yg
-// sempat dikirim duluan — itu fitur beda, baca dari sistem TTE terpisah
-// yg filenya tidak ketemu di server manapun yg bisa dicek): ambil daftar
-// berkas dari berkas_digital_perawatan (endpoint /api/berkas-rawat/list
-// yg sudah ada, dipakai juga UploadTab.tsx), lalu tampilkan SEMUA berkas
-// bertumpuk berurutan (bukan card+modal preview) — persis <object
-// data="...pdf"> yg di-loop PHP situ.
+// Tab "Berkas Klaim" pakai BerkasKlaimGabungView (di bawah) — GABUNGAN dua
+// sumber, sama-sama disimpan di folder fisik berkasrawat/pages/upload tapi
+// beda cara dilacak (dikonfirmasi dari 2 sumber: file lokal
+// SIMRS-Khanza/webapps DAN kode caller Java MnTampilkanBerkasActionPerformed
+// yg dikirim user, pathFile="berkasrawat/pages/upload" sama persis):
+//  1. Dokumen resmi hasil TTE (SEP_/Gruper_/Resume_/dst) — BUKAN tercatat
+//     di tabel manapun, dicek langsung by nama file (getBerkasKlaimTte).
+//  2. Berkas upload manual (KTP, foto, dll) — tercatat di
+//     berkas_digital_perawatan (endpoint /api/berkas-rawat/list yg sudah
+//     ada, dipakai jg UploadTab.tsx), padanan berkasrawat/pages/tampilpdf.php.
+// Semua ditampilkan SATU LIST bertumpuk berurutan (bukan card+modal) —
+// dokumen TTE resmi duluan, baru berkas upload manual.
 
 type BerkasRawatItem = {
   no_rawat: string; kode: string; nama_berkas: string;
   lokasi_file: string; nama_file: string; ekstensi: string;
 };
+type BerkasTteItem = { label: string; url: string };
+type BerkasGabungan = { key: string; label: string; url: string; ekstensi: string };
 
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
 
 const berkasRawatUrl = (lokasiFile: string) => encodeURI('/berkasrawat/' + lokasiFile);
 
 const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
-  const [items, setItems] = React.useState<BerkasRawatItem[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [items, setItems] = React.useState<BerkasGabungan[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setLoading(true);
+    setItems(null);
     setError(null);
-    fetch(`/api/berkas-rawat/list/${encodeURIComponent(noRawat)}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error('Gagal memuat berkas');
-        const d = await r.json();
-        setItems(Array.isArray(d) ? d : []);
+    Promise.all([
+      fetch(`/api/casemix/berkas-klaim-tte/${encodeURIComponent(noRawat)}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch(`/api/berkas-rawat/list/${encodeURIComponent(noRawat)}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([tte, upload]: [BerkasTteItem[], BerkasRawatItem[]]) => {
+        const tteItems: BerkasGabungan[] = (Array.isArray(tte) ? tte : []).map((t) => ({
+          key: `tte-${t.url}`, label: t.label, url: t.url, ekstensi: 'pdf',
+        }));
+        const uploadItems: BerkasGabungan[] = (Array.isArray(upload) ? upload : []).map((u) => ({
+          key: `upload-${u.kode}-${u.lokasi_file}`, label: u.nama_berkas || u.nama_file,
+          url: berkasRawatUrl(u.lokasi_file), ekstensi: u.ekstensi,
+        }));
+        setItems([...tteItems, ...uploadItems]);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
-      .finally(() => setLoading(false));
+      .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'));
   }, [noRawat]);
 
   const centerStyle: React.CSSProperties = { padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 };
 
-  if (loading) return <div style={centerStyle}>Memuat berkas...</div>;
   if (error) return <div style={{ ...centerStyle, color: '#dc2626' }}>{error}</div>;
+  if (items === null) return <div style={centerStyle}>Memuat berkas...</div>;
   if (items.length === 0) {
-    return <div style={centerStyle}>Belum ada berkas yang diupload untuk No. Rawat: {noRawat}</div>;
+    return <div style={centerStyle}>Belum ada berkas untuk No. Rawat: {noRawat}</div>;
   }
 
   return (
     <div style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
       {items.map((item, i) => {
-        const url = berkasRawatUrl(item.lokasi_file);
         const isImage = IMAGE_EXT.includes(item.ekstensi);
-        const label = item.nama_berkas || item.nama_file;
         return (
-          <div key={`${item.kode}-${item.lokasi_file}`}>
+          <div key={item.key}>
             {i > 0 && <div style={{ height: 1, background: '#e5e7eb', margin: '20px 0' }} />}
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 8 }}>{label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 8 }}>{item.label}</div>
             {isImage ? (
-              <img src={url} alt={label} style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid #d1d5db', display: 'block' }} />
+              <img src={item.url} alt={item.label} style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid #d1d5db', display: 'block' }} />
             ) : item.ekstensi === 'pdf' ? (
               <div style={{ border: '1px solid #d1d5db', borderRadius: 8, overflow: 'hidden', background: '#ffffff' }}>
-                <iframe src={url} title={label} style={{ width: '100%', height: 800, border: 'none', display: 'block' }} />
+                <iframe src={item.url} title={item.label} style={{ width: '100%', height: 800, border: 'none', display: 'block' }} />
               </div>
             ) : (
               <div style={{ padding: 12, border: '1px dashed #d1d5db', borderRadius: 8, fontSize: 12.5, color: '#6b7280' }}>
                 Berkas ini ({item.ekstensi || 'file'}) tidak bisa ditampilkan langsung —{' '}
-                <a href={url} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>unduh {item.nama_file}</a>
+                <a href={item.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>unduh</a>
               </div>
             )}
           </div>
