@@ -71,7 +71,9 @@ async function renderPagesFromUrl(
   const pages: PdfPageItem[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 0.4 });
+    // Scale 1.1 (bukan cuma buat thumbnail grid kecil) — dipakai juga di
+    // PdfPreviewViewer full-screen, jadi harus cukup tajam saat diperbesar.
+    const viewport = page.getViewport({ scale: 1.1 });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -90,6 +92,7 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
   const [pages, setPages] = React.useState<PdfPageItem[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [zoom, setZoom] = React.useState(150);
+  const [previewIndex, setPreviewIndex] = React.useState<number | null>(null);
   const [saving, setSaving] = React.useState(false);
   const sourceBytesRef = React.useRef<Map<string, Uint8Array>>(new Map());
   const dragFromRef = React.useRef<number | null>(null);
@@ -227,7 +230,7 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
 
   return (
     <div style={{ padding: 20 }}>
-      <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+      <div style={{ background: '#ffffff', borderRadius: 0, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         {/* Header hijau — persis referensi: judul+badge jumlah halaman, Tambah Halaman, Simpan PDF */}
         <div style={{ background: '#16a34a', color: '#ffffff', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -242,13 +245,13 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
             <input ref={fileInputRef} type="file" accept=".pdf,image/*" multiple style={{ display: 'none' }} onChange={handleTambahHalaman} />
             <button
               type="button" onClick={() => fileInputRef.current?.click()}
-              style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#ffffff', color: '#166534', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+              style={{ padding: '7px 14px', borderRadius: 0, border: 'none', background: '#ffffff', color: '#166534', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
             >
               + Tambah Halaman
             </button>
             <button
               type="button" onClick={handleSimpanPdf} disabled={saving || pages.length === 0}
-              style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: saving ? '#d1d5db' : '#f59e0b', color: '#ffffff', fontSize: 12.5, fontWeight: 600, cursor: saving ? 'default' : 'pointer' }}
+              style={{ padding: '7px 14px', borderRadius: 0, border: 'none', background: saving ? '#d1d5db' : '#f59e0b', color: '#ffffff', fontSize: 12.5, fontWeight: 600, cursor: saving ? 'default' : 'pointer' }}
             >
               {saving ? 'Menyimpan...' : 'Simpan PDF'}
             </button>
@@ -260,8 +263,8 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
             ⓘ Drag halaman untuk mengubah urutan. Gunakan tombol aksi untuk memutar atau menghapus halaman.
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => setZoom((z) => Math.max(90, z - 20))} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer' }}>− Perkecil</button>
-            <button type="button" onClick={() => setZoom((z) => Math.min(260, z + 20))} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer' }}>+ Perbesar</button>
+            <button type="button" onClick={() => setZoom((z) => Math.max(90, z - 20))} style={{ padding: '6px 12px', borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer' }}>− Perkecil</button>
+            <button type="button" onClick={() => setZoom((z) => Math.min(260, z + 20))} style={{ padding: '6px 12px', borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer' }}>+ Perbesar</button>
           </div>
         </div>
 
@@ -290,6 +293,15 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
                   {i + 1}
                 </div>
                 <div style={{ display: 'flex', gap: 4, position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                  <button
+                    type="button" onClick={() => setPreviewIndex(i)} title="Lihat penuh"
+                    style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="7"></circle>
+                      <path d="m21 21-4.3-4.3"></path>
+                    </svg>
+                  </button>
                   <button
                     type="button" onClick={() => handleRotate(p.id)} title="Putar"
                     style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
@@ -320,6 +332,72 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
           </div>
         )}
       </div>
+
+      {previewIndex !== null && (
+        <PdfPreviewViewer pages={pages} initialIndex={previewIndex} onClose={() => setPreviewIndex(null)} />
+      )}
+    </div>
+  );
+};
+
+// PdfPreviewViewer — full-screen, persis referensi desain user: BG gelap,
+// sidebar kiri thumbnail semua halaman (halaman aktif diberi border biru),
+// area kanan nampilin halaman aktif ukuran besar di tengah.
+const PdfPreviewViewer: React.FC<{ pages: PdfPageItem[]; initialIndex: number; onClose: () => void }> = ({ pages, initialIndex, onClose }) => {
+  const [active, setActive] = React.useState(initialIndex);
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') setActive((a) => Math.min(pages.length - 1, a + 1));
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') setActive((a) => Math.max(0, a - 1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pages.length, onClose]);
+
+  const activePage = pages[active];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: '#292929', display: 'flex' }}>
+      {/* Sidebar thumbnail */}
+      <div style={{ width: 160, background: '#1f1f1f', overflowY: 'auto', padding: '16px 0', flexShrink: 0 }}>
+        {pages.map((p, i) => {
+          const isActive = i === active;
+          return (
+            <div key={p.id} onClick={() => setActive(i)} style={{ padding: '0 20px 24px', cursor: 'pointer' }}>
+              <div style={{
+                border: isActive ? '3px solid #60a5fa' : '3px solid transparent', borderRadius: 2,
+                overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', aspectRatio: '3/4',
+              }}>
+                <img src={p.thumbnail} alt={p.label} style={{ maxWidth: '100%', maxHeight: '100%', transform: `rotate(${p.rotation}deg)` }} />
+              </div>
+              <div style={{ textAlign: 'center', color: '#ffffff', fontSize: 12, marginTop: 8 }}>{i + 1}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Halaman aktif — besar, di tengah */}
+      <div style={{ flex: 1, minWidth: 0, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        {activePage && (
+          <img
+            src={activePage.thumbnail} alt={activePage.label}
+            style={{ maxWidth: '100%', maxHeight: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', transform: `rotate(${activePage.rotation}deg)` }}
+          />
+        )}
+      </div>
+
+      <button
+        type="button" onClick={onClose} title="Tutup"
+        style={{
+          position: 'fixed', top: 16, right: 20, width: 36, height: 36, borderRadius: '50%',
+          border: 'none', background: 'rgba(255,255,255,0.12)', color: '#ffffff', fontSize: 18,
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        &times;
+      </button>
     </div>
   );
 };
@@ -480,7 +558,7 @@ const GroupingFormView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
           type="button"
           disabled
           title="Kirim ke E-Klaim belum diimplementasikan"
-          style={{ padding: '10px 28px', borderRadius: 8, border: 'none', background: '#9ca3af', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}
+          style={{ padding: '10px 28px', borderRadius: 0, border: 'none', background: '#9ca3af', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}
         >
           Kirim (Segera Hadir)
         </button>
@@ -614,7 +692,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
           // atas BG abu-abu spt Berkas Klaim), formnya lebih enak dibaca
           // dgn batas jelas krn banyak input berdempetan.
           <div style={{ padding: 20 }}>
-            <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ background: '#ffffff', borderRadius: 0, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <GroupingFormView noRawat={noRawat} />
             </div>
           </div>
