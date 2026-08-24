@@ -3473,6 +3473,9 @@ func main() {
 	r.PUT("/api/preview-obat-pengaturan", savePreviewObatPengaturan(db))
 
 	// Bridging SEP (BPJS VClaim) endpoints
+	r.GET("/api/casemix/list-klaim", getListKlaim(db))
+	r.GET("/api/casemix/grouping-inacbg/*no_rawat", getGroupingInacbgHeader(db))
+	r.GET("/api/casemix/grouping-form/*no_rawat", getGroupingForm(db))
 	r.GET("/api/bridging/sep/list", getBridgingSepList(db))
 	r.GET("/api/bridging/sep/by-no-rawat/*no_rawat", getBridgingSepByNoRawat(db))
 	r.GET("/api/bridging/sep/count-today", getBridgingSepCountToday(db))

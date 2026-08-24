@@ -6,6 +6,9 @@ import '../models/pengumuman.dart';
 import '../services/pengumuman_service.dart';
 
 const _kBorder = Color(0xFFE5E7EB);
+// Tinggi banner promo/pengumuman spt DANA/ShopeePay — kompak, BUKAN
+// setinggi card menu (sempat dicoba 236 biar sama tinggi Layanan grid,
+// ternyata kegedean & gak sesuai pola banner app lain).
 const _kCardHeight = 108.0;
 
 const _kBulanId = [

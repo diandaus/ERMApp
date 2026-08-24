@@ -1,5 +1,6 @@
 import React from 'react';
 import { KlaimInacbgView } from './KlaimInacbg';
+import { ListKlaimInacbgView } from './ListKlaimInacbg';
 import { CasemixPengaturanView } from './CasemixPengaturan';
 
 type AppUser = {
@@ -300,11 +301,7 @@ export const CasemixView: React.FC<CasemixViewProps> = ({ user, onBack }) => {
             boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
           }}
         >
-          {activeTab === 'list-klaim' && (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>
-              Fitur List Klaim akan dikembangkan nanti.
-            </div>
-          )}
+          {activeTab === 'list-klaim' && <ListKlaimInacbgView />}
           {activeTab === 'klaim-inacbg' && <KlaimInacbgView user={user} />}
           {activeTab === 'perbaikan' && (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>
