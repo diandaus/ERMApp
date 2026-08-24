@@ -470,3 +470,158 @@ func saveHasilLabPK(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Hasil pemeriksaan lab PK berhasil disimpan"})
 	}
 }
+
+type cetakHasilLabPKItem struct {
+	KdJenisPrw   string `json:"kd_jenis_prw"`
+	NmPerawatan  string `json:"nm_perawatan"`
+	Pemeriksaan  string `json:"pemeriksaan"`
+	Hasil        string `json:"hasil"`
+	Satuan       string `json:"satuan"`
+	NilaiRujukan string `json:"nilai_rujukan"`
+	Keterangan   string `json:"keterangan"`
+}
+
+// GET /api/lab-pk/cetak/:noorder — data cetak "HASIL PEMERIKSAAN
+// LABORATORIUM", padanan getCetakHasilRadiologi (radiologi_hasil_handler.go)
+// tapi hasilnya tabel per parameter (detail_periksa_lab + template_laboratorium)
+// bukan teks bebas. Selalu ambil sesi periksa_lab TERBARU utk no_rawat ini
+// (konsisten dgn pola "hasil terakhir" radiologi), bukan noorder yg sedang
+// dibuka — supaya cetak ulang tetap benar walau permintaan ini sudah lama.
+func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noOrder := c.Param("noorder")
+		if noOrder == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "noorder wajib diisi"})
+			return
+		}
+
+		var noRawat, dokterPerujukOrder string
+		if err := db.QueryRow(`SELECT no_rawat, dokter_perujuk FROM permintaan_lab WHERE noorder = ?`, noOrder).
+			Scan(&noRawat, &dokterPerujukOrder); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Permintaan lab tidak ditemukan"})
+			return
+		}
+
+		var tglPeriksa, jam string
+		if err := db.QueryRow(`
+			SELECT DATE_FORMAT(tgl_periksa,'%Y-%m-%d'), jam FROM periksa_lab WHERE no_rawat = ?
+			ORDER BY tgl_periksa DESC, jam DESC LIMIT 1
+		`, noRawat).Scan(&tglPeriksa, &jam); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Belum ada hasil pemeriksaan untuk order ini"})
+			return
+		}
+
+		rows, err := db.Query(`
+			SELECT pl.kd_jenis_prw, IFNULL(jpl.nm_perawatan, pl.kd_jenis_prw),
+				pl.kd_dokter, IFNULL(dpj.nm_dokter,''), pl.nip,
+				pl.dokter_perujuk, IFNULL(dperujuk.nm_dokter,'')
+			FROM periksa_lab pl
+			LEFT JOIN jns_perawatan_lab jpl ON pl.kd_jenis_prw = jpl.kd_jenis_prw
+			LEFT JOIN dokter dpj ON pl.kd_dokter = dpj.kd_dokter
+			LEFT JOIN dokter dperujuk ON pl.dokter_perujuk = dperujuk.kd_dokter
+			WHERE pl.no_rawat = ? AND pl.tgl_periksa = ? AND pl.jam = ?
+		`, noRawat, tglPeriksa, jam)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		type examMeta struct{ kdJenisPrw, nmPerawatan string }
+		var exams []examMeta
+		var kdDokterPj, nmDokterPj, nip, dokterPerujuk, nmDokterPerujuk string
+		for rows.Next() {
+			var e examMeta
+			if rows.Scan(&e.kdJenisPrw, &e.nmPerawatan, &kdDokterPj, &nmDokterPj, &nip, &dokterPerujuk, &nmDokterPerujuk) == nil {
+				exams = append(exams, e)
+			}
+		}
+		rows.Close()
+		if len(exams) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Belum ada hasil pemeriksaan untuk order ini"})
+			return
+		}
+		if dokterPerujuk == "" {
+			dokterPerujuk = dokterPerujukOrder
+			db.QueryRow(`SELECT IFNULL(nm_dokter,'') FROM dokter WHERE kd_dokter = ?`, dokterPerujuk).Scan(&nmDokterPerujuk)
+		}
+
+		var nmPetugas string
+		db.QueryRow(`SELECT IFNULL(nama,'') FROM petugas WHERE nip = ?`, nip).Scan(&nmPetugas)
+
+		items := []cetakHasilLabPKItem{}
+		for _, e := range exams {
+			dRows, err := db.Query(`
+				SELECT tl.Pemeriksaan, dpl.nilai, IFNULL(tl.satuan,''), dpl.nilai_rujukan, dpl.keterangan
+				FROM detail_periksa_lab dpl
+				INNER JOIN template_laboratorium tl ON dpl.id_template = tl.id_template
+				WHERE dpl.no_rawat = ? AND dpl.kd_jenis_prw = ? AND dpl.tgl_periksa = ? AND dpl.jam = ?
+			`, noRawat, e.kdJenisPrw, tglPeriksa, jam)
+			if err != nil {
+				continue
+			}
+			for dRows.Next() {
+				var it cetakHasilLabPKItem
+				if dRows.Scan(&it.Pemeriksaan, &it.Hasil, &it.Satuan, &it.NilaiRujukan, &it.Keterangan) == nil {
+					it.KdJenisPrw = e.kdJenisPrw
+					it.NmPerawatan = e.nmPerawatan
+					items = append(items, it)
+				}
+			}
+			dRows.Close()
+		}
+
+		var noRkmMedis, nmPasien, jk, tglLahir, alamat string
+		db.QueryRow(`
+			SELECT pasien.no_rkm_medis, pasien.nm_pasien, IFNULL(pasien.jk,''), IFNULL(pasien.tgl_lahir,''),
+				CONCAT_WS(', ', NULLIF(pasien.alamat,''), kelurahan.nm_kel, kecamatan.nm_kec, kabupaten.nm_kab)
+			FROM reg_periksa
+			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
+			LEFT JOIN kelurahan ON pasien.kd_kel = kelurahan.kd_kel
+			LEFT JOIN kecamatan ON pasien.kd_kec = kecamatan.kd_kec
+			LEFT JOIN kabupaten ON pasien.kd_kab = kabupaten.kd_kab
+			WHERE reg_periksa.no_rawat = ?
+		`, noRawat).Scan(&noRkmMedis, &nmPasien, &jk, &tglLahir, &alamat)
+
+		var poli string
+		var statusLanjut string
+		db.QueryRow(`SELECT status_lanjut FROM reg_periksa WHERE no_rawat = ?`, noRawat).Scan(&statusLanjut)
+		if strings.EqualFold(statusLanjut, "ranap") {
+			var kdKamar, nmBangsal string
+			db.QueryRow(`SELECT kd_kamar FROM kamar_inap WHERE no_rawat = ? ORDER BY tgl_masuk DESC, jam_masuk DESC LIMIT 1`, noRawat).Scan(&kdKamar)
+			if kdKamar != "" {
+				db.QueryRow(`SELECT nm_bangsal FROM bangsal INNER JOIN kamar ON bangsal.kd_bangsal = kamar.kd_bangsal WHERE kamar.kd_kamar = ?`, kdKamar).Scan(&nmBangsal)
+				poli = strings.TrimSpace(kdKamar + " " + nmBangsal)
+			} else {
+				poli = "Ranap Gabung"
+			}
+		} else {
+			db.QueryRow(`
+				SELECT IFNULL(poliklinik.nm_poli,'') FROM reg_periksa
+				LEFT JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
+				WHERE reg_periksa.no_rawat = ?
+			`, noRawat).Scan(&poli)
+		}
+
+		tglFormatted := tglPeriksa
+		if t, err := time.Parse("2006-01-02", tglPeriksa); err == nil {
+			tglFormatted = t.Format("02-01-2006")
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"no_periksa":          noOrder,
+			"no_rm":               noRkmMedis,
+			"nama_pasien":         nmPasien,
+			"jk":                  jk,
+			"tgl_lahir":           tglLahir,
+			"alamat":              alamat,
+			"penanggung_jawab":    nmDokterPj,
+			"kd_penanggung_jawab": kdDokterPj,
+			"dokter_pengirim":     nmDokterPerujuk,
+			"tgl_pemeriksaan":     tglFormatted,
+			"jam_pemeriksaan":     jam,
+			"poli":                poli,
+			"hasil":               items,
+			"petugas_nip":         nip,
+			"petugas_nama":        nmPetugas,
+		})
+	}
+}

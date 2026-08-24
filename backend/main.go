@@ -3331,6 +3331,7 @@ func main() {
 	// Modul LaboratoriumPK.tsx (worklist departemen Laboratorium PK)
 	r.GET("/api/lab-pk/list", getPermintaanLabPKList(db))
 	r.GET("/api/lab-pk/permintaan/:noorder", getPermintaanLabPKDetail(db))
+	r.GET("/api/lab-pk/cetak/:noorder", getCetakHasilLabPK(db))
 	r.POST("/api/lab-pk/hasil", saveHasilLabPK(db))
 	r.POST("/api/lab-pk/sampel/:noorder", setSampelLabPK(db))
 

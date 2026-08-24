@@ -347,6 +347,7 @@ const Avatar: React.FC<{ nama: string; photo?: string; size?: number }> = ({ nam
 type RiwayatRow = {
   tanggal: string; shift: string; jam_datang: string; jam_pulang: string;
   status: string; keterlambatan: string; durasi: string;
+  foto_masuk: string; foto_pulang: string;
 };
 
 const GRADIENT = 'linear-gradient(135deg, #34d399 0%, #059669 100%)';
@@ -1013,6 +1014,7 @@ const HomeTab: React.FC<{
 const KehadiranTab: React.FC<{ nik: string }> = ({ nik }) => {
   const [list, setList] = React.useState<RiwayatRow[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [preview, setPreview] = React.useState<{ url: string; label: string } | null>(null);
 
   React.useEffect(() => {
     if (!nik) return;
@@ -1035,9 +1037,31 @@ const KehadiranTab: React.FC<{ nik: string }> = ({ nik }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {list.map((r) => {
             const st = getStatusStyle(r.status);
+            const adaFotoMasuk = isUsablePhotoUrl(r.foto_masuk);
+            const adaFotoPulang = isUsablePhotoUrl(r.foto_pulang);
             return (
-              <div key={`${r.tanggal}-${r.jam_datang}`} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
+              <div key={`${r.tanggal}-${r.jam_datang}`} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                {adaFotoMasuk || adaFotoPulang ? (
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {adaFotoMasuk && (
+                      <img
+                        src={mediaUrl(r.foto_masuk)} alt="Foto masuk" title="Foto Masuk"
+                        onClick={() => setPreview({ url: r.foto_masuk, label: `Foto Masuk — ${r.tanggal} ${r.jam_datang}` })}
+                        style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #e5e7eb', cursor: 'pointer' }}
+                      />
+                    )}
+                    {adaFotoPulang && (
+                      <img
+                        src={mediaUrl(r.foto_pulang)} alt="Foto pulang" title="Foto Pulang"
+                        onClick={() => setPreview({ url: r.foto_pulang, label: `Foto Pulang — ${r.tanggal} ${r.jam_pulang}` })}
+                        style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #e5e7eb', cursor: 'pointer' }}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ width: 36, height: 36, borderRadius: 6, background: '#f3f4f6', flexShrink: 0 }} />
+                )}
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{r.tanggal}</div>
                   <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
                     {r.jam_datang || '--:--'} → {r.jam_pulang || '--:--'} · {r.durasi}
@@ -1049,6 +1073,24 @@ const KehadiranTab: React.FC<{ nik: string }> = ({ nik }) => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {preview && (
+        <div
+          onClick={() => setPreview(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 24 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 12, maxWidth: '92vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{preview.label}</span>
+              <button
+                type="button" onClick={() => setPreview(null)}
+                style={{ width: 26, height: 26, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#fff', color: '#6b7280', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
+              >&times;</button>
+            </div>
+            <img src={mediaUrl(preview.url)} alt={preview.label} style={{ maxWidth: '88vw', maxHeight: '75vh', objectFit: 'contain', borderRadius: 8 }} />
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/riwayat_row.dart';
+import '../../services/api_config.dart';
 import '../../services/presensi_service.dart';
 
 const _kGreenDark = Color(0xFF059669);
@@ -94,6 +95,98 @@ class _KehadiranTabState extends State<KehadiranTab> {
   }
 }
 
+void _showFotoPreview(BuildContext context, String url, String label) {
+  showDialog(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (_) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF111827))),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(url, fit: BoxFit.contain),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _FotoThumb extends StatelessWidget {
+  final String? url;
+  final String label;
+  const _FotoThumb({required this.url, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    if (url == null) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () => _showFotoPreview(context, url!, label),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(
+          url!,
+          width: 36,
+          height: 36,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(6)),
+            child: const Icon(Icons.broken_image_outlined, size: 16, color: Color(0xFF9CA3AF)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Leading (kiri) tiap kartu riwayat — foto masuk/pulang (kalau ada,
+/// letaknya SEBELUM tanggal & jam, bukan di bawahnya lagi) atau placeholder
+/// abu-abu kalau belum ada foto sama sekali (mis. presensi dari sblm fitur
+/// foto ada, atau upload gagal) supaya layout tiap kartu tetap konsisten.
+class _FotoLeading extends StatelessWidget {
+  final String? fotoMasuk;
+  final String? fotoPulang;
+  final String labelMasuk;
+  final String labelPulang;
+  const _FotoLeading({required this.fotoMasuk, required this.fotoPulang, required this.labelMasuk, required this.labelPulang});
+
+  @override
+  Widget build(BuildContext context) {
+    if (fotoMasuk == null && fotoPulang == null) {
+      return Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(6)),
+        child: const Icon(Icons.image_not_supported_outlined, size: 16, color: Color(0xFF9CA3AF)),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _FotoThumb(url: fotoMasuk, label: labelMasuk),
+        if (fotoMasuk != null && fotoPulang != null) const SizedBox(width: 4),
+        _FotoThumb(url: fotoPulang, label: labelPulang),
+      ],
+    );
+  }
+}
+
 class _RiwayatRowTile extends StatelessWidget {
   final RiwayatRow row;
   const _RiwayatRowTile({required this.row});
@@ -103,13 +196,21 @@ class _RiwayatRowTile extends StatelessWidget {
     final style = _statusStyle(row.status);
     final jamDatang = row.jamDatang.isEmpty ? '--:--' : row.jamDatang;
     final jamPulang = row.jamPulang.isEmpty ? '--:--' : row.jamPulang;
+    final fotoMasuk = resolvePhotoUrl(row.fotoMasuk);
+    final fotoPulang = resolvePhotoUrl(row.fotoPulang);
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(12)),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          _FotoLeading(
+            fotoMasuk: fotoMasuk,
+            fotoPulang: fotoPulang,
+            labelMasuk: 'Foto Masuk — ${row.tanggal} $jamDatang',
+            labelPulang: 'Foto Pulang — ${row.tanggal} $jamPulang',
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,6 +223,7 @@ class _RiwayatRowTile extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(color: style.bg, borderRadius: BorderRadius.circular(999)),

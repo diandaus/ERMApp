@@ -8,6 +8,8 @@ class RiwayatRow {
   final String status;
   final String keterlambatan;
   final String durasi;
+  final String fotoMasuk;
+  final String fotoPulang;
 
   RiwayatRow({
     required this.tanggal,
@@ -17,6 +19,8 @@ class RiwayatRow {
     required this.status,
     required this.keterlambatan,
     required this.durasi,
+    required this.fotoMasuk,
+    required this.fotoPulang,
   });
 
   factory RiwayatRow.fromJson(Map<String, dynamic> json) {
@@ -28,6 +32,8 @@ class RiwayatRow {
       status: json['status'] as String? ?? '',
       keterlambatan: json['keterlambatan'] as String? ?? '',
       durasi: json['durasi'] as String? ?? '-',
+      fotoMasuk: json['foto_masuk'] as String? ?? '',
+      fotoPulang: json['foto_pulang'] as String? ?? '',
     );
   }
 }

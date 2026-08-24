@@ -444,6 +444,12 @@ type RiwayatPresensiRow struct {
 	Status        string `json:"status"`
 	Keterlambatan string `json:"keterlambatan"`
 	Durasi        string `json:"durasi"`
+	// FotoMasuk/FotoPulang — sama tujuannya spt di RekapPresensiRow
+	// (verifikasi visual, cegah manipulasi), ditampilkan di tab Kehadiran
+	// PresensiMobile.tsx & KehadiranTab (e_presensi Flutter) supaya pegawai
+	// sendiri juga bisa lihat bukti foto presensinya, bukan cuma HRD.
+	FotoMasuk  string `json:"foto_masuk"`
+	FotoPulang string `json:"foto_pulang"`
 }
 
 func getPresensiRiwayat(db *sql.DB) gin.HandlerFunc {
@@ -465,11 +471,13 @@ func getPresensiRiwayat(db *sql.DB) gin.HandlerFunc {
 		tahunI, _ := strconv.Atoi(tahun)
 
 		rows, err := db.Query(`
-			SELECT DATE_FORMAT(jam_datang,'%Y-%m-%d'), shift, DATE_FORMAT(jam_datang,'%H:%i'),
-				COALESCE(DATE_FORMAT(jam_pulang,'%H:%i'),''), status, keterlambatan, COALESCE(durasi,'-')
-			FROM rekap_presensi
-			WHERE id=? AND YEAR(jam_datang)=? AND MONTH(jam_datang)=?
-			ORDER BY jam_datang DESC`, id, tahunI, bulanI)
+			SELECT DATE_FORMAT(rp.jam_datang,'%Y-%m-%d'), rp.shift, DATE_FORMAT(rp.jam_datang,'%H:%i'),
+				COALESCE(DATE_FORMAT(rp.jam_pulang,'%H:%i'),''), rp.status, rp.keterlambatan, COALESCE(rp.durasi,'-'),
+				COALESCE(rp.photo,''), COALESCE(ext.photo_out,'')
+			FROM rekap_presensi rp
+			LEFT JOIN rekap_presensi_ext ext ON ext.id = rp.id AND ext.jam_datang = rp.jam_datang
+			WHERE rp.id=? AND YEAR(rp.jam_datang)=? AND MONTH(rp.jam_datang)=?
+			ORDER BY rp.jam_datang DESC`, id, tahunI, bulanI)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -478,7 +486,7 @@ func getPresensiRiwayat(db *sql.DB) gin.HandlerFunc {
 		list := []RiwayatPresensiRow{}
 		for rows.Next() {
 			var r RiwayatPresensiRow
-			if err := rows.Scan(&r.Tanggal, &r.Shift, &r.JamDatang, &r.JamPulang, &r.Status, &r.Keterlambatan, &r.Durasi); err == nil {
+			if err := rows.Scan(&r.Tanggal, &r.Shift, &r.JamDatang, &r.JamPulang, &r.Status, &r.Keterlambatan, &r.Durasi, &r.FotoMasuk, &r.FotoPulang); err == nil {
 				list = append(list, r)
 			}
 		}
@@ -501,6 +509,16 @@ type RekapPresensiRow struct {
 	Status        string `json:"status"`
 	Keterlambatan string `json:"keterlambatan"`
 	Durasi        string `json:"durasi"`
+	// FotoMasuk/FotoPulang — path hasil /api/upload saat check-in/check-out
+	// lewat Presensi Mandiri (mobile). Ditampilkan di PresensiRekap.tsx
+	// (HRD, desktop) supaya kehadiran bisa diverifikasi visual, bukan cuma
+	// percaya jam+status tercatat — tujuannya mencegah manipulasi (titip
+	// absen dll). Baris lama dari mesin fingerprint Khanza / hasil migrasi
+	// desktop bisa berisi path legacy yang bukan URL (lihat komentar
+	// resolvePegawaiID), makanya frontend HARUS validasi format sebelum
+	// dipakai sbg <img src>.
+	FotoMasuk  string `json:"foto_masuk"`
+	FotoPulang string `json:"foto_pulang"`
 }
 
 func getPresensiRekap(db *sql.DB) gin.HandlerFunc {
@@ -513,9 +531,11 @@ func getPresensiRekap(db *sql.DB) gin.HandlerFunc {
 			SELECT pegawai.nik, pegawai.nama, DATE_FORMAT(rekap_presensi.jam_datang,'%Y-%m-%d'),
 				rekap_presensi.shift, DATE_FORMAT(rekap_presensi.jam_datang,'%H:%i'),
 				COALESCE(DATE_FORMAT(rekap_presensi.jam_pulang,'%H:%i'),''),
-				rekap_presensi.status, rekap_presensi.keterlambatan, COALESCE(rekap_presensi.durasi,'-')
+				rekap_presensi.status, rekap_presensi.keterlambatan, COALESCE(rekap_presensi.durasi,'-'),
+				COALESCE(rekap_presensi.photo,''), COALESCE(ext.photo_out,'')
 			FROM rekap_presensi
 			INNER JOIN pegawai ON pegawai.id = rekap_presensi.id
+			LEFT JOIN rekap_presensi_ext ext ON ext.id = rekap_presensi.id AND ext.jam_datang = rekap_presensi.jam_datang
 			WHERE DATE(rekap_presensi.jam_datang) BETWEEN ? AND ?`
 		args := []interface{}{tglAwal, tglAkhir}
 		if search != "" {
@@ -534,7 +554,7 @@ func getPresensiRekap(db *sql.DB) gin.HandlerFunc {
 		list := []RekapPresensiRow{}
 		for rows.Next() {
 			var r RekapPresensiRow
-			if err := rows.Scan(&r.NIK, &r.Nama, &r.Tanggal, &r.Shift, &r.JamDatang, &r.JamPulang, &r.Status, &r.Keterlambatan, &r.Durasi); err == nil {
+			if err := rows.Scan(&r.NIK, &r.Nama, &r.Tanggal, &r.Shift, &r.JamDatang, &r.JamPulang, &r.Status, &r.Keterlambatan, &r.Durasi, &r.FotoMasuk, &r.FotoPulang); err == nil {
 				list = append(list, r)
 			}
 		}

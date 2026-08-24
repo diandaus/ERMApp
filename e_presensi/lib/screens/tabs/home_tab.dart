@@ -4,13 +4,13 @@ import '../../models/app_user.dart';
 import '../../models/presensi_hari_ini.dart';
 import '../../services/api_config.dart';
 import '../../services/presensi_service.dart';
+import '../../widgets/menu_svg_icons.dart';
 import '../../widgets/pengumuman_card.dart';
 import '../../services/klinis_service.dart';
 import '../atur_jadwal_view.dart';
 import '../cuti_izin_view.dart';
 import '../farmasi_view.dart';
 import '../igd_view.dart';
-import '../kalender_libur_view.dart';
 import '../lapor_it_view.dart';
 import '../lembur_view.dart';
 import '../operasi_view.dart';
@@ -329,12 +329,16 @@ class _MasukPulangCol extends StatelessWidget {
 class _LayananItem {
   final String label;
   final IconData icon;
-  const _LayananItem(this.label, this.icon);
+  // iconBuilder — override IconData bawaan pakai SVG persis yg dikirim
+  // user (menu_svg_icons.dart), dipakai kalau ada; kalau null tetap pakai
+  // Material Icon `icon` di atas (menu lain yg belum diganti).
+  final Widget Function(Color color)? iconBuilder;
+  const _LayananItem(this.label, this.icon, {this.iconBuilder});
 }
 
 const _kLayananItemsInti = [
   _LayananItem('Lembur', Icons.more_time_outlined),
-  _LayananItem('Cuti', Icons.beach_access_outlined),
+  _LayananItem('Cuti', Icons.beach_access_outlined, iconBuilder: iconCutiSvg),
   _LayananItem('Izin', Icons.description_outlined),
   _LayananItem('Tugas', Icons.task_alt_outlined),
   _LayananItem('Lapor IT', Icons.desktop_windows_outlined),
@@ -343,16 +347,12 @@ const _kLayananItemsInti = [
   // Departemen di dalam AturJadwalView sendiri: non-admin otomatis
   // terkunci ke departemen dia sendiri, admin bebas pilih semua.
   _LayananItem('Atur Jadwal', Icons.event_available_outlined),
-  // Kalender Libur: semua user bisa LIHAT (transparansi jadwal libur),
-  // tapi tombol Sinkron/Tambah/Hapus di dalam KalenderLiburView sendiri
-  // cuma tampil utk admin — pola sama spt gating _isAdmin di AturJadwalView.
-  _LayananItem('Kalender Libur', Icons.event_busy_outlined),
 ];
 
 const _kLayananItemsKlinis = [
-  _LayananItem('Poli', Icons.medical_information_outlined),
-  _LayananItem('IGD', Icons.emergency_outlined),
-  _LayananItem('Ranap', Icons.bed_outlined),
+  _LayananItem('Poli', Icons.medical_information_outlined, iconBuilder: iconPoliSvg),
+  _LayananItem('IGD', Icons.emergency_outlined, iconBuilder: iconIgdSvg),
+  _LayananItem('Ranap', Icons.bed_outlined, iconBuilder: iconRanapSvg),
   _LayananItem('Farmasi', Icons.medication_outlined),
   _LayananItem('Lab', Icons.science_outlined),
   _LayananItem('Radiologi', Icons.medical_services_outlined),
@@ -458,10 +458,6 @@ void _onLayananTap(BuildContext context, AppUser user, String label) {
       Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => AturJadwalView(user: user)));
       return;
-    case 'Kalender Libur':
-      Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => KalenderLiburView(user: user)));
-      return;
     default:
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -482,7 +478,11 @@ Widget _layananItemTile(BuildContext context, AppUser user, _LayananItem item) {
           SizedBox(
             width: 44,
             height: 44,
-            child: Icon(item.icon, color: _kGreenDark, size: 26),
+            child: Center(
+              child: item.iconBuilder != null
+                  ? item.iconBuilder!(_kGreenDark)
+                  : Icon(item.icon, color: _kGreenDark, size: 26),
+            ),
           ),
           const SizedBox(height: 0),
           Text(item.label,
@@ -509,6 +509,55 @@ class _LayananGrid extends StatelessWidget {
     final hasMore = items.length > _kLayananGridSlots;
     final visibleItems =
         hasMore ? items.take(_kLayananGridSlots - 1).toList() : items;
+
+    final tiles = <Widget>[
+      ...visibleItems.map((item) => _layananItemTile(context, user, item)),
+      if (hasMore)
+        SizedBox(
+          width: 68,
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SemuaMenuView(user: user))),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Icon(Icons.more_horiz, color: _kGreenDark, size: 26),
+                ),
+                const SizedBox(height: 0),
+                const Text('Lihat Semua',
+                    style: TextStyle(fontSize: 10, color: Color(0xFF374151)),
+                    textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+    ];
+
+    // 4 kolom via Row+Expanded (bukan Wrap) — tiap kolom dapat porsi lebar
+    // yg SAMA PERSIS dari lebar card, lalu ikonnya di-Center di dalam
+    // kolomnya. Ini bikin jarak kiri-ke-ikon-pertama & kanan-ke-ikon-
+    // terakhir otomatis simetris (keduanya = padding card, 16), beda dari
+    // Wrap yg align kiri sehingga sisa lebar (card lebih lebar dari total
+    // 4 ikon+spacing) numpuk jadi celah kosong di kanan doang.
+    const kolom = 4;
+    final rows = <Widget>[];
+    for (var i = 0; i < tiles.length; i += kolom) {
+      final rowTiles = tiles.skip(i).take(kolom).toList();
+      rows.add(Row(
+        children: [
+          for (var c = 0; c < kolom; c++)
+            Expanded(
+              child: Center(
+                child: c < rowTiles.length ? rowTiles[c] : const SizedBox(),
+              ),
+            ),
+        ],
+      ));
+    }
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(16),
@@ -516,40 +565,12 @@ class _LayananGrid extends StatelessWidget {
           color: Colors.white,
           border: Border.all(color: _kBorder),
           borderRadius: BorderRadius.circular(16)),
-      // Wrap (bukan GridView.count) — GridView.count selalu meregangkan 4
-      // kolom mengisi penuh lebar card, jadi mengubah spacing cuma
-      // realokasi kecil antara lebar sel & jarak (efek keliatannya cuma
-      // ~1/4 dari nilai spacing, nyaris tak kelihatan). Wrap dgn lebar sel
-      // TETAP (bukan ikut melebar) bikin spacing benar-benar jadi jarak
-      // visual antar ikon, bukan cuma dipakai buat itung ulang lebar sel.
-      child: Wrap(
-        alignment: WrapAlignment.start,
-        spacing: 16,
-        runSpacing: 6,
+      child: Column(
         children: [
-          ...visibleItems.map((item) => _layananItemTile(context, user, item)),
-          if (hasMore)
-            SizedBox(
-              width: 68,
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => SemuaMenuView(user: user))),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Icon(Icons.more_horiz, color: _kGreenDark, size: 26),
-                    ),
-                    const SizedBox(height: 0),
-                    const Text('Lihat Semua',
-                        style:
-                            TextStyle(fontSize: 10, color: Color(0xFF374151)),
-                        textAlign: TextAlign.center),
-                  ],
-                ),
-              ),
+          for (var i = 0; i < rows.length; i++)
+            Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+              child: rows[i],
             ),
         ],
       ),
