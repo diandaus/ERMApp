@@ -28,6 +28,7 @@ type Patient = {
   kd_kamar: string;
   status_bayar: string;
   agama: string;
+  jk: string;
 };
 
 type AppUser = {

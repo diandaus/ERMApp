@@ -7,7 +7,8 @@ type MenuKey =
   | 'rawat-jalan'
   | 'rawat-inap'
   | 'radiologi'
-  | 'laboratorium'
+  | 'laboratorium-pk'
+  | 'laboratorium-pa'
   | 'farmasi'
   | 'kasir'
   | 'casemix'
@@ -87,10 +88,17 @@ export const MenuUtamaView: React.FC<MenuUtamaViewProps> = ({ user, setActiveMen
       category: 'penunjang',
     },
     {
-      key: 'laboratorium',
-      label: 'Laboratorium',
-      description: 'Pemeriksaan lab PK, PA & hasil laboratorium',
+      key: 'laboratorium-pk',
+      label: 'Laboratorium PK',
+      description: 'Pemeriksaan lab Patologi Klinik & hasil laboratorium',
       icon: '🔬',
+      category: 'penunjang',
+    },
+    {
+      key: 'laboratorium-pa',
+      label: 'Laboratorium PA',
+      description: 'Pemeriksaan lab Patologi Anatomi & hasil laboratorium',
+      icon: '🧫',
       category: 'penunjang',
     },
     {

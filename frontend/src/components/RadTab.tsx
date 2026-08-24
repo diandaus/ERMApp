@@ -93,6 +93,15 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
 
   const hasRadiologiData = radiolojiData.pemeriksaan.length > 0 || radiolojiData.hasil.length > 0 || radiolojiData.gambar.length > 0;
 
+  // Sudah keluar hasil? — sama pola dengan LabTab.tsx: card "Riwayat
+  // Permintaan" cuma menampilkan yang belum ada hasilnya (masih pending);
+  // begitu tgl_hasil terisi, card-nya hilang dari sini (hasilnya tetap
+  // kelihatan di tabel "Bacaan/Hasil Radiologi" di bawah).
+  const riwayatPending = React.useMemo(
+    () => riwayatRad.filter((item) => !item.tgl_hasil),
+    [riwayatRad]
+  );
+
   return (
     <div>
 
@@ -125,11 +134,14 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
         </div>
       )}
 
-      {/* Riwayat Permintaan Radiologi */}
-      {!loadingRiwayat && riwayatRad.length > 0 && (
+      {/* Riwayat Permintaan Radiologi — cuma yang belum ada hasilnya
+          (masih "Pending"); begitu hasil sudah keluar, card-nya hilang
+          dari sini (tetap bisa dilihat lewat tabel "Bacaan/Hasil
+          Radiologi" di bawah). */}
+      {!loadingRiwayat && riwayatPending.length > 0 && (
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {riwayatRad.map((item, idx) => (
+            {riwayatPending.map((item, idx) => (
               <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div>
@@ -184,11 +196,8 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
       {/* Data Pemeriksaan Radiologi */}
       {!loadingRadiologi && hasRadiologiData && (
         <div style={{ marginTop: 24 }}>
-          <h4 style={{ margin: '0 0 20px 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h4 style={{ margin: '0 0 20px 0', fontSize: 16, fontWeight: 400, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
            Data Pemeriksaan Radiologi
-            <button onClick={fetchRadiolojiData} style={{ marginLeft: 'auto', padding: '4px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#374151' }}>
-              ↻ Refresh
-            </button>
           </h4>
 
           <div style={{ overflowX: 'auto' }}>

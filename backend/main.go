@@ -117,6 +117,7 @@ type RawatInapPatient struct {
 	KdBangsal     string  `json:"kd_bangsal"`
 	StatusBayar   string  `json:"status_bayar"`
 	Agama         string  `json:"agama"`
+	Jk            string  `json:"jk"`
 }
 
 type AppUser struct {
@@ -846,7 +847,8 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				kamar.kd_bangsal,
 				reg_periksa.status_bayar,
 				CONCAT(reg_periksa.umurdaftar, ' ', reg_periksa.sttsumur) AS umur,
-				pasien.agama
+				pasien.agama,
+				pasien.jk
 			FROM kamar_inap
 			INNER JOIN reg_periksa ON kamar_inap.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -877,7 +879,7 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				&p.TrfKamar, &p.DiagnosaAwal, &p.DiagnosaAkhir,
 				&p.TglMasuk, &p.JamMasuk, &p.TglKeluar, &p.JamKeluar,
 				&p.TtlBiaya, &p.SttsPulang, &p.Lama, &p.NmDokter,
-				&p.KdDokter, &p.KdKamar, &p.KdBangsal, &p.StatusBayar, &p.Umur, &p.Agama,
+				&p.KdDokter, &p.KdKamar, &p.KdBangsal, &p.StatusBayar, &p.Umur, &p.Agama, &p.Jk,
 			)
 			if err != nil {
 				log.Printf("Error scanning row: %v", err)
@@ -3326,6 +3328,12 @@ func main() {
 	r.POST("/api/radiologi/sampel/:noorder", setSampelRadiologi(db))
 	r.GET("/api/radiologi/cetak/:noorder", getCetakHasilRadiologi(db))
 
+	// Modul LaboratoriumPK.tsx (worklist departemen Laboratorium PK)
+	r.GET("/api/lab-pk/list", getPermintaanLabPKList(db))
+	r.GET("/api/lab-pk/permintaan/:noorder", getPermintaanLabPKDetail(db))
+	r.POST("/api/lab-pk/hasil", saveHasilLabPK(db))
+	r.POST("/api/lab-pk/sampel/:noorder", setSampelLabPK(db))
+
 	// Riwayat Perawatan endpoint
 	r.GET("/api/riwayat-perawatan/:no_rkm_medis", getRiwayatPerawatan(db))
 	// Delete permintaan radiologi
@@ -3414,6 +3422,33 @@ func main() {
 
 	// Tindakan Rawat Inap endpoint
 	r.GET("/api/tindakan-ranap/*no_rawat", getTindakanRanap(db))
+	// jenis-perawatan-ranap sengaja TIDAK di bawah prefix "/api/tindakan-ranap/"
+	// (yang dipakai GET wildcard *no_rawat di atas) — Gin menolak route GET
+	// statis & wildcard bertumpuk di path yang sama, jadi ditaruh sejajar
+	// dengan /api/tindakan/jenis-perawatan (ralan), bukan di bawah prefix
+	// ranap. POST/DELETE di bawah tidak masalah, beda method jadi tidak
+	// bentrok dgn GET wildcard-nya.
+	r.GET("/api/tindakan/jenis-perawatan-ranap", func(c *gin.Context) {
+		GetJenisTindakanRanap(c, db)
+	})
+	r.POST("/api/tindakan-ranap/simpan", func(c *gin.Context) {
+		SimpanTindakanRanap(c, db)
+	})
+	r.POST("/api/tindakan-ranap/simpan-petugas", func(c *gin.Context) {
+		SimpanTindakanRanapPetugas(c, db)
+	})
+	r.POST("/api/tindakan-ranap/simpan-drpr", func(c *gin.Context) {
+		SimpanTindakanRanapDrPr(c, db)
+	})
+	r.DELETE("/api/tindakan-ranap/delete", func(c *gin.Context) {
+		DeleteTindakanRanap(c, db)
+	})
+	r.DELETE("/api/tindakan-ranap/delete-petugas", func(c *gin.Context) {
+		DeleteTindakanRanapPetugas(c, db)
+	})
+	r.DELETE("/api/tindakan-ranap/delete-dokter-petugas", func(c *gin.Context) {
+		DeleteTindakanRanapDokterPetugas(c, db)
+	})
 
 	// Kamar Inap endpoint
 	r.GET("/api/kamar-inap/*no_rawat", getKamarInap(db))

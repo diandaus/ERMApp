@@ -664,6 +664,26 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     }
   };
 
+  // Hitung Kandungan Obat Racikan — kebalikan dari hitungJumlahObatRacikan
+  // di atas: dipakai kalau user isi "Jumlah" (mis. 4 tab) langsung, bukan
+  // "Kandungan" dulu. kandungan = jml * kapasitas / jml_dr (Jumlah Diminta
+  // Racikan, di-set di header racikan). Hasilnya angka desimal biasa
+  // (bukan pecahan seperti "2/3") — field Kandungan tetap teks bebas jadi
+  // user boleh menimpanya manual kalau mau format pecahan.
+  const hitungKandunganObatRacikan = (jmlStr: string) => {
+    if (!selectedObatRacikan || !jmlStr.trim()) {
+      setInputObatRacikanForm(prev => ({ ...prev, kandungan: '' }));
+      return;
+    }
+
+    const kapasitas = parseFloat(selectedObatRacikan.kapasitas || '0');
+    const jmlNum = parseFloat(jmlStr);
+    if (!isNaN(jmlNum) && kapasitas > 0 && activeRacikan.jml_dr > 0) {
+      const kandungan = jmlNum * kapasitas / activeRacikan.jml_dr;
+      setInputObatRacikanForm(prev => ({ ...prev, kandungan: parseFloat(kandungan.toFixed(2)).toString() }));
+    }
+  };
+
   // Confirm Tambah Obat Racikan
   const confirmTambahObatRacikan = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1598,8 +1618,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     step="0.1"
                     placeholder="4"
                     onChange={(e) => {
-                      const jml = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                      const raw = e.target.value;
+                      const jml = raw === '' ? 0 : parseFloat(raw);
                       setInputObatRacikanForm(prev => ({ ...prev, jml: isNaN(jml) ? 0 : jml }));
+                      hitungKandunganObatRacikan(raw);
                     }}
                   />
                 </div>
@@ -1615,7 +1637,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 </div>
               </div>
               <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
-                Isi Kandungan untuk hitung Jumlah otomatis, atau langsung isi Jumlah (mis. 4 tablet) tanpa Kandungan.
+                Isi salah satu saja — Kandungan untuk hitung Jumlah otomatis, atau Jumlah (mis. 4 tablet) untuk hitung balik Kandungan-nya.
               </div>
             </form>
           </div>

@@ -383,7 +383,8 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 				IFNULL(d.nm_dokter, '-') as nm_dokter,
 				pr.status,
 				IFNULL(pr.informasi_tambahan, '') as informasi_tambahan,
-				IFNULL(pr.diagnosa_klinis, '') as diagnosa_klinis
+				IFNULL(pr.diagnosa_klinis, '') as diagnosa_klinis,
+				IF(pr.tgl_hasil='0000-00-00', '', DATE_FORMAT(pr.tgl_hasil, '%Y-%m-%d')) as tgl_hasil
 			FROM permintaan_radiologi pr
 			LEFT JOIN dokter d ON pr.dokter_perujuk = d.kd_dokter
 			WHERE pr.no_rawat = ?
@@ -407,6 +408,7 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 			Status            string                   `json:"status"`
 			InformasiTambahan string                   `json:"informasi_tambahan"`
 			DiagnosisKlinis   string                   `json:"diagnosa_klinis"`
+			TglHasil          string                   `json:"tgl_hasil"`
 			DetailPemeriksaan []map[string]interface{} `json:"detail_pemeriksaan"`
 		}
 
@@ -423,6 +425,7 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 				&item.Status,
 				&item.InformasiTambahan,
 				&item.DiagnosisKlinis,
+				&item.TglHasil,
 			)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca data", "details": err.Error()})

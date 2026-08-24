@@ -4,6 +4,12 @@ import { ModalInputTindakan } from './ModalInputTindakan';
 
 type TindakanTabProps = {
   patient: any;
+  // isRanap menentukan sumber data: tabel rawat_inap_dr/pr/drpr (endpoint
+  // /api/tindakan-ranap/*) kalau true, atau rawat_jl_dr/pr/drpr (endpoint
+  // /api/tindakan-ralan/*, /api/tindakan/*) kalau false/undefined. Tanpa
+  // ini, komponen selalu membaca & menghapus dari tabel ralan meski
+  // dipakai di layar Rawat Inap.
+  isRanap?: boolean;
 };
 
 // Padanan 3 tabel terpisah DlgRawatJalan.java (tabModeDr, tabModePr,
@@ -13,7 +19,7 @@ type TindakanTabProps = {
 const TH_STYLE: React.CSSProperties = { padding: '8px 10px', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap' };
 const TD_STYLE: React.CSSProperties = { padding: '8px 10px', color: '#374151' };
 
-export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
+export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) => {
   const [tindakanDokter, setTindakanDokter] = React.useState<any[]>([]);
   const [tindakanParamedis, setTindakanParamedis] = React.useState<any[]>([]);
   const [tindakanDokterParamedis, setTindakanDokterParamedis] = React.useState<any[]>([]);
@@ -22,12 +28,13 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
 
   React.useEffect(() => {
     fetchTindakanList();
-  }, [patient.no_rawat]);
+  }, [patient.no_rawat, isRanap]);
 
   const fetchTindakanList = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/tindakan-ralan/${encodeURIComponent(patient.no_rawat)}`);
+      const base = isRanap ? '/api/tindakan-ranap' : '/api/tindakan-ralan';
+      const res = await fetch(`${base}/${encodeURIComponent(patient.no_rawat)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTindakanDokter(Array.isArray(data.tindakan_dokter) ? data.tindakan_dokter : []);
@@ -59,14 +66,15 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
       if (tglPerawatan?.includes('T')) tglPerawatan = tglPerawatan.split('T')[0];
 
       const params = new URLSearchParams({
-        no_rawat: item.no_rawat,
+        no_rawat: patient.no_rawat,
         kd_jenis_prw: item.kd_jenis_prw,
         tgl_perawatan: tglPerawatan,
         jam_rawat: item.jam_rawat,
         kd_dokter: item.kd_dokter,
       });
 
-      const res = await fetch(`/api/tindakan/delete?${params}`, { method: 'DELETE' });
+      const deleteBase = isRanap ? '/api/tindakan-ranap' : '/api/tindakan';
+      const res = await fetch(`${deleteBase}/delete?${params}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Gagal menghapus tindakan');
 
@@ -106,7 +114,8 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
         nip: item.nip,
       });
 
-      const res = await fetch(`/api/tindakan/delete-petugas?${params}`, { method: 'DELETE' });
+      const deleteBase = isRanap ? '/api/tindakan-ranap' : '/api/tindakan';
+      const res = await fetch(`${deleteBase}/delete-petugas?${params}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Gagal menghapus tindakan');
 
@@ -144,7 +153,8 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
         nip: item.nip,
       });
 
-      const res = await fetch(`/api/tindakan/delete-dokter-petugas?${params}`, { method: 'DELETE' });
+      const deleteBase = isRanap ? '/api/tindakan-ranap' : '/api/tindakan';
+      const res = await fetch(`${deleteBase}/delete-dokter-petugas?${params}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Gagal menghapus tindakan');
 
@@ -219,7 +229,7 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
           {/* Tindakan Dokter — padanan tabModeDr */}
           {tindakanDokter.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tindakan Dokter</div>
+              <div style={{ fontSize: 13, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Tindakan Dokter</div>
               <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -265,7 +275,7 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
           {/* Tindakan Perawat — padanan tabModePr */}
           {tindakanParamedis.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tindakan Perawat</div>
+              <div style={{ fontSize: 13, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Tindakan Perawat</div>
               <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -311,7 +321,7 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
           {/* Tindakan Dokter & Perawat — padanan tabModeDrPr */}
           {tindakanDokterParamedis.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tindakan Dokter &amp; Perawat</div>
+              <div style={{ fontSize: 13, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Tindakan Dokter &amp; Perawat</div>
               <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -361,6 +371,7 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient }) => {
       {showInputModal && (
         <ModalInputTindakan
           patient={patient}
+          isRanap={isRanap}
           onClose={() => setShowInputModal(false)}
           onSaved={fetchTindakanList}
         />

@@ -276,9 +276,9 @@ type AppUserLite = {
 // allowed_modules (diatur admin) atau fallback per role. Sengaja
 // disamakan persis (termasuk "celah" IGD yang cuma masuk fallback admin)
 // supaya konsisten dgn kontrol akses shell utama. Kunci modul HARUS sama
-// persis dgn App.tsx: 'laboratorium' (bukan 'lab'), 'jadwal-operasi'
-// (bukan 'operasi').
-type ModuleKey = 'rawat-jalan' | 'igd' | 'rawat-inap' | 'farmasi' | 'laboratorium' | 'radiologi' | 'jadwal-operasi';
+// persis dgn App.tsx: 'laboratorium-pk'/'laboratorium-pa' (bukan 'lab'),
+// 'jadwal-operasi' (bukan 'operasi').
+type ModuleKey = 'rawat-jalan' | 'igd' | 'rawat-inap' | 'farmasi' | 'laboratorium-pk' | 'laboratorium-pa' | 'radiologi' | 'jadwal-operasi';
 function canAccessModule(user: AppUserLite, moduleKey: ModuleKey): boolean {
   if (user.allowed_modules) {
     return user.allowed_modules.split(',').filter(Boolean).includes(moduleKey);
@@ -696,7 +696,7 @@ function buildLayananItems(user: AppUserLite): LayananItem[] {
     ...(canAccessModule(user, 'igd') ? [{ key: 'igd', label: 'IGD', icon: <IconSiren size={26} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'rawat-inap') ? [{ key: 'ranap', label: 'Ranap', icon: <IconBed size={26} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'farmasi') ? [{ key: 'farmasi', label: 'Farmasi', icon: <IconPill size={26} color="#059669" /> }] : []),
-    ...(canAccessModule(user, 'laboratorium') ? [{ key: 'lab', label: 'Lab', icon: <IconFlask size={26} color="#059669" /> }] : []),
+    ...(canAccessModule(user, 'laboratorium-pk') || canAccessModule(user, 'laboratorium-pa') ? [{ key: 'lab', label: 'Lab', icon: <IconFlask size={26} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'radiologi') ? [{ key: 'radiologi', label: 'Radiologi', icon: <IconRadiology size={26} color="#059669" /> }] : []),
     ...(canAccessModule(user, 'jadwal-operasi') ? [{ key: 'operasi', label: 'Operasi', icon: <IconScalpel size={26} color="#059669" /> }] : []),
   ];

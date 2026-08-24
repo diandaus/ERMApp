@@ -119,9 +119,11 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   // seperti semula — drawer hanya dipakai di bawah itu (tablet, dsb).
   const isPermanentSidebar = !useMediaQuery(1365);
   // Kartu Grafik TTV di sisa ruang kanan tab SOAP/CPPT cuma muat kalau ada
-  // ruang ekstra di luar sidebar(~300) + form(900) + gap — baru ditampilkan
-  // di layar lebar (>1600px), di bawah itu disembunyikan drpd overflow.
-  const showVitalChart = !useMediaQuery(1600);
+  // ruang ekstra di luar sidebar(~300) + form(900) + gap. Breakpoint
+  // 1300px dipilih supaya kebagian juga di MacBook (13" ~1440px, 14"/16"
+  // Retina ~1512-1728px CSS width) yang sebelumnya kepotong oleh ambang
+  // 1600px — di bawah 1300px disembunyikan drpd overflow horizontal.
+  const showVitalChart = !useMediaQuery(1300);
   const [showPatientInfo, setShowPatientInfo] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -652,35 +654,63 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
 
   // Mini line chart tanpa library — tiap vital tanda punya skala sendiri
   // (bukan digabung 1 sumbu, kecuali Sistol/Diastol yg satuannya sama),
-  // garis tipis 2px + titik data, tanpa grid/axis (recessive by design,
-  // ruang kartu terlalu sempit utk label sumbu).
+  // garis tipis 2px + titik data. Grid horizontal (4 ticks + label angka)
+  // & vertikal (per titik data) ditambahkan spt referensi grafik Excel —
+  // tetap tipis & abu-abu muda (#f3f4f6) supaya recessive, tidak
+  // mengalahkan garis data.
   const renderVitalChart = (series: { color: string; values: (number | null)[] }[]) => {
-    const width = 260;
-    const height = 56;
-    const padY = 8;
+    const width = 280;
+    const height = 90;
+    const leftPad = 28;
+    const rightPad = 8;
+    const topPad = 8;
+    const bottomPad = 8;
+    const plotW = width - leftPad - rightPad;
+    const plotH = height - topPad - bottomPad;
     const allValues = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
     if (allValues.length === 0) {
       return <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', padding: '14px 0' }}>-</div>;
     }
-    const min = Math.min(...allValues);
-    const max = Math.max(...allValues);
+    const rawMin = Math.min(...allValues);
+    const rawMax = Math.max(...allValues);
+    const margin = (rawMax - rawMin) * 0.15 || 5;
+    const min = rawMin - margin;
+    const max = rawMax + margin;
     const span = max - min || 1;
     const n = vitalTrend.length;
-    const stepX = n > 1 ? (width - 16) / (n - 1) : 0;
-    const scaleY = (v: number) => height - padY - ((v - min) / span) * (height - padY * 2);
+    const stepX = n > 1 ? plotW / (n - 1) : 0;
+    const scaleX = (i: number) => leftPad + i * stepX;
+    const scaleY = (v: number) => topPad + plotH - ((v - min) / span) * plotH;
+
+    const tickCount = 4;
+    const yTicks = Array.from({ length: tickCount + 1 }, (_, i) => min + (span * i) / tickCount);
+
     return (
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible' }}>
+        {/* Grid horizontal + label sumbu Y */}
+        {yTicks.map((tick, i) => (
+          <g key={`h-${i}`}>
+            <line x1={leftPad} y1={scaleY(tick)} x2={width - rightPad} y2={scaleY(tick)} stroke="#f3f4f6" strokeWidth={1} />
+            <text x={leftPad - 5} y={scaleY(tick)} textAnchor="end" dominantBaseline="middle" fontSize={7} fill="#9ca3af">
+              {Math.round(tick)}
+            </text>
+          </g>
+        ))}
+        {/* Grid vertikal per titik data */}
+        {vitalTrend.map((_, i) => (
+          <line key={`v-${i}`} x1={scaleX(i)} y1={topPad} x2={scaleX(i)} y2={height - bottomPad} stroke="#f3f4f6" strokeWidth={1} />
+        ))}
         {series.map((s, si) => {
           let d = '';
           s.values.forEach((v, i) => {
             if (v === null) return;
-            d += (d === '' ? 'M' : 'L') + `${8 + i * stepX},${scaleY(v)} `;
+            d += (d === '' ? 'M' : 'L') + `${scaleX(i)},${scaleY(v)} `;
           });
           return (
             <g key={si}>
               <path d={d} fill="none" stroke={s.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               {s.values.map((v, i) => (v === null ? null : (
-                <circle key={i} cx={8 + i * stepX} cy={scaleY(v)} r={2.5} fill={s.color} />
+                <circle key={i} cx={scaleX(i)} cy={scaleY(v)} r={2.5} fill={s.color} />
               )))}
             </g>
           );
@@ -778,10 +808,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827' }}>Identitas Diri</h4>
             </div>
             <div style={{ display: 'grid', gap: 12 }}>
-              <InfoItem label="Jenis Kelamin" value={patient.jk === 'L' ? 'Laki-laki' : patient.jk === 'P' ? 'Perempuan' : patient.jk || '-'}
+              <InfoItem
+                label="Jenis Kelamin"
+                value={`${patient.jk === 'L' ? 'Laki-laki' : patient.jk === 'P' ? 'Perempuan' : patient.jk || '-'}${patient.umur ? ` (${patient.umur})` : ''}`}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/></svg>} />
-              <InfoItem label="Umur" value={patient.umur || '-'}
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>} />
               {patient.gol_darah && (
                 <InfoItem label="Golongan Darah" value={patient.gol_darah}
                   icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/></svg>}
@@ -873,7 +903,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
             onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
             onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
           >
-            ← Keluar
+            Kembali
           </button>
         </div>
 
@@ -938,7 +968,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                             type="text"
                             value={form.alergi}
                             onChange={(e) => handleInputChange('alergi', e.target.value)}
-                            style={{ width: 180, padding: '7px 10px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: 13, outline: 'none', background: form.alergi ? '#fef2f2' : '#fff', color: '#dc2626' }}
+                            style={{ width: 140, padding: '7px 10px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: 13, outline: 'none', background: form.alergi ? '#fef2f2' : '#fff', color: '#dc2626' }}
                             placeholder="Alergi..."
                           />
                         </div>
@@ -1244,13 +1274,25 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                 </div>
 
                 {/* Grafik TTV — mengisi sisa ruang kanan setelah form
-                    dibatasi maxWidth 900, cuma tampil di layar lebar
-                    (>1600px) supaya tidak bikin overflow horizontal di
-                    layar sedang. Sticky supaya tetap kelihatan walau form
-                    di kiri di-scroll panjang. */}
+                    dibatasi maxWidth 900, cuma tampil di layar cukup lebar
+                    (>1300px) supaya tidak bikin overflow horizontal di
+                    layar sedang. Lebar responsif (clamp, sama pola dgn
+                    SIDEBAR_WIDTH di Pemeriksaan.tsx). position:sticky
+                    sebelumnya masih ikut lepas begitu parent row (form+
+                    history table yg panjang) selesai di-scroll — diganti
+                    position:fixed persis pola card "Kunjungan Terakhir" di
+                    Pemeriksaan.tsx: div placeholder di sini cuma menjaga
+                    ruang kosong di layout flex, card sungguhannya
+                    dipaku ke viewport (top:120 = tinggi header+tab+padding
+                    konten, right:20) sehingga benar-benar diam walau
+                    halaman di-scroll sejauh apa pun. */}
                 {showVitalChart && (
-                  <div style={{ width: 300, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
-                    <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+                  <div style={{ width: 'clamp(300px, 20vw, 460px)', flexShrink: 0 }}>
+                    <div style={{
+                      background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      position: 'fixed', top: 120, right: 20, width: 'clamp(300px, 20vw, 460px)',
+                      maxHeight: 'calc(100vh - 140px)', overflowY: 'auto', zIndex: 10,
+                    }}>
                       <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)' }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Grafik TTV</span>
                       </div>
@@ -1321,7 +1363,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
             {activeTab === 'resep' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Riwayat Resep Rawat Inap</h4>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 400, color: '#374151' }}>Riwayat Resep Rawat Inap</h4>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { setEditingResepPulang(null); setShowResepPulangModal(true); }}
                       style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
@@ -1428,7 +1470,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                 {/* ── Riwayat Resep Pulang ── */}
                 <div style={{ marginTop: 28 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Riwayat Resep Pulang</h4>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 400, color: '#374151' }}>Riwayat Resep Pulang</h4>
                   </div>
                   {loadingResepPulang ? (
                     <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Memuat...</div>
@@ -1516,7 +1558,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
 
             {activeTab === 'lab'      && <LabTab      patient={patient} />}
             {activeTab === 'rad'      && <RadTab      patient={patient} />}
-            {activeTab === 'tindakan' && <TindakanTab patient={patient} />}
+            {activeTab === 'tindakan' && <TindakanTab patient={patient} isRanap />}
             {activeTab === 'upload'   && <UploadTab   patient={patient} />}
 
             {/* ── ADIME GIZI Tab ── */}

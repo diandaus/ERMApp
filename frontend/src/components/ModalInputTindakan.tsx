@@ -7,6 +7,12 @@ type ModalInputTindakanProps = {
   patient: any;
   onClose: () => void;
   onSaved: () => void;
+  // isRanap menentukan seluruh jalur data: pencarian jenis tindakan (tarif
+  // rawat inap dari jns_perawatan_inap, bukan jns_perawatan) dan endpoint
+  // simpan (rawat_inap_dr/pr/drpr, bukan rawat_jl_dr/pr/drpr). Tanpa flag
+  // ini, tindakan yang diinput dari layar Rawat Inap akan selalu salah
+  // tersimpan ke tabel rawat jalan.
+  isRanap?: boolean;
 };
 
 // Penanganan — padanan 3 kategori tindakan yang sudah dipakai di sisi
@@ -17,7 +23,7 @@ type ModalInputTindakanProps = {
 // tapi tidak pernah bisa diisi dari modal manapun.
 type Penanganan = 'dokter' | 'petugas' | 'keduanya';
 
-export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient, onClose, onSaved }) => {
+export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient, onClose, onSaved, isRanap }) => {
   const [activePenanganan, setActivePenanganan] = React.useState<Penanganan>('dokter');
 
   const [searchTindakan, setSearchTindakan] = React.useState('');
@@ -54,13 +60,22 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
   const fetchJenisTindakan = React.useCallback((q: string) => {
     setLoadingTindakan(true);
     const params = new URLSearchParams({ search: q });
-    if (patient.kd_pj) params.append('kd_pj', patient.kd_pj);
-    fetch(`/api/tindakan/jenis-perawatan?${params}`)
+    let endpoint = '/api/tindakan/jenis-perawatan';
+    if (isRanap) {
+      // GetJenisTindakanRanap resolve kd_pj/kd_bangsal/kelas sendiri dari
+      // no_rawat (kamar_inap aktif terbaru) — tidak butuh kd_pj/kd_poli
+      // dari frontend spt jalur ralan di bawah.
+      endpoint = '/api/tindakan/jenis-perawatan-ranap';
+      if (patient.no_rawat) params.append('no_rawat', patient.no_rawat);
+    } else if (patient.kd_pj) {
+      params.append('kd_pj', patient.kd_pj);
+    }
+    fetch(`${endpoint}?${params}`)
       .then(res => (res.ok ? res.json() : []))
       .then((data) => setJenisTindakanList(Array.isArray(data) ? data : []))
       .catch(() => setJenisTindakanList([]))
       .finally(() => setLoadingTindakan(false));
-  }, [patient.kd_pj]);
+  }, [patient.kd_pj, patient.no_rawat, isRanap]);
 
   React.useEffect(() => {
     fetchJenisTindakan('');
@@ -121,10 +136,11 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
       let successCount = 0;
       let errorCount = 0;
 
+      const basePath = isRanap ? '/api/tindakan-ranap' : '/api/tindakan';
       const endpoint =
-        activePenanganan === 'dokter' ? '/api/tindakan/simpan' :
-        activePenanganan === 'petugas' ? '/api/tindakan/simpan-petugas' :
-        '/api/tindakan/simpan-drpr';
+        activePenanganan === 'dokter' ? `${basePath}/simpan` :
+        activePenanganan === 'petugas' ? `${basePath}/simpan-petugas` :
+        `${basePath}/simpan-drpr`;
 
       for (const item of selectedTindakanData) {
         if (!item) continue;
@@ -245,7 +261,7 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              Input Tindakan Rawat Jalan
+              {isRanap ? 'Input Tindakan Rawat Inap' : 'Input Tindakan Rawat Jalan'}
             </span>
             <button
               type="button" onClick={onClose}

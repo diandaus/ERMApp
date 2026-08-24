@@ -1514,19 +1514,17 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827' }}>Data Sosial</h4>
             </div>
             <div style={{ display: 'grid', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <InfoItem 
-                  label="Pendidikan" 
-                  value={patientData.pnd || '-'}
-                  icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>}
-                />
-                <InfoItem 
-                  label="Pekerjaan" 
-                  value={patientData.pekerjaan || '-'}
-                  icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>}
-                />
-              </div>
-              <InfoItem 
+              <InfoItem
+                label="Pendidikan"
+                value={patientData.pnd || '-'}
+                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>}
+              />
+              <InfoItem
+                label="Pekerjaan"
+                value={patientData.pekerjaan || '-'}
+                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>}
+              />
+              <InfoItem
                 label="Nama Ibu Kandung" 
                 value={patientData.nm_ibu || '-'}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>}
@@ -3347,7 +3345,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               <>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#374151' }}>Riwayat Permintaan Resep</h4>
+                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 400, color: '#374151' }}>Riwayat Permintaan Resep</h4>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => { setEditingResep(null); setShowResepModal(true); }}

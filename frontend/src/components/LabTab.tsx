@@ -184,6 +184,22 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
     fetchRiwayatPA();
   };
 
+  // Sudah keluar hasil? — permintaan_lab.tgl_hasil dikembalikan backend
+  // sebagai timestamp Go zero-value "0001-01-01T00:00:00Z" kalau belum ada
+  // hasil (kolom DATE kosong '0000-00-00' discan langsung tanpa
+  // DATE_FORMAT), atau tanggal asli (mis. "2026-04-15T00:00:00+07:00")
+  // begitu hasil disimpan. Dipakai utk menyembunyikan card "Riwayat
+  // Permintaan" begitu hasilnya sudah keluar (statusnya bukan pending lagi).
+  const sudahAdaHasil = (item: any) => {
+    const tgl = item?.tgl_hasil;
+    return !!tgl && tgl !== '0000-00-00' && !String(tgl).startsWith('0001-01-01');
+  };
+
+  const riwayatPending = React.useMemo(() => [
+    ...riwayatPK.map((item) => ({ item, kategori: 'pk' as const })),
+    ...riwayatPA.map((item) => ({ item, kategori: 'pa' as const })),
+  ].filter(({ item }) => !sudahAdaHasil(item)), [riwayatPK, riwayatPA]);
+
   return (
     <div>
 
@@ -223,14 +239,14 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
           </button>
         </div>
 
-        {/* Riwayat Permintaan Lab */}
-        {!loadingRiwayatPK && !loadingRiwayatPA && (riwayatPK.length > 0 || riwayatPA.length > 0) && (
+        {/* Riwayat Permintaan Lab — cuma yang belum ada hasilnya (masih
+            "Pending"); begitu hasil sudah keluar, card-nya hilang dari
+            sini (tetap bisa dilihat lewat tabel "Hasil Periksa
+            Laboratorium" di bawah). */}
+        {!loadingRiwayatPK && !loadingRiwayatPA && riwayatPending.length > 0 && (
           <div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {[
-                ...riwayatPK.map((item) => ({ item, kategori: 'pk' as const })),
-                ...riwayatPA.map((item) => ({ item, kategori: 'pa' as const })),
-              ].map(({ item, kategori }, idx) => (
+              {riwayatPending.map(({ item, kategori }, idx) => (
                 <RiwayatCard
                   key={idx}
                   item={item}
@@ -246,7 +262,7 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
 
         {/* Judul Hasil Periksa Laboratorium */}
         {!loadingHasilPeriksa && hasilPeriksa.length > 0 && (
-          <h4 style={{ margin: '24px 0 0 0', fontSize: 16, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h4 style={{ margin: '24px 0 0 0', fontSize: 16, fontWeight: 400, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
             Hasil Periksa Laboratorium
           </h4>
         )}

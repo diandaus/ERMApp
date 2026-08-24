@@ -9,6 +9,7 @@ import { BridgingView } from './Bridging';
 import { ApotekView } from './Apotek';
 import { JadwalOperasiView } from './JadwalOperasi';
 import { RadiologiView } from './Radiologi';
+import { LaboratoriumPKView } from './LaboratoriumPK';
 import { RegistrasiView } from './Registrasi';
 import { IGDKView } from './IGDK';
 import { DisplayAntrianView } from './DisplayAntrian';
@@ -33,7 +34,8 @@ type MenuKey =
   | 'rawat-jalan'
   | 'rawat-inap'
   | 'radiologi'
-  | 'laboratorium'
+  | 'laboratorium-pk'
+  | 'laboratorium-pa'
   | 'farmasi'
   | 'kasir'
   | 'casemix'
@@ -679,6 +681,12 @@ export const App: React.FC = () => {
   const [user, setUser] = React.useState<AppUser | null>(null);
   const [authView, setAuthView] = React.useState<'login' | 'register'>('login');
   const [activeMenu, setActiveMenu] = React.useState<MenuKey>('menu-utama');
+  // Accordion "Laboratorium" di sidebar — satu tombol induk yg expand jadi
+  // 2 anak (Laboratorium PK/PA), sama pola dgn "Daftar Resep Dokter" >
+  // Rawat Jalan/Rawat Inap di sidebar Apotek. Toggle manual lewat klik
+  // induk, TAPI juga otomatis kebuka kalau activeMenu lagi ada di salah
+  // satu anaknya (mis. reload halaman / navigasi langsung).
+  const [labMenuOpen, setLabMenuOpen] = React.useState(false);
   const [health, setHealth] = React.useState<string>('Belum cek');
   const [loadingHealth, setLoadingHealth] = React.useState<boolean>(false);
   const [selectedPatientForExam, setSelectedPatientForExam] = React.useState<any | null>(null);
@@ -731,7 +739,8 @@ export const App: React.FC = () => {
     'rawat-inap',
     'farmasi',
     'radiologi',
-    'laboratorium',
+    'laboratorium-pk',
+    'laboratorium-pa',
     'jadwal-operasi',
     'casemix',
     'bridging',
@@ -799,13 +808,26 @@ export const App: React.FC = () => {
       )
     },
     {
-      key: 'laboratorium',
-      label: 'Laboratorium',
+      key: 'laboratorium-pk',
+      label: 'Laboratorium PK',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 3v10.5L5.5 19c-.5.9-.5 2 .5 2.5h12c1 -.5 1-1.6.5-2.5L15 13.5V3"></path>
           <path d="M6.5 16h11"></path>
           <path d="M9 3h6"></path>
+        </svg>
+      )
+    },
+    {
+      key: 'laboratorium-pa',
+      label: 'Laboratorium PA',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="6" cy="6" r="3"></circle>
+          <path d="M8.12 8.12 12 12"></path>
+          <path d="M20 4 8.12 15.88"></path>
+          <circle cx="6" cy="18" r="3"></circle>
+          <path d="M14.8 14.8 20 20"></path>
         </svg>
       )
     },
@@ -1107,11 +1129,13 @@ export const App: React.FC = () => {
         return <BridgingView key={bridgingResetKey} />;
       case 'radiologi':
         return <RadiologiView user={user} />;
-      case 'laboratorium':
+      case 'laboratorium-pk':
+        return <LaboratoriumPKView user={user} />;
+      case 'laboratorium-pa':
         return (
           <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
-            <h2 style={{ marginTop: 0 }}>Laboratorium</h2>
-            <p style={{ color: '#6b7280' }}>Pemeriksaan lab PK, PA & hasil laboratorium</p>
+            <h2 style={{ marginTop: 0 }}>Laboratorium PA</h2>
+            <p style={{ color: '#6b7280' }}>Pemeriksaan lab PA & hasil laboratorium — segera hadir, menyusul Laboratorium PK.</p>
           </section>
         );
       case 'kepegawaian':
@@ -1232,59 +1256,187 @@ export const App: React.FC = () => {
         </div>
 
         <nav style={{ marginTop: 16, flex: 1, overflowY: 'auto' }}>
-          {visibleMenuItems.map((item) => {
-            const active = activeMenu === item.key;
-            return (
-              <button
-                key={item.key}
-                onClick={() => {
-                  // Klik ulang menu Casemix/Bridging (walau sudah aktif) reset kembali
-                  // ke grid sub-menu-nya, karena tidak ada tombol "kembali" di dalamnya.
-                  if (item.key === 'casemix') {
-                    setCasemixResetKey((k) => k + 1);
-                  }
-                  if (item.key === 'bridging') {
-                    setBridgingResetKey((k) => k + 1);
-                  }
-                  setActiveMenu(item.key);
-                  if (isCompact) setSidebarOpen(false);
-                }}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 10px',
-                  marginBottom: 4,
-                  borderRadius: 10,
-                  border: 'none',
-                  background: active ? '#2563eb' : 'transparent',
-                  color: active ? '#ffffff' : '#000000',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 400,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 10,
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) {
-                    e.currentTarget.style.background = '#f3f4f6';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) {
-                    e.currentTarget.style.background = 'transparent';
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 16, lineHeight: 1 }}>{item.icon}</span>
-                  <span>{item.label}</span>
-                </div>
-              </button>
-            );
-          })}
+          {(() => {
+            const labChildren = visibleMenuItems.filter((i) => i.key === 'laboratorium-pk' || i.key === 'laboratorium-pa');
+            const labActive = labChildren.some((i) => i.key === activeMenu);
+            const labExpanded = labMenuOpen || labActive;
+
+            const renderNavButton = (item: { key: MenuKey; label: string; icon: string | React.ReactNode }, indent = false) => {
+              const active = activeMenu === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    // Klik ulang menu Casemix/Bridging (walau sudah aktif) reset kembali
+                    // ke grid sub-menu-nya, karena tidak ada tombol "kembali" di dalamnya.
+                    if (item.key === 'casemix') {
+                      setCasemixResetKey((k) => k + 1);
+                    }
+                    if (item.key === 'bridging') {
+                      setBridgingResetKey((k) => k + 1);
+                    }
+                    setActiveMenu(item.key);
+                    if (isCompact) setSidebarOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: indent ? '7px 10px 7px 20px' : '8px 10px',
+                    marginBottom: 4,
+                    borderRadius: 10,
+                    border: 'none',
+                    background: active ? '#2563eb' : 'transparent',
+                    color: active ? '#ffffff' : '#000000',
+                    cursor: 'pointer',
+                    fontSize: indent ? 12.5 : 13,
+                    fontWeight: 400,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 10,
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = '#f3f4f6';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {indent ? (
+                      <span style={{ fontSize: 13, lineHeight: 1, opacity: 0.7 }}>›</span>
+                    ) : (
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>{item.icon}</span>
+                    )}
+                    <span>{item.label}</span>
+                  </div>
+                </button>
+              );
+            };
+
+            return visibleMenuItems.map((item) => {
+              // "Laboratorium PA" tidak dirender sendiri — sudah ikut
+              // ditampilkan sebagai anak accordion di posisi "laboratorium-pk".
+              if (item.key === 'laboratorium-pa') return null;
+
+              // Grup accordion "Laboratorium" — cuma dipakai kalau user
+              // punya akses ke KEDUA anak (PK & PA). Kalau cuma satu yg
+              // diizinkan (mis. lewat allowed_modules per akun), tampilkan
+              // sbg tombol biasa spy tidak ada accordion kosong sebelah.
+              if (item.key === 'laboratorium-pk' && labChildren.length >= 2) {
+                // Satu panel biru solid membungkus induk + semua anak begitu
+                // expanded (bukan cuma anak aktif yg diwarnai) — persis
+                // referensi "Daftar Resep Dokter" di sidebar Apotek.
+                return (
+                  <div
+                    key="laboratorium-group"
+                    style={{
+                      marginBottom: 4,
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      background: labExpanded ? '#2563eb' : 'transparent',
+                      transition: 'background 0.2s ease',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setLabMenuOpen((v) => !v)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 10px',
+                        borderRadius: 10,
+                        border: 'none',
+                        // Ikut labExpanded (bukan selalu 'transparent') —
+                        // supaya React mendeteksi PERUBAHAN nilai style tiap
+                        // kali accordion dibuka/tutup dan otomatis menimpa
+                        // efek hover abu-abu yg dimanipulasi langsung ke DOM
+                        // (onMouseEnter/Leave di bawah). Kalau nilainya selalu
+                        // sama ('transparent' terus), React tidak pernah
+                        // menulis ulang style itu shg hover abu-abu jadi
+                        // "nyangkut" permanen begitu accordion di-expand.
+                        background: labExpanded ? '#2563eb' : 'transparent',
+                        color: labExpanded ? '#ffffff' : '#000000',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 400,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 10,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!labExpanded) e.currentTarget.style.background = '#f3f4f6';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!labExpanded) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 16, lineHeight: 1 }}>{item.icon}</span>
+                        <span>Laboratorium</span>
+                      </div>
+                      <svg
+                        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                        strokeLinecap="round" strokeLinejoin="round"
+                        style={{ transform: labExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    {labExpanded && (
+                      <div style={{ paddingBottom: 4 }}>
+                        {labChildren.map((child) => {
+                          const childActive = activeMenu === child.key;
+                          return (
+                            <button
+                              key={child.key}
+                              onClick={() => {
+                                setActiveMenu(child.key);
+                                if (isCompact) setSidebarOpen(false);
+                              }}
+                              style={{
+                                width: '100%',
+                                textAlign: 'left',
+                                padding: childActive ? '7px 10px 7px 26px' : '7px 10px 7px 20px',
+                                border: 'none',
+                                // Tanpa background sama sekali (biar panel biru
+                                // di belakangnya yg tampil apa adanya) — cuma
+                                // font putih+bold yg membedakan item aktif.
+                                // TIDAK pakai onMouseEnter/Leave imperatif di
+                                // sini spy tidak kena bug yg sama dgn header
+                                // (background bernilai konstan antar render
+                                // bikin React tidak pernah menimpa ulang
+                                // mutasi DOM dari hover, jadi nyangkut).
+                                background: 'transparent',
+                                color: '#ffffff',
+                                cursor: 'pointer',
+                                fontSize: 12.5,
+                                fontWeight: childActive ? 700 : 400,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                              }}
+                            >
+                              <span style={{ fontSize: 13, lineHeight: 1, opacity: 0.85 }}>›</span>
+                              <span>{child.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return renderNavButton(item);
+            });
+          })()}
         </nav>
 
         <div

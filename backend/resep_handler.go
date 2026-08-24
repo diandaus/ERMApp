@@ -181,11 +181,19 @@ func submitResep(db *sql.DB) gin.HandlerFunc {
 				NamaRacikan string `json:"nama_racikan" binding:"required"`
 				Keterangan  string `json:"keterangan"`
 				MetodeRacik string `json:"metode_racik"`
-				JmlDr       int    `json:"jml_dr" binding:"required"`
+				// JmlDr (Jml.Racik/Bungkus, "kps") sengaja TIDAK required —
+				// dokter kadang isi Jumlah obat (mis. 4 tab) duluan sebelum
+				// farmasi menentukan jumlah kapsul/bungkus racikannya;
+				// dibiarkan 0 di sini, bukan diblokir saat simpan.
+				JmlDr       int    `json:"jml_dr"`
 				AturanPakai string `json:"aturan_pakai" binding:"required"`
 				Detail      []struct {
-					KodeBrng  string  `json:"kode_brng" binding:"required"`
-					Kandungan string  `json:"kandungan" binding:"required"`
+					KodeBrng string `json:"kode_brng" binding:"required"`
+					// Kandungan juga tidak required — sama alasan spt JmlDr
+					// di atas, tidak selalu bisa dihitung otomatis kalau
+					// JmlDr belum diisi (lihat hitungKandunganObatRacikan
+					// di ResepModal.tsx).
+					Kandungan string  `json:"kandungan"`
 					Jml       float64 `json:"jml" binding:"required"`
 				} `json:"detail" binding:"required"`
 			} `json:"racikan"`
