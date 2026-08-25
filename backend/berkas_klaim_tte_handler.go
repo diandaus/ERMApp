@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -142,5 +144,46 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, items)
+	}
+}
+
+// POST /api/casemix/berkas-klaim-tte/gruper — simpan PDF hasil "Cetak Klaim"
+// (claim_print E-Klaim) sbg file "Gruper_<no_rawat>.pdf" di folder fisik yg
+// sama dgn TTE (berkasrawat/pages/upload), TANPA tabel DB — persis konvensi
+// jenisBerkasKlaim di atas, jadi otomatis kedeteksi getBerkasKlaimTte tanpa
+// perlu langkah tambahan.
+func saveGruperKlaim(cfg KhanzaWebappsConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.PostForm("no_rawat")
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+			return
+		}
+		file, _, err := c.Request.FormFile("file")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "File tidak ditemukan"})
+			return
+		}
+		defer file.Close()
+
+		uploadDir := WebappsUploadDir(cfg)
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat direktori upload"})
+			return
+		}
+
+		buf, err := io.ReadAll(file)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca file"})
+			return
+		}
+
+		fileName := "Gruper_" + strings.ReplaceAll(noRawat, "/", "_") + ".pdf"
+		if err := os.WriteFile(filepath.Join(uploadDir, fileName), buf, 0644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Berkas Gruper berhasil disimpan", "file_name": fileName})
 	}
 }

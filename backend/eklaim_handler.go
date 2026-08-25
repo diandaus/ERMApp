@@ -35,8 +35,11 @@ import (
 // BRIDGING_DEFS di frontend, belum termasuk di sini).
 
 type eklaimConfig struct {
-	URL string
-	Key string // hex, 64 karakter = 256-bit
+	URL       string
+	Key       string // hex, 64 karakter = 256-bit
+	PayorID   string // Payplan ID dari E-Klaim > Setup > Jaminan, tetap per-RS
+	PayorCd   string // Code Payplan tsb, mis. "JKN"
+	KodeTarif string // mis. "DS" — tetap per-RS, jarang beda antar klaim
 }
 
 func getEklaimConfig(db *sql.DB) (*eklaimConfig, error) {
@@ -48,7 +51,7 @@ func getEklaimConfig(db *sql.DB) (*eklaimConfig, error) {
 	if err := json.Unmarshal([]byte(configJSON), &m); err != nil {
 		return nil, fmt.Errorf("konfigurasi E-Klaim tidak valid")
 	}
-	cfg := &eklaimConfig{URL: strings.TrimRight(m["URL"], "/"), Key: m["KEY"]}
+	cfg := &eklaimConfig{URL: strings.TrimRight(m["URL"], "/"), Key: m["KEY"], PayorID: m["PAYOR_ID"], PayorCd: m["PAYOR_CD"], KodeTarif: m["KODE_TARIF"]}
 	if cfg.URL == "" || cfg.Key == "" {
 		return nil, fmt.Errorf("URL dan Encryption Key E-Klaim belum diisi di Pengaturan Bridging")
 	}
@@ -319,6 +322,22 @@ func eklaimProxy(db *sql.DB, method string) gin.HandlerFunc {
 				return
 			}
 			body["nomor_sep"] = noSep
+		}
+
+		// Payor ID/Code & Kode Tarif tetap per-RS (Payor dari Setup > Jaminan
+		// di aplikasi E-Klaim, Kode Tarif dari kelas RS), jadi bukan diisi
+		// ulang tiap klaim di form — ambil dari Pengaturan Bridging kalau
+		// frontend tidak mengirimkannya sendiri.
+		if method == "set_claim_data" {
+			if _, has := body["payor_id"]; !has && cfg.PayorID != "" {
+				body["payor_id"] = cfg.PayorID
+			}
+			if _, has := body["payor_cd"]; !has && cfg.PayorCd != "" {
+				body["payor_cd"] = cfg.PayorCd
+			}
+			if _, has := body["kode_tarif"]; !has && cfg.KodeTarif != "" {
+				body["kode_tarif"] = cfg.KodeTarif
+			}
 		}
 
 		result, err := eklaimRequest(cfg, method, nil, body)

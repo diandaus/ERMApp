@@ -36,7 +36,6 @@ type GroupingInacbgHeader struct {
 	NoKartu     string `json:"no_kartu"`
 	Tipe        string `json:"tipe"` // "RI" / "RJ"
 	Cbg         string `json:"cbg"`  // hasil grouping — "-" (blm digrouping)
-	Petugas     string `json:"petugas"`
 	DxUtama     string `json:"dx_utama"`
 	ProsUtama   string `json:"pros_utama"`
 	// Info Klaim
@@ -116,7 +115,6 @@ func getGroupingInacbgHeader(db *sql.DB) gin.HandlerFunc {
 			h.Tipe = "RI"
 		}
 		h.Cbg = "-"
-		h.Petugas = "INACBG"
 
 		// No.SEP + No.Kartu dari SEP kalau sudah pernah diterbitkan
 		// (bridging_sep) — dipakai sbg fallback tampilan, TIDAK menimpa

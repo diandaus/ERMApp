@@ -162,6 +162,12 @@ const BRIDGING_DEFS: ServiceDef[] = [
     fields: [
       { key: 'URL', label: 'URL Web Service', type: 'url', placeholder: 'http://192.168.1.x/E-Klaim/ws.php' },
       { key: 'KEY', label: 'Encryption Key (256-bit hex)', type: 'secret' },
+      // Payplan ID & Code dari aplikasi E-Klaim > Setup > Jaminan — tetap
+      // per-RS (bukan per-klaim), jadi cukup diisi sekali di sini, dipakai
+      // otomatis oleh backend/eklaim_handler.go tiap set_claim_data.
+      { key: 'PAYOR_ID', label: 'Payor ID', type: 'text', placeholder: 'dari E-Klaim > Setup > Jaminan, mis. 3' },
+      { key: 'PAYOR_CD', label: 'Payor Code', type: 'text', placeholder: 'mis. JKN' },
+      { key: 'KODE_TARIF', label: 'Kode Tarif', type: 'text', placeholder: 'mis. DS' },
     ],
   },
   {
@@ -252,6 +258,21 @@ export const AdminView: React.FC = () => {
   const [waStatus, setWaStatus] = React.useState<{ state: string; connected: boolean; number: string | null } | null>(null);
   const [waQr, setWaQr] = React.useState<string | null>(null);
   const [waError, setWaError] = React.useState('');
+
+  // E-Klaim — Kelola Coder NIK (master data inacbg_coder_nik, dipakai
+  // Grouping INACBG utk pilih Coder NIK per klaim, bukan diketik manual)
+  const [showCoderNik, setShowCoderNik] = React.useState(false);
+  const [coderList, setCoderList] = React.useState<{ nik: string; nama: string; no_ik: string }[]>([]);
+  const [coderSearch, setCoderSearch] = React.useState('');
+  const [coderLoading, setCoderLoading] = React.useState(false);
+  const [coderError, setCoderError] = React.useState('');
+  const [coderEditingNik, setCoderEditingNik] = React.useState<string | null>(null);
+  const [coderNoIkDraft, setCoderNoIkDraft] = React.useState('');
+  const [coderAdding, setCoderAdding] = React.useState(false);
+  const [pegawaiSearch, setPegawaiSearch] = React.useState('');
+  const [pegawaiOptions, setPegawaiOptions] = React.useState<{ nik: string; nama: string; jbtn: string }[]>([]);
+  const [pegawaiPicked, setPegawaiPicked] = React.useState<{ nik: string; nama: string } | null>(null);
+  const [coderSaving, setCoderSaving] = React.useState(false);
   const [loadingWa, setLoadingWa] = React.useState(false);
 
   // Set Penggunaan Tarif state — padanan set_tarif.java, 11 saklar Yes/No.
@@ -428,6 +449,71 @@ export const AdminView: React.FC = () => {
       setWaQr(null);
     } catch (e) {
       Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  // Kelola Coder NIK (E-Klaim) — muat ulang tiap modal dibuka / kata kunci
+  // cari berubah (debounce ringan spy tidak nembak request tiap ketikan).
+  React.useEffect(() => {
+    if (!showCoderNik) return;
+    const t = setTimeout(async () => {
+      setCoderLoading(true);
+      setCoderError('');
+      try {
+        const res = await fetch(`/api/bridging/eklaim/coder-nik/list?q=${encodeURIComponent(coderSearch)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal memuat daftar Coder NIK');
+        setCoderList(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setCoderError(e instanceof Error ? e.message : 'Terjadi kesalahan');
+      } finally {
+        setCoderLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [showCoderNik, coderSearch]);
+
+  // Pencarian pegawai utk dipilih saat "+ Tambah Coder" (endpoint /api/pegawai
+  // yg sudah dipakai fitur lain — search by nik/nama/jbtn).
+  React.useEffect(() => {
+    if (!coderAdding || pegawaiSearch.trim() === '') { setPegawaiOptions([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/pegawai?search=${encodeURIComponent(pegawaiSearch)}`);
+        const data = await res.json();
+        if (res.ok) setPegawaiOptions(Array.isArray(data) ? data : []);
+      } catch { /* biarkan opsi kosong, bukan error fatal */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [coderAdding, pegawaiSearch]);
+
+  const resetCoderForm = () => {
+    setCoderAdding(false);
+    setCoderEditingNik(null);
+    setCoderNoIkDraft('');
+    setPegawaiPicked(null);
+    setPegawaiSearch('');
+    setPegawaiOptions([]);
+  };
+
+  const handleSaveCoder = async (nik: string) => {
+    if (!coderNoIkDraft.trim()) return;
+    setCoderSaving(true);
+    try {
+      const res = await fetch('/api/bridging/eklaim/coder-nik', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nik, no_ik: coderNoIkDraft.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
+      resetCoderForm();
+      const r2 = await fetch(`/api/bridging/eklaim/coder-nik/list?q=${encodeURIComponent(coderSearch)}`);
+      const d2 = await r2.json();
+      if (r2.ok) setCoderList(Array.isArray(d2) ? d2 : []);
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan' });
+    } finally {
+      setCoderSaving(false);
     }
   };
 
@@ -657,6 +743,14 @@ export const AdminView: React.FC = () => {
                   style={{ padding: '7px 20px', borderRadius: 8, border: `1px solid ${grp.color}`, background: '#fff', color: grp.color, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
                 >
                   Pairing (Scan QR)
+                </button>
+              )}
+              {def.kode === 'eklaim' && (
+                <button
+                  onClick={() => setShowCoderNik(true)}
+                  style={{ padding: '7px 20px', borderRadius: 8, border: `1px solid ${grp.color}`, background: '#fff', color: grp.color, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Kelola Coder NIK
                 </button>
               )}
               <button
@@ -905,6 +999,137 @@ export const AdminView: React.FC = () => {
               </>
             ) : (
               <div style={{ padding: 30, color: '#6b7280', fontSize: 13 }}>Menunggu QR dari WhatsApp Gateway...</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Kelola Coder NIK (E-Klaim) — master data inacbg_coder_nik,
+          dipakai form Grouping INACBG utk pilih Coder NIK per klaim */}
+      {showCoderNik && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 20 }}
+          onClick={() => { setShowCoderNik(false); resetCoderForm(); }}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 560, width: '95%', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Kelola Coder NIK</span>
+              <button
+                type="button" onClick={() => { setShowCoderNik(false); resetCoderForm(); }}
+                style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0 }}
+              >
+                &times;
+              </button>
+            </div>
+            <p style={{ margin: 0, fontSize: 12.5, color: '#6b7280' }}>
+              Daftar pegawai yang terdaftar sebagai coder di E-Klaim (No. IK = nomor izin kerja coder yang terdaftar di aplikasi E-Klaim). Dipakai sebagai pilihan Coder NIK di form Grouping INACBG.
+            </p>
+
+            <input
+              type="text" value={coderSearch} onChange={(e) => setCoderSearch(e.target.value)}
+              placeholder="Cari nama / NIK / No. IK..."
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
+            />
+
+            {coderError && (
+              <div style={{ fontSize: 12, color: '#991b1b', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>{coderError}</div>
+            )}
+
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              {coderLoading ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat...</div>
+              ) : coderList.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Belum ada coder terdaftar.</div>
+              ) : (
+                coderList.map((c) => (
+                  <div key={c.nik} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: '1px solid #f3f4f6' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{c.nama}</div>
+                      <div style={{ fontSize: 11.5, color: '#9ca3af' }}>NIK {c.nik}</div>
+                    </div>
+                    {coderEditingNik === c.nik ? (
+                      <>
+                        <input
+                          autoFocus type="text" value={coderNoIkDraft} onChange={(e) => setCoderNoIkDraft(e.target.value)}
+                          placeholder="No. IK" style={{ width: 150, padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none' }}
+                        />
+                        <button type="button" disabled={coderSaving} onClick={() => void handleSaveCoder(c.nik)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Simpan</button>
+                        <button type="button" onClick={resetCoderForm} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Batal</button>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 12.5, color: '#374151' }}>No. IK: {c.no_ik || '-'}</div>
+                        <button
+                          type="button"
+                          onClick={() => { resetCoderForm(); setCoderEditingNik(c.nik); setCoderNoIkDraft(c.no_ik); }}
+                          style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {coderAdding ? (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#111827' }}>Tambah Coder</div>
+                {pegawaiPicked ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, fontSize: 13, color: '#111827' }}>{pegawaiPicked.nama} <span style={{ color: '#9ca3af', fontSize: 11.5 }}>(NIK {pegawaiPicked.nik})</span></div>
+                    <button type="button" onClick={() => setPegawaiPicked(null)} style={{ fontSize: 11.5, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>Ganti</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text" value={pegawaiSearch} onChange={(e) => setPegawaiSearch(e.target.value)}
+                      placeholder="Cari nama/NIK pegawai..." autoFocus
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none' }}
+                    />
+                    {pegawaiOptions.length > 0 && (
+                      <div style={{ border: '1px solid #e5e7eb', borderRadius: 6, maxHeight: 160, overflowY: 'auto' }}>
+                        {pegawaiOptions.map((p) => (
+                          <div
+                            key={p.nik} onClick={() => setPegawaiPicked({ nik: p.nik, nama: p.nama })}
+                            style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                          >
+                            {p.nama} <span style={{ color: '#9ca3af' }}>— {p.jbtn} — NIK {p.nik}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                {pegawaiPicked && (
+                  <input
+                    type="text" value={coderNoIkDraft} onChange={(e) => setCoderNoIkDraft(e.target.value)}
+                    placeholder="No. IK (nomor izin kerja di E-Klaim)"
+                    style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none' }}
+                  />
+                )}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={resetCoderForm} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Batal</button>
+                  <button
+                    type="button" disabled={!pegawaiPicked || coderSaving}
+                    onClick={() => pegawaiPicked && void handleSaveCoder(pegawaiPicked.nik)}
+                    style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: pegawaiPicked ? '#2563eb' : '#d1d5db', color: '#fff', fontSize: 12, fontWeight: 600, cursor: pegawaiPicked ? 'pointer' : 'not-allowed' }}
+                  >
+                    Simpan
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button" onClick={() => { resetCoderForm(); setCoderAdding(true); }}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px dashed #9ca3af', background: '#fff', color: '#374151', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                + Tambah Coder
+              </button>
             )}
           </div>
         </div>

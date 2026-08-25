@@ -3397,6 +3397,7 @@ func main() {
 	r.POST("/api/berkas-rawat/upload", uploadBerkasRawat(db, khanzaCfg))
 	r.DELETE("/api/berkas-rawat", deleteBerkasRawat(db, khanzaCfg))
 	r.GET("/api/casemix/berkas-klaim-tte/*no_rawat", getBerkasKlaimTte(db, khanzaCfg))
+	r.POST("/api/casemix/berkas-klaim-tte/gruper", saveGruperKlaim(khanzaCfg))
 	r.POST("/api/bridging/eklaim/new-claim", postEklaimNewClaim(db))
 	// Method #4 Update Data Klaim, #5-6 Set/Get Diagnosa iDRG,
 	// #7-8 Set/Get Prosedur iDRG, #11-13 Final/Re-edit iDRG & Import ke
@@ -3440,6 +3441,8 @@ func main() {
 	r.POST("/api/bridging/eklaim/generate-nomor-klaim", eklaimProxy(db, "generate_claim_number"))
 	r.POST("/api/bridging/eklaim/sitb/validasi", eklaimProxy(db, "sitb_validate"))
 	r.POST("/api/bridging/eklaim/sitb/batal", eklaimProxy(db, "sitb_invalidate"))
+	r.GET("/api/bridging/eklaim/coder-nik/list", getEklaimCoderNikList(db))
+	r.POST("/api/bridging/eklaim/coder-nik", saveEklaimCoderNik(db))
 
 	// Tindakan Rawat Jalan endpoint
 	r.GET("/api/tindakan-ralan/*no_rawat", getTindakanRalan(db))

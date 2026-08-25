@@ -44,6 +44,17 @@ type GroupingFormData struct {
 	BeratLahir   string `json:"berat_lahir"`
 	CaraPulang   string `json:"cara_pulang"`
 	Dpjp         string `json:"dpjp"`
+
+	// Perkiraan awal Tarif RS per komponen, dihitung dari billing — tetap
+	// bisa diedit manual di form (bukan dikunci), sekadar starting point spy
+	// coder tidak isi dari nol. Padanan persis query di klaimbarumanual.php.
+	TarifRs map[string]float64 `json:"tarif_rs"`
+
+	// Diagnosa/Prosedur iDRG auto dari diagnosa_pasien/prosedur_pasien (coding
+	// yg sudah diisi dokter/perawat di RM), format sama persis dgn yg dikirim
+	// ke E-Klaim (dipisah '#'). Tetap bisa diedit manual sblm klik Grup iDRG.
+	DiagnosaIdrg string `json:"diagnosa_idrg"`
+	ProsedurIdrg string `json:"prosedur_idrg"`
 }
 
 // GET /api/casemix/grouping-form/:no_rawat
@@ -155,7 +166,103 @@ func getGroupingForm(db *sql.DB) gin.HandlerFunc {
 			`, noRawat).Scan(&f.Jaminan)
 		}
 
+		f.TarifRs = computeTarifRs(db, noRawat)
+		f.DiagnosaIdrg, f.ProsedurIdrg = computeIdrgCoding(db, noRawat)
+
 		c.JSON(http.StatusOK, f)
+	}
+}
+
+// computeIdrgCoding — susun string Diagnosa/Prosedur iDRG dari
+// diagnosa_pasien/prosedur_pasien (coding yg sudah diisi di RM), padanan
+// PERSIS query "Diagnosa IDRG"/"Prosedur IDRG" di klaimbarumanual.php:
+// diurut prioritas, digabung '#'. Untuk prosedur, jumlah>1 ditambahkan sbg
+// suffix "+N" (jumlah=1 tidak ditambah suffix — str_replace("+1","",...) di
+// sumber aslinya menghapusnya).
+func computeIdrgCoding(db *sql.DB, noRawat string) (string, string) {
+	var diagnosa []string
+	rowsD, err := db.Query(`SELECT kd_penyakit FROM diagnosa_pasien WHERE no_rawat = ? ORDER BY prioritas ASC`, noRawat)
+	if err == nil {
+		defer rowsD.Close()
+		for rowsD.Next() {
+			var kd string
+			if rowsD.Scan(&kd) == nil {
+				diagnosa = append(diagnosa, kd)
+			}
+		}
+	}
+
+	var prosedur []string
+	rowsP, err := db.Query(`SELECT kode, jumlah FROM prosedur_pasien WHERE no_rawat = ? ORDER BY prioritas ASC`, noRawat)
+	if err == nil {
+		defer rowsP.Close()
+		for rowsP.Next() {
+			var kode, jumlah string
+			if rowsP.Scan(&kode, &jumlah) == nil {
+				suffix := strings.ReplaceAll("+"+jumlah, "+1", "")
+				prosedur = append(prosedur, kode+suffix)
+			}
+		}
+	}
+
+	return strings.Join(diagnosa, "#"), strings.Join(prosedur, "#")
+}
+
+// computeTarifRs — breakdown Tarif RS per komponen dari tabel billing,
+// padanan PERSIS query di klaimbarumanual.php (Khanza) supaya angka yg
+// muncul sama dgn yg biasa dipakai coder di aplikasi lama. tenaga_ahli,
+// rawat_intensif, alkes, tarif_poli_eks memang di-hardcode 0 di sumbernya
+// juga (tidak ada mapping billing-nya) — tetap 0 di sini, isi manual.
+func computeTarifRs(db *sql.DB, noRawat string) map[string]float64 {
+	sum := func(where string) float64 {
+		var v sql.NullFloat64
+		if err := db.QueryRow(`SELECT SUM(totalbiaya) FROM billing WHERE no_rawat = ? AND `+where, noRawat).Scan(&v); err != nil {
+			return 0
+		}
+		return v.Float64
+	}
+
+	prosedurNonBedah := sum(`nm_perawatan LIKE '%PNB%'`)
+	prosedurBedah := sum(`nm_perawatan LIKE '%PB%'`)
+	konsultasi := sum(`(nm_perawatan LIKE '%KONSUL%' OR nm_perawatan LIKE '%(KSL)%')`)
+	keperawatan := sum(`(status = 'Ranap Paramedis' OR status = 'Ralan Paramedis') AND nm_perawatan LIKE '%(TDP)%'`)
+	penunjang := sum(`(status = 'Ranap Paramedis' OR status = 'Ralan Paramedis') AND nm_perawatan LIKE '%(PNG)%'`)
+	radiologi := sum(`status = 'Radiologi'`)
+	laboratorium := sum(`status = 'Laborat'`)
+	pelayananDarah := sum(`(nm_perawatan LIKE '%DRH%' OR nm_perawatan LIKE '%(DRH)%')`)
+	rehabilitasi := sum(`status = 'Ralan Dokter Paramedis' AND nm_perawatan LIKE '%terapi%'`) +
+		sum(`status = 'Ranap Dokter Paramedis' AND nm_perawatan LIKE '%terapi%'`)
+
+	var biayaReg sql.NullFloat64
+	db.QueryRow(`SELECT biaya_reg FROM reg_periksa WHERE no_rawat = ?`, noRawat).Scan(&biayaReg)
+	kamar := sum(`status = 'Kamar'`) + biayaReg.Float64
+
+	obatKronis := sum(`nm_perawatan LIKE '%kronis%' AND status = 'Obat'`)
+	obatKemoterapi := sum(`nm_perawatan LIKE '%kemo%' AND status = 'Obat'`)
+	obat := sum(`status = 'Obat'`) + sum(`status = 'Retur Obat'`) + sum(`status = 'Resep Pulang'`) - obatKronis - obatKemoterapi
+
+	bmhp := sum(`status = 'Tambahan'`)
+	sewaAlat := sum(`nm_perawatan LIKE '%(ALM)%' AND status IN ('Ralan Paramedis','Ranap Paramedis','Ralan Dokter Paramedis','Ranap Dokter Paramedis','Ralan Dokter','Ranap Dokter')`)
+
+	return map[string]float64{
+		"prosedur_non_bedah": prosedurNonBedah,
+		"prosedur_bedah":     prosedurBedah,
+		"konsultasi":         konsultasi,
+		"tenaga_ahli":        0,
+		"keperawatan":        keperawatan,
+		"penunjang":          penunjang,
+		"radiologi":          radiologi,
+		"laboratorium":       laboratorium,
+		"pelayanan_darah":    pelayananDarah,
+		"rehabilitasi":       rehabilitasi,
+		"kamar":              kamar,
+		"rawat_intensif":     0,
+		"obat":               obat,
+		"obat_kronis":        obatKronis,
+		"obat_kemoterapi":    obatKemoterapi,
+		"alkes":              0,
+		"bmhp":               bmhp,
+		"sewa_alat":          sewaAlat,
 	}
 }
 

@@ -31,13 +31,13 @@ func searchPenyakit(db *sql.DB) gin.HandlerFunc {
 		if q == "" {
 			// Kosong -> tampilkan daftar awal (dipakai saat modal baru
 			// dibuka, sebelum user mengetik apapun).
-			rows, err = db.Query(`SELECT kd_penyakit, COALESCE(nm_penyakit, '') FROM penyakit ORDER BY nm_penyakit LIMIT 50`)
+			rows, err = db.Query(`SELECT kd_penyakit, COALESCE(nm_penyakit, '') FROM penyakit ORDER BY kd_penyakit LIMIT 50`)
 		} else {
 			rows, err = db.Query(`
 				SELECT kd_penyakit, COALESCE(nm_penyakit, '')
 				FROM penyakit
 				WHERE kd_penyakit LIKE ? OR nm_penyakit LIKE ?
-				ORDER BY nm_penyakit
+				ORDER BY kd_penyakit
 				LIMIT 50
 			`, "%"+q+"%", "%"+q+"%")
 		}
@@ -175,13 +175,13 @@ func searchIcd9(db *sql.DB) gin.HandlerFunc {
 		var rows *sql.Rows
 		var err error
 		if q == "" {
-			rows, err = db.Query(`SELECT kode, COALESCE(deskripsi_panjang, '') FROM icd9 ORDER BY deskripsi_panjang LIMIT 50`)
+			rows, err = db.Query(`SELECT kode, COALESCE(deskripsi_panjang, '') FROM icd9 ORDER BY kode LIMIT 50`)
 		} else {
 			rows, err = db.Query(`
 				SELECT kode, COALESCE(deskripsi_panjang, '')
 				FROM icd9
 				WHERE kode LIKE ? OR deskripsi_panjang LIKE ?
-				ORDER BY deskripsi_panjang
+				ORDER BY kode
 				LIMIT 50
 			`, "%"+q+"%", "%"+q+"%")
 		}

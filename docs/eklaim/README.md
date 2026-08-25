@@ -60,11 +60,23 @@ pengembangan Grouping INACBG (`frontend/src/modules/GroupingInacbg.tsx`,
   lingkungan dev ini) — semua field/nama method ditranskripsi presisi
   dari manual resmi, tapi perilaku sebenarnya (bentuk error, edge-case
   respons) baru bisa dipastikan pas dites langsung di server RS.
-- ⚠️ State (`stage`) di `GroupingFormView` cuma di memori komponen, TIDAK
-  disinkron dari `get_claim_data` (method #24) saat halaman dibuka ulang
-  — reload = mulai dari awal lagi walau klaim sebenarnya sudah jalan di
-  E-Klaim. Perlu ditambah cek status awal via method #24 kalau mau lebih
-  robust.
+- ✅ State (`stage`) di `GroupingFormView` disinkron dari `get_claim_data`
+  (method #24) tiap halaman dibuka — kalau klaim utk SEP itu sudah pernah
+  dibuat sebelumnya, form otomatis lompat ke tahap yang sesuai (idrg_input/
+  idrg_grouped/idrg_final/inacbg_grouped/inacbg_final/klaim_final) dan
+  isi ulang diagnosa/prosedur/hasil grouping/tarif dari respons server.
+  "Buat Klaim Baru" juga sudah toleran kalau E-Klaim membalas "Duplikasi
+  nomor SEP" (klaim memang sudah ada) — dianggap sukses, bukan error.
+  ⚠️ Deteksi `klaim_status_cd === 'final'` untuk tahap `klaim_final` masih
+  tebakan berdasar pola `status_cd` di iDRG/INACBG grouper (manual resmi
+  tidak kasih contoh respons `get_claim_data` utk klaim yang sudah final)
+  — perlu diverifikasi begitu ada klaim yang benar-benar difinalisasi.
+  **Dikonfirmasi dari server produksi nyata (2026-08-25)**: `grouper.
+  response_idrg` SELALU ada sbg object placeholder (`status_cd:"normal"`,
+  `total_cost_weight:"0"`, tanpa `drg_code`) walau grouping belum pernah
+  dijalankan — beda dari contoh di manual. Deteksi "sudah di-grouping"
+  jadi dipakai kemunculan `drg_code`/`cbg.code`, bukan sekadar objeknya
+  ada.
 - ⏳ Import tabel kode ICD dari 2 file tsv (lokal, autocomplete pencarian
   diagnosa/prosedur) — belum diputuskan/dibangun. Saat ini staf isi kode
   diagnosa/prosedur iDRG & INACBG manual (dipisah tanda `#`), belum ada

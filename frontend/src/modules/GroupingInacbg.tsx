@@ -512,6 +512,8 @@ type GroupingFormData = {
   no_peserta: string; cob: boolean; jenis_rawat: 'jalan' | 'inap'; naik_kelas: boolean; kelas_hak: string;
   tgl_masuk_jam: string; tgl_pulang_jam: string; umur: string; cara_masuk: string; los: number;
   berat_lahir: string; cara_pulang: string; dpjp: string;
+  tarif_rs: Record<string, number>;
+  diagnosa_idrg: string; prosedur_idrg: string;
 };
 
 const TARIF_KOLOM: { key: string; label: string }[][] = [
@@ -520,10 +522,8 @@ const TARIF_KOLOM: { key: string; label: string }[][] = [
   [{ key: 'konsultasi', label: 'Konsultasi' }, { key: 'penunjang', label: 'Penunjang' }, { key: 'pelayanan_darah', label: 'Pelayanan Darah' }, { key: 'rawat_intensif', label: 'Rawat Intensif' }, { key: 'obat_kemoterapi', label: 'Obat Kemoterapi' }, { key: 'sewa_alat', label: 'Sewa Alat' }],
 ];
 
-const KODE_TARIF_OPSI = ['AP', 'AS', 'BP', 'BS', 'CP', 'CS', 'DP', 'DS', 'RSCM', 'RSJP', 'RSD', 'RSAB'];
-
 const gLabel: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontStyle: 'italic' };
-const gInput: React.CSSProperties = { padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none', width: '100%', boxSizing: 'border-box' };
+const gInput: React.CSSProperties = { padding: '6px 10px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none', width: '100%', boxSizing: 'border-box' };
 
 // discharge_status E-Klaim (1-5) dari raw kamar_inap.stts_pulang — padanan
 // persis mapping discharge_status di klaimbarumanual.php (Khanza Java).
@@ -542,6 +542,41 @@ function caraMasukToCode(label: string): string {
   if (label === 'Rujukan FKTP') return 'gp';
   if (label === 'Rujukan FKRTL') return 'hosp-trans';
   return 'other';
+}
+
+// Auto-fill (dari coding RM) / sync (dari get_claim_data) cuma kasih kode
+// diagnosa mentah (dipisah '#'), bukan namanya — resolve satu-satu ke
+// /api/penyakit/search (exact match kd_penyakit) spy list-nya bisa
+// tampilkan nama, bukan cuma kode.
+async function resolveDiagnosaCodes(codesStr: string): Promise<{ code: string; label: string }[]> {
+  const codes = codesStr.split('#').map((s) => s.trim()).filter(Boolean);
+  return Promise.all(codes.map(async (code) => {
+    try {
+      const r = await fetch(`/api/penyakit/search?q=${encodeURIComponent(code)}`);
+      const d = await r.json();
+      const match = Array.isArray(d) ? d.find((it: any) => it.kd_penyakit === code) : null;
+      return { code, label: match ? match.nm_penyakit : '' };
+    } catch {
+      return { code, label: '' };
+    }
+  }));
+}
+
+// Sama pola dgn resolveDiagnosaCodes, tapi kode Prosedur bisa punya suffix
+// "+N" (jumlah) yg perlu dipisah dulu sblm dicari ke /api/icd9/search.
+async function resolveProsedurCodes(codesStr: string): Promise<{ code: string; label: string; jumlah: string }[]> {
+  const tokens = codesStr.split('#').map((s) => s.trim()).filter(Boolean);
+  return Promise.all(tokens.map(async (token) => {
+    const [code, jumlah] = token.split('+');
+    try {
+      const r = await fetch(`/api/icd9/search?q=${encodeURIComponent(code)}`);
+      const d = await r.json();
+      const match = Array.isArray(d) ? d.find((it: any) => it.kode === code) : null;
+      return { code, label: match ? match.deskripsi_panjang : '', jumlah: jumlah || '1' };
+    } catch {
+      return { code, label: '', jumlah: jumlah || '1' };
+    }
+  }));
 }
 
 type EklaimStage = 'awal' | 'idrg_input' | 'idrg_grouped' | 'idrg_final' | 'inacbg_input' | 'inacbg_grouped' | 'inacbg_final' | 'klaim_final';
@@ -564,42 +599,276 @@ const btnPrimary: React.CSSProperties = { padding: '8px 16px', borderRadius: 0, 
 const btnSecondary: React.CSSProperties = { padding: '8px 16px', borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
 const btnDisabled: React.CSSProperties = { padding: '8px 16px', borderRadius: 0, border: 'none', background: '#d1d5db', color: '#6b7280', fontSize: 12.5, fontWeight: 600, cursor: 'not-allowed' };
 
+// Modal cari & pilih ICD-10 (Diagnosa) / ICD-9 (Prosedur) — endpoint sama
+// persis dgn yg dipakai ModalInputDiagnosa.tsx (tab Diagnosa Pemeriksaan),
+// cuma di sini hasil klik langsung digabung '#' ke field teks Diagnosa/
+// Prosedur iDRG, bukan disimpan ke diagnosa_pasien/prosedur_pasien (field
+// ini murni payload E-Klaim, terpisah dari coding RM).
+const IcdPickerModal: React.FC<{
+  kind: 'diagnosa' | 'prosedur';
+  current: string;
+  onPick: (item: { code: string; label: string }) => void;
+  onClose: () => void;
+}> = ({ kind, current, onPick, onClose }) => {
+  const [q, setQ] = React.useState('');
+  const [options, setOptions] = React.useState<{ code: string; label: string }[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  // Kode Prosedur bisa punya suffix "+N" (jumlah) — dibandingkan tanpa
+  // suffix-nya spy deteksi "sudah dipilih" tetap kena.
+  const currentCodes = current.split('#').map((s) => s.trim().split('+')[0]).filter(Boolean);
+  const searchUrl = kind === 'diagnosa' ? '/api/penyakit/search' : '/api/icd9/search';
+  const fieldLabel = kind === 'diagnosa' ? 'Diagnosa (ICD-10) :' : 'Prosedur (ICD-9-CM) :';
+  const placeholder = kind === 'diagnosa' ? 'Cari nama/kode ICD-10...' : 'Cari nama/kode ICD-9...';
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetch(`${searchUrl}?q=${encodeURIComponent(q.trim())}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((raw: any[]) => {
+          if (cancelled) return;
+          const mapped = Array.isArray(raw)
+            ? raw.map((item) => (kind === 'diagnosa'
+              ? { code: item.kd_penyakit, label: item.nm_penyakit }
+              : { code: item.kode, label: item.deskripsi_panjang }))
+            : [];
+          setOptions(mapped);
+        })
+        .catch(() => { if (!cancelled) setOptions([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, q === '' ? 0 : 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q, kind, searchUrl]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 20, maxWidth: 480, width: '95%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 10 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{fieldLabel}</span>
+          <input
+            type="text" autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={placeholder}
+            style={{ flex: 1, padding: '8px 12px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
+          />
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>&times;</button>
+        </div>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflowY: 'auto', flex: 1, minHeight: 200 }}>
+          {loading ? (
+            <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 12.5 }}>Memuat...</div>
+          ) : options.length === 0 ? (
+            <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 12.5 }}>Tidak ada hasil</div>
+          ) : (
+            options.map((item, idx) => {
+              const already = currentCodes.includes(item.code);
+              return (
+                <div
+                  key={item.code}
+                  onClick={() => !already && onPick(item)}
+                  style={{
+                    padding: '8px 12px', cursor: already ? 'default' : 'pointer',
+                    background: already ? '#e0f2fe' : '#fff',
+                    borderBottom: idx < options.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    fontSize: 12.5, color: '#111827',
+                  }}
+                  onMouseEnter={(e) => { if (!already) e.currentTarget.style.background = '#f9fafb'; }}
+                  onMouseLeave={(e) => { if (!already) e.currentTarget.style.background = '#fff'; }}
+                >
+                  <span style={{ fontWeight: 600 }}>{item.code}</span> — {item.label} {already && <span style={{ color: '#2563eb' }}>✓ sudah dipilih</span>}
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={onClose} style={btnSecondary}>Selesai</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | null }> = ({ noRawat, header }) => {
   const [form, setForm] = React.useState<GroupingFormData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [tarif, setTarif] = React.useState<Record<string, number>>({});
   const [coderNik, setCoderNik] = React.useState('');
-  const [kodeTarif, setKodeTarif] = React.useState('DS');
-  const [payorId, setPayorId] = React.useState('');
-  const [payorCd, setPayorCd] = React.useState('JKN');
+  // Payor ID/Code & Kode Tarif sekarang setting tetap per-RS (Admin >
+  // Pengaturan Bridging > E-Klaim), bukan diisi ulang tiap klaim —
+  // backend/eklaim_handler.go
+  // otomatis menyisipkannya ke set_claim_data.
 
   const [stage, setStage] = React.useState<EklaimStage>('awal');
   const [busy, setBusy] = React.useState('');
   const [actionError, setActionError] = React.useState('');
 
-  const [idrgDiagnosa, setIdrgDiagnosa] = React.useState('');
-  const [idrgProsedur, setIdrgProsedur] = React.useState('');
+  // Diagnosa iDRG disimpan sbg list {code,label} (bukan cuma string '#') spy
+  // bisa ditampilkan sbg baris nama+kode+Primary/Secondary & digeser urutan
+  // (drag) — urutan menentukan Primary (baris pertama) vs Secondary,
+  // dikirim ke E-Klaim sbg string digabung '#' saat Group iDRG.
+  const [idrgDiagnosaList, setIdrgDiagnosaList] = React.useState<{ code: string; label: string }[]>([]);
+  const [dragDiagnosaIdx, setDragDiagnosaIdx] = React.useState<number | null>(null);
+  // Sama pola dgn Diagnosa — list {code,label,jumlah}, urutan -> Primary/
+  // Secondary, jumlah > 1 dikirim sbg suffix "+N" (jumlah=1 tanpa suffix,
+  // persis konvensi klaimbarumanual.php).
+  const [idrgProsedurList, setIdrgProsedurList] = React.useState<{ code: string; label: string; jumlah: string }[]>([]);
+  const [dragProsedurIdx, setDragProsedurIdx] = React.useState<number | null>(null);
   const [idrgResult, setIdrgResult] = React.useState<any>(null);
   const [idrgTopupPick, setIdrgTopupPick] = React.useState('');
+  const [showIcdDiagnosaModal, setShowIcdDiagnosaModal] = React.useState(false);
+  const [showIcdProsedurModal, setShowIcdProsedurModal] = React.useState(false);
+  const addIdrgDiagnosaCode = (item: { code: string; label: string }) => {
+    setIdrgDiagnosaList((prev) => (prev.some((d) => d.code === item.code) ? prev : [...prev, item]));
+  };
+  const removeIdrgDiagnosaAt = (idx: number) => {
+    setIdrgDiagnosaList((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const moveIdrgDiagnosa = (from: number, to: number) => {
+    setIdrgDiagnosaList((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  };
+  const addIdrgProsedurCode = (item: { code: string; label: string }) => {
+    setIdrgProsedurList((prev) => (prev.some((p) => p.code === item.code) ? prev : [...prev, { ...item, jumlah: '1' }]));
+  };
+  const removeIdrgProsedurAt = (idx: number) => {
+    setIdrgProsedurList((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const moveIdrgProsedur = (from: number, to: number) => {
+    setIdrgProsedurList((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  };
+  const setIdrgProsedurJumlah = (idx: number, jumlah: string) => {
+    setIdrgProsedurList((prev) => prev.map((p, i) => (i === idx ? { ...p, jumlah } : p)));
+  };
 
   const [inacbgDiagnosa, setInacbgDiagnosa] = React.useState('');
   const [inacbgProsedur, setInacbgProsedur] = React.useState('');
   const [inacbgResult, setInacbgResult] = React.useState<any>(null);
   const [inacbgCmgPick, setInacbgCmgPick] = React.useState('');
 
+  // Ambil form header + terapkan auto-fill (Tarif RS dari billing, Diagnosa/
+  // Prosedur iDRG dari tab Diagnosa Pemeriksaan). Dipanggil saat halaman
+  // dibuka DAN dipanggil ulang pas klik Buat Klaim Baru, spy kalau dokter
+  // baru isi diagnosa di tab Pemeriksaan setelah halaman Grouping ini
+  // dibuka duluan, datanya tetap ke-refresh sebelum mulai coding — bukan
+  // data basi dari load pertama. Nilai yg SUDAH diketik manual (prev) tidak
+  // ditimpa (prev||value / {...default,...prev}).
+  const fetchAndApplyAutoFill = React.useCallback(async () => {
+    const r = await fetch(`/api/casemix/grouping-form/${encodeURIComponent(noRawat)}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Gagal memuat data grouping');
+    setForm(d);
+    if (d.tarif_rs) {
+      const billingDefaults: Record<string, number> = {};
+      TARIF_KOLOM.flat().forEach((k) => {
+        if (d.tarif_rs[k.key] != null) billingDefaults[k.label] = Number(d.tarif_rs[k.key]);
+      });
+      setTarif((prev) => ({ ...billingDefaults, ...prev }));
+    }
+    if (d.diagnosa_idrg) {
+      const resolved = await resolveDiagnosaCodes(d.diagnosa_idrg);
+      setIdrgDiagnosaList((prev) => (prev.length > 0 ? prev : resolved));
+    }
+    if (d.prosedur_idrg) {
+      const resolvedP = await resolveProsedurCodes(d.prosedur_idrg);
+      setIdrgProsedurList((prev) => (prev.length > 0 ? prev : resolvedP));
+    }
+    return d as GroupingFormData;
+  }, [noRawat]);
+
   React.useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/casemix/grouping-form/${encodeURIComponent(noRawat)}`)
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Gagal memuat data grouping');
-        setForm(d);
-        setTarif({});
-      })
+    fetchAndApplyAutoFill()
       .catch((e) => setError(e instanceof Error ? e.message : 'Terjadi kesalahan'))
       .finally(() => setLoading(false));
+  }, [fetchAndApplyAutoFill]);
+
+  // Coder NIK tidak ditampilkan sbg field isian (mandatory di E-Klaim, tapi
+  // bukan sesuatu yg perlu dipilih staf tiap klaim) — auto-resolve dari NIP
+  // user yg login (session 'ermapp_user', field .nip = pegawai.nik jg dipakai
+  // inacbg_coder_nik.nik, lihat auth_register_handler.go). Kalau user yg
+  // login tidak terdaftar sbg coder, ambil salah satu (coder pertama) dari
+  // daftar terdaftar (Admin > Pengaturan Bridging > E-Klaim > Kelola Coder
+  // NIK) — prev||resolved supaya tidak menimpa kalau klaim ini sudah pernah
+  // disimpan sebelumnya dgn coder_nik lain (sync effect di bawah menang).
+  React.useEffect(() => {
+    fetch('/api/bridging/eklaim/coder-nik/list')
+      .then((r) => r.json())
+      .then((d) => {
+        const list: { nik: string; nama: string; no_ik: string }[] = Array.isArray(d) ? d : [];
+        if (list.length === 0) return;
+        let myNip = '';
+        try {
+          const stored = sessionStorage.getItem('ermapp_user');
+          if (stored) myNip = JSON.parse(stored)?.nip || '';
+        } catch { /* biarkan kosong, fallback ke coder pertama */ }
+        const resolved = (list.find((c) => c.nik === myNip) || list[0]).nik;
+        setCoderNik((prev) => prev || resolved);
+      })
+      .catch(() => { /* tidak fatal — handleSimpanDataKlaim akan tetap validasi coderNik terisi */ });
+  }, []);
+
+  // Sinkronkan progres yang sudah ada di E-Klaim (kalau halaman ini pernah
+  // dibuka & "Buat Klaim Baru" sudah pernah sukses sebelumnya) supaya user
+  // yang keluar-masuk lagi tidak mulai dari nol / kena "Duplikasi nomor SEP"
+  // saat coba Buat Klaim Baru ulang. Kalau klaim belum pernah dibuat,
+  // get_claim_data akan error — diamkan saja, tetap mulai dari tahap 'awal'.
+  React.useEffect(() => {
+    eklaimCall('klaim/detail', { no_rawat: noRawat })
+      .then(async (res) => {
+        const d = res?.response?.data;
+        if (!d) return;
+        // coder_nik cuma keisi kalau set_claim_data memang sudah pernah
+        // dikirim (mandatory di E-Klaim) — dipakai sbg penanda "klaim ini
+        // sudah pernah disimpan", supaya tarif_rs placeholder nol dari
+        // klaim yg belum pernah disimpan tidak menimpa auto-fill billing.
+        if (d.coder_nik) {
+          setCoderNik(String(d.coder_nik));
+          if (d.tarif_rs) {
+            const restored: Record<string, number> = {};
+            TARIF_KOLOM.flat().forEach((k) => {
+              if (d.tarif_rs[k.key] != null) restored[k.label] = Number(d.tarif_rs[k.key]);
+            });
+            setTarif((prev) => ({ ...prev, ...restored }));
+          }
+        }
+        if (d.diagnosa_inagrouper) setIdrgDiagnosaList(await resolveDiagnosaCodes(String(d.diagnosa_inagrouper)));
+        if (d.procedure_inagrouper) setIdrgProsedurList(await resolveProsedurCodes(String(d.procedure_inagrouper)));
+        if (d.diagnosa) setInacbgDiagnosa(String(d.diagnosa));
+        if (d.procedure) setInacbgProsedur(String(d.procedure));
+
+        // response_idrg SELALU ada sbg object placeholder (status_cd:"normal",
+        // total_cost_weight:"0", tanpa drg_code) walau grouping belum pernah
+        // dijalankan sama sekali — dikonfirmasi dari data real server, BEDA
+        // dari contoh di manual resmi. Jadi jangan pakai "ada objeknya" sbg
+        // sinyal sudah di-grouping, pakai kemunculan drg_code (khusus utk
+        // hasil grouping asli, bukan placeholder).
+        const idrg = d.grouper?.response_idrg;
+        const inacbg = d.grouper?.response_inacbg;
+        const idrgGrouped = !!idrg?.drg_code;
+        const inacbgGrouped = !!inacbg?.cbg?.code;
+        if (idrgGrouped) setIdrgResult(idrg);
+        if (inacbgGrouped) setInacbgResult(inacbg);
+
+        let next: EklaimStage = 'idrg_input';
+        if (idrgGrouped) next = 'idrg_grouped';
+        if (idrgGrouped && idrg.status_cd === 'final') next = 'idrg_final';
+        if (idrgGrouped && idrg.status_cd === 'final' && inacbgGrouped && !String(inacbg.cbg.code).startsWith('X')) next = 'inacbg_grouped';
+        if (inacbgGrouped && inacbg.status_cd === 'final') next = 'inacbg_final';
+        if (d.klaim_status_cd === 'final') next = 'klaim_final';
+        setStage(next);
+      })
+      .catch(() => { /* klaim belum pernah dibuat — tetap di tahap awal */ });
   }, [noRawat]);
 
   const totalTarif = Object.values(tarif).reduce((a, b) => a + (b || 0), 0);
@@ -617,7 +886,19 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   };
 
   const handleBuatKlaimBaru = () => runAction('buat', async () => {
-    await eklaimCall('new-claim', { no_rawat: noRawat });
+    try {
+      await eklaimCall('new-claim', { no_rawat: noRawat });
+    } catch (e) {
+      // Klaim untuk SEP ini sudah pernah dibuat sebelumnya (E-Klaim menolak
+      // dgn "Duplikasi nomor SEP") — bukan error, lanjut saja ke tahap
+      // berikutnya, sama seperti kalau sync di atas berhasil duluan.
+      const msg = e instanceof Error ? e.message : '';
+      if (!/duplikasi/i.test(msg)) throw e;
+    }
+    // Refresh Tarif & Diagnosa/Prosedur iDRG sebelum masuk tahap coding —
+    // tangkap kalau ada isian baru di tab Diagnosa Pemeriksaan sejak
+    // halaman ini pertama dibuka.
+    await fetchAndApplyAutoFill().catch(() => { /* gagal refresh bukan blocker, data awal dari load pertama tetap dipakai */ });
     setStage('idrg_input');
   });
 
@@ -635,16 +916,15 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
       jenis_rawat: header.tipe === 'RI' ? '1' : '2',
       kelas_rawat: header.kelas_hak || '3',
       discharge_status: caraPulangToDischargeStatus(header.cara_pulang || ''),
-      kode_tarif: kodeTarif,
-      payor_id: payorId || undefined,
-      payor_cd: payorCd || undefined,
       tarif_rs: tarifRs,
     });
   });
 
   const handleGroupIdrg = () => runAction('idrg-group', async () => {
-    if (idrgDiagnosa.trim()) await eklaimCall('idrg/diagnosa/set', { no_rawat: noRawat, diagnosa: idrgDiagnosa.trim() });
-    if (idrgProsedur.trim()) await eklaimCall('idrg/prosedur/set', { no_rawat: noRawat, procedure: idrgProsedur.trim() });
+    const idrgDiagnosaStr = idrgDiagnosaList.map((d) => d.code).join('#');
+    if (idrgDiagnosaStr) await eklaimCall('idrg/diagnosa/set', { no_rawat: noRawat, diagnosa: idrgDiagnosaStr });
+    const idrgProsedurStr = idrgProsedurList.map((p) => p.code + (p.jumlah && p.jumlah !== '1' ? `+${p.jumlah}` : '')).join('#');
+    if (idrgProsedurStr) await eklaimCall('idrg/prosedur/set', { no_rawat: noRawat, procedure: idrgProsedurStr });
     const r = await eklaimCall('idrg/grouping', { no_rawat: noRawat, stage: 1 });
     setIdrgResult(r.response_idrg);
     setStage('idrg_grouped');
@@ -707,6 +987,10 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
     await eklaimCall('klaim/kirim-individual', { no_rawat: noRawat });
   });
 
+  // Nama file "Gruper_<no_rawat>.pdf" — PERSIS konvensi jenisBerkasKlaim
+  // (berkas_klaim_tte_handler.go), disimpan langsung ke folder fisik
+  // berkasrawat/pages/upload (tanpa tabel DB), jadi otomatis terdeteksi
+  // di tab Berkas Klaim tanpa langkah tambahan.
   const handleCetakKlaim = () => runAction('cetak', async () => {
     const r = await eklaimCall('klaim/cetak', { no_rawat: noRawat });
     const base64 = r.data;
@@ -716,6 +1000,15 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
     for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
     const blob = new Blob([bytes], { type: 'application/pdf' });
     window.open(URL.createObjectURL(blob), '_blank');
+
+    const form = new FormData();
+    form.append('no_rawat', noRawat);
+    form.append('file', new Blob([bytes], { type: 'application/pdf' }), `Gruper_${noRawat.replace(/\//g, '_')}.pdf`);
+    const upRes = await fetch('/api/casemix/berkas-klaim-tte/gruper', { method: 'POST', body: form });
+    if (!upRes.ok) {
+      const upData = await upRes.json().catch(() => ({}));
+      throw new Error(`PDF sudah dibuka, tapi gagal diupload otomatis ke Berkas Rawat: ${upData.error || 'terjadi kesalahan'}`);
+    }
   });
 
   const idrgUngroupable = idrgResult?.mdc_number === '36';
@@ -748,30 +1041,13 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
 
       {stage !== 'awal' && (
         <>
-          {/* Step 2 — Data Klaim (method #4 set_claim_data): tarif breakdown +
-              field wajib E-Klaim yg belum ada di header (coder_nik dkk). */}
+          {/* Step 2 — Data Klaim (method #4 set_claim_data): tarif breakdown.
+              coder_nik & kode_tarif diisi otomatis (coder_nik dari user login
+              / fallback, kode_tarif dari Pengaturan Bridging E-Klaim) — tidak
+              ditampilkan sbg field isian, lihat effect di atas & eklaimProxy
+              di backend. */}
           <div style={stageStyle}>
             <div style={stageTitle}>2. Data Klaim (Tarif RS)</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
-              <div style={{ flex: '1 1 200px' }}>
-                <div style={gLabel}>Coder NIK *</div>
-                <input style={gInput} value={coderNik} onChange={(e) => setCoderNik(e.target.value)} placeholder="NIK yg terdaftar di E-Klaim" disabled={stage !== 'idrg_input'} />
-              </div>
-              <div style={{ flex: '1 1 140px' }}>
-                <div style={gLabel}>Kode Tarif</div>
-                <select style={gInput} value={kodeTarif} onChange={(e) => setKodeTarif(e.target.value)} disabled={stage !== 'idrg_input'}>
-                  {KODE_TARIF_OPSI.map((k) => <option key={k} value={k}>{k}</option>)}
-                </select>
-              </div>
-              <div style={{ flex: '1 1 140px' }}>
-                <div style={gLabel}>Payor ID</div>
-                <input style={gInput} value={payorId} onChange={(e) => setPayorId(e.target.value)} placeholder="dari Setup Jaminan E-Klaim" disabled={stage !== 'idrg_input'} />
-              </div>
-              <div style={{ flex: '1 1 140px' }}>
-                <div style={gLabel}>Payor Code</div>
-                <input style={gInput} value={payorCd} onChange={(e) => setPayorCd(e.target.value)} disabled={stage !== 'idrg_input'} />
-              </div>
-            </div>
 
             <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
               <span style={{ fontSize: 12.5, color: '#6b7280' }}>Tarif Rumah Sakit : </span>
@@ -806,19 +1082,109 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
             <div style={stageTitle}>3. Coding & Grouping iDRG</div>
             {(stage === 'idrg_input' || stage === 'idrg_grouped') ? (
               <>
-                <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 260px' }}>
-                    <div style={gLabel}>Diagnosa (pisah #, cth: S73.02#E11.9)</div>
-                    <input style={gInput} value={idrgDiagnosa} onChange={(e) => setIdrgDiagnosa(e.target.value)} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ ...gLabel, whiteSpace: 'nowrap' }}>Diagnosa (ICD-10) :</span>
+                      <button
+                        type="button" onClick={() => setShowIcdDiagnosaModal(true)} title="Tambah dari daftar ICD-10"
+                        style={{ padding: '0 12px', height: 26, borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >+</button>
+                    </div>
+                    {idrgDiagnosaList.length === 0 ? (
+                      <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Belum ada diagnosa dipilih.</div>
+                    ) : (
+                      idrgDiagnosaList.map((item, idx) => (
+                        <div
+                          key={item.code}
+                          draggable
+                          onDragStart={() => setDragDiagnosaIdx(idx)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => {
+                            if (dragDiagnosaIdx !== null && dragDiagnosaIdx !== idx) moveIdrgDiagnosa(dragDiagnosaIdx, idx);
+                            setDragDiagnosaIdx(null);
+                          }}
+                          onDragEnd={() => setDragDiagnosaIdx(null)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px',
+                            borderBottom: idx < idrgDiagnosaList.length - 1 ? '1px solid #f3f4f6' : 'none',
+                            cursor: 'grab', opacity: dragDiagnosaIdx === idx ? 0.4 : 1,
+                          }}
+                        >
+                          <span style={{ color: '#9ca3af', fontSize: 13, letterSpacing: -1, flexShrink: 0 }}>⋮⋮</span>
+                          <span style={{ fontSize: 12.5, color: '#111827', flexShrink: 0 }}>{item.label || item.code}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#374151', border: '1px solid #d1d5db', padding: '1px 6px', flexShrink: 0 }}>{item.code}</span>
+                          <span style={{ fontSize: 11, color: idx === 0 ? '#2563eb' : '#9ca3af', fontWeight: idx === 0 ? 700 : 400, flexShrink: 0 }}>
+                            {idx === 0 ? 'Primary' : 'Secondary'}
+                          </span>
+                          <button
+                            type="button" onClick={() => removeIdrgDiagnosaAt(idx)} title="Hapus"
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, padding: 0, lineHeight: 1, flexShrink: 0 }}
+                          >×</button>
+                        </div>
+                      ))
+                    )}
                   </div>
-                  <div style={{ flex: '1 1 260px' }}>
-                    <div style={gLabel}>Prosedur (pisah #, cth: 81.53#86.28+2)</div>
-                    <input style={gInput} value={idrgProsedur} onChange={(e) => setIdrgProsedur(e.target.value)} />
+                  <div style={{ borderTop: '1px solid #e5e7eb' }} />
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ ...gLabel, whiteSpace: 'nowrap' }}>Prosedur (ICD-9-CM) :</span>
+                      <button
+                        type="button" onClick={() => setShowIcdProsedurModal(true)} title="Tambah dari daftar ICD-9"
+                        style={{ padding: '0 12px', height: 26, borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >+</button>
+                    </div>
+                    {idrgProsedurList.length === 0 ? (
+                      <div style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Belum ada prosedur dipilih.</div>
+                    ) : (
+                      idrgProsedurList.map((item, idx) => (
+                        <div
+                          key={item.code}
+                          draggable
+                          onDragStart={() => setDragProsedurIdx(idx)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => {
+                            if (dragProsedurIdx !== null && dragProsedurIdx !== idx) moveIdrgProsedur(dragProsedurIdx, idx);
+                            setDragProsedurIdx(null);
+                          }}
+                          onDragEnd={() => setDragProsedurIdx(null)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px',
+                            borderBottom: idx < idrgProsedurList.length - 1 ? '1px solid #f3f4f6' : 'none',
+                            cursor: 'grab', opacity: dragProsedurIdx === idx ? 0.4 : 1,
+                          }}
+                        >
+                          <span style={{ color: '#9ca3af', fontSize: 13, letterSpacing: -1, flexShrink: 0 }}>⋮⋮</span>
+                          <span style={{ fontSize: 12.5, color: '#111827', flexShrink: 0 }}>{item.label || item.code}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#374151', border: '1px solid #d1d5db', padding: '1px 6px', flexShrink: 0 }}>{item.code}</span>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: '#6b7280', flexShrink: 0 }}>
+                            Jml
+                            <input
+                              type="text" value={item.jumlah} onChange={(e) => setIdrgProsedurJumlah(idx, e.target.value)}
+                              style={{ width: 28, padding: '2px 4px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 11, textAlign: 'center' }}
+                            />
+                          </label>
+                          <span style={{ fontSize: 11, color: idx === 0 ? '#2563eb' : '#9ca3af', fontWeight: idx === 0 ? 700 : 400, flexShrink: 0 }}>
+                            {idx === 0 ? 'Primary' : 'Secondary'}
+                          </span>
+                          <button
+                            type="button" onClick={() => removeIdrgProsedurAt(idx)} title="Hapus"
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, padding: 0, lineHeight: 1, flexShrink: 0 }}
+                          >×</button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
                 <button type="button" onClick={handleGroupIdrg} disabled={!!busy} style={busy === 'idrg-group' ? btnDisabled : btnSecondary}>
                   {busy === 'idrg-group' ? 'Memproses...' : 'Group iDRG'}
                 </button>
+                {showIcdDiagnosaModal && (
+                  <IcdPickerModal kind="diagnosa" current={idrgDiagnosaList.map((d) => d.code).join('#')} onPick={addIdrgDiagnosaCode} onClose={() => setShowIcdDiagnosaModal(false)} />
+                )}
+                {showIcdProsedurModal && (
+                  <IcdPickerModal kind="prosedur" current={idrgProsedurList.map((p) => p.code).join('#')} onPick={addIdrgProsedurCode} onClose={() => setShowIcdProsedurModal(false)} />
+                )}
               </>
             ) : (
               <div style={{ fontSize: 12, color: '#16a34a' }}>✓ iDRG sudah final.</div>
@@ -981,6 +1347,12 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [section, setSection] = React.useState<Section>('berkas-klaim');
+  // Nama coder yg lagi aktif — resolve sama persis dgn logika Coder NIK di
+  // GroupingFormView (NIP user login dicocokkan ke inacbg_coder_nik,
+  // fallback coder pertama), ditampilkan di sini sbg indikator "petugas
+  // yg mengerjakan", bukan lagi field "Petugas" placeholder ("INACBG") yg
+  // sebelumnya hardcode di backend.
+  const [coderName, setCoderName] = React.useState('');
 
   React.useEffect(() => {
     setLoading(true);
@@ -995,71 +1367,84 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
       .finally(() => setLoading(false));
   }, [noRawat]);
 
+  React.useEffect(() => {
+    fetch('/api/bridging/eklaim/coder-nik/list')
+      .then((r) => r.json())
+      .then((d) => {
+        const list: { nik: string; nama: string }[] = Array.isArray(d) ? d : [];
+        if (list.length === 0) return;
+        let myNip = '';
+        try {
+          const stored = sessionStorage.getItem('ermapp_user');
+          if (stored) myNip = JSON.parse(stored)?.nip || '';
+        } catch { /* fallback ke coder pertama */ }
+        setCoderName((list.find((c) => c.nik === myNip) || list[0]).nama);
+      })
+      .catch(() => {});
+  }, []);
+
   // Full-bleed: strip putih di atas (tombol × + 3 kolom header) nempel
   // langsung ke tepi layar (tanpa card/shadow/rounded), garis pemisah
   // tipis, lalu badan abu-abu mengisi sisa layar — persis mockup yang
   // diminta (bukan lagi kartu putih dgn padding di semua sisi).
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#eeeeee', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
-        {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 24px' }}>
-            <CloseBtn onClick={onBack} />
-            <span style={{ color: '#6b7280', fontSize: 13 }}>Memuat...</span>
-          </div>
-        ) : error ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 24px' }}>
-            <CloseBtn onClick={onBack} />
-            <span style={{ color: '#dc2626', fontSize: 13 }}>{error}</span>
-          </div>
-        ) : data ? (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32, padding: '10px 24px 12px', flexWrap: 'wrap' }}>
-            <CloseBtn onClick={onBack} />
-            <div style={{ minWidth: 240 }}>
-              <ColumnTitle icon={<IconUser />} iconBg="#dbeafe" iconColor="#2563eb">Data Pasien</ColumnTitle>
-              <HeaderField label="No.Rawat" value={data.no_rawat} />
-              <HeaderField label="No.RM" value={data.no_rm} />
-              <HeaderField label="Nama Pasien" value={data.nm_pasien} />
-              <HeaderField label="Umur" value={data.umur} />
-              <HeaderField label="Jenis Kelamin" value={data.jk} />
-              <HeaderField label="Alamat Pasien" value={data.alamat} />
-            </div>
-            <div style={{ minWidth: 240 }}>
-              <ColumnTitle icon={<IconCalendar />} iconBg="#dcfce7" iconColor="#16a34a">Data Registrasi</ColumnTitle>
-              <HeaderField label="Tgl.Registrasi" value={data.tgl_registrasi} />
-              <HeaderField label="Tgl.Pulang" value={data.tanggal_pulang} />
-              <HeaderField label="Poliklinik" value={data.poliklinik} />
-              <HeaderField label="DPJP" value={data.dpjp} />
-              <HeaderField label="Status" value={data.status} />
-              <HeaderField label="Jaminan" value={data.jaminan} />
-            </div>
-            <div style={{ minWidth: 260 }}>
-              <ColumnTitle icon={<IconClipboard />} iconBg="#fef3c7" iconColor="#d97706">Data Kunjungan</ColumnTitle>
-              <HeaderField label="No SEP" value={data.no_sep} />
-              <HeaderField label="No. Kunjungan" value={data.no_kunjungan} />
-              <HeaderField label="No. Kartu" value={data.no_kartu} />
-              <HeaderField label="Tipe" value={data.tipe} />
-              <HeaderField label="CBG" value={data.cbg} />
-              <HeaderField label="Petugas" value={data.petugas} />
-              <HeaderField label="Dx. Utama" value={data.dx_utama} accent />
-              <HeaderField label="Pros. Utama" value={data.pros_utama} accent />
-            </div>
-            <div style={{ minWidth: 200 }}>
-              <ColumnTitle icon={<IconShield />} iconBg="#ede9fe" iconColor="#7c3aed">Info Klaim</ColumnTitle>
-              <HeaderField label="COB" value={data.cob} />
-              <HeaderField label="Naik Kelas" value={data.naik_kelas} />
-              <HeaderField label="Rawat Intensif" value={data.ada_rawat_intensif} />
-              <HeaderField label="Kelas Hak" value={data.kelas_hak} />
-              <HeaderField label="Cara Masuk" value={data.cara_masuk} />
-              <HeaderField label="LOS" value={data.los} />
-              <HeaderField label="Berat Lahir" value={data.berat_lahir} />
-              <HeaderField label="ADL Score" value={data.adl_score} />
-              <HeaderField label="Cara Pulang" value={data.cara_pulang} />
-              <HeaderField label="Jenis Tarif" value={data.jenis_tarif} />
-              <HeaderField label="Pasien TB" value={data.pasien_tb} />
-            </div>
-          </div>
-        ) : null}
+      {/* Navbar: kolom-kolom data (scroll horizontal sendiri kalau sempit,
+          flex:1 minWidth:0) di kiri, nama coder + tombol Tutup di kanan
+          dlm area TERPISAH yg flexShrink:0 — jadi selalu terlihat, tidak
+          pernah ikut ter-scroll/terdorong keluar layar. */}
+      <div style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', flexShrink: 0, display: 'flex', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 32, padding: '10px 12px 12px 24px', flexWrap: 'nowrap', overflowX: 'auto', flex: 1, minWidth: 0 }}>
+          {loading && <span style={{ color: '#6b7280', fontSize: 13, flexShrink: 0 }}>Memuat...</span>}
+          {error && <span style={{ color: '#dc2626', fontSize: 13, flexShrink: 0 }}>{error}</span>}
+          {data && (
+            <>
+              <div style={{ minWidth: 240, flexShrink: 0 }}>
+                <ColumnTitle icon={<IconUser />} iconBg="#dbeafe" iconColor="#2563eb">Data Pasien</ColumnTitle>
+                <HeaderField label="No.Rawat" value={data.no_rawat} />
+                <HeaderField label="No.RM" value={data.no_rm} />
+                <HeaderField label="Nama Pasien" value={data.nm_pasien} />
+                <HeaderField label="Umur" value={data.umur} />
+                <HeaderField label="Jenis Kelamin" value={data.jk} />
+                <HeaderField label="Alamat Pasien" value={data.alamat} />
+                <HeaderField label="Berat Lahir" value={data.berat_lahir} />
+              </div>
+              <div style={{ minWidth: 240, flexShrink: 0 }}>
+                <ColumnTitle icon={<IconCalendar />} iconBg="#dcfce7" iconColor="#16a34a">Data Registrasi</ColumnTitle>
+                <HeaderField label="Tgl.Registrasi" value={data.tgl_registrasi} />
+                <HeaderField label="Tgl.Pulang" value={data.tanggal_pulang} />
+                <HeaderField label="Poliklinik" value={data.poliklinik} />
+                <HeaderField label="DPJP" value={data.dpjp} />
+                <HeaderField label="Status" value={data.status} />
+                <HeaderField label="Kelas Hak" value={data.kelas_hak} />
+                <HeaderField label="Cara Masuk" value={data.cara_masuk} />
+              </div>
+              <div style={{ minWidth: 260, flexShrink: 0 }}>
+                <ColumnTitle icon={<IconClipboard />} iconBg="#fef3c7" iconColor="#d97706">Data Kunjungan</ColumnTitle>
+                <HeaderField label="No SEP" value={data.no_sep ? `${data.no_sep}${data.tipe ? ` (${data.tipe})` : ''}` : data.no_sep} />
+                <HeaderField label="No. Kartu" value={data.no_kartu} />
+                <HeaderField label="CBG" value={data.cbg} />
+                <HeaderField label="COB" value={data.cob} />
+                <HeaderField label="Dx. Utama" value={data.dx_utama} accent />
+                <HeaderField label="Pros. Utama" value={data.pros_utama} accent />
+              </div>
+              <div style={{ minWidth: 200, flexShrink: 0 }}>
+                <ColumnTitle icon={<IconShield />} iconBg="#ede9fe" iconColor="#7c3aed">Info Klaim</ColumnTitle>
+                <HeaderField label="Naik Kelas" value={data.naik_kelas} />
+                <HeaderField label="Rawat Intensif" value={data.ada_rawat_intensif} />
+                <HeaderField label="LOS" value={data.los} />
+                <HeaderField label="ADL Score" value={data.adl_score} />
+                <HeaderField label="Cara Pulang" value={data.cara_pulang} />
+                <HeaderField label="Jenis Tarif" value={data.jenis_tarif} />
+                <HeaderField label="Pasien TB" value={data.pasien_tb} />
+              </div>
+            </>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 24px 12px 12px', flexShrink: 0 }}>
+          {coderName && <span style={{ color: '#6b7280', fontSize: 13, whiteSpace: 'nowrap' }}>{coderName}</span>}
+          <CloseBtn onClick={onBack} />
+        </div>
       </div>
 
       {data && (
@@ -1104,7 +1489,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
   );
 };
 
-const CloseBtn: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+const CloseBtn: React.FC<{ onClick: () => void; style?: React.CSSProperties }> = ({ onClick, style }) => (
   <button
     type="button"
     onClick={onClick}
@@ -1114,6 +1499,7 @@ const CloseBtn: React.FC<{ onClick: () => void }> = ({ onClick }) => (
       background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       color: '#6b7280', cursor: 'pointer', padding: 0, flexShrink: 0,
+      ...style,
     }}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
