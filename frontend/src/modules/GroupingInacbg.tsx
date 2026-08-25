@@ -1009,6 +1009,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
       const upData = await upRes.json().catch(() => ({}));
       throw new Error(`PDF sudah dibuka, tapi gagal diupload otomatis ke Berkas Rawat: ${upData.error || 'terjadi kesalahan'}`);
     }
+    await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'PDF klaim tersimpan otomatis ke Berkas Klaim', timer: 2000, showConfirmButton: false });
   });
 
   const idrgUngroupable = idrgResult?.mdc_number === '36';

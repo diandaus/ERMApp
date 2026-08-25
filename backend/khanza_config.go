@@ -1,17 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -206,11 +209,67 @@ func RegisterKhanzaWebappsRoutes(r *gin.Engine, cfg KhanzaWebappsConfig) {
 }
 
 // WebappsUploadDir mengembalikan path direktori upload berkasrawat di filesystem lokal.
-// Digunakan oleh upload handler untuk menyimpan file.
+// Dipakai HANYA saat cfg.IsRemote=false (backend & webapps satu server) —
+// kalau remote, upload harus lewat WriteWebappsFile (upload.php), BUKAN
+// tulis langsung ke disk lokal (disk backend beda dgn disk webapps).
 func WebappsUploadDir(cfg KhanzaWebappsConfig) string {
 	base := cfg.LocalPath
 	if base == "" {
 		base = "/var/www/html/webapps"
 	}
 	return base + "/berkasrawat/pages/upload"
+}
+
+// WriteWebappsFile menyimpan file ke webapps/<relDir>/<fileName>. Kalau
+// cfg.IsRemote (backend & webapps di server terpisah) — kirim lewat
+// upload.php di server webapps, PERSIS mekanisme UploadPDF() di aplikasi
+// desktop Khanza Java (auto-upload PDF SEP yg sudah terbukti jalan di
+// produksi): POST multipart ke "<webappsURL>/upload.php?doc=<relDir>",
+// field "file" = isi berkas. Kalau tidak remote (satu server), langsung
+// tulis ke disk lokal seperti sebelumnya.
+func WriteWebappsFile(cfg KhanzaWebappsConfig, relDir, fileName string, data []byte) error {
+	if cfg.IsRemote {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		part, err := w.CreateFormFile("file", fileName)
+		if err != nil {
+			return err
+		}
+		if _, err := part.Write(data); err != nil {
+			return err
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+
+		// upload.php di server webapps concat "$location.$name" TANPA slash
+		// pemisah (dikonfirmasi baca source-nya langsung) — jadi "doc" WAJIB
+		// diakhiri "/", kalau tidak nama file nyambung ke nama folder.
+		uploadURL := strings.TrimRight(cfg.URL, "/") + "/upload.php?doc=" + strings.TrimRight(relDir, "/") + "/"
+		req, err := http.NewRequest(http.MethodPost, uploadURL, &buf)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		client := &http.Client{Timeout: 20 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("gagal terhubung ke server webapps (%s): %w", uploadURL, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("upload.php di server webapps membalas status %d", resp.StatusCode)
+		}
+		return nil
+	}
+
+	dir := cfg.LocalPath
+	if dir == "" {
+		dir = "/var/www/html/webapps"
+	}
+	fullDir := dir + "/" + relDir
+	if err := os.MkdirAll(fullDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(fullDir+"/"+fileName, data, 0644)
 }

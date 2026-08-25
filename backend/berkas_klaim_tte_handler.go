@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -166,12 +165,6 @@ func saveGruperKlaim(cfg KhanzaWebappsConfig) gin.HandlerFunc {
 		}
 		defer file.Close()
 
-		uploadDir := WebappsUploadDir(cfg)
-		if err := os.MkdirAll(uploadDir, 0755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat direktori upload"})
-			return
-		}
-
 		buf, err := io.ReadAll(file)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca file"})
@@ -179,8 +172,8 @@ func saveGruperKlaim(cfg KhanzaWebappsConfig) gin.HandlerFunc {
 		}
 
 		fileName := "Gruper_" + strings.ReplaceAll(noRawat, "/", "_") + ".pdf"
-		if err := os.WriteFile(filepath.Join(uploadDir, fileName), buf, 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file"})
+		if err := WriteWebappsFile(cfg, "berkasrawat/pages/upload", fileName, buf); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file: " + err.Error()})
 			return
 		}
 

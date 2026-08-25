@@ -117,21 +117,16 @@ func uploadBerkasRawat(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 		}, baseName)
 		safeName := fmt.Sprintf("%s_%s%s", safeBase, time.Now().Format("20060102_150405"), ext)
 
-		// Simpan ke direktori upload Khanza berkasrawat
-		uploadDir := WebappsUploadDir(cfg)
-		if err := os.MkdirAll(uploadDir, 0755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat direktori upload"})
-			return
-		}
-
-		destPath := filepath.Join(uploadDir, safeName)
+		// Simpan ke webapps/berkasrawat/pages/upload — lewat upload.php kalau
+		// backend & webapps beda server (WriteWebappsFile), langsung tulis
+		// disk kalau satu server.
 		buf := make([]byte, header.Size)
 		if _, err := file.Read(buf); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca file"})
 			return
 		}
-		if err := os.WriteFile(destPath, buf, 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file"})
+		if err := WriteWebappsFile(cfg, "berkasrawat/pages/upload", safeName, buf); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file: " + err.Error()})
 			return
 		}
 
@@ -143,8 +138,6 @@ func uploadBerkasRawat(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 			noRawat, kode, lokasiFile,
 		)
 		if err != nil {
-			// Hapus file jika insert DB gagal
-			os.Remove(destPath)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan ke database: " + err.Error()})
 			return
 		}
