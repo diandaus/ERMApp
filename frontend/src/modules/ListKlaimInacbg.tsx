@@ -11,6 +11,17 @@ import { GroupingInacbgView } from './GroupingInacbg';
 type ListKlaimRow = {
   no_rawat: string; no_rm: string; nm_pasien: string; unit: string; kamar: string;
   nm_dokter: string; no_sep: string; tgl_sep: string; tgl_regis: string; tgl_pulang: string;
+  status_klaim: string;
+};
+
+// Badge warna per tahap Status Klaim — checkpoint lokal Khanza
+// (inacbg_klaim_baru/inacbg_data_terkirim/inacbg_grouping_stage1[2]),
+// diurutkan makin hijau/tegas makin lanjut prosesnya.
+const STATUS_KLAIM_STYLE: Record<string, { bg: string; color: string }> = {
+  'Belum Diproses': { bg: '#f3f4f6', color: '#6b7280' },
+  'Klaim Dibuat': { bg: '#fef3c7', color: '#92400e' },
+  'Data Klaim Terkirim': { bg: '#dbeafe', color: '#1e40af' },
+  'Sudah Grouping INACBG': { bg: '#dcfce7', color: '#166534' },
 };
 
 type Jenis = 'ralan' | 'ranap';
@@ -27,8 +38,8 @@ const filterInputStyle: React.CSSProperties = {
 // Tab Rawat Jalan tampilkan Unit + Nama Dokter; tab Rawat Inap tampilkan
 // Kamar sbg gantinya (tanpa Nama Dokter) — sesuai kolom List Klaim Khanza
 // Desktop yang beda antara dua tab ini.
-const COLUMNS_RALAN = ['No Rawat', 'No RM', 'Nama Pasien', 'Unit', 'Nama Dokter', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang'];
-const COLUMNS_RANAP = ['No Rawat', 'No RM', 'Nama Pasien', 'Kamar', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang'];
+const COLUMNS_RALAN = ['No Rawat', 'No RM', 'Nama Pasien', 'Unit', 'Nama Dokter', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang', 'Status Klaim'];
+const COLUMNS_RANAP = ['No Rawat', 'No RM', 'Nama Pasien', 'Kamar', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang', 'Status Klaim'];
 
 export const ListKlaimInacbgView: React.FC = () => {
   const [jenis, setJenis] = React.useState<Jenis>('ralan');
@@ -134,11 +145,13 @@ export const ListKlaimInacbgView: React.FC = () => {
                 const baseBg = index % 2 === 0 ? '#ffffff' : '#f9fafb';
                 return (
                   <tr key={`${r.no_rawat}-${r.no_sep}`} style={{ background: baseBg }}>
-                    <td
-                      onClick={() => setSelectedNoRawat(r.no_rawat)}
-                      style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, color: '#4338ca', whiteSpace: 'nowrap', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                      {r.no_rawat}
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button" onClick={() => setSelectedNoRawat(r.no_rawat)}
+                        style={{ padding: '2px 10px', borderRadius: 2, border: 'none', background: '#2563eb', color: '#ffffff', fontSize: 12, fontWeight: 400, cursor: 'pointer' }}
+                      >
+                        {r.no_rawat}
+                      </button>
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.no_rm || '-'}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontWeight: 500, whiteSpace: 'nowrap' }}>{r.nm_pasien || '-'}</td>
@@ -150,6 +163,15 @@ export const ListKlaimInacbgView: React.FC = () => {
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.tgl_sep || '-'}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.tgl_regis || '-'}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.tgl_pulang || '-'}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '3px 10px', borderRadius: 2, fontSize: 11, fontWeight: 400,
+                        background: (STATUS_KLAIM_STYLE[r.status_klaim] || STATUS_KLAIM_STYLE['Belum Diproses']).bg,
+                        color: (STATUS_KLAIM_STYLE[r.status_klaim] || STATUS_KLAIM_STYLE['Belum Diproses']).color,
+                      }}>
+                        {r.status_klaim || 'Belum Diproses'}
+                      </span>
+                    </td>
                   </tr>
                 );
               })

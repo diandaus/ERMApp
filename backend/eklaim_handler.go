@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -217,6 +218,78 @@ func eklaimRequest(cfg *eklaimConfig, method string, extraMetadata map[string]in
 	return result, nil
 }
 
+// eklaimResultOk — cek metadata.message=="Ok" / code==200, persis kondisi
+// sukses yg dipakai UpdateDataKlaim()/BuatKlaimBaru() dkk di wsinacbg.php
+// (Khanza) sblm nulis checkpoint lokal (inacbg_klaim_baru dkk).
+func eklaimResultOk(result map[string]interface{}) bool {
+	meta, _ := result["metadata"].(map[string]interface{})
+	if meta == nil {
+		return false
+	}
+	if msg, _ := meta["message"].(string); msg == "Ok" {
+		return true
+	}
+	if code, ok := meta["code"].(float64); ok && code == 200 {
+		return true
+	}
+	return false
+}
+
+// asString — field respons E-Klaim kadang string kadang angka (JSON number)
+// tergantung server; kolom checkpoint lokal semuanya varchar.
+func asString(v interface{}) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
+// writeInacbgKlaimBaru/writeInacbgDataTerkirim/writeInacbgGroupingStage12 —
+// checkpoint lokal PERSIS tabel & kondisi yg dipakai Khanza Java/PHP
+// (wsinacbg.php: BuatKlaimBaru/UpdateDataKlaim2/GroupingStage12) supaya
+// status klaim di List Klaim (list_klaim_handler.go) akurat baik utk klaim
+// yg diproses lewat Khanza lama maupun lewat GroupingInacbg.tsx (web baru)
+// — dua-duanya nulis ke tabel yg sama, satu sumber kebenaran.
+func writeInacbgKlaimBaru(db *sql.DB, noSep string, resp map[string]interface{}) {
+	if noSep == "" {
+		return
+	}
+	db.Exec(`
+		INSERT INTO inacbg_klaim_baru (no_sep, patient_id, admission_id, hospital_admission_id)
+		VALUES (?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE patient_id=VALUES(patient_id), admission_id=VALUES(admission_id), hospital_admission_id=VALUES(hospital_admission_id)
+	`, noSep, asString(resp["patient_id"]), asString(resp["admission_id"]), asString(resp["hospital_admission_id"]))
+}
+
+func writeInacbgDataTerkirim(db *sql.DB, noSep, coderNik string) {
+	if noSep == "" {
+		return
+	}
+	db.Exec(`
+		INSERT INTO inacbg_data_terkirim (no_sep, nik) VALUES (?, ?)
+		ON DUPLICATE KEY UPDATE nik=VALUES(nik)
+	`, noSep, coderNik)
+}
+
+func writeInacbgGroupingStage12(db *sql.DB, noSep string, respInacbg map[string]interface{}) {
+	if noSep == "" || respInacbg == nil {
+		return
+	}
+	cbg, _ := respInacbg["cbg"].(map[string]interface{})
+	if cbg == nil {
+		return
+	}
+	tarif, _ := respInacbg["tariff"].(float64)
+	db.Exec(`
+		INSERT INTO inacbg_grouping_stage12 (no_sep, code_cbg, deskripsi, tarif) VALUES (?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE code_cbg=VALUES(code_cbg), deskripsi=VALUES(deskripsi), tarif=VALUES(tarif)
+	`, noSep, asString(cbg["code"]), asString(cbg["description"]), tarif)
+}
+
 // POST /api/bridging/eklaim/new-claim
 // Body: {"no_rawat": "..."}
 // Padanan method #1 "Membuat klaim baru (dan registrasi pasien jika belum
@@ -269,6 +342,10 @@ func postEklaimNewClaim(db *sql.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
+		}
+		if eklaimResultOk(result) {
+			resp, _ := result["response"].(map[string]interface{})
+			writeInacbgKlaimBaru(db, noSep, resp)
 		}
 		c.JSON(http.StatusOK, result)
 	}
@@ -345,6 +422,11 @@ func eklaimProxy(db *sql.DB, method string) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
+		if method == "set_claim_data" && eklaimResultOk(result) {
+			noSep, _ := body["nomor_sep"].(string)
+			coderNik, _ := body["coder_nik"].(string)
+			writeInacbgDataTerkirim(db, noSep, coderNik)
+		}
 		c.JSON(http.StatusOK, result)
 	}
 }
@@ -404,6 +486,10 @@ func postEklaimGrouping(db *sql.DB, grouperType string) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
+		}
+		if grouperType == "inacbg" && req.Stage == 1 && eklaimResultOk(result) {
+			respInacbg, _ := result["response_inacbg"].(map[string]interface{})
+			writeInacbgGroupingStage12(db, noSep, respInacbg)
 		}
 		c.JSON(http.StatusOK, result)
 	}

@@ -5,6 +5,7 @@ import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PDFDocument, degrees } from 'pdf-lib';
 import Swal from 'sweetalert2';
 import { ModalBilling } from '../components/ModalBilling';
+import { SepPrintView } from '../components/SepPrintView';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -871,7 +872,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
         const resolved = (list.find((c) => c.nik === myNip) || list[0]).nik;
         setCoderNik((prev) => prev || resolved);
       })
-      .catch(() => { /* tidak fatal — handleSimpanDataKlaim akan tetap validasi coderNik terisi */ });
+      .catch(() => { /* tidak fatal — handleGroupIdrg akan tetap validasi coderNik terisi */ });
   }, []);
 
   // Sinkronkan progres yang sudah ada di E-Klaim (kalau halaman ini pernah
@@ -958,7 +959,12 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
     setStage('idrg_input');
   });
 
-  const handleSimpanDataKlaim = () => runAction('simpan', async () => {
+  // Digabung jadi satu klik "Group iDRG" — di aplikasi E-Klaim asli TIDAK
+  // ada tombol simpan tarif terpisah, tarif/data klaim (set_claim_data)
+  // langsung dikirim bareng saat klik tombol Grouping di bawahnya (lihat
+  // screenshot 192.168.1.10/E-Klaim). Urutan: set_claim_data → set
+  // diagnosa/prosedur iDRG → grouping stage 1.
+  const handleGroupIdrg = () => runAction('idrg-group', async () => {
     if (!coderNik.trim()) throw new Error('Coder NIK wajib diisi (mandatory di E-Klaim)');
     if (!header) throw new Error('Data header belum termuat');
     const tarifRs: Record<string, number> = {};
@@ -974,9 +980,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
       discharge_status: caraPulangToDischargeStatus(header.cara_pulang || ''),
       tarif_rs: tarifRs,
     });
-  });
 
-  const handleGroupIdrg = () => runAction('idrg-group', async () => {
     const idrgDiagnosaStr = idrgDiagnosaList.map((d) => d.code).join('#');
     if (idrgDiagnosaStr) await eklaimCall('idrg/diagnosa/set', { no_rawat: noRawat, diagnosa: idrgDiagnosaStr });
     const idrgProsedurStr = idrgProsedurList.map((p) => p.code + (p.jumlah && p.jumlah !== '1' ? `+${p.jumlah}` : '')).join('#');
@@ -1146,11 +1150,6 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
                 </div>
               ))}
             </div>
-            {stage === 'idrg_input' && (
-              <button type="button" onClick={handleSimpanDataKlaim} disabled={!!busy} style={busy === 'simpan' ? btnDisabled : btnSecondary}>
-                {busy === 'simpan' ? 'Menyimpan...' : 'Simpan Data Klaim'}
-              </button>
-            )}
           </div>
 
           {/* Step 3 — Grouping iDRG (method #5-11) */}
@@ -1435,6 +1434,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
   // sebelumnya hardcode di backend.
   const [coderName, setCoderName] = React.useState('');
   const [showBilling, setShowBilling] = React.useState(false);
+  const [showSepPrint, setShowSepPrint] = React.useState(false);
 
   React.useEffect(() => {
     setLoading(true);
@@ -1504,7 +1504,20 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
               </div>
               <div style={{ minWidth: 260, flexShrink: 0 }}>
                 <ColumnTitle icon={<IconClipboard />} iconBg="#fef3c7" iconColor="#d97706">Data Kunjungan</ColumnTitle>
-                <HeaderField label="No SEP" value={data.no_sep ? `${data.no_sep}${data.tipe ? ` (${data.tipe})` : ''}` : data.no_sep} />
+                <HeaderField
+                  label="No SEP"
+                  value={data.no_sep ? (
+                    <>
+                      <button
+                        type="button" onClick={() => setShowSepPrint(true)}
+                        style={{ padding: '2px 10px', borderRadius: 2, border: '1px solid #16a34a', background: '#fff', color: '#16a34a', fontSize: 12, fontWeight: 400, cursor: 'pointer' }}
+                      >
+                        {data.no_sep}
+                      </button>
+                      {data.tipe ? ` (${data.tipe})` : ''}
+                    </>
+                  ) : data.no_sep}
+                />
                 <HeaderField label="No. Kartu" value={data.no_kartu} />
                 <HeaderField label="CBG" value={data.cbg} />
                 <HeaderField label="COB" value={data.cob} />
@@ -1533,6 +1546,10 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
 
       {showBilling && data && (
         <ModalBilling noRawat={noRawat} namaPasien={data.nm_pasien} onClose={() => setShowBilling(false)} />
+      )}
+
+      {showSepPrint && (
+        <SepPrintView noRawat={noRawat} onClose={() => setShowSepPrint(false)} />
       )}
 
       {data && (

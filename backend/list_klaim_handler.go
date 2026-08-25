@@ -35,6 +35,13 @@ type ListKlaimRow struct {
 	TglSep    string `json:"tgl_sep"`
 	TglRegis  string `json:"tgl_regis"`
 	TglPulang string `json:"tgl_pulang"`
+	// StatusKlaim — checkpoint lokal (inacbg_klaim_baru/inacbg_data_terkirim/
+	// inacbg_grouping_stage1[2]), tabel bawaan Khanza yg SEKARANG juga
+	// ditulis oleh backend web ini sendiri (lihat eklaim_handler.go:
+	// writeInacbgKlaimBaru/writeInacbgDataTerkirim/writeInacbgGroupingStage12)
+	// tiap new_claim/set_claim_data/grouping INACBG sukses — jadi akurat utk
+	// klaim yg diproses lewat Khanza lama MAUPUN GroupingInacbg.tsx (web baru).
+	StatusKlaim string `json:"status_klaim"`
 }
 
 // GET /api/casemix/list-klaim?jenis=ralan|ranap&tgl_dari=&tgl_sampai=&search=
@@ -74,9 +81,24 @@ func getListKlaim(db *sql.DB) gin.HandlerFunc {
 				COALESCE(bs.nmdpdjp,''),
 				bs.no_sep, DATE_FORMAT(bs.tglsep,'%Y-%m-%d'),
 				COALESCE(DATE_FORMAT(rp.tgl_registrasi,'%Y-%m-%d'),''),
-				IF(bs.tglpulang IS NULL OR bs.tglpulang = '0000-00-00 00:00:00', '', DATE_FORMAT(bs.tglpulang,'%Y-%m-%d'))
+				COALESCE((
+					SELECT IF(ki2.tgl_keluar IS NULL OR ki2.tgl_keluar = '0000-00-00', '', DATE_FORMAT(ki2.tgl_keluar,'%Y-%m-%d'))
+					FROM kamar_inap ki2
+					WHERE ki2.no_rawat = bs.no_rawat
+					ORDER BY ki2.tgl_masuk DESC, ki2.jam_masuk DESC LIMIT 1
+				), '') AS tgl_pulang,
+				CASE
+					WHEN igs1.no_sep IS NOT NULL OR igs12.no_sep IS NOT NULL THEN 'Sudah Grouping INACBG'
+					WHEN idt.no_sep IS NOT NULL THEN 'Data Klaim Terkirim'
+					WHEN ikb.no_sep IS NOT NULL THEN 'Klaim Dibuat'
+					ELSE 'Belum Diproses'
+				END AS status_klaim
 			FROM bridging_sep bs
 			LEFT JOIN reg_periksa rp ON rp.no_rawat = bs.no_rawat
+			LEFT JOIN inacbg_klaim_baru ikb ON ikb.no_sep = bs.no_sep
+			LEFT JOIN inacbg_data_terkirim idt ON idt.no_sep = bs.no_sep
+			LEFT JOIN inacbg_grouping_stage1 igs1 ON igs1.no_sep = bs.no_sep
+			LEFT JOIN inacbg_grouping_stage12 igs12 ON igs12.no_sep = bs.no_sep
 			WHERE bs.jnspelayanan = ? AND bs.tglsep BETWEEN ? AND ?`
 		args := []interface{}{jnsPelayanan, tglDari, tglSampai}
 
@@ -98,7 +120,7 @@ func getListKlaim(db *sql.DB) gin.HandlerFunc {
 		for rows.Next() {
 			var r ListKlaimRow
 			if err := rows.Scan(&r.NoRawat, &r.NoRM, &r.NmPasien, &r.Unit, &r.Kamar, &r.NmDokter,
-				&r.NoSep, &r.TglSep, &r.TglRegis, &r.TglPulang); err == nil {
+				&r.NoSep, &r.TglSep, &r.TglRegis, &r.TglPulang, &r.StatusKlaim); err == nil {
 				list = append(list, r)
 			}
 		}
