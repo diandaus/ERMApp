@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,12 +36,13 @@ type ListKlaimRow struct {
 	TglSep    string `json:"tgl_sep"`
 	TglRegis  string `json:"tgl_regis"`
 	TglPulang string `json:"tgl_pulang"`
-	// StatusKlaim — checkpoint lokal (inacbg_klaim_baru/inacbg_data_terkirim/
-	// inacbg_grouping_stage1[2]), tabel bawaan Khanza yg SEKARANG juga
-	// ditulis oleh backend web ini sendiri (lihat eklaim_handler.go:
-	// writeInacbgKlaimBaru/writeInacbgDataTerkirim/writeInacbgGroupingStage12)
-	// tiap new_claim/set_claim_data/grouping INACBG sukses — jadi akurat utk
-	// klaim yg diproses lewat Khanza lama MAUPUN GroupingInacbg.tsx (web baru).
+	// StatusKlaim — DEFAULT dari checkpoint lokal (fallback cepat kalau
+	// E-Klaim tidak terjangkau), tapi kalau kredensial E-Klaim tersedia &
+	// server bisa dihubungi, DITIMPA hasil live get_claim_data
+	// (DeriveStatusKlaimLive di eklaim_handler.go) — supaya akurat utk klaim
+	// yg diproses lewat aplikasi APA PUN (Khanza lama, aplikasi E-Klaim resmi
+	// langsung, atau ERMApp ini), bukan cuma yg kebetulan nulis checkpoint
+	// lokal.
 	StatusKlaim string `json:"status_klaim"`
 }
 
@@ -124,6 +126,31 @@ func getListKlaim(db *sql.DB) gin.HandlerFunc {
 				list = append(list, r)
 			}
 		}
+
+		// Timpa status default (checkpoint lokal) dgn hasil LIVE get_claim_data
+		// per SEP — paralel dgn batas concurrency (jangan banjiri E-Klaim) &
+		// timeout pendek per panggilan (satu SEP lambat tidak boleh bikin
+		// seluruh list nunggu lama). Kalau E-Klaim belum dikonfigurasi / semua
+		// panggilan gagal konek, diam-diam tetap pakai status checkpoint lokal.
+		if cfg, cfgErr := getEklaimConfig(db); cfgErr == nil {
+			const maxConcurrent = 6
+			const perCallTimeout = 8 * time.Second
+			sem := make(chan struct{}, maxConcurrent)
+			var wg sync.WaitGroup
+			for i := range list {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(idx int) {
+					defer wg.Done()
+					defer func() { <-sem }()
+					if status, ok := DeriveStatusKlaimLive(cfg, list[idx].NoSep, perCallTimeout); ok {
+						list[idx].StatusKlaim = status
+					}
+				}(i)
+			}
+			wg.Wait()
+		}
+
 		c.JSON(http.StatusOK, list)
 	}
 }

@@ -582,6 +582,67 @@ const TARIF_KOLOM: { key: string; label: string }[][] = [
 const gLabel: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontStyle: 'italic' };
 const gInput: React.CSSProperties = { padding: '6px 10px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none', width: '100%', boxSizing: 'border-box' };
 
+// Style sub-section "Data Klinis" (Step 2) — dibuat sub-card kecil per
+// kelompok field spy jelas mana yg satu topik (Persalinan/APGAR/dst),
+// bukan satu grid rata semua field spt Tarif RS.
+const dkSection: React.CSSProperties = { border: '1px solid #e5e7eb', padding: 10, marginBottom: 10 };
+const dkSectionTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 };
+const dkRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' };
+const dkFieldLabel: React.CSSProperties = { ...gLabel, minWidth: 140 };
+const dkNumInput: React.CSSProperties = { ...gInput, width: 90 };
+
+// Data Klinis — field opsional method #4 (set_claim_data), persis nama &
+// struktur field di Manual Web Service E-Klaim hal. 13-22 & contoh respons
+// get_claim_data hal. 45-46 (field2 ini DIECHO balik apa adanya di top-level
+// `data`, kecuali sub-objek `ventilator` yg tidak terlihat diecho — makanya
+// use_ind/start/stop ventilator TIDAK direstore dari sync, isi ulang manual
+// tiap sesi). "Akan selalu disimpan terlepas dari kondisi detail klaim
+// namun hanya diperhitungkan ketika kondisi terpenuhi" (mis. apgar cuma
+// dipakai kalau umur pasien <=1 hari, persalinan cuma kalau ranap dgn
+// diagnosa persalinan, dst) — jadi field2 di bawah SELALU dikirim, biar
+// E-Klaim sendiri yg memutuskan relevan atau tidak per kasus.
+type DataKlinis = {
+  sistole: string; diastole: string;
+  adl_sub_acute: string; adl_chronic: string;
+  icu_indikator: boolean; icu_los: string;
+  ventilator_use_ind: boolean; ventilator_start: string; ventilator_stop: string; ventilator_hour: string;
+  dializer_single_use: boolean;
+  kantong_darah: string;
+  alteplase_ind: boolean;
+  upgrade_class_ind: boolean; upgrade_class_class: string; upgrade_class_los: string; upgrade_class_payor: string; add_payment_pct: string;
+  bayi_lahir_status_cd: string;
+  usia_kehamilan: string; gravida: string; partus: string; abortus: string; onset_kontraksi: string;
+};
+
+const DATA_KLINIS_DEFAULT: DataKlinis = {
+  sistole: '', diastole: '',
+  adl_sub_acute: '', adl_chronic: '',
+  icu_indikator: false, icu_los: '',
+  ventilator_use_ind: false, ventilator_start: '', ventilator_stop: '', ventilator_hour: '',
+  dializer_single_use: false,
+  kantong_darah: '',
+  alteplase_ind: false,
+  upgrade_class_ind: false, upgrade_class_class: 'kelas_1', upgrade_class_los: '', upgrade_class_payor: 'peserta', add_payment_pct: '',
+  bayi_lahir_status_cd: '',
+  usia_kehamilan: '', gravida: '', partus: '', abortus: '', onset_kontraksi: '',
+};
+
+type ApgarScore = { appearance: string; pulse: string; grimace: string; activity: string; respiration: string };
+const APGAR_DEFAULT: ApgarScore = { appearance: '', pulse: '', grimace: '', activity: '', respiration: '' };
+
+type DeliveryRow = {
+  delivery_sequence: number; delivery_method: string; delivery_dttm: string;
+  letak_janin: string; kondisi: string;
+  use_manual: boolean; use_forcep: boolean; use_vacuum: boolean;
+  shk_spesimen_ambil: string; shk_lokasi: string; shk_alasan: string; shk_spesimen_dttm: string;
+};
+const newDeliveryRow = (seq: number): DeliveryRow => ({
+  delivery_sequence: seq, delivery_method: 'vaginal', delivery_dttm: '',
+  letak_janin: 'kepala', kondisi: 'livebirth',
+  use_manual: false, use_forcep: false, use_vacuum: false,
+  shk_spesimen_ambil: 'tidak', shk_lokasi: 'tumit', shk_alasan: 'akses-sulit', shk_spesimen_dttm: '',
+});
+
 // discharge_status E-Klaim (1-5) dari raw kamar_inap.stts_pulang — padanan
 // persis mapping discharge_status di klaimbarumanual.php (Khanza Java).
 function caraPulangToDischargeStatus(v: string): string {
@@ -751,6 +812,11 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   const [error, setError] = React.useState<string | null>(null);
   const [tarif, setTarif] = React.useState<Record<string, number>>({});
   const [coderNik, setCoderNik] = React.useState('');
+  const [dataKlinis, setDataKlinis] = React.useState<DataKlinis>(DATA_KLINIS_DEFAULT);
+  const setDK = (key: keyof DataKlinis, value: string | boolean) => setDataKlinis((prev) => ({ ...prev, [key]: value }));
+  const [apgarMenit1, setApgarMenit1] = React.useState<ApgarScore>(APGAR_DEFAULT);
+  const [apgarMenit5, setApgarMenit5] = React.useState<ApgarScore>(APGAR_DEFAULT);
+  const [deliveryList, setDeliveryList] = React.useState<DeliveryRow[]>([]);
   // Payor ID/Code & Kode Tarif sekarang setting tetap per-RS (Admin >
   // Pengaturan Bridging > E-Klaim), bukan diisi ulang tiap klaim —
   // backend/eklaim_handler.go
@@ -811,6 +877,12 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   const [inacbgProsedur, setInacbgProsedur] = React.useState('');
   const [inacbgResult, setInacbgResult] = React.useState<any>(null);
   const [inacbgCmgPick, setInacbgCmgPick] = React.useState('');
+  // klaim_status_cd & kemenkes_dc_status_cd — persis field respons
+  // get_claim_data (lihat contoh di Manual Web Service E-Klaim hal. 47),
+  // dipakai utk tampilkan box "Status Klaim" spt tampilan resmi E-Klaim
+  // (Status Klaim: Final, Status DC Kemkes: Terkirim) sesudah klaim final.
+  const [klaimStatusCd, setKlaimStatusCd] = React.useState('');
+  const [dcKemkesStatusCd, setDcKemkesStatusCd] = React.useState('');
 
   // Ambil form header + terapkan auto-fill (Tarif RS dari billing, Diagnosa/
   // Prosedur iDRG dari tab Diagnosa Pemeriksaan). Dipanggil saat halaman
@@ -880,53 +952,126 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   // yang keluar-masuk lagi tidak mulai dari nol / kena "Duplikasi nomor SEP"
   // saat coba Buat Klaim Baru ulang. Kalau klaim belum pernah dibuat,
   // get_claim_data akan error — diamkan saja, tetap mulai dari tahap 'awal'.
-  React.useEffect(() => {
-    eklaimCall('klaim/detail', { no_rawat: noRawat })
-      .then(async (res) => {
-        const d = res?.response?.data;
-        if (!d) return;
-        // coder_nik cuma keisi kalau set_claim_data memang sudah pernah
-        // dikirim (mandatory di E-Klaim) — dipakai sbg penanda "klaim ini
-        // sudah pernah disimpan", supaya tarif_rs placeholder nol dari
-        // klaim yg belum pernah disimpan tidak menimpa auto-fill billing.
-        if (d.coder_nik) {
-          setCoderNik(String(d.coder_nik));
-          if (d.tarif_rs) {
-            const restored: Record<string, number> = {};
-            TARIF_KOLOM.flat().forEach((k) => {
-              if (d.tarif_rs[k.key] != null) restored[k.label] = Number(d.tarif_rs[k.key]);
-            });
-            setTarif((prev) => ({ ...prev, ...restored }));
-          }
+  // Diekstrak jadi callback (bukan cuma efek sekali jalan) supaya bisa
+  // dipanggil ulang sesudah "Kirim Klaim" — kemenkes_dc_status_cd baru
+  // berubah dari "unsent" ke "sent" SESUDAH kirim online sukses, jadi box
+  // "Status Klaim" perlu data terbaru, bukan snapshot saat halaman dibuka.
+  const syncFromEklaim = React.useCallback(async () => {
+    try {
+      const res = await eklaimCall('klaim/detail', { no_rawat: noRawat });
+      const d = res?.response?.data;
+      if (!d) return;
+      // coder_nik cuma keisi kalau set_claim_data memang sudah pernah
+      // dikirim (mandatory di E-Klaim) — dipakai sbg penanda "klaim ini
+      // sudah pernah disimpan", supaya tarif_rs placeholder nol dari
+      // klaim yg belum pernah disimpan tidak menimpa auto-fill billing.
+      if (d.coder_nik) {
+        setCoderNik(String(d.coder_nik));
+        if (d.tarif_rs) {
+          const restored: Record<string, number> = {};
+          TARIF_KOLOM.flat().forEach((k) => {
+            if (d.tarif_rs[k.key] != null) restored[k.label] = Number(d.tarif_rs[k.key]);
+          });
+          setTarif((prev) => ({ ...prev, ...restored }));
         }
-        if (d.diagnosa_inagrouper) setIdrgDiagnosaList(await resolveDiagnosaCodes(String(d.diagnosa_inagrouper)));
-        if (d.procedure_inagrouper) setIdrgProsedurList(await resolveProsedurCodes(String(d.procedure_inagrouper)));
-        if (d.diagnosa) setInacbgDiagnosa(String(d.diagnosa));
-        if (d.procedure) setInacbgProsedur(String(d.procedure));
 
-        // response_idrg SELALU ada sbg object placeholder (status_cd:"normal",
-        // total_cost_weight:"0", tanpa drg_code) walau grouping belum pernah
-        // dijalankan sama sekali — dikonfirmasi dari data real server, BEDA
-        // dari contoh di manual resmi. Jadi jangan pakai "ada objeknya" sbg
-        // sinyal sudah di-grouping, pakai kemunculan drg_code (khusus utk
-        // hasil grouping asli, bukan placeholder).
-        const idrg = d.grouper?.response_idrg;
-        const inacbg = d.grouper?.response_inacbg;
-        const idrgGrouped = !!idrg?.drg_code;
-        const inacbgGrouped = !!inacbg?.cbg?.code;
-        if (idrgGrouped) setIdrgResult(idrg);
-        if (inacbgGrouped) setInacbgResult(inacbg);
+        // Restore Data Klinis — field2 ini diecho balik di top-level `data`
+        // (persis nama field request), KECUALI sub-objek ventilator
+        // use_ind/start_dttm/stop_dttm yg tidak terlihat diecho di contoh
+        // respons manual — jadi tetap kosong tiap sesi, isi ulang manual.
+        setDataKlinis({
+          sistole: d.sistole != null ? String(d.sistole) : '',
+          diastole: d.diastole != null ? String(d.diastole) : '',
+          adl_sub_acute: d.adl_sub_acute != null ? String(d.adl_sub_acute) : '',
+          adl_chronic: d.adl_chronic != null ? String(d.adl_chronic) : '',
+          icu_indikator: String(d.icu_indikator) === '1',
+          icu_los: d.icu_los != null ? String(d.icu_los) : '',
+          ventilator_use_ind: false, ventilator_start: '', ventilator_stop: '',
+          ventilator_hour: d.ventilator_hour != null ? String(d.ventilator_hour) : '',
+          dializer_single_use: String(d.dializer_single_use) === '1',
+          kantong_darah: d.kantong_darah != null ? String(d.kantong_darah) : '',
+          alteplase_ind: String(d.alteplase_ind) === '1',
+          upgrade_class_ind: String(d.upgrade_class_ind) === '1',
+          upgrade_class_class: d.upgrade_class_class || 'kelas_1',
+          upgrade_class_los: d.upgrade_class_los != null ? String(d.upgrade_class_los) : '',
+          upgrade_class_payor: d.upgrade_class_payor || 'peserta',
+          add_payment_pct: d.add_payment_pct != null ? String(d.add_payment_pct) : '',
+          bayi_lahir_status_cd: d.bayi_lahir_status_cd != null ? String(d.bayi_lahir_status_cd) : '',
+          usia_kehamilan: d.persalinan?.usia_kehamilan != null ? String(d.persalinan.usia_kehamilan) : '',
+          gravida: d.persalinan?.gravida != null ? String(d.persalinan.gravida) : '',
+          partus: d.persalinan?.partus != null ? String(d.persalinan.partus) : '',
+          abortus: d.persalinan?.abortus != null ? String(d.persalinan.abortus) : '',
+          onset_kontraksi: d.persalinan?.onset_kontraksi || '',
+        });
+        if (d.apgar?.menit_1) {
+          setApgarMenit1({
+            appearance: d.apgar.menit_1.appearance != null ? String(d.apgar.menit_1.appearance) : '',
+            pulse: d.apgar.menit_1.pulse != null ? String(d.apgar.menit_1.pulse) : '',
+            grimace: d.apgar.menit_1.grimace != null ? String(d.apgar.menit_1.grimace) : '',
+            activity: d.apgar.menit_1.activity != null ? String(d.apgar.menit_1.activity) : '',
+            respiration: d.apgar.menit_1.respiration != null ? String(d.apgar.menit_1.respiration) : '',
+          });
+        }
+        if (d.apgar?.menit_5) {
+          setApgarMenit5({
+            appearance: d.apgar.menit_5.appearance != null ? String(d.apgar.menit_5.appearance) : '',
+            pulse: d.apgar.menit_5.pulse != null ? String(d.apgar.menit_5.pulse) : '',
+            grimace: d.apgar.menit_5.grimace != null ? String(d.apgar.menit_5.grimace) : '',
+            activity: d.apgar.menit_5.activity != null ? String(d.apgar.menit_5.activity) : '',
+            respiration: d.apgar.menit_5.respiration != null ? String(d.apgar.menit_5.respiration) : '',
+          });
+        }
+        if (Array.isArray(d.persalinan?.delivery)) {
+          setDeliveryList(d.persalinan.delivery.map((x: any, i: number) => ({
+            delivery_sequence: Number(x.delivery_sequence) || i + 1,
+            delivery_method: x.delivery_method || 'vaginal',
+            delivery_dttm: x.delivery_dttm || '',
+            letak_janin: x.letak_janin || 'kepala',
+            kondisi: x.kondisi || 'livebirth',
+            use_manual: String(x.use_manual) === '1',
+            use_forcep: String(x.use_forcep) === '1',
+            use_vacuum: String(x.use_vacuum) === '1',
+            shk_spesimen_ambil: x.shk_spesimen_ambil || 'tidak',
+            shk_lokasi: x.shk_lokasi || 'tumit',
+            shk_alasan: x.shk_alasan || 'akses-sulit',
+            shk_spesimen_dttm: x.shk_spesimen_dttm || '',
+          })));
+        }
+      }
+      if (d.diagnosa_inagrouper) setIdrgDiagnosaList(await resolveDiagnosaCodes(String(d.diagnosa_inagrouper)));
+      if (d.procedure_inagrouper) setIdrgProsedurList(await resolveProsedurCodes(String(d.procedure_inagrouper)));
+      if (d.diagnosa) setInacbgDiagnosa(String(d.diagnosa));
+      if (d.procedure) setInacbgProsedur(String(d.procedure));
 
-        let next: EklaimStage = 'idrg_input';
-        if (idrgGrouped) next = 'idrg_grouped';
-        if (idrgGrouped && idrg.status_cd === 'final') next = 'idrg_final';
-        if (idrgGrouped && idrg.status_cd === 'final' && inacbgGrouped && !String(inacbg.cbg.code).startsWith('X')) next = 'inacbg_grouped';
-        if (inacbgGrouped && inacbg.status_cd === 'final') next = 'inacbg_final';
-        if (d.klaim_status_cd === 'final') next = 'klaim_final';
-        setStage(next);
-      })
-      .catch(() => { /* klaim belum pernah dibuat — tetap di tahap awal */ });
+      // response_idrg SELALU ada sbg object placeholder (status_cd:"normal",
+      // total_cost_weight:"0", tanpa drg_code) walau grouping belum pernah
+      // dijalankan sama sekali — dikonfirmasi dari data real server, BEDA
+      // dari contoh di manual resmi. Jadi jangan pakai "ada objeknya" sbg
+      // sinyal sudah di-grouping, pakai kemunculan drg_code (khusus utk
+      // hasil grouping asli, bukan placeholder).
+      const idrg = d.grouper?.response_idrg;
+      const inacbg = d.grouper?.response_inacbg;
+      const idrgGrouped = !!idrg?.drg_code;
+      const inacbgGrouped = !!inacbg?.cbg?.code;
+      if (idrgGrouped) setIdrgResult(idrg);
+      if (inacbgGrouped) setInacbgResult(inacbg);
+
+      let next: EklaimStage = 'idrg_input';
+      if (idrgGrouped) next = 'idrg_grouped';
+      if (idrgGrouped && idrg.status_cd === 'final') next = 'idrg_final';
+      if (idrgGrouped && idrg.status_cd === 'final' && inacbgGrouped && !String(inacbg.cbg.code).startsWith('X')) next = 'inacbg_grouped';
+      if (inacbgGrouped && inacbg.status_cd === 'final') next = 'inacbg_final';
+      if (d.klaim_status_cd === 'final') next = 'klaim_final';
+      setStage(next);
+
+      setKlaimStatusCd(String(d.klaim_status_cd || ''));
+      setDcKemkesStatusCd(String(d.kemenkes_dc_status_cd || ''));
+    } catch {
+      /* klaim belum pernah dibuat — tetap di tahap awal */
+    }
   }, [noRawat]);
+
+  React.useEffect(() => { syncFromEklaim(); }, [syncFromEklaim]);
 
   const totalTarif = Object.values(tarif).reduce((a, b) => a + (b || 0), 0);
 
@@ -964,6 +1109,70 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   // langsung dikirim bareng saat klik tombol Grouping di bawahnya (lihat
   // screenshot 192.168.1.10/E-Klaim). Urutan: set_claim_data → set
   // diagnosa/prosedur iDRG → grouping stage 1.
+  // Susun field2 Data Klinis utk dikirim bareng set_claim_data — SELALU
+  // dikirim field skalar (tekanan darah/ADL/ICU/dst, kosong -> 0), tapi
+  // sub-objek ventilator/apgar/persalinan cuma disertakan kalau memang
+  // diisi (kirim objek kosong/nol semua tidak ada gunanya & bikin payload
+  // sia-sia sesuai catatan manual "akan selalu disimpan ... namun hanya
+  // diperhitungkan ketika kondisi terpenuhi").
+  const buildDataKlinisFields = (): Record<string, unknown> => {
+    const fields: Record<string, unknown> = {
+      sistole: dataKlinis.sistole ? Number(dataKlinis.sistole) : 0,
+      diastole: dataKlinis.diastole ? Number(dataKlinis.diastole) : 0,
+      adl_sub_acute: dataKlinis.adl_sub_acute ? Number(dataKlinis.adl_sub_acute) : 0,
+      adl_chronic: dataKlinis.adl_chronic ? Number(dataKlinis.adl_chronic) : 0,
+      icu_indikator: dataKlinis.icu_indikator ? 1 : 0,
+      icu_los: dataKlinis.icu_los ? Number(dataKlinis.icu_los) : 0,
+      ventilator_hour: dataKlinis.ventilator_hour ? Number(dataKlinis.ventilator_hour) : 0,
+      dializer_single_use: dataKlinis.dializer_single_use ? 1 : 0,
+      kantong_darah: dataKlinis.kantong_darah ? Number(dataKlinis.kantong_darah) : 0,
+      alteplase_ind: dataKlinis.alteplase_ind ? 1 : 0,
+      upgrade_class_ind: dataKlinis.upgrade_class_ind ? 1 : 0,
+      upgrade_class_class: dataKlinis.upgrade_class_ind ? dataKlinis.upgrade_class_class : '',
+      upgrade_class_los: dataKlinis.upgrade_class_ind && dataKlinis.upgrade_class_los ? Number(dataKlinis.upgrade_class_los) : 0,
+      upgrade_class_payor: dataKlinis.upgrade_class_ind ? dataKlinis.upgrade_class_payor : '',
+      add_payment_pct: dataKlinis.upgrade_class_ind && dataKlinis.add_payment_pct ? Number(dataKlinis.add_payment_pct) : 0,
+    };
+    if (dataKlinis.bayi_lahir_status_cd) fields.bayi_lahir_status_cd = Number(dataKlinis.bayi_lahir_status_cd);
+    if (dataKlinis.ventilator_use_ind) {
+      fields.ventilator = { use_ind: 1, start_dttm: dataKlinis.ventilator_start, stop_dttm: dataKlinis.ventilator_stop };
+    }
+    const apgarFilled = (s: ApgarScore) => Object.values(s).some((v) => v !== '');
+    if (apgarFilled(apgarMenit1) || apgarFilled(apgarMenit5)) {
+      const toNum = (s: ApgarScore) => ({
+        appearance: Number(s.appearance) || 0, pulse: Number(s.pulse) || 0, grimace: Number(s.grimace) || 0,
+        activity: Number(s.activity) || 0, respiration: Number(s.respiration) || 0,
+      });
+      fields.apgar = { menit_1: toNum(apgarMenit1), menit_5: toNum(apgarMenit5) };
+    }
+    const persalinanFilled = dataKlinis.usia_kehamilan || dataKlinis.gravida || dataKlinis.partus
+      || dataKlinis.abortus || dataKlinis.onset_kontraksi || deliveryList.length > 0;
+    if (persalinanFilled) {
+      fields.persalinan = {
+        usia_kehamilan: dataKlinis.usia_kehamilan ? Number(dataKlinis.usia_kehamilan) : 0,
+        gravida: dataKlinis.gravida ? Number(dataKlinis.gravida) : 0,
+        partus: dataKlinis.partus ? Number(dataKlinis.partus) : 0,
+        abortus: dataKlinis.abortus ? Number(dataKlinis.abortus) : 0,
+        onset_kontraksi: dataKlinis.onset_kontraksi || undefined,
+        delivery: deliveryList.map((row) => ({
+          delivery_sequence: row.delivery_sequence,
+          delivery_method: row.delivery_method,
+          delivery_dttm: row.delivery_dttm,
+          letak_janin: row.letak_janin,
+          kondisi: row.kondisi,
+          use_manual: row.use_manual ? 1 : 0,
+          use_forcep: row.use_forcep ? 1 : 0,
+          use_vacuum: row.use_vacuum ? 1 : 0,
+          shk_spesimen_ambil: row.shk_spesimen_ambil,
+          ...(row.shk_spesimen_ambil === 'ya'
+            ? { shk_lokasi: row.shk_lokasi, shk_alasan: row.shk_alasan, shk_spesimen_dttm: row.shk_spesimen_dttm }
+            : {}),
+        })),
+      };
+    }
+    return fields;
+  };
+
   const handleGroupIdrg = () => runAction('idrg-group', async () => {
     if (!coderNik.trim()) throw new Error('Coder NIK wajib diisi (mandatory di E-Klaim)');
     if (!header) throw new Error('Data header belum termuat');
@@ -979,6 +1188,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
       kelas_rawat: header.kelas_hak || '3',
       discharge_status: caraPulangToDischargeStatus(header.cara_pulang || ''),
       tarif_rs: tarifRs,
+      ...buildDataKlinisFields(),
     });
 
     const idrgDiagnosaStr = idrgDiagnosaList.map((d) => d.code).join('#');
@@ -1028,6 +1238,12 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   });
 
   const handleFinalInacbg = () => runAction('inacbg-final', async () => {
+    // Dialyzer/Kantong Darah/Alteplase baru diisi di step ini (sesudah CBG
+    // diketahui) — kirim ulang set_claim_data dulu spy nilainya kesimpan
+    // sebelum Final INACBG, baru relevan kalau CBG-nya memang cocok.
+    if (showDialyzerKantong || showAlteplase) {
+      await eklaimCall('update-klaim', { no_rawat: noRawat, coder_nik: coderNik.trim(), ...buildDataKlinisFields() });
+    }
     await eklaimCall('inacbg/final', { no_rawat: noRawat });
     setStage('inacbg_final');
   });
@@ -1041,6 +1257,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
     if (!coderNik.trim()) throw new Error('Coder NIK wajib diisi');
     await eklaimCall('klaim/final', { no_rawat: noRawat, coder_nik: coderNik.trim() });
     setStage('klaim_final');
+    setKlaimStatusCd('final');
   });
 
   const handleEditUlangKlaim = async () => {
@@ -1063,6 +1280,9 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
 
   const handleKirimKlaim = () => runAction('kirim', async () => {
     await eklaimCall('klaim/kirim-individual', { no_rawat: noRawat });
+    // kemenkes_dc_status_cd baru berubah jadi "sent" SESUDAH kirim online
+    // sukses — sync ulang supaya box Status Klaim langsung update.
+    await syncFromEklaim();
   });
 
   // Nama file "Gruper_<no_rawat>.pdf" — PERSIS konvensi jenisBerkasKlaim
@@ -1092,7 +1312,27 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   });
 
   const idrgUngroupable = idrgResult?.mdc_number === '36';
-  const inacbgUngroupable = typeof inacbgResult?.cbg?.code === 'string' && inacbgResult.cbg.code.startsWith('X');
+  const inacbgCode = typeof inacbgResult?.cbg?.code === 'string' ? inacbgResult.cbg.code : '';
+  const inacbgUngroupable = inacbgCode.startsWith('X');
+  // Gating tampil grup Data Klinis — cuma yg PUNYA kondisi eksplisit di
+  // manual resmi yg diotomasi (sisanya, mis. ICU/Naik Kelas/ADL/Bayi Lahir,
+  // tetap selalu tampil krn bukan turunan diagnosa, murni fakta administratif
+  // yg staf harus bisa isi kapan saja):
+  //  - APGAR: khusus bayi umur <=1 hari — dipakai proxy "encounter ini
+  //    tercatat sbg bayi/neonatus" (header.berat_lahir terisi, dari
+  //    pasien_bayi), bukan hitung umur presisi hari dari tgl_lahir (header
+  //    cuma punya umur dlm tahun, tidak cukup presisi).
+  //  - Persalinan: khusus ranap dgn diagnosa persalinan — proxy: ada
+  //    diagnosa iDRG berkode awalan "O" (ICD-10 bab XV, Pregnancy/
+  //    Childbirth/Puerperium).
+  //  - Dialyzer/Kantong Darah/Alteplase: TIDAK di sini — kondisinya (kode
+  //    CBG N-3-15-0/G-4-14-*) baru diketahui SESUDAH grouping INACBG, jadi
+  //    field2 ini dipindah ke Step 4 (lihat showDialyzerKantong/showAlteplase
+  //    di bawah), bukan di Data Klinis (Step 2) spt versi sebelumnya.
+  const isNewborn = !!header?.berat_lahir;
+  const hasPersalinanDx = header?.tipe === 'RI' && idrgDiagnosaList.some((d) => /^O/i.test(d.code));
+  const showDialyzerKantong = inacbgCode === 'N-3-15-0';
+  const showAlteplase = inacbgCode.startsWith('G-4-14-');
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Memuat...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#dc2626', fontSize: 13 }}>{error}</div>;
@@ -1149,6 +1389,232 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
                   ))}
                 </div>
               ))}
+            </div>
+
+            {/* Data Klinis — sepadan tampilan resmi E-Klaim (field opsional
+                method #4), disertakan bareng klik Group iDRG. Semua field
+                selalu tersedia diisi — E-Klaim yg menentukan relevan/tidak
+                per kasus (lihat buildDataKlinisFields di atas). */}
+            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#111827', marginBottom: 10, textAlign: 'center' }}>Data Klinis</div>
+
+              <div style={dkSection}>
+                <div style={dkSectionTitle}>Tekanan Darah (mmHg)</div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Sistole / Diastole</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.sistole} onChange={(e) => setDK('sistole', e.target.value)} />
+                  <span style={{ color: '#9ca3af' }}>/</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.diastole} onChange={(e) => setDK('diastole', e.target.value)} />
+                </div>
+              </div>
+
+              <div style={dkSection}>
+                <div style={dkSectionTitle}>ADL Score</div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Sub Acute (12-60)</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.adl_sub_acute} onChange={(e) => setDK('adl_sub_acute', e.target.value)} />
+                </div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Chronic (12-60)</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.adl_chronic} onChange={(e) => setDK('adl_chronic', e.target.value)} />
+                </div>
+              </div>
+
+              {hasPersalinanDx && (
+              <div style={dkSection}>
+                <div style={dkSectionTitle}>Persalinan (khusus rawat inap dgn diagnosa persalinan)</div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Usia Kehamilan (minggu)</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.usia_kehamilan} onChange={(e) => setDK('usia_kehamilan', e.target.value)} />
+                </div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Gravida / Partus / Abortus</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.gravida} onChange={(e) => setDK('gravida', e.target.value)} />
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.partus} onChange={(e) => setDK('partus', e.target.value)} />
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.abortus} onChange={(e) => setDK('abortus', e.target.value)} />
+                </div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Onset Kontraksi</span>
+                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 220 }} value={dataKlinis.onset_kontraksi} onChange={(e) => setDK('onset_kontraksi', e.target.value)}>
+                    <option value="">— pilih —</option>
+                    <option value="spontan">Timbul Spontan</option>
+                    <option value="induksi">Dengan Induksi</option>
+                    <option value="non_spontan_non_induksi">SC Tanpa Kontraksi/Induksi</option>
+                  </select>
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ ...dkFieldLabel, minWidth: 0, marginBottom: 6 }}>Kelahiran</div>
+                  {deliveryList.map((row, idx) => (
+                    <div key={idx} style={{ border: '1px solid #e5e7eb', padding: 8, marginBottom: 6, background: '#f9fafb' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>Bayi ke-{row.delivery_sequence}</span>
+                        {stage === 'idrg_input' && (
+                          <button type="button" onClick={() => setDeliveryList((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, delivery_sequence: i + 1 })))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11.5 }}>
+                            Hapus
+                          </button>
+                        )}
+                      </div>
+                      <div style={dkRow}>
+                        <span style={{ ...dkFieldLabel, minWidth: 100 }}>Metode</span>
+                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.delivery_method} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, delivery_method: e.target.value } : r)))}>
+                          <option value="vaginal">Vaginal</option>
+                          <option value="sc">SC</option>
+                        </select>
+                        <span style={{ ...dkFieldLabel, minWidth: 90 }}>Letak Janin</span>
+                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.letak_janin} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, letak_janin: e.target.value } : r)))}>
+                          <option value="kepala">Kepala</option>
+                          <option value="sungsang">Sungsang</option>
+                          <option value="lintang">Lintang</option>
+                        </select>
+                      </div>
+                      <div style={dkRow}>
+                        <span style={{ ...dkFieldLabel, minWidth: 100 }}>Waktu Lahir</span>
+                        <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={row.delivery_dttm} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, delivery_dttm: e.target.value } : r)))} />
+                        <span style={{ ...dkFieldLabel, minWidth: 90 }}>Kondisi Bayi</span>
+                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.kondisi} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, kondisi: e.target.value } : r)))}>
+                          <option value="livebirth">Livebirth</option>
+                          <option value="stillbirth">Stillbirth</option>
+                        </select>
+                      </div>
+                      <div style={dkRow}>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_manual} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_manual: e.target.checked } : r)))} /> Manual
+                        </label>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_forcep} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_forcep: e.target.checked } : r)))} /> Forcep
+                        </label>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_vacuum} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_vacuum: e.target.checked } : r)))} /> Vacuum
+                        </label>
+                      </div>
+                      <div style={dkRow}>
+                        <span style={{ ...dkFieldLabel, minWidth: 100 }}>Spesimen SHK</span>
+                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 100 }} value={row.shk_spesimen_ambil} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_spesimen_ambil: e.target.value } : r)))}>
+                          <option value="tidak">Tidak</option>
+                          <option value="ya">Ya</option>
+                        </select>
+                        {row.shk_spesimen_ambil === 'ya' && (
+                          <>
+                            <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 100 }} value={row.shk_lokasi} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_lokasi: e.target.value } : r)))}>
+                              <option value="tumit">Tumit</option>
+                              <option value="vena">Vena</option>
+                            </select>
+                            <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.shk_alasan} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_alasan: e.target.value } : r)))}>
+                              <option value="akses-sulit">Akses Sulit</option>
+                              <option value="tidak-dapat">Tidak Dapat</option>
+                            </select>
+                            <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={row.shk_spesimen_dttm} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_spesimen_dttm: e.target.value } : r)))} />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {stage === 'idrg_input' && (
+                    <button type="button" onClick={() => setDeliveryList((prev) => [...prev, newDeliveryRow(prev.length + 1)])} style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11.5 }}>
+                      + Tambah Bayi
+                    </button>
+                  )}
+                </div>
+              </div>
+              )}
+
+              {isNewborn && (
+              <div style={dkSection}>
+                <div style={dkSectionTitle}>APGAR (khusus bayi umur ≤ 1 hari)</div>
+                {([['Menit 1', apgarMenit1, setApgarMenit1], ['Menit 5', apgarMenit5, setApgarMenit5]] as [string, ApgarScore, React.Dispatch<React.SetStateAction<ApgarScore>>][]).map(([label, score, setScore]) => (
+                  <div key={label} style={dkRow}>
+                    <span style={{ ...dkFieldLabel, minWidth: 60 }}>{label}</span>
+                    {(['appearance', 'pulse', 'grimace', 'activity', 'respiration'] as (keyof ApgarScore)[]).map((key) => (
+                      <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <span style={{ fontSize: 10, color: '#9ca3af', textTransform: 'capitalize' }}>{key}</span>
+                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 52 }} value={score[key]} onChange={(e) => setScore((prev) => ({ ...prev, [key]: e.target.value }))}>
+                          <option value="">-</option>
+                          <option value="0">0</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              )}
+
+              <div style={dkSection}>
+                <div style={dkSectionTitle}>ICU & Ventilator</div>
+                <div style={dkRow}>
+                  <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, minWidth: 140 }}>
+                    <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.icu_indikator} onChange={(e) => setDK('icu_indikator', e.target.checked)} /> Rawat ICU
+                  </label>
+                  {dataKlinis.icu_indikator && (
+                    <>
+                      <span style={{ ...gLabel }}>Lama Hari (ICU LOS)</span>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.icu_los} onChange={(e) => setDK('icu_los', e.target.value)} />
+                    </>
+                  )}
+                </div>
+                <div style={dkRow}>
+                  <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, minWidth: 140 }}>
+                    <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.ventilator_use_ind} onChange={(e) => setDK('ventilator_use_ind', e.target.checked)} /> Pakai Ventilator
+                  </label>
+                  {dataKlinis.ventilator_use_ind && (
+                    <>
+                      <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.ventilator_start} onChange={(e) => setDK('ventilator_start', e.target.value)} />
+                      <span style={{ color: '#9ca3af' }}>s/d</span>
+                      <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.ventilator_stop} onChange={(e) => setDK('ventilator_stop', e.target.value)} />
+                    </>
+                  )}
+                </div>
+                <div style={dkRow}>
+                  <span style={dkFieldLabel}>Jam Pemakaian Ventilator</span>
+                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.ventilator_hour} onChange={(e) => setDK('ventilator_hour', e.target.value)} />
+                </div>
+              </div>
+
+              <div style={dkSection}>
+                <div style={dkSectionTitle}>Naik Kelas</div>
+                <div style={dkRow}>
+                  <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, minWidth: 140 }}>
+                    <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.upgrade_class_ind} onChange={(e) => setDK('upgrade_class_ind', e.target.checked)} /> Naik Kelas
+                  </label>
+                </div>
+                {dataKlinis.upgrade_class_ind && (
+                  <>
+                    <div style={dkRow}>
+                      <span style={dkFieldLabel}>Kenaikan Ke Kelas</span>
+                      <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={dataKlinis.upgrade_class_class} onChange={(e) => setDK('upgrade_class_class', e.target.value)}>
+                        <option value="kelas_1">Kelas 1</option>
+                        <option value="kelas_2">Kelas 2</option>
+                        <option value="vip">VIP</option>
+                      </select>
+                      <span style={dkFieldLabel}>Lama Hari Naik Kelas</span>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.upgrade_class_los} onChange={(e) => setDK('upgrade_class_los', e.target.value)} />
+                    </div>
+                    <div style={dkRow}>
+                      <span style={dkFieldLabel}>Sumber Pembayaran Tambahan</span>
+                      <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 170 }} value={dataKlinis.upgrade_class_payor} onChange={(e) => setDK('upgrade_class_payor', e.target.value)}>
+                        <option value="peserta">Peserta</option>
+                        <option value="pemberi_kerja">Pemberi Kerja</option>
+                        <option value="asuransi_tambahan">Asuransi Tambahan</option>
+                      </select>
+                      <span style={dkFieldLabel}>% Koefisien Tambahan</span>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.add_payment_pct} onChange={(e) => setDK('add_payment_pct', e.target.value)} />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div style={{ ...dkSection, marginBottom: 0 }}>
+                <div style={dkSectionTitle}>Status Bayi Lahir (khusus Jaminan Bayi Baru Lahir)</div>
+                <div style={dkRow}>
+                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.bayi_lahir_status_cd} onChange={(e) => setDK('bayi_lahir_status_cd', e.target.value)}>
+                    <option value="">— tidak berlaku —</option>
+                    <option value="1">Tanpa Kelainan</option>
+                    <option value="2">Dengan Kelainan</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1354,6 +1820,42 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
                       </button>
                     </div>
                   )}
+
+                  {/* Dialyzer/Kantong Darah/Alteplase — BUKAN bagian Data
+                      Klinis (Step 2) krn kondisi munculnya (kode CBG N-3-15-0
+                      / G-4-14-*) baru diketahui SESUDAH grouping INACBG,
+                      persis posisinya di tampilan resmi (muncul sbg baris
+                      tambahan di hasil grouping, sebelum Final INACBG). */}
+                  {showDialyzerKantong && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #bbf7d0' }}>
+                      <div style={dkRow}>
+                        <span style={dkFieldLabel}>Penggunaan Dialyzer</span>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={!dataKlinis.dializer_single_use} onChange={() => setDK('dializer_single_use', false)} /> Multiple Use (reuse)
+                        </label>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={dataKlinis.dializer_single_use} onChange={() => setDK('dializer_single_use', true)} /> Single Use
+                        </label>
+                      </div>
+                      <div style={dkRow}>
+                        <span style={dkFieldLabel}>Jumlah Kantong Darah</span>
+                        <input type="number" disabled={stage !== 'inacbg_grouped'} style={dkNumInput} value={dataKlinis.kantong_darah} onChange={(e) => setDK('kantong_darah', e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+                  {showAlteplase && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #bbf7d0' }}>
+                      <div style={dkRow}>
+                        <span style={dkFieldLabel}>Pemberian Alteplase</span>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={!dataKlinis.alteplase_ind} onChange={() => setDK('alteplase_ind', false)} /> Tidak diberikan
+                        </label>
+                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={dataKlinis.alteplase_ind} onChange={() => setDK('alteplase_ind', true)} /> Diberikan
+                        </label>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1383,26 +1885,48 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
                   {busy === 'klaim-final' ? 'Memproses...' : 'Final Klaim'}
                 </button>
               ) : (
-                <>
-                  <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 10 }}>✓ Klaim sudah final.</div>
-                  <button type="button" onClick={handleEditUlangKlaim} disabled={!!busy} style={busy === 'klaim-reedit' ? btnDisabled : btnSecondary}>
-                    Edit Ulang Klaim
-                  </button>
-                </>
+                <div style={{ fontSize: 12, color: '#16a34a' }}>✓ Klaim sudah final.</div>
               )}
             </div>
           )}
 
-          {/* Step 6 — Kirim & Cetak (method #22-23, #27) */}
+          {/* Step 6 — Kirim & Cetak (method #22-23, #27) — status box + tombol
+              aksi dibuat sepadan tampilan resmi 192.168.1.10/E-Klaim (box
+              "Status Klaim" di atas, Cetak Klaim/Kirim Klaim Online rata
+              kiri, Edit Ulang Klaim rata kanan sebaris). */}
           {stage === 'klaim_final' && (
             <div style={stageStyle}>
               <div style={stageTitle}>6. Kirim & Cetak Klaim</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={handleKirimKlaim} disabled={!!busy} style={busy === 'kirim' ? btnDisabled : btnPrimary}>
-                  {busy === 'kirim' ? 'Mengirim...' : 'Kirim Klaim'}
-                </button>
-                <button type="button" onClick={handleCetakKlaim} disabled={!!busy} style={busy === 'cetak' ? btnDisabled : btnSecondary}>
-                  {busy === 'cetak' ? 'Menyiapkan...' : 'Cetak Klaim'}
+
+              <div style={{ marginBottom: 12, border: '1px solid #e5e7eb' }}>
+                <div style={{ padding: '6px 10px', background: '#f3f4f6', fontWeight: 700, fontSize: 12.5, textAlign: 'center', color: '#111827' }}>
+                  Status Klaim
+                </div>
+                <div style={{ display: 'flex', borderTop: '1px solid #e5e7eb' }}>
+                  <div style={{ flex: 1, padding: '6px 10px', fontSize: 12.5, color: '#6b7280' }}>Status Klaim</div>
+                  <div style={{ flex: 2, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
+                    {klaimStatusCd === 'final' ? 'Final' : klaimStatusCd === 'normal' ? 'Normal' : (klaimStatusCd || '-')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', borderTop: '1px solid #e5e7eb' }}>
+                  <div style={{ flex: 1, padding: '6px 10px', fontSize: 12.5, color: '#6b7280' }}>Status DC Kemkes</div>
+                  <div style={{ flex: 2, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
+                    {dcKemkesStatusCd === 'sent' ? 'Terkirim' : dcKemkesStatusCd === 'unsent' ? 'Belum Terkirim' : (dcKemkesStatusCd || '-')}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" onClick={handleCetakKlaim} disabled={!!busy} style={busy === 'cetak' ? btnDisabled : btnSecondary}>
+                    {busy === 'cetak' ? 'Menyiapkan...' : 'Cetak Klaim'}
+                  </button>
+                  <button type="button" onClick={handleKirimKlaim} disabled={!!busy} style={busy === 'kirim' ? btnDisabled : btnPrimary}>
+                    {busy === 'kirim' ? 'Mengirim...' : 'Kirim Klaim Online'}
+                  </button>
+                </div>
+                <button type="button" onClick={handleEditUlangKlaim} disabled={!!busy} style={busy === 'klaim-reedit' ? btnDisabled : btnSecondary}>
+                  Edit Ulang Klaim
                 </button>
               </div>
             </div>

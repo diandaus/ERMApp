@@ -166,6 +166,14 @@ func chunkSplit(s string, chunkLen int, sep string) string {
 // dipakai method spt "grouper" yg butuh "stage"/"grouper" di metadata
 // (bukan di data) — boleh nil kalau tidak perlu.
 func eklaimRequest(cfg *eklaimConfig, method string, extraMetadata map[string]interface{}, data map[string]interface{}) (map[string]interface{}, error) {
+	return eklaimRequestTimeout(cfg, method, extraMetadata, data, 30*time.Second)
+}
+
+// eklaimRequestTimeout — sama persis eklaimRequest, cuma timeout-nya bisa
+// diatur per pemanggil. Dipakai list_klaim_handler.go (cek status BANYAK
+// SEP sekaligus, live ke E-Klaim) supaya satu SEP yg lambat/gagal tidak
+// bikin seluruh List Klaim nunggu sampai 30 detik.
+func eklaimRequestTimeout(cfg *eklaimConfig, method string, extraMetadata map[string]interface{}, data map[string]interface{}, timeout time.Duration) (map[string]interface{}, error) {
 	metadata := map[string]interface{}{"method": method}
 	for k, v := range extraMetadata {
 		metadata[k] = v
@@ -183,7 +191,7 @@ func eklaimRequest(cfg *eklaimConfig, method string, extraMetadata map[string]in
 		return nil, err
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	req, err := http.NewRequest(http.MethodPost, cfg.URL, strings.NewReader(encryptedBody))
 	if err != nil {
 		return nil, err
@@ -288,6 +296,67 @@ func writeInacbgGroupingStage12(db *sql.DB, noSep string, respInacbg map[string]
 		INSERT INTO inacbg_grouping_stage12 (no_sep, code_cbg, deskripsi, tarif) VALUES (?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE code_cbg=VALUES(code_cbg), deskripsi=VALUES(deskripsi), tarif=VALUES(tarif)
 	`, noSep, asString(cbg["code"]), asString(cbg["description"]), tarif)
+}
+
+// DeriveStatusKlaimLive — panggil get_claim_data LANGSUNG ke server E-Klaim
+// dan turunkan status, PERSIS logika sync stage di GroupingFormView
+// (frontend/src/modules/GroupingInacbg.tsx, efek "Sinkronkan progres...").
+// Sengaja LIVE (bukan baca tabel checkpoint lokal inacbg_klaim_baru dkk)
+// supaya akurat utk klaim yg diproses lewat aplikasi APA PUN — Khanza lama,
+// aplikasi E-Klaim resmi langsung, atau ERMApp ini — bukan cuma yg
+// kebetulan lewat salah satu aplikasi yg nulis checkpoint lokal itu.
+// Return (status, ok) — ok=false artinya gagal konek/timeout, PEMANGGIL
+// jangan menimpa status fallback dgn ini; ok=true (termasuk utk "Belum
+// Diproses" krn E-Klaim jawab bukan "Ok") berarti hasil definitif.
+func DeriveStatusKlaimLive(cfg *eklaimConfig, noSep string, timeout time.Duration) (string, bool) {
+	if noSep == "" {
+		return "", false
+	}
+	result, err := eklaimRequestTimeout(cfg, "get_claim_data", nil, map[string]interface{}{"nomor_sep": noSep}, timeout)
+	if err != nil {
+		return "", false
+	}
+	if !eklaimResultOk(result) {
+		return "Belum Diproses", true
+	}
+	resp, _ := result["response"].(map[string]interface{})
+	d, _ := resp["data"].(map[string]interface{})
+	if d == nil {
+		return "Belum Diproses", true
+	}
+
+	grouper, _ := d["grouper"].(map[string]interface{})
+	idrg, _ := grouper["response_idrg"].(map[string]interface{})
+	inacbg, _ := grouper["response_inacbg"].(map[string]interface{})
+	idrgGrouped := idrg != nil && asString(idrg["drg_code"]) != ""
+	inacbgCode := ""
+	if inacbg != nil {
+		if cbg, ok := inacbg["cbg"].(map[string]interface{}); ok {
+			inacbgCode = asString(cbg["code"])
+		}
+	}
+	inacbgGrouped := inacbgCode != ""
+
+	status := "Klaim Dibuat"
+	if asString(d["coder_nik"]) != "" {
+		status = "Data Klaim Terkirim"
+	}
+	if idrgGrouped {
+		status = "Grouping iDRG"
+	}
+	if idrgGrouped && asString(idrg["status_cd"]) == "final" {
+		status = "iDRG Final"
+	}
+	if idrgGrouped && asString(idrg["status_cd"]) == "final" && inacbgGrouped && !strings.HasPrefix(inacbgCode, "X") {
+		status = "Grouping INACBG"
+	}
+	if inacbgGrouped && asString(inacbg["status_cd"]) == "final" {
+		status = "INACBG Final"
+	}
+	if asString(d["klaim_status_cd"]) == "final" {
+		status = "Klaim Final"
+	}
+	return status, true
 }
 
 // POST /api/bridging/eklaim/new-claim

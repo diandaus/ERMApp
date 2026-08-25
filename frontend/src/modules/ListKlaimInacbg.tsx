@@ -14,14 +14,19 @@ type ListKlaimRow = {
   status_klaim: string;
 };
 
-// Badge warna per tahap Status Klaim — checkpoint lokal Khanza
-// (inacbg_klaim_baru/inacbg_data_terkirim/inacbg_grouping_stage1[2]),
+// Badge warna per tahap Status Klaim — hasil LIVE get_claim_data ke E-Klaim
+// (backend/list_klaim_handler.go > DeriveStatusKlaimLive), jadi akurat utk
+// klaim yg diproses lewat aplikasi apa pun (bukan cuma lewat ERMApp ini),
 // diurutkan makin hijau/tegas makin lanjut prosesnya.
 const STATUS_KLAIM_STYLE: Record<string, { bg: string; color: string }> = {
   'Belum Diproses': { bg: '#f3f4f6', color: '#6b7280' },
   'Klaim Dibuat': { bg: '#fef3c7', color: '#92400e' },
-  'Data Klaim Terkirim': { bg: '#dbeafe', color: '#1e40af' },
-  'Sudah Grouping INACBG': { bg: '#dcfce7', color: '#166534' },
+  'Data Klaim Terkirim': { bg: '#fde68a', color: '#78350f' },
+  'Grouping iDRG': { bg: '#dbeafe', color: '#1e40af' },
+  'iDRG Final': { bg: '#bfdbfe', color: '#1e3a8a' },
+  'Grouping INACBG': { bg: '#e0e7ff', color: '#3730a3' },
+  'INACBG Final': { bg: '#c7d2fe', color: '#312e81' },
+  'Klaim Final': { bg: '#dcfce7', color: '#166534' },
 };
 
 type Jenis = 'ralan' | 'ranap';
