@@ -330,18 +330,22 @@ func eklaimProxy(db *sql.DB, method string) gin.HandlerFunc {
 	}
 }
 
-// POST /api/bridging/eklaim/idrg/grouping
-// Body: {"no_rawat": "...", "stage": 1|2, "topup_codes": "code1#code2"}
-// Padanan method #9 & #10 (Grouping iDRG Stage 1 & 2) — dipisah dari
-// eklaimProxy krn "stage"/"grouper" masuk METADATA (bukan data spt method
-// lain), dan format tipe stage-nya beda antara contoh stage 1 (int) vs
-// stage 2 (string) di manual — ditranskripsi literal apa adanya.
-func postEklaimIdrgGrouping(db *sql.DB) gin.HandlerFunc {
+// POST /api/bridging/eklaim/idrg/grouping atau .../inacbg/grouping
+// Body: {"no_rawat": "...", "stage": 1|2, "topup_codes"/"special_cmg": "code1#code2"}
+// Padanan method #9-10 (Grouping iDRG) DAN #16-17 (Grouping INACBG) — dua
+// pasangan method yg strukturnya SAMA PERSIS (cuma beda "grouper":
+// "idrg"/"inacbg" & nama field stage-2: topup_codes vs special_cmg),
+// makanya digabung 1 handler param grouperType. Dipisah dari eklaimProxy
+// krn "stage"/"grouper" masuk METADATA (bukan data spt method lain), dan
+// format tipe stage-nya beda antara contoh stage 1 (int) vs stage 2
+// (string) di manual — ditranskripsi literal apa adanya.
+func postEklaimGrouping(db *sql.DB, grouperType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			NoRawat    string `json:"no_rawat" binding:"required"`
 			Stage      int    `json:"stage" binding:"required"`
 			TopupCodes string `json:"topup_codes"`
+			SpecialCmg string `json:"special_cmg"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -367,12 +371,16 @@ func postEklaimIdrgGrouping(db *sql.DB) gin.HandlerFunc {
 		var stageMeta interface{} = req.Stage // stage 1: dikirim sbg int, persis contoh manual
 		if req.Stage == 2 {
 			stageMeta = "2" // stage 2: dikirim sbg string, persis contoh manual
-			data["topup_codes"] = req.TopupCodes
+			if grouperType == "idrg" {
+				data["topup_codes"] = req.TopupCodes
+			} else {
+				data["special_cmg"] = req.SpecialCmg
+			}
 		}
 
 		result, err := eklaimRequest(cfg, "grouper", map[string]interface{}{
 			"stage":   stageMeta,
-			"grouper": "idrg",
+			"grouper": grouperType,
 		}, data)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})

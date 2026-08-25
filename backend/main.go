@@ -3410,10 +3410,36 @@ func main() {
 	// dokumen aslinya, tapi ditranskripsi apa adanya — perlu diverifikasi
 	// ke server E-Klaim asli).
 	r.POST("/api/bridging/eklaim/idrg/prosedur/get", eklaimProxy(db, "inacbg_procedure_get"))
-	r.POST("/api/bridging/eklaim/idrg/grouping", postEklaimIdrgGrouping(db))
+	r.POST("/api/bridging/eklaim/idrg/grouping", postEklaimGrouping(db, "idrg"))
 	r.POST("/api/bridging/eklaim/idrg/final", eklaimProxy(db, "idrg_grouper_final"))
 	r.POST("/api/bridging/eklaim/idrg/reedit", eklaimProxy(db, "idrg_grouper_reedit"))
 	r.POST("/api/bridging/eklaim/idrg/import-to-inacbg", eklaimProxy(db, "idrg_to_inacbg_import"))
+
+	// Method #14-15 Set Diagnosa/Prosedur INACBG, #16-17 Grouping INACBG,
+	// #18-19 Final/Re-edit INACBG, #20-21 Final/Re-edit Klaim, #22-23 Kirim
+	// klaim (kolektif/individual), #24-25 Get detail/status klaim, #26-27
+	// Hapus/Cetak klaim, #28-31 Pencarian diagnosa/prosedur iDRG & INACBG,
+	// #32 Generate nomor klaim, #33-34 Validasi/Batal SITB.
+	r.POST("/api/bridging/eklaim/inacbg/diagnosa/set", eklaimProxy(db, "inacbg_diagnosa_set"))
+	r.POST("/api/bridging/eklaim/inacbg/prosedur/set", eklaimProxy(db, "inacbg_procedure_set"))
+	r.POST("/api/bridging/eklaim/inacbg/grouping", postEklaimGrouping(db, "inacbg"))
+	r.POST("/api/bridging/eklaim/inacbg/final", eklaimProxy(db, "inacbg_grouper_final"))
+	r.POST("/api/bridging/eklaim/inacbg/reedit", eklaimProxy(db, "inacbg_grouper_reedit"))
+	r.POST("/api/bridging/eklaim/klaim/final", eklaimProxy(db, "claim_final"))
+	r.POST("/api/bridging/eklaim/klaim/reedit", eklaimProxy(db, "reedit_claim"))
+	r.POST("/api/bridging/eklaim/klaim/kirim-kolektif", eklaimProxy(db, "send_claim"))
+	r.POST("/api/bridging/eklaim/klaim/kirim-individual", eklaimProxy(db, "send_claim_individual"))
+	r.POST("/api/bridging/eklaim/klaim/detail", eklaimProxy(db, "get_claim_data"))
+	r.POST("/api/bridging/eklaim/klaim/status", eklaimProxy(db, "get_claim_status"))
+	r.POST("/api/bridging/eklaim/klaim/hapus", eklaimProxy(db, "delete_claim"))
+	r.POST("/api/bridging/eklaim/klaim/cetak", eklaimProxy(db, "claim_print"))
+	r.POST("/api/bridging/eklaim/cari/diagnosa-idrg", eklaimProxy(db, "search_diagnosis_inagrouper"))
+	r.POST("/api/bridging/eklaim/cari/prosedur-idrg", eklaimProxy(db, "search_procedures_inagrouper"))
+	r.POST("/api/bridging/eklaim/cari/diagnosa-inacbg", eklaimProxy(db, "search_diagnosis"))
+	r.POST("/api/bridging/eklaim/cari/prosedur-inacbg", eklaimProxy(db, "search_procedures"))
+	r.POST("/api/bridging/eklaim/generate-nomor-klaim", eklaimProxy(db, "generate_claim_number"))
+	r.POST("/api/bridging/eklaim/sitb/validasi", eklaimProxy(db, "sitb_validate"))
+	r.POST("/api/bridging/eklaim/sitb/batal", eklaimProxy(db, "sitb_invalidate"))
 
 	// Tindakan Rawat Jalan endpoint
 	r.GET("/api/tindakan-ralan/*no_rawat", getTindakanRalan(db))

@@ -496,15 +496,17 @@ const IconShield = () => (
   </svg>
 );
 
-// GroupingFormView — padanan tampilan aplikasi E-Klaim (screenshot yg
-// dikirim user) utk tab "Grouping". Field yg bisa diprefill dari data yg
-// SUDAH ada (bridging_sep/reg_periksa/kamar_inap/dpjp_ranap, lihat
-// backend/grouping_form_handler.go) langsung terisi; field yg belum ada
-// sumber datanya di skema Khanza (ADL Score, Jenis Tarif/kelas RS, Pasien
-// TB, breakdown tarif per kategori) dikosongkan/0 spy staf isi manual —
-// SAMA PERSIS gaya form E-Klaim aslinya (form input, bukan laporan
-// otomatis). Tombol Kirim sengaja nonaktif — kirim ke E-Klaim (webservice
-// terenkripsi AES-256-CBC ke server terpisah) belum diimplementasikan.
+// GroupingFormView — workflow iDRG → INACBG → Klaim sesuai 25 Kriteria
+// resmi (docs/eklaim/DO 25 Kriteria...xlsx): grouping iDRG WAJIB duluan,
+// baru INACBG, baru Final Klaim, baru Kirim/Cetak muncul. Tersambung ke
+// 22 endpoint E-Klaim yg sudah dibangun (backend/eklaim_handler.go).
+//
+// PENTING: belum pernah diuji ke server E-Klaim NYATA (tidak ada akses
+// dari sini) — alur/nama field ditranskripsi presisi dari manual resmi,
+// tapi perilaku sebenarnya (pesan error, bentuk respons edge-case) baru
+// bisa dipastikan pas dites di server RS. State (stage) TIDAK disimpan
+// di DB — cuma di memori komponen ini, reload halaman = mulai dari 'awal'
+// lagi (idealnya nanti disinkron ulang lewat get_claim_data, menyusul).
 type GroupingFormData = {
   tanggal_masuk: string; tanggal_pulang: string; jaminan: string; no_sep: string; tipe: string;
   no_peserta: string; cob: boolean; jenis_rawat: 'jalan' | 'inap'; naik_kelas: boolean; kelas_hak: string;
@@ -512,22 +514,79 @@ type GroupingFormData = {
   berat_lahir: string; cara_pulang: string; dpjp: string;
 };
 
-const TARIF_KOLOM: { label: string }[][] = [
-  [{ label: 'Prosedur Non Bedah' }, { label: 'Tenaga Ahli' }, { label: 'Radiologi' }, { label: 'Rehabilitasi' }, { label: 'Obat' }, { label: 'Alkes' }],
-  [{ label: 'Prosedur Bedah' }, { label: 'Keperawatan' }, { label: 'Laboratorium' }, { label: 'Kamar / Akomodasi' }, { label: 'Obat Kronis' }, { label: 'BMHP' }],
-  [{ label: 'Konsultasi' }, { label: 'Penunjang' }, { label: 'Pelayanan Darah' }, { label: 'Rawat Intensif' }, { label: 'Obat Kemoterapi' }, { label: 'Sewa Alat' }],
+const TARIF_KOLOM: { key: string; label: string }[][] = [
+  [{ key: 'prosedur_non_bedah', label: 'Prosedur Non Bedah' }, { key: 'tenaga_ahli', label: 'Tenaga Ahli' }, { key: 'radiologi', label: 'Radiologi' }, { key: 'rehabilitasi', label: 'Rehabilitasi' }, { key: 'obat', label: 'Obat' }, { key: 'alkes', label: 'Alkes' }],
+  [{ key: 'prosedur_bedah', label: 'Prosedur Bedah' }, { key: 'keperawatan', label: 'Keperawatan' }, { key: 'laboratorium', label: 'Laboratorium' }, { key: 'kamar', label: 'Kamar / Akomodasi' }, { key: 'obat_kronis', label: 'Obat Kronis' }, { key: 'bmhp', label: 'BMHP' }],
+  [{ key: 'konsultasi', label: 'Konsultasi' }, { key: 'penunjang', label: 'Penunjang' }, { key: 'pelayanan_darah', label: 'Pelayanan Darah' }, { key: 'rawat_intensif', label: 'Rawat Intensif' }, { key: 'obat_kemoterapi', label: 'Obat Kemoterapi' }, { key: 'sewa_alat', label: 'Sewa Alat' }],
 ];
+
+const KODE_TARIF_OPSI = ['AP', 'AS', 'BP', 'BS', 'CP', 'CS', 'DP', 'DS', 'RSCM', 'RSJP', 'RSD', 'RSAB'];
 
 const gLabel: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontStyle: 'italic' };
 const gInput: React.CSSProperties = { padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none', width: '100%', boxSizing: 'border-box' };
-const gRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 16, padding: '10px 0', borderBottom: '1px solid #f3f4f6', flexWrap: 'wrap' };
 
-const GroupingFormView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
+// discharge_status E-Klaim (1-5) dari raw kamar_inap.stts_pulang — padanan
+// persis mapping discharge_status di klaimbarumanual.php (Khanza Java).
+function caraPulangToDischargeStatus(v: string): string {
+  const s = v.toLowerCase();
+  if (['sembuh', 'sehat', 'atas persetujuan dokter'].includes(s)) return '1';
+  if (s === 'rujuk') return '2';
+  if (['aps', 'pulang paksa', 'atas permintaan sendiri'].includes(s)) return '3';
+  if (['meninggal', '+'].includes(s)) return '4';
+  return '5';
+}
+// cara_masuk E-Klaim dari label ringkas yg sudah kita punya (header
+// backend cuma bisa bedakan Faskes 1/Faskes 2/Lainnya dari bridging_sep —
+// enum E-Klaim py 10 opsi, jadi ini best-effort, bukan pemetaan lengkap).
+function caraMasukToCode(label: string): string {
+  if (label === 'Rujukan FKTP') return 'gp';
+  if (label === 'Rujukan FKRTL') return 'hosp-trans';
+  return 'other';
+}
+
+type EklaimStage = 'awal' | 'idrg_input' | 'idrg_grouped' | 'idrg_final' | 'inacbg_input' | 'inacbg_grouped' | 'inacbg_final' | 'klaim_final';
+
+async function eklaimCall(path: string, body: Record<string, unknown>): Promise<any> {
+  const res = await fetch(`/api/bridging/eklaim/${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal memanggil E-Klaim');
+  if (data?.metadata?.code && data.metadata.code !== 200) {
+    throw new Error(data.metadata.message || 'E-Klaim mengembalikan error');
+  }
+  return data;
+}
+
+const stageStyle: React.CSSProperties = { padding: 16, border: '1px solid #e5e7eb', marginBottom: 12 };
+const stageTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 10 };
+const btnPrimary: React.CSSProperties = { padding: '8px 16px', borderRadius: 0, border: 'none', background: '#2563eb', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+const btnSecondary: React.CSSProperties = { padding: '8px 16px', borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+const btnDisabled: React.CSSProperties = { padding: '8px 16px', borderRadius: 0, border: 'none', background: '#d1d5db', color: '#6b7280', fontSize: 12.5, fontWeight: 600, cursor: 'not-allowed' };
+
+const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | null }> = ({ noRawat, header }) => {
   const [form, setForm] = React.useState<GroupingFormData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [tarif, setTarif] = React.useState<Record<string, number>>({});
-  const [setuju, setSetuju] = React.useState(false);
+  const [coderNik, setCoderNik] = React.useState('');
+  const [kodeTarif, setKodeTarif] = React.useState('DS');
+  const [payorId, setPayorId] = React.useState('');
+  const [payorCd, setPayorCd] = React.useState('JKN');
+
+  const [stage, setStage] = React.useState<EklaimStage>('awal');
+  const [busy, setBusy] = React.useState('');
+  const [actionError, setActionError] = React.useState('');
+
+  const [idrgDiagnosa, setIdrgDiagnosa] = React.useState('');
+  const [idrgProsedur, setIdrgProsedur] = React.useState('');
+  const [idrgResult, setIdrgResult] = React.useState<any>(null);
+  const [idrgTopupPick, setIdrgTopupPick] = React.useState('');
+
+  const [inacbgDiagnosa, setInacbgDiagnosa] = React.useState('');
+  const [inacbgProsedur, setInacbgProsedur] = React.useState('');
+  const [inacbgResult, setInacbgResult] = React.useState<any>(null);
+  const [inacbgCmgPick, setInacbgCmgPick] = React.useState('');
 
   React.useEffect(() => {
     setLoading(true);
@@ -545,59 +604,365 @@ const GroupingFormView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
 
   const totalTarif = Object.values(tarif).reduce((a, b) => a + (b || 0), 0);
 
+  const runAction = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key);
+    setActionError('');
+    try {
+      await fn();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Terjadi kesalahan');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const handleBuatKlaimBaru = () => runAction('buat', async () => {
+    await eklaimCall('new-claim', { no_rawat: noRawat });
+    setStage('idrg_input');
+  });
+
+  const handleSimpanDataKlaim = () => runAction('simpan', async () => {
+    if (!coderNik.trim()) throw new Error('Coder NIK wajib diisi (mandatory di E-Klaim)');
+    if (!header) throw new Error('Data header belum termuat');
+    const tarifRs: Record<string, number> = {};
+    TARIF_KOLOM.flat().forEach((k) => { tarifRs[k.key] = tarif[k.label] ?? 0; });
+    await eklaimCall('update-klaim', {
+      no_rawat: noRawat,
+      coder_nik: coderNik.trim(),
+      tgl_masuk: header.tgl_registrasi.length > 10 ? header.tgl_registrasi + ':00' : header.tgl_registrasi + ' 00:00:00',
+      tgl_pulang: header.tanggal_pulang ? header.tanggal_pulang + ' 00:00:00' : undefined,
+      cara_masuk: caraMasukToCode(header.cara_masuk || ''),
+      jenis_rawat: header.tipe === 'RI' ? '1' : '2',
+      kelas_rawat: header.kelas_hak || '3',
+      discharge_status: caraPulangToDischargeStatus(header.cara_pulang || ''),
+      kode_tarif: kodeTarif,
+      payor_id: payorId || undefined,
+      payor_cd: payorCd || undefined,
+      tarif_rs: tarifRs,
+    });
+  });
+
+  const handleGroupIdrg = () => runAction('idrg-group', async () => {
+    if (idrgDiagnosa.trim()) await eklaimCall('idrg/diagnosa/set', { no_rawat: noRawat, diagnosa: idrgDiagnosa.trim() });
+    if (idrgProsedur.trim()) await eklaimCall('idrg/prosedur/set', { no_rawat: noRawat, procedure: idrgProsedur.trim() });
+    const r = await eklaimCall('idrg/grouping', { no_rawat: noRawat, stage: 1 });
+    setIdrgResult(r.response_idrg);
+    setStage('idrg_grouped');
+  });
+
+  const handleGroupIdrgStage2 = () => runAction('idrg-stage2', async () => {
+    const r = await eklaimCall('idrg/grouping', { no_rawat: noRawat, stage: 2, topup_codes: idrgTopupPick });
+    setIdrgResult(r.response_idrg);
+  });
+
+  const handleFinalIdrg = () => runAction('idrg-final', async () => {
+    await eklaimCall('idrg/final', { no_rawat: noRawat });
+    setStage('idrg_final');
+  });
+
+  const handleEditUlangIdrg = () => runAction('idrg-reedit', async () => {
+    await eklaimCall('idrg/reedit', { no_rawat: noRawat });
+    setStage('idrg_grouped');
+  });
+
+  const handleImportKeInacbg = () => runAction('import', async () => {
+    const r = await eklaimCall('idrg/import-to-inacbg', { no_rawat: noRawat });
+    const dxList = (r.data?.diagnosa?.expanded || []).map((d: any) => d.code).join('#');
+    const prList = (r.data?.procedure?.expanded || []).map((p: any) => p.code).join('#');
+    setInacbgDiagnosa(dxList);
+    setInacbgProsedur(prList);
+    setStage('inacbg_input');
+  });
+
+  const handleGroupInacbg = () => runAction('inacbg-group', async () => {
+    if (inacbgDiagnosa.trim()) await eklaimCall('inacbg/diagnosa/set', { no_rawat: noRawat, diagnosa: inacbgDiagnosa.trim() });
+    if (inacbgProsedur.trim()) await eklaimCall('inacbg/prosedur/set', { no_rawat: noRawat, procedure: inacbgProsedur.trim() });
+    const r = await eklaimCall('inacbg/grouping', { no_rawat: noRawat, stage: 1 });
+    setInacbgResult(r.response_inacbg);
+    setStage('inacbg_grouped');
+  });
+
+  const handleGroupInacbgStage2 = () => runAction('inacbg-stage2', async () => {
+    const r = await eklaimCall('inacbg/grouping', { no_rawat: noRawat, stage: 2, special_cmg: inacbgCmgPick });
+    setInacbgResult(r.response_inacbg);
+  });
+
+  const handleFinalInacbg = () => runAction('inacbg-final', async () => {
+    await eklaimCall('inacbg/final', { no_rawat: noRawat });
+    setStage('inacbg_final');
+  });
+
+  const handleEditUlangInacbg = () => runAction('inacbg-reedit', async () => {
+    await eklaimCall('inacbg/reedit', { no_rawat: noRawat });
+    setStage('inacbg_grouped');
+  });
+
+  const handleFinalKlaim = () => runAction('klaim-final', async () => {
+    if (!coderNik.trim()) throw new Error('Coder NIK wajib diisi');
+    await eklaimCall('klaim/final', { no_rawat: noRawat, coder_nik: coderNik.trim() });
+    setStage('klaim_final');
+  });
+
+  const handleKirimKlaim = () => runAction('kirim', async () => {
+    await eklaimCall('klaim/kirim-individual', { no_rawat: noRawat });
+  });
+
+  const handleCetakKlaim = () => runAction('cetak', async () => {
+    const r = await eklaimCall('klaim/cetak', { no_rawat: noRawat });
+    const base64 = r.data;
+    if (typeof base64 !== 'string') throw new Error('Respons cetak tidak berisi data PDF');
+    const byteChars = atob(base64);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    window.open(URL.createObjectURL(blob), '_blank');
+  });
+
+  const idrgUngroupable = idrgResult?.mdc_number === '36';
+  const inacbgUngroupable = typeof inacbgResult?.cbg?.code === 'string' && inacbgResult.cbg.code.startsWith('X');
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Memuat...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#dc2626', fontSize: 13 }}>{error}</div>;
   if (!form) return null;
 
   return (
     <div style={{ padding: 20 }}>
-      {/* Semua field ringkasan (Jenis Rawat, Naik/Turun Kelas, Ada Rawat
-          Intensif, Kelas Hak, Tanggal Rawat, Umur, Cara Masuk, LOS, Berat
-          Lahir, ADL Score, Cara Pulang, Jenis Tarif, Pasien TB) sudah
-          dipindah ke kolom "Info Klaim" di header halaman — form ini
-          sekarang cuma isi breakdown tarif (satu-satunya bagian yg
-          memang butuh diisi manual). */}
+      {actionError && (
+        <div style={{ padding: 10, marginBottom: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12.5 }}>
+          {actionError}
+        </div>
+      )}
 
-      {/* Tarif Rumah Sakit total */}
-      <div style={{ textAlign: 'center', padding: '16px 0 8px' }}>
-        <span style={{ fontSize: 12.5, color: '#6b7280' }}>Tarif Rumah Sakit : </span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>Rp {totalTarif.toLocaleString('id-ID')}</span>
-      </div>
+      {/* Step 1 — Buat Klaim Baru (method #1 new_claim) */}
+      {stage === 'awal' && (
+        <div style={stageStyle}>
+          <div style={stageTitle}>1. Buat Klaim Baru di E-Klaim</div>
+          <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 10px' }}>
+            Mendaftarkan No. SEP ini ke sistem E-Klaim sebelum bisa lanjut coding/grouping.
+          </p>
+          <button type="button" onClick={handleBuatKlaimBaru} disabled={!!busy} style={busy === 'buat' ? btnDisabled : btnPrimary}>
+            {busy === 'buat' ? 'Memproses...' : 'Buat Klaim Baru'}
+          </button>
+        </div>
+      )}
 
-      {/* Breakdown tarif — 3 kolom, semua editable default 0 spt E-Klaim asli */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '4px 24px', marginBottom: 16 }}>
-        {TARIF_KOLOM.map((kolom, ki) => (
-          <div key={ki} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {kolom.map((item) => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ ...gLabel, width: 130, flexShrink: 0 }}>{item.label}</span>
-                <input
-                  type="number"
-                  style={{ ...gInput, width: 110 }}
-                  value={tarif[item.label] ?? 0}
-                  onChange={(e) => setTarif((prev) => ({ ...prev, [item.label]: Number(e.target.value) || 0 }))}
-                />
+      {stage !== 'awal' && (
+        <>
+          {/* Step 2 — Data Klaim (method #4 set_claim_data): tarif breakdown +
+              field wajib E-Klaim yg belum ada di header (coder_nik dkk). */}
+          <div style={stageStyle}>
+            <div style={stageTitle}>2. Data Klaim (Tarif RS)</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+              <div style={{ flex: '1 1 200px' }}>
+                <div style={gLabel}>Coder NIK *</div>
+                <input style={gInput} value={coderNik} onChange={(e) => setCoderNik(e.target.value)} placeholder="NIK yg terdaftar di E-Klaim" disabled={stage !== 'idrg_input'} />
               </div>
-            ))}
+              <div style={{ flex: '1 1 140px' }}>
+                <div style={gLabel}>Kode Tarif</div>
+                <select style={gInput} value={kodeTarif} onChange={(e) => setKodeTarif(e.target.value)} disabled={stage !== 'idrg_input'}>
+                  {KODE_TARIF_OPSI.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: '1 1 140px' }}>
+                <div style={gLabel}>Payor ID</div>
+                <input style={gInput} value={payorId} onChange={(e) => setPayorId(e.target.value)} placeholder="dari Setup Jaminan E-Klaim" disabled={stage !== 'idrg_input'} />
+              </div>
+              <div style={{ flex: '1 1 140px' }}>
+                <div style={gLabel}>Payor Code</div>
+                <input style={gInput} value={payorCd} onChange={(e) => setPayorCd(e.target.value)} disabled={stage !== 'idrg_input'} />
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280' }}>Tarif Rumah Sakit : </span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>Rp {totalTarif.toLocaleString('id-ID')}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '4px 24px', marginBottom: 12 }}>
+              {TARIF_KOLOM.map((kolom, ki) => (
+                <div key={ki} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {kolom.map((item) => (
+                    <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ ...gLabel, width: 130, flexShrink: 0 }}>{item.label}</span>
+                      <input
+                        type="number" disabled={stage !== 'idrg_input'}
+                        style={{ ...gInput, width: 110 }}
+                        value={tarif[item.label] ?? 0}
+                        onChange={(e) => setTarif((prev) => ({ ...prev, [item.label]: Number(e.target.value) || 0 }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {stage === 'idrg_input' && (
+              <button type="button" onClick={handleSimpanDataKlaim} disabled={!!busy} style={busy === 'simpan' ? btnDisabled : btnSecondary}>
+                {busy === 'simpan' ? 'Menyimpan...' : 'Simpan Data Klaim'}
+              </button>
+            )}
           </div>
-        ))}
-      </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, color: '#374151', marginBottom: 16 }}>
-        <input type="checkbox" checked={setuju} onChange={(e) => setSetuju(e.target.checked)} />
-        Menyatakan benar bahwa data tarif yang tersebut di atas adalah benar sesuai dengan kondisi yang sesungguhnya.
-      </label>
+          {/* Step 3 — Grouping iDRG (method #5-11) */}
+          <div style={stageStyle}>
+            <div style={stageTitle}>3. Coding & Grouping iDRG</div>
+            {(stage === 'idrg_input' || stage === 'idrg_grouped') ? (
+              <>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 260px' }}>
+                    <div style={gLabel}>Diagnosa (pisah #, cth: S73.02#E11.9)</div>
+                    <input style={gInput} value={idrgDiagnosa} onChange={(e) => setIdrgDiagnosa(e.target.value)} />
+                  </div>
+                  <div style={{ flex: '1 1 260px' }}>
+                    <div style={gLabel}>Prosedur (pisah #, cth: 81.53#86.28+2)</div>
+                    <input style={gInput} value={idrgProsedur} onChange={(e) => setIdrgProsedur(e.target.value)} />
+                  </div>
+                </div>
+                <button type="button" onClick={handleGroupIdrg} disabled={!!busy} style={busy === 'idrg-group' ? btnDisabled : btnSecondary}>
+                  {busy === 'idrg-group' ? 'Memproses...' : 'Group iDRG'}
+                </button>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: '#16a34a' }}>✓ iDRG sudah final.</div>
+            )}
 
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <button
-          type="button"
-          disabled
-          title="Kirim ke E-Klaim belum diimplementasikan"
-          style={{ padding: '10px 28px', borderRadius: 0, border: 'none', background: '#9ca3af', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}
-        >
-          Kirim (Segera Hadir)
-        </button>
-      </div>
+            {idrgResult && (
+              <div style={{ marginTop: 12, padding: 10, background: idrgUngroupable ? '#fef2f2' : '#f0fdf4', border: `1px solid ${idrgUngroupable ? '#fecaca' : '#bbf7d0'}`, fontSize: 12.5 }}>
+                <div><b>DRG:</b> {idrgResult.drg_code} — {idrgResult.drg_description}</div>
+                <div><b>MDC:</b> {idrgResult.mdc_number} — {idrgResult.mdc_description}</div>
+                {idrgResult.total_tarif && <div><b>Total Tarif:</b> Rp {Number(idrgResult.total_tarif).toLocaleString('id-ID')}</div>}
+                {idrgUngroupable && <div style={{ color: '#991b1b', fontWeight: 600 }}>Ungroupable — tidak bisa lanjut Final iDRG.</div>}
+
+                {Array.isArray(idrgResult.topup_options) && idrgResult.topup_options.length > 0 && stage === 'idrg_grouped' && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select style={{ ...gInput, width: 240 }} value={idrgTopupPick} onChange={(e) => setIdrgTopupPick(e.target.value)}>
+                      <option value="">— pilih top up —</option>
+                      {idrgResult.topup_options.map((t: any) => (
+                        <option key={t.code} value={t.code}>{t.description} ({t.type})</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={handleGroupIdrgStage2} disabled={!idrgTopupPick || !!busy} style={!idrgTopupPick || busy ? btnDisabled : btnSecondary}>
+                      Terapkan Top Up (Stage 2)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {stage === 'idrg_grouped' && !idrgUngroupable && (
+              <div style={{ marginTop: 10 }}>
+                <button type="button" onClick={handleFinalIdrg} disabled={!!busy} style={busy === 'idrg-final' ? btnDisabled : btnPrimary}>
+                  {busy === 'idrg-final' ? 'Memproses...' : 'Final iDRG'}
+                </button>
+              </div>
+            )}
+            {stage === 'idrg_final' && (
+              <div style={{ marginTop: 10 }}>
+                <button type="button" onClick={handleEditUlangIdrg} disabled={!!busy} style={busy === 'idrg-reedit' ? btnDisabled : btnSecondary}>
+                  Edit Ulang iDRG
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Step 4 — Import ke INACBG + Grouping INACBG (method #13-19) */}
+          {(stage === 'idrg_final' || stage === 'inacbg_input' || stage === 'inacbg_grouped' || stage === 'inacbg_final' || stage === 'klaim_final') && (
+            <div style={stageStyle}>
+              <div style={stageTitle}>4. Coding & Grouping INACBG</div>
+              {stage === 'idrg_final' && (
+                <button type="button" onClick={handleImportKeInacbg} disabled={!!busy} style={busy === 'import' ? btnDisabled : btnPrimary}>
+                  {busy === 'import' ? 'Memproses...' : 'Import Coding iDRG ke INACBG'}
+                </button>
+              )}
+
+              {(stage === 'inacbg_input' || stage === 'inacbg_grouped') && (
+                <>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 260px' }}>
+                      <div style={gLabel}>Diagnosa INACBG</div>
+                      <input style={gInput} value={inacbgDiagnosa} onChange={(e) => setInacbgDiagnosa(e.target.value)} />
+                    </div>
+                    <div style={{ flex: '1 1 260px' }}>
+                      <div style={gLabel}>Prosedur INACBG</div>
+                      <input style={gInput} value={inacbgProsedur} onChange={(e) => setInacbgProsedur(e.target.value)} />
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleGroupInacbg} disabled={!!busy} style={busy === 'inacbg-group' ? btnDisabled : btnSecondary}>
+                    {busy === 'inacbg-group' ? 'Memproses...' : 'Group INACBG'}
+                  </button>
+                </>
+              )}
+              {(stage === 'inacbg_final' || stage === 'klaim_final') && (
+                <div style={{ fontSize: 12, color: '#16a34a' }}>✓ INACBG sudah final.</div>
+              )}
+
+              {inacbgResult && (
+                <div style={{ marginTop: 12, padding: 10, background: inacbgUngroupable ? '#fef2f2' : '#f0fdf4', border: `1px solid ${inacbgUngroupable ? '#fecaca' : '#bbf7d0'}`, fontSize: 12.5 }}>
+                  <div><b>CBG:</b> {inacbgResult.cbg?.code} — {inacbgResult.cbg?.description}</div>
+                  {inacbgResult.tariff && <div><b>Tarif:</b> Rp {Number(inacbgResult.tariff).toLocaleString('id-ID')}</div>}
+                  {inacbgUngroupable && <div style={{ color: '#991b1b', fontWeight: 600 }}>Ungroupable — tidak bisa lanjut Final INACBG.</div>}
+
+                  {Array.isArray(inacbgResult.special_cmg_option) && inacbgResult.special_cmg_option.length > 0 && stage === 'inacbg_grouped' && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <select style={{ ...gInput, width: 240 }} value={inacbgCmgPick} onChange={(e) => setInacbgCmgPick(e.target.value)}>
+                        <option value="">— pilih special CMG —</option>
+                        {inacbgResult.special_cmg_option.map((t: any) => (
+                          <option key={t.code} value={t.code}>{t.description} ({t.type})</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={handleGroupInacbgStage2} disabled={!inacbgCmgPick || !!busy} style={!inacbgCmgPick || busy ? btnDisabled : btnSecondary}>
+                        Terapkan CMG (Stage 2)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {stage === 'inacbg_grouped' && !inacbgUngroupable && (
+                <div style={{ marginTop: 10 }}>
+                  <button type="button" onClick={handleFinalInacbg} disabled={!!busy} style={busy === 'inacbg-final' ? btnDisabled : btnPrimary}>
+                    {busy === 'inacbg-final' ? 'Memproses...' : 'Final INACBG'}
+                  </button>
+                </div>
+              )}
+              {stage === 'inacbg_final' && (
+                <div style={{ marginTop: 10 }}>
+                  <button type="button" onClick={handleEditUlangInacbg} disabled={!!busy} style={busy === 'inacbg-reedit' ? btnDisabled : btnSecondary}>
+                    Edit Ulang INACBG
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 5 — Final Klaim (method #20) */}
+          {(stage === 'inacbg_final' || stage === 'klaim_final') && (
+            <div style={stageStyle}>
+              <div style={stageTitle}>5. Finalisasi Klaim</div>
+              {stage === 'inacbg_final' ? (
+                <button type="button" onClick={handleFinalKlaim} disabled={!!busy} style={busy === 'klaim-final' ? btnDisabled : btnPrimary}>
+                  {busy === 'klaim-final' ? 'Memproses...' : 'Final Klaim'}
+                </button>
+              ) : (
+                <div style={{ fontSize: 12, color: '#16a34a' }}>✓ Klaim sudah final.</div>
+              )}
+            </div>
+          )}
+
+          {/* Step 6 — Kirim & Cetak (method #22-23, #27) */}
+          {stage === 'klaim_final' && (
+            <div style={stageStyle}>
+              <div style={stageTitle}>6. Kirim & Cetak Klaim</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={handleKirimKlaim} disabled={!!busy} style={busy === 'kirim' ? btnDisabled : btnPrimary}>
+                  {busy === 'kirim' ? 'Mengirim...' : 'Kirim Klaim'}
+                </button>
+                <button type="button" onClick={handleCetakKlaim} disabled={!!busy} style={busy === 'cetak' ? btnDisabled : btnSecondary}>
+                  {busy === 'cetak' ? 'Menyiapkan...' : 'Cetak Klaim'}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
@@ -728,7 +1093,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
           // dgn batas jelas krn banyak input berdempetan.
           <div style={{ padding: 20 }}>
             <div style={{ background: '#ffffff', borderRadius: 0, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <GroupingFormView noRawat={noRawat} />
+              <GroupingFormView noRawat={noRawat} header={data} />
             </div>
           </div>
         ) : (

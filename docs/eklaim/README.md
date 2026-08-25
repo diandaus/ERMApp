@@ -43,13 +43,61 @@ pengembangan Grouping INACBG (`frontend/src/modules/GroupingInacbg.tsx`,
 - ✅ Modul enkripsi (`eklaimEncrypt`/`eklaimDecrypt`) — teruji round-trip.
 - ✅ `eklaimRequest()` helper (bangun payload → encrypt → POST → strip
   wrapper → decrypt respons).
-- ✅ Method #1 "Membuat klaim baru" (`POST /api/bridging/eklaim/new-claim`).
 - ✅ Kredensial (URL + Encryption Key) via Admin.tsx > Pengaturan Bridging
   (kode `eklaim`), sama pola dgn BPJS VClaim dkk.
-- ⏳ 33 method lainnya (Set/Get Diagnosa Prosedur iDRG & INACBG, Grouping
-  Stage 1/2, Finalisasi, Import iDRG→INACBG, Kirim/Cetak Klaim, dst) —
-  belum dibangun.
-- ⏳ State machine tab Grouping (urutan tombol Final/Edit Ulang sesuai 25
-  kriteria di atas) — tab yang ada sekarang masih form ringkasan statis,
-  belum ikuti alur ini.
-- ⏳ Import tabel kode ICD dari 2 file tsv — belum diputuskan.
+- ✅ **Semua 34 method** sudah ada endpoint-nya di
+  `backend/eklaim_handler.go` (lihat tabel route di bawah). Sebagian besar
+  lewat `eklaimProxy()` generik (passthrough `{no_rawat, ...data}`),
+  Grouping (iDRG #9-10 & INACBG #16-17) lewat `postEklaimGrouping()`
+  khusus krn `stage`/`grouper` di metadata bukan data.
+- ✅ **State machine tab Grouping** (`GroupingFormView` di
+  `frontend/src/modules/GroupingInacbg.tsx`) — mengikuti urutan wajib 25
+  kriteria: Buat Klaim Baru → Data Klaim (tarif) → Grouping iDRG → Final
+  iDRG → Import ke INACBG → Grouping INACBG → Final INACBG → Final Klaim
+  → Kirim/Cetak. Tombol tiap tahap cuma muncul kalau tahap sebelumnya
+  sudah selesai, sesuai kriteria #7-24.
+- ⚠️ **BELUM PERNAH diuji ke server E-Klaim nyata** (tidak ada akses dari
+  lingkungan dev ini) — semua field/nama method ditranskripsi presisi
+  dari manual resmi, tapi perilaku sebenarnya (bentuk error, edge-case
+  respons) baru bisa dipastikan pas dites langsung di server RS.
+- ⚠️ State (`stage`) di `GroupingFormView` cuma di memori komponen, TIDAK
+  disinkron dari `get_claim_data` (method #24) saat halaman dibuka ulang
+  — reload = mulai dari awal lagi walau klaim sebenarnya sudah jalan di
+  E-Klaim. Perlu ditambah cek status awal via method #24 kalau mau lebih
+  robust.
+- ⏳ Import tabel kode ICD dari 2 file tsv (lokal, autocomplete pencarian
+  diagnosa/prosedur) — belum diputuskan/dibangun. Saat ini staf isi kode
+  diagnosa/prosedur iDRG & INACBG manual (dipisah tanda `#`), belum ada
+  UI pencarian pakai method #28-31.
+- ⏳ Field opsional method #4 (ventilator, apgar, persalinan/delivery,
+  dializer_single_use, alteplase_ind, kantong_darah, bayi_lahir_status_cd)
+  belum ada UI-nya — endpoint backend menerima passthrough apa saja lewat
+  `eklaimProxy`, tapi `GroupingFormView` baru kirim field inti.
+
+## Daftar route backend (34 method)
+
+| # | Method resmi | Route |
+|---|---|---|
+| 1 | new_claim | `POST /api/bridging/eklaim/new-claim` |
+| 4 | set_claim_data | `POST /api/bridging/eklaim/update-klaim` |
+| 5-6 | idrg_diagnosa_set/get | `.../idrg/diagnosa/set`, `/get` |
+| 7-8 | idrg_procedure_set / inacbg_procedure_get* | `.../idrg/prosedur/set`, `/get` |
+| 9-10 | grouper (idrg) | `.../idrg/grouping` |
+| 11-12 | idrg_grouper_final/reedit | `.../idrg/final`, `/reedit` |
+| 13 | idrg_to_inacbg_import | `.../idrg/import-to-inacbg` |
+| 14-15 | inacbg_diagnosa_set / inacbg_procedure_set | `.../inacbg/diagnosa/set`, `/prosedur/set` |
+| 16-17 | grouper (inacbg) | `.../inacbg/grouping` |
+| 18-19 | inacbg_grouper_final/reedit | `.../inacbg/final`, `/reedit` |
+| 20-21 | claim_final / reedit_claim | `.../klaim/final`, `/reedit` |
+| 22-23 | send_claim / send_claim_individual | `.../klaim/kirim-kolektif`, `/kirim-individual` |
+| 24-25 | get_claim_data / get_claim_status | `.../klaim/detail`, `/status` |
+| 26-27 | delete_claim / claim_print | `.../klaim/hapus`, `/cetak` |
+| 28-29 | search_diagnosis_inagrouper / search_procedures_inagrouper | `.../cari/diagnosa-idrg`, `/prosedur-idrg` |
+| 30-31 | search_diagnosis / search_procedures | `.../cari/diagnosa-inacbg`, `/prosedur-inacbg` |
+| 32 | generate_claim_number | `.../generate-nomor-klaim` |
+| 33-34 | sitb_validate / sitb_invalidate | `.../sitb/validasi`, `/batal` |
+
+\* Method #8 "Get Prosedur iDRG" — manual resmi menuliskan nama method
+`inacbg_procedure_get` (bukan `idrg_procedure_get`) baik di request
+maupun response contohnya. Kemungkinan salah ketik di dokumen asli,
+ditranskripsi apa adanya — perlu diverifikasi ke server nyata.
