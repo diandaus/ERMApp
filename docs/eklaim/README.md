@@ -56,10 +56,15 @@ pengembangan Grouping INACBG (`frontend/src/modules/GroupingInacbg.tsx`,
   iDRG → Import ke INACBG → Grouping INACBG → Final INACBG → Final Klaim
   → Kirim/Cetak. Tombol tiap tahap cuma muncul kalau tahap sebelumnya
   sudah selesai, sesuai kriteria #7-24.
-- ⚠️ **BELUM PERNAH diuji ke server E-Klaim nyata** (tidak ada akses dari
-  lingkungan dev ini) — semua field/nama method ditranskripsi presisi
-  dari manual resmi, tapi perilaku sebenarnya (bentuk error, edge-case
-  respons) baru bisa dipastikan pas dites langsung di server RS.
+- ✅ **Terverifikasi live ke server E-Klaim produksi** (`192.168.1.10`,
+  2026-08-25): `new_claim`, `generate_claim_number`, `get_claim_data` —
+  pipeline enkripsi/request/respons terbukti benar end-to-end.
+- ⚠️ **Method lain (termasuk `send_claim_individual`/"Kirim Klaim")
+  belum pernah dites sungguhan** — sengaja tidak dicoba asal-asalan krn
+  efeknya nyata (kirim klaim betulan ke data center BPJS/Kemenkes, bukan
+  operasi baca yg aman diulang). Jalur teknisnya sama persis dgn method
+  yg sudah terverifikasi (`eklaimProxy` generik), jadi kemungkinan besar
+  jalan, tapi belum ada bukti langsung.
 - ✅ State (`stage`) di `GroupingFormView` disinkron dari `get_claim_data`
   (method #24) tiap halaman dibuka — kalau klaim utk SEP itu sudah pernah
   dibuat sebelumnya, form otomatis lompat ke tahap yang sesuai (idrg_input/

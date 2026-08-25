@@ -983,6 +983,24 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
     setStage('klaim_final');
   });
 
+  const handleEditUlangKlaim = async () => {
+    const confirm = await Swal.fire({
+      title: 'Edit Ulang Klaim?',
+      text: 'Anda akan membatalkan status final dan melakukan edit ulang klaim?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya (edit ulang)',
+      cancelButtonText: 'Tidak (batal edit)',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    });
+    if (!confirm.isConfirmed) return;
+    await runAction('klaim-reedit', async () => {
+      await eklaimCall('klaim/reedit', { no_rawat: noRawat });
+      setStage('inacbg_final');
+    });
+  };
+
   const handleKirimKlaim = () => runAction('kirim', async () => {
     await eklaimCall('klaim/kirim-individual', { no_rawat: noRawat });
   });
@@ -1309,7 +1327,12 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
                   {busy === 'klaim-final' ? 'Memproses...' : 'Final Klaim'}
                 </button>
               ) : (
-                <div style={{ fontSize: 12, color: '#16a34a' }}>✓ Klaim sudah final.</div>
+                <>
+                  <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 10 }}>✓ Klaim sudah final.</div>
+                  <button type="button" onClick={handleEditUlangKlaim} disabled={!!busy} style={busy === 'klaim-reedit' ? btnDisabled : btnSecondary}>
+                    Edit Ulang Klaim
+                  </button>
+                </>
               )}
             </div>
           )}
