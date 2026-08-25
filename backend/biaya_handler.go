@@ -202,7 +202,12 @@ func getBillingPreview(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		items, err := computeBillingPreview(db, noRawat)
+		// obat_mode (opsional, ?obat_mode=jual|modal) — override basis harga
+		// Obat & BHP lepas dari Casemix > Pengaturan > Preview Billing > Set
+		// Preview Obat. Dipakai ModalBilling.tsx (Grouping INACBG) yg sengaja
+		// SELALU "jual" (harga ditagihkan ke pasien), tidak ikut pengaturan
+		// global itu — PreviewBilling.tsx tetap ikut pengaturan (query kosong).
+		items, err := computeBillingPreview(db, noRawat, c.Query("obat_mode"))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -237,7 +242,10 @@ func fetchStoredBillingRows(db *sql.DB, noRawat string) ([]BillingRow, error) {
 
 // computeBillingPreview menghitung ringkasan biaya per kategori langsung dari
 // tabel transaksi (belum ada nomor nota / belum digenerate ke tabel billing).
-func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
+// obatModeOverride: "jual"/"modal" — kalau diisi, menang atas pengaturan
+// global getPreviewObatMode(db); string kosong = pakai pengaturan global
+// (perilaku lama, dipakai PreviewBilling.tsx).
+func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) ([]BillingRow, error) {
 	items := []BillingRow{}
 
 	// Kategori yang di-nonaktifkan lewat Casemix > Pengaturan > Preview
@@ -536,9 +544,13 @@ func computeBillingPreview(db *sql.DB, noRawat string) ([]BillingRow, error) {
 	// embalase/tuslah ke total (itu biaya jasa racik/kemasan yang melekat ke
 	// harga jual, bukan bagian dari modal obatnya).
 	if !hidden["Obat & BHP"] {
+		obatMode := obatModeOverride
+		if obatMode == "" {
+			obatMode = getPreviewObatMode(db)
+		}
 		var obatRows *sql.Rows
 		var err error
-		if getPreviewObatMode(db) == "modal" {
+		if obatMode == "modal" {
 			obatRows, err = db.Query(`
 			SELECT databarang.nama_brng, jenis.nama, detail_pemberian_obat.h_beli,
 				SUM(detail_pemberian_obat.jml) AS jml,

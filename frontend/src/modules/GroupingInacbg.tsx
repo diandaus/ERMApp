@@ -4,6 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PDFDocument, degrees } from 'pdf-lib';
 import Swal from 'sweetalert2';
+import { ModalBilling } from '../components/ModalBilling';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -98,6 +99,8 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
   const sourceBytesRef = React.useRef<Map<string, Uint8Array>>(new Map());
   const dragFromRef = React.useRef<number | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isDraggingFile, setIsDraggingFile] = React.useState(false);
+  const dragCounterRef = React.useRef(0);
 
   const loadAll = React.useCallback(() => {
     setPages(null);
@@ -131,9 +134,10 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
 
   React.useEffect(() => { loadAll(); }, [loadAll]);
 
-  const handleTambahHalaman = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
+  // processFiles — dipakai baik dari input file (klik "+ Tambah Halaman")
+  // maupun drag langsung dari folder OS (onDrop di kartu Halaman PDF),
+  // supaya keduanya lewat jalur render+tambah halaman yg sama persis.
+  const processFiles = async (files: File[]) => {
     if (files.length === 0) return;
     const added: PdfPageItem[] = [];
     for (const file of files) {
@@ -142,6 +146,7 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
       sourceBytesRef.current.set(localUrl, buf);
       const isImage = IMAGE_EXT.includes((file.name.split('.').pop() || '').toLowerCase());
       const ekstensi = isImage ? (file.name.split('.').pop() || '').toLowerCase() : 'pdf';
+      if (!isImage && ekstensi !== 'pdf') continue;
       try {
         const blobUrl = URL.createObjectURL(new Blob([buf.slice() as BlobPart], { type: file.type }));
         const rendered = await renderPagesFromUrl(blobUrl, file.name, file.name, isImage, ekstensi, new Map());
@@ -152,6 +157,42 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
       }
     }
     setPages((prev) => [...(prev || []), ...added]);
+  };
+
+  const handleTambahHalaman = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    await processFiles(files);
+  };
+
+  // Drag file langsung dari folder OS ke kartu Halaman PDF — pakai counter
+  // (bukan boolean langsung) krn dragenter/dragleave ikut ke-trigger tiap
+  // masuk/keluar elemen ANAK di dalam drop zone, bukan cuma sekali di batas
+  // terluar; counter balik ke 0 baru berarti benar-benar keluar drop zone.
+  const handleExternalDragEnter = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    setIsDraggingFile(true);
+  };
+  const handleExternalDragLeave = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingFile(false);
+    }
+  };
+  const handleExternalDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+  };
+  const handleExternalDrop = async (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+    await processFiles(Array.from(e.dataTransfer.files || []));
   };
 
   const handleRotate = (id: string) => {
@@ -264,7 +305,22 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
           ))}
         </div>
       )}
-      <div style={{ background: '#ffffff', borderRadius: 0, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+      <div
+        onDragEnter={handleExternalDragEnter}
+        onDragLeave={handleExternalDragLeave}
+        onDragOver={handleExternalDragOver}
+        onDrop={handleExternalDrop}
+        style={{
+          background: '#ffffff', borderRadius: 0, overflow: 'hidden',
+          border: isDraggingFile ? '2px dashed #16a34a' : '1px solid #e5e7eb',
+          outline: isDraggingFile ? '2px solid #bbf7d0' : 'none', outlineOffset: -2,
+        }}
+      >
+        {isDraggingFile && (
+          <div style={{ padding: '10px 20px', background: '#ecfdf5', color: '#166534', fontSize: 12.5, fontWeight: 600, textAlign: 'center' }}>
+            Lepas di sini untuk menambah halaman
+          </div>
+        )}
         {/* Header hijau — persis referensi: judul+badge jumlah halaman, Tambah Halaman, Simpan PDF */}
         <div style={{ background: '#16a34a', color: '#ffffff', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1021,8 +1077,9 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
 
     const form = new FormData();
     form.append('no_rawat', noRawat);
+    form.append('jenis', 'Gruper_');
     form.append('file', new Blob([bytes], { type: 'application/pdf' }), `Gruper_${noRawat.replace(/\//g, '_')}.pdf`);
-    const upRes = await fetch('/api/casemix/berkas-klaim-tte/gruper', { method: 'POST', body: form });
+    const upRes = await fetch('/api/casemix/berkas-klaim-tte/save', { method: 'POST', body: form });
     if (!upRes.ok) {
       const upData = await upRes.json().catch(() => ({}));
       throw new Error(`PDF sudah dibuka, tapi gagal diupload otomatis ke Berkas Rawat: ${upData.error || 'terjadi kesalahan'}`);
@@ -1377,6 +1434,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
   // yg mengerjakan", bukan lagi field "Petugas" placeholder ("INACBG") yg
   // sebelumnya hardcode di backend.
   const [coderName, setCoderName] = React.useState('');
+  const [showBilling, setShowBilling] = React.useState(false);
 
   React.useEffect(() => {
     setLoading(true);
@@ -1417,7 +1475,8 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
           flex:1 minWidth:0) di kiri, nama coder + tombol Tutup di kanan
           dlm area TERPISAH yg flexShrink:0 — jadi selalu terlihat, tidak
           pernah ikut ter-scroll/terdorong keluar layar. */}
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', flexShrink: 0, display: 'flex', alignItems: 'flex-start' }}>
+      <div style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', gap: 32, padding: '10px 12px 12px 24px', flexWrap: 'nowrap', overflowX: 'auto', flex: 1, minWidth: 0 }}>
           {loading && <span style={{ color: '#6b7280', fontSize: 13, flexShrink: 0 }}>Memuat...</span>}
           {error && <span style={{ color: '#dc2626', fontSize: 13, flexShrink: 0 }}>{error}</span>}
@@ -1469,29 +1528,42 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
           {coderName && <span style={{ color: '#6b7280', fontSize: 13, whiteSpace: 'nowrap' }}>{coderName}</span>}
           <CloseBtn onClick={onBack} />
         </div>
+        </div>
       </div>
 
+      {showBilling && data && (
+        <ModalBilling noRawat={noRawat} namaPasien={data.nm_pasien} onClose={() => setShowBilling(false)} />
+      )}
+
       {data && (
-        <div style={{ display: 'flex', gap: 0, padding: '12px 24px', flexShrink: 0 }}>
-          {SECTIONS.map((s, i) => {
-            const active = section === s.key;
-            return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setSection(s.key)}
-                style={{
-                  padding: '7px 16px', borderRadius: 0, border: '1px solid #d1d5db',
-                  background: active ? '#2563eb' : '#ffffff', color: active ? '#ffffff' : '#374151',
-                  borderColor: active ? '#2563eb' : '#d1d5db',
-                  fontSize: 12.5, fontWeight: active ? 600 : 400, cursor: 'pointer',
-                  marginLeft: i === 0 ? 0 : -1,
-                }}
-              >
-                {s.label}
-              </button>
-            );
-          })}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 0 }}>
+            {SECTIONS.map((s, i) => {
+              const active = section === s.key;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setSection(s.key)}
+                  style={{
+                    padding: '7px 16px', borderRadius: 0, border: '1px solid #d1d5db',
+                    background: active ? '#2563eb' : '#ffffff', color: active ? '#ffffff' : '#374151',
+                    borderColor: active ? '#2563eb' : '#d1d5db',
+                    fontSize: 12.5, fontWeight: active ? 600 : 400, cursor: 'pointer',
+                    marginLeft: i === 0 ? 0 : -1,
+                  }}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button" onClick={() => setShowBilling(true)}
+            style={{ padding: '7px 16px', borderRadius: 0, border: 'none', background: '#000000', color: '#ffffff', fontSize: 12.5, fontWeight: 400, cursor: 'pointer' }}
+          >
+            Billing
+          </button>
         </div>
       )}
 

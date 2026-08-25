@@ -76,6 +76,13 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 
 		checkAndAdd := func(label, tag, fileName string) {
 			if cfg.IsRemote {
+				// Cek keberadaan file langsung ke server webapps (HEAD, backend
+				// ke backend, satu jaringan LAN — selalu bisa). TAPI url yg
+				// dikirim ke FRONTEND pakai path relatif "/berkasrawat/..." biar
+				// browser tetap request ke domain aplikasi ini sendiri, lalu
+				// diteruskan lewat reverse proxy (registerWebappsSubRoute) —
+				// bukan URL absolut ke IP LAN internal server webapps yg tidak
+				// bisa dijangkau browser dari luar jaringan RS.
 				url := baseURL + "/" + fileName
 				req, err := http.NewRequest(http.MethodHead, url, nil)
 				if err != nil {
@@ -87,7 +94,7 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode == http.StatusOK && resp.ContentLength >= 100 {
-					items = append(items, BerkasKlaimPdfItem{Label: label, Url: url, Tag: tag})
+					items = append(items, BerkasKlaimPdfItem{Label: label, Url: "/berkasrawat/pages/upload/" + fileName, Tag: tag})
 				}
 				return
 			}
@@ -146,18 +153,32 @@ func getBerkasKlaimTte(db *sql.DB, cfg KhanzaWebappsConfig) gin.HandlerFunc {
 	}
 }
 
-// POST /api/casemix/berkas-klaim-tte/gruper — simpan PDF hasil "Cetak Klaim"
-// (claim_print E-Klaim) sbg file "Gruper_<no_rawat>.pdf" di folder fisik yg
-// sama dgn TTE (berkasrawat/pages/upload), TANPA tabel DB — persis konvensi
-// jenisBerkasKlaim di atas, jadi otomatis kedeteksi getBerkasKlaimTte tanpa
-// perlu langkah tambahan.
-func saveGruperKlaim(cfg KhanzaWebappsConfig) gin.HandlerFunc {
+// POST /api/casemix/berkas-klaim-tte/save — simpan PDF (mis. hasil "Cetak
+// Klaim"/claim_print E-Klaim, atau PDF Billing) sbg file "<jenis><no_rawat>
+// [_signed].pdf" di folder fisik yg sama dgn TTE (berkasrawat/pages/upload),
+// TANPA tabel DB — persis konvensi jenisBerkasKlaim di atas, jadi otomatis
+// kedeteksi getBerkasKlaimTte tanpa perlu langkah tambahan. "jenis" WAJIB
+// salah satu dari jenisBerkasKlaim (whitelist, bukan bebas dari client).
+func saveBerkasKlaimTte(cfg KhanzaWebappsConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := c.PostForm("no_rawat")
-		if noRawat == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+		jenis := c.PostForm("jenis")
+		if noRawat == "" || jenis == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat dan jenis wajib diisi"})
 			return
 		}
+		dikenal := false
+		for _, j := range jenisBerkasKlaim {
+			if j == jenis {
+				dikenal = true
+				break
+			}
+		}
+		if !dikenal {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "jenis berkas tidak dikenal: " + jenis})
+			return
+		}
+
 		file, _, err := c.Request.FormFile("file")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "File tidak ditemukan"})
@@ -171,12 +192,16 @@ func saveGruperKlaim(cfg KhanzaWebappsConfig) gin.HandlerFunc {
 			return
 		}
 
-		fileName := "Gruper_" + strings.ReplaceAll(noRawat, "/", "_") + ".pdf"
+		suffix := ".pdf"
+		if !tanpaSuffixSigned(jenis) {
+			suffix = "_signed.pdf"
+		}
+		fileName := jenis + strings.ReplaceAll(noRawat, "/", "_") + suffix
 		if err := WriteWebappsFile(cfg, "berkasrawat/pages/upload", fileName, buf); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file: " + err.Error()})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"message": "Berkas Gruper berhasil disimpan", "file_name": fileName})
+		c.JSON(http.StatusOK, gin.H{"message": "Berkas berhasil disimpan", "file_name": fileName})
 	}
 }

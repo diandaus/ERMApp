@@ -3397,7 +3397,7 @@ func main() {
 	r.POST("/api/berkas-rawat/upload", uploadBerkasRawat(db, khanzaCfg))
 	r.DELETE("/api/berkas-rawat", deleteBerkasRawat(db, khanzaCfg))
 	r.GET("/api/casemix/berkas-klaim-tte/*no_rawat", getBerkasKlaimTte(db, khanzaCfg))
-	r.POST("/api/casemix/berkas-klaim-tte/gruper", saveGruperKlaim(khanzaCfg))
+	r.POST("/api/casemix/berkas-klaim-tte/save", saveBerkasKlaimTte(khanzaCfg))
 	r.POST("/api/bridging/eklaim/new-claim", postEklaimNewClaim(db))
 	// Method #4 Update Data Klaim, #5-6 Set/Get Diagnosa iDRG,
 	// #7-8 Set/Get Prosedur iDRG, #11-13 Final/Re-edit iDRG & Import ke
