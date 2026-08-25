@@ -3398,6 +3398,22 @@ func main() {
 	r.DELETE("/api/berkas-rawat", deleteBerkasRawat(db, khanzaCfg))
 	r.GET("/api/casemix/berkas-klaim-tte/*no_rawat", getBerkasKlaimTte(db, khanzaCfg))
 	r.POST("/api/bridging/eklaim/new-claim", postEklaimNewClaim(db))
+	// Method #4 Update Data Klaim, #5-6 Set/Get Diagnosa iDRG,
+	// #7-8 Set/Get Prosedur iDRG, #11-13 Final/Re-edit iDRG & Import ke
+	// INACBG — lihat docs/eklaim/README.md utk daftar lengkap 34 method.
+	r.POST("/api/bridging/eklaim/update-klaim", eklaimProxy(db, "set_claim_data"))
+	r.POST("/api/bridging/eklaim/idrg/diagnosa/set", eklaimProxy(db, "idrg_diagnosa_set"))
+	r.POST("/api/bridging/eklaim/idrg/diagnosa/get", eklaimProxy(db, "idrg_diagnosa_get"))
+	r.POST("/api/bridging/eklaim/idrg/prosedur/set", eklaimProxy(db, "idrg_procedure_set"))
+	// Method name "inacbg_procedure_get" persis spt tertulis di manual
+	// resmi utk section "8. Get Prosedur iDRG" (kemungkinan salah ketik di
+	// dokumen aslinya, tapi ditranskripsi apa adanya — perlu diverifikasi
+	// ke server E-Klaim asli).
+	r.POST("/api/bridging/eklaim/idrg/prosedur/get", eklaimProxy(db, "inacbg_procedure_get"))
+	r.POST("/api/bridging/eklaim/idrg/grouping", postEklaimIdrgGrouping(db))
+	r.POST("/api/bridging/eklaim/idrg/final", eklaimProxy(db, "idrg_grouper_final"))
+	r.POST("/api/bridging/eklaim/idrg/reedit", eklaimProxy(db, "idrg_grouper_reedit"))
+	r.POST("/api/bridging/eklaim/idrg/import-to-inacbg", eklaimProxy(db, "idrg_to_inacbg_import"))
 
 	// Tindakan Rawat Jalan endpoint
 	r.GET("/api/tindakan-ralan/*no_rawat", getTindakanRalan(db))
