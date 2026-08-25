@@ -153,6 +153,18 @@ const BRIDGING_DEFS: ServiceDef[] = [
     ],
   },
   {
+    // E-Klaim (grouper resmi iDRG/INACBG Kemenkes) — server TERPISAH di
+    // jaringan RS (biasanya http://<ip-server-eklaim>/E-Klaim/ws.php),
+    // Encryption Key di-generate lewat menu Setup > Integrasi > SIMRS di
+    // Aplikasi E-Klaim itu sendiri (256-bit/64 karakter hex), lihat
+    // backend/eklaim_handler.go.
+    kode: 'eklaim', nama: 'E-Klaim (iDRG/INACBG)', grp: 'kemkes',
+    fields: [
+      { key: 'URL', label: 'URL Web Service', type: 'url', placeholder: 'http://192.168.1.x/E-Klaim/ws.php' },
+      { key: 'KEY', label: 'Encryption Key (256-bit hex)', type: 'secret' },
+    ],
+  },
+  {
     // wa-gateway/ — servis Node.js/Baileys terpisah (WhatsApp Web tidak
     // resmi, gratis — bukan WhatsApp Business API resmi), lihat
     // backend/wa_gateway_handler.go. URL = alamat servis itu (mis.
