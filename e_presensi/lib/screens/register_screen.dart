@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/api_client.dart';
 
 const _kGreenDark = Color(0xFF059669);
@@ -134,13 +135,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
           title: const Text('Pendaftaran berhasil'),
-          content: const Text('Silakan masuk pakai NIP dan kata sandi yang baru dibuat.'),
-          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Silakan masuk pakai username dan kata sandi yang baru dibuat.'),
+              const SizedBox(height: 12),
+              const Text('Username Anda:', style: TextStyle(fontSize: 11.5, color: Color(0xFF6B7280))),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.only(left: 12, right: 4, top: 4, bottom: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _foundNip ?? '',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF166534)),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 20, color: Color(0xFF166534)),
+                      tooltip: 'Salin username',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: _foundNip ?? ''));
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          const SnackBar(content: Text('Username disalin'), duration: Duration(seconds: 2)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('OK'))],
         ),
       );
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(_foundNip);
     } on ApiException catch (e) {
       setState(() => _submitError = e.message);
     } catch (_) {

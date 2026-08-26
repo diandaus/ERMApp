@@ -223,10 +223,13 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text('Belum punya akun?',
                   style: TextStyle(fontSize: 12.5, color: Color(0xFF374151))),
               TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
+                onPressed: () async {
+                  final nip = await Navigator.of(context).push<String>(
                     MaterialPageRoute(builder: (_) => const RegisterScreen()),
                   );
+                  if (mounted && nip != null && nip.isNotEmpty) {
+                    setState(() => _usernameCtrl.text = nip);
+                  }
                 },
                 style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 6),

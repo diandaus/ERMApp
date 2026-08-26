@@ -524,7 +524,39 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => {
       // Prefill username di halaman Masuk, sama seperti kalau baru saja
       // centang "Ingat saya" — supaya staf tinggal ketik kata sandi.
       window.localStorage.setItem('ermapp_remembered_username', found.nip);
-      await Swal.fire({ icon: 'success', title: 'Pendaftaran berhasil', text: 'Silakan masuk pakai NIP dan kata sandi yang baru dibuat.' });
+      // Username (NIP) ditampilkan besar + tombol copy di dialog sukses —
+      // staf yang daftar pakai NIK KTP (bukan hafal NIP-nya) sering
+      // bingung mau login pakai apa krn cuma inget password yg baru
+      // dibuat. Padanan Flutter: e_presensi/lib/screens/register_screen.dart.
+      const nipValue = found.nip;
+      await Swal.fire({
+        icon: 'success',
+        title: 'Pendaftaran berhasil',
+        html: `
+          <div style="text-align:left;font-size:13px;color:#374151;">
+            <div style="margin-bottom:10px;">Silakan masuk pakai username dan kata sandi yang baru dibuat.</div>
+            <div style="font-size:11.5px;color:#6b7280;margin-bottom:4px;">Username Anda:</div>
+            <div style="display:flex;align-items:center;gap:4px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 4px 6px 12px;">
+              <span style="flex:1;font-size:16px;font-weight:700;color:#166534;">${nipValue}</span>
+              <button id="reg-copy-username-btn" type="button" title="Salin username" style="background:transparent;border:none;cursor:pointer;padding:6px;display:flex;align-items:center;color:#166534;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+          </div>
+        `,
+        confirmButtonText: 'OK',
+        didOpen: () => {
+          const btn = document.getElementById('reg-copy-username-btn');
+          if (!btn) return;
+          btn.addEventListener('click', () => {
+            navigator.clipboard.writeText(nipValue).catch(() => {});
+            btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            window.setTimeout(() => {
+              btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+            }, 1500);
+          });
+        },
+      });
       onBackToLogin();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Terjadi kesalahan');
