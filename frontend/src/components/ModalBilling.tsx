@@ -252,8 +252,19 @@ export const ModalBilling: React.FC<ModalBillingProps> = ({ noRawat, namaPasien,
       if (isTextOnlyRow) {
         if (namaTrim.startsWith('Total')) {
           // Baris subtotal per kategori (mis. "Total Kamar Inap : 325,000")
-          // — rata kanan, TANPA bold.
-          rightText(namaTrim, 8);
+          // — dipecah jadi label / titik dua / nilai, masing2 digambar di
+          // posisi kolom yg SAMA dgn baris lain (col.uraian/col.pemisah/
+          // colEnd.total), supaya titik duanya sejajar vertikal dgn baris
+          // item & label:value lain, bukan ikut geser krn seluruh baris
+          // dirata-kanankan sbg satu string utuh.
+          const idxColon = namaTrim.indexOf(' : ');
+          if (idxColon === -1) {
+            rightText(namaTrim, 8);
+          } else {
+            text(namaTrim.slice(0, idxColon), col.uraian, 8);
+            text(':', col.pemisah, 8);
+            rightAlignAt(namaTrim.slice(idxColon + 3), colEnd.total, 8);
+          }
         } else {
           // Teks polos anak baris label (mis. "dr. Hilyatul Nadia" di
           // bawah "Dokter :") — SAMA indentasinya dgn nama item (itemIndent),
@@ -285,7 +296,7 @@ export const ModalBilling: React.FC<ModalBillingProps> = ({ noRawat, namaPasien,
         if (row.jumlah) rightAlignAt(String(row.jumlah), colEnd.jumlah, 8);
         if (row.totalbiaya) rightAlignAt(formatAngka(row.totalbiaya), colEnd.total, 8);
       }
-      y -= 12;
+      y -= 9;
     });
 
     newPageIfNeeded();
