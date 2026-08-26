@@ -16,24 +16,23 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 // Tab "Berkas Klaim" pakai BerkasKlaimGabungView (di bawah) — tampilan
 // grid halaman spt aplikasi "gabung PDF" (screenshot referensi user):
 // tiap PDF dipecah per-HALAMAN (bukan per-dokumen) jadi thumbnail bisa
-// di-drag urut ulang/diputar/dihapus, lalu digabung jadi satu PDF baru
-// via tombol Simpan PDF. Sumbernya GABUNGAN dua sumber yg sudah ada
+// di-drag urut ulang/diputar/dihapus, lalu digabung jadi satu PDF via
+// tombol Download PDF — hasil gabungan langsung diunduh ke komputer
+// (BUKAN upload ke server), nama filenya otomatis "<No SEP> <Nama
+// Pasien> <Tgl Pulang>.pdf" (mis. "0190R0200326V000015 Sakha Hamizan
+// Aqila 2026-03-14.pdf"). Sumbernya GABUNGAN dua sumber yg sudah ada
 // (sama2 disimpan di folder fisik berkasrawat/pages/upload, dikonfirmasi
 // dari kode caller Java MnTampilkanBerkasActionPerformed):
 //  1. Dokumen resmi hasil TTE (SEP_/Gruper_/Resume_/dst) — dicek by nama
 //     file (getBerkasKlaimTte), TIDAK tercatat di tabel manapun.
 //  2. Berkas upload manual (KTP, foto, dll) — berkas_digital_perawatan
 //     (endpoint /api/berkas-rawat/list yg sudah ada, dipakai jg UploadTab.tsx).
-// TIDAK ada tabel baru — Simpan PDF menyimpan hasil gabungan lewat
-// endpoint upload yg SUDAH ADA (/api/berkas-rawat/upload), pilih salah
-// satu jenis berkas dari master_berkas_digital yg sudah ada.
 
 type BerkasRawatItem = {
   no_rawat: string; kode: string; nama_berkas: string;
   lokasi_file: string; nama_file: string; ekstensi: string;
 };
 type BerkasTteItem = { label: string; url: string; tag: string };
-type MasterBerkas = { kode: string; nama: string };
 
 type PdfPageItem = {
   id: string;
@@ -43,7 +42,7 @@ type PdfPageItem = {
   isImage: boolean;
   label: string;
   thumbnail: string; // data URL kecil utk preview grid
-  rotation: number; // 0/90/180/270 — visual + diterapkan bneran pas Simpan PDF
+  rotation: number; // 0/90/180/270 — visual + diterapkan bneran pas Download PDF
 };
 
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
@@ -91,12 +90,12 @@ async function renderPagesFromUrl(
   return pages;
 }
 
-const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
+const BerkasKlaimGabungView: React.FC<{ noRawat: string; noSep: string; namaPasien: string; tanggalPulang: string }> = ({ noRawat, noSep, namaPasien, tanggalPulang }) => {
   const [pages, setPages] = React.useState<PdfPageItem[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [zoom, setZoom] = React.useState(150);
   const [previewIndex, setPreviewIndex] = React.useState<number | null>(null);
-  const [saving, setSaving] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
   const sourceBytesRef = React.useRef<Map<string, Uint8Array>>(new Map());
   const dragFromRef = React.useRef<number | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -217,20 +216,18 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
     });
   };
 
-  const handleSimpanPdf = async () => {
-    if (!pages || pages.length === 0) return;
-    const master: MasterBerkas[] = await fetch('/api/berkas-rawat/master').then((r) => (r.ok ? r.json() : [])).catch(() => []);
-    const { value: kode } = await Swal.fire({
-      title: 'Simpan sebagai jenis berkas apa?',
-      input: 'select',
-      inputOptions: Object.fromEntries(master.map((m) => [m.kode, m.nama])),
-      showCancelButton: true,
-      confirmButtonText: 'Simpan PDF',
-      cancelButtonText: 'Batal',
-    });
-    if (!kode) return;
+  // Nama file download — "<No SEP> <Nama Pasien> <Tgl Pulang>.pdf" (mis.
+  // "0190R0200326V000015 Sakha Hamizan Aqila 2026-03-14.pdf"). Fallback ke
+  // no_rawat kalau salah satu field kosong (mis. blm ada SEP/blm pulang).
+  const buildDownloadFileName = () => {
+    const parts = [noSep, namaPasien, tanggalPulang].map((s) => (s || '').trim()).filter(Boolean);
+    const base = parts.length > 0 ? parts.join(' ') : `BerkasKlaim_${noRawat}`;
+    return base.replace(/[\\/:*?"<>|]/g, '-') + '.pdf';
+  };
 
-    setSaving(true);
+  const handleDownloadPdf = async () => {
+    if (!pages || pages.length === 0) return;
+    setDownloading(true);
     try {
       const merged = await PDFDocument.create();
       for (const p of pages) {
@@ -250,19 +247,18 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
         }
       }
       const mergedBytes = await merged.save();
-      const form = new FormData();
-      form.append('no_rawat', noRawat);
-      form.append('kode', kode);
-      form.append('file', new Blob([mergedBytes as BlobPart], { type: 'application/pdf' }), `BerkasKlaim_${noRawat.replace(/\//g, '_')}.pdf`);
-      const res = await fetch('/api/berkas-rawat/upload', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan PDF gabungan');
-      await Swal.fire({ icon: 'success', title: 'Tersimpan', text: 'PDF gabungan berhasil disimpan', timer: 1800, showConfirmButton: false });
-      loadAll();
+      const blobUrl = URL.createObjectURL(new Blob([mergedBytes as BlobPart], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = buildDownloadFileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
     } catch (e) {
       Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan' });
     } finally {
-      setSaving(false);
+      setDownloading(false);
     }
   };
 
@@ -322,7 +318,7 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
             Lepas di sini untuk menambah halaman
           </div>
         )}
-        {/* Header hijau — persis referensi: judul+badge jumlah halaman, Tambah Halaman, Simpan PDF */}
+        {/* Header hijau — persis referensi: judul+badge jumlah halaman, Tambah Halaman, Download PDF */}
         <div style={{ background: '#16a34a', color: '#ffffff', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -341,10 +337,10 @@ const BerkasKlaimGabungView: React.FC<{ noRawat: string }> = ({ noRawat }) => {
               + Tambah Halaman
             </button>
             <button
-              type="button" onClick={handleSimpanPdf} disabled={saving || pages.length === 0}
-              style={{ padding: '7px 14px', borderRadius: 0, border: 'none', background: saving ? '#d1d5db' : '#f59e0b', color: '#ffffff', fontSize: 12.5, fontWeight: 600, cursor: saving ? 'default' : 'pointer' }}
+              type="button" onClick={handleDownloadPdf} disabled={downloading || pages.length === 0}
+              style={{ padding: '7px 14px', borderRadius: 0, border: 'none', background: downloading ? '#d1d5db' : '#f59e0b', color: '#ffffff', fontSize: 12.5, fontWeight: 600, cursor: downloading ? 'default' : 'pointer' }}
             >
-              {saving ? 'Menyimpan...' : 'Simpan PDF'}
+              {downloading ? 'Mengunduh...' : 'Download PDF'}
             </button>
           </div>
         </div>
@@ -2310,7 +2306,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
             </div>
           </div>
         ) : (
-          <BerkasKlaimGabungView noRawat={noRawat} />
+          <BerkasKlaimGabungView noRawat={noRawat} noSep={data?.no_sep || ''} namaPasien={data?.nm_pasien || ''} tanggalPulang={data?.tanggal_pulang || ''} />
         )}
       </div>
     </div>

@@ -227,7 +227,7 @@ export const ModalBilling: React.FC<ModalBillingProps> = ({ noRawat, namaPasien,
     // col.biaya/jumlah/total: dikelompokkan ke kanan (bukan nempel nama)
     // — kolom "tambahan" DIHAPUS (jarang/tidak pernah terisi di data
     // nyata), ruangnya dipakai memperlebar 5 kolom sisanya.
-    const col = { uraian: margin, pemisah: margin + 100, biaya: margin + 260, jumlah: margin + 380, total: margin + 380 };
+    const col = { uraian: margin, pemisah: margin + 100, biaya: margin + 260, jumlah: margin + 360, total: margin + 380 };
     const itemIndent = 100; // nama item menjorok ke kolom ke-2, lihat pemakaian di bawah
     // colEnd — batas kanan tiap kolom angka (dipakai rightAlignAt), diambil
     // dari titik mulai kolom berikutnya dikurangi sedikit jarak; kolom
