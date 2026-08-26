@@ -233,6 +233,13 @@ export const ModalBilling: React.FC<ModalBillingProps> = ({ noRawat, namaPasien,
     // dari titik mulai kolom berikutnya dikurangi sedikit jarak; kolom
     // "total" (kolom terakhir) batasnya margin kanan halaman.
     const colEnd = { biaya: col.jumlah - 10, jumlah: col.total - 10, total: pageWidth - margin };
+    // totalLabelEndX — titik akhir TETAP utk label "Total <kategori> :"
+    // (dirata-kanankan sampai sini), supaya ':' semua baris subtotal
+    // sejajar vertikal walau panjang labelnya beda2 per kategori (mis.
+    // "Total Kamar Inap :" vs "Total Obat & BHP :") — beda dari baris
+    // label:value biasa yg titik duanya sejajar krn VALUE-nya (bukan
+    // labelnya) yg mulai di posisi tetap col.pemisah.
+    const totalLabelEndX = colEnd.total - 85;
 
     let insideRingkas = false;
     rows.forEach((row) => {
@@ -261,14 +268,14 @@ export const ModalBilling: React.FC<ModalBillingProps> = ({ noRawat, namaPasien,
           if (idxColon === -1) {
             rightText(namaTrim, 8);
           } else {
-            // Label "Total <kategori> :" diindentasi 2x itemIndent (lebih
-            // dalam dari nama item) — biar makin keliatan sbg baris
-            // penutup/ringkasan kategori, bukan rata kiri sejajar header.
-            // Titik dua digabung jadi SATU string dgn labelnya (bukan
-            // digambar terpisah di col.pemisah) — krn posisi col.pemisah
-            // sekarang ada DI DALAM area indentasi ini, kalau dipisah
-            // keduanya numpuk.
-            text(namaTrim.slice(0, idxColon) + ' :', col.uraian + itemIndent * 2, 8);
+            // Label "Total <kategori> :" dirata-kanankan ke totalLabelEndX
+            // (bukan rata kiri dari titik indentasi) — supaya ':'-nya
+            // sejajar vertikal di semua baris subtotal, walau panjang
+            // labelnya beda2 per kategori. Titik dua digabung jadi SATU
+            // string dgn labelnya (bukan digambar terpisah di col.pemisah)
+            // — krn posisi col.pemisah ada DI DALAM area indentasi ini,
+            // kalau dipisah keduanya numpuk.
+            rightAlignAt(namaTrim.slice(0, idxColon) + ' :', totalLabelEndX, 8);
             rightAlignAt(namaTrim.slice(idxColon + 3), colEnd.total, 8);
           }
         } else {
