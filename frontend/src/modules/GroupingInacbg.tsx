@@ -1359,12 +1359,19 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   const isNewborn = !!header?.berat_lahir;
   const hasPersalinanDx = header?.tipe === 'RI' && idrgDiagnosaList.some((d) => /^O/i.test(d.code));
   // Grup tanpa kondisi diagnosa — tampil kalau salah satu field-nya terisi,
-  // ATAU staf sudah buka manual lewat "+ Tambah ..." (revealX).
-  const adlFilled = dataKlinis.adl_sub_acute !== '' || dataKlinis.adl_chronic !== '';
-  const icuFilled = dataKlinis.icu_indikator || dataKlinis.icu_los !== '' || dataKlinis.ventilator_use_ind
-    || dataKlinis.ventilator_start !== '' || dataKlinis.ventilator_stop !== '' || dataKlinis.ventilator_hour !== '';
-  const naikKelasFilled = dataKlinis.upgrade_class_ind || dataKlinis.upgrade_class_los !== '' || dataKlinis.add_payment_pct !== '';
-  const bayiLahirFilled = dataKlinis.bayi_lahir_status_cd !== '';
+  // ATAU staf sudah buka manual lewat "+ Tambah ..." (revealX). "Terisi"
+  // di sini HARUS > 0 (bukan cuma !== ''), krn get_claim_data SELALU
+  // mengembalikan field numerik ini sbg "0" (bukan kosong/null) walau
+  // memang belum pernah diisi — kalau cuma cek !== '' maka string "0" hasil
+  // sync dianggap "terisi" dan grup ikut tampil terus meski sebenarnya
+  // kosong (dikonfirmasi nyata: klaim final tanpa data ADL/ICU/Naik Kelas
+  // tapi grupnya tetap muncul menampilkan 0).
+  const numFilled = (v: string) => v !== '' && Number(v) !== 0;
+  const adlFilled = numFilled(dataKlinis.adl_sub_acute) || numFilled(dataKlinis.adl_chronic);
+  const icuFilled = dataKlinis.icu_indikator || numFilled(dataKlinis.icu_los) || dataKlinis.ventilator_use_ind
+    || dataKlinis.ventilator_start !== '' || dataKlinis.ventilator_stop !== '' || numFilled(dataKlinis.ventilator_hour);
+  const naikKelasFilled = dataKlinis.upgrade_class_ind || numFilled(dataKlinis.upgrade_class_los) || numFilled(dataKlinis.add_payment_pct);
+  const bayiLahirFilled = dataKlinis.bayi_lahir_status_cd !== '' && dataKlinis.bayi_lahir_status_cd !== '0';
   const showAdl = adlFilled || revealAdl;
   const showIcu = icuFilled || revealIcu;
   const showNaikKelas = naikKelasFilled || revealNaikKelas;
@@ -1405,8 +1412,6 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
               ditampilkan sbg field isian, lihat effect di atas & eklaimProxy
               di backend. */}
           <div style={stageStyle}>
-            <div style={stageTitle}>2. Data Klaim (Tarif RS)</div>
-
             <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
               <span style={{ fontSize: 12.5, color: '#6b7280' }}>Tarif Rumah Sakit : </span>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>Rp {totalTarif.toLocaleString('id-ID')}</span>
@@ -1712,7 +1717,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
 
           {/* Step 3 — Grouping iDRG (method #5-11) */}
           <div style={stageStyle}>
-            <div style={stageTitle}>3. Coding & Grouping iDRG</div>
+            <div style={stageTitle}>iDRG</div>
             {(stage === 'idrg_input' || stage === 'idrg_grouped') ? (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 10 }}>
@@ -1922,7 +1927,7 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
           {/* Step 4 — Import ke INACBG + Grouping INACBG (method #13-19) */}
           {(stage === 'idrg_final' || stage === 'inacbg_input' || stage === 'inacbg_grouped' || stage === 'inacbg_final' || stage === 'klaim_final') && (
             <div style={stageStyle}>
-              <div style={stageTitle}>4. Coding & Grouping INACBG</div>
+              <div style={stageTitle}>INACBG</div>
               {stage === 'idrg_final' && (
                 <button type="button" onClick={handleImportKeInacbg} disabled={!!busy} style={busy === 'import' ? btnDisabled : btnPrimary}>
                   {busy === 'import' ? 'Memproses...' : 'Import Coding iDRG ke INACBG'}
@@ -2068,59 +2073,53 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
             </div>
           )}
 
-          {/* Step 5 — Final Klaim (method #20) */}
+          {/* Step 5+6 digabung — Finalisasi Klaim (method #20) sekarang jadi
+              bagian dari box "Kirim & Cetak Klaim" (bukan box terpisah lagi),
+              krn fungsinya memang cuma langkah awal sebelum kirim/cetak.
+              Status box + tombol aksi dibuat sepadan tampilan resmi
+              192.168.1.10/E-Klaim (box "Status Klaim" di atas, Cetak Klaim/
+              Kirim Klaim Online rata kiri, Edit Ulang Klaim rata kanan
+              sebaris). */}
           {(stage === 'inacbg_final' || stage === 'klaim_final') && (
             <div style={stageStyle}>
-              <div style={stageTitle}>5. Finalisasi Klaim</div>
+              <div style={stageTitle}>Status Klaim</div>
+
               {stage === 'inacbg_final' ? (
                 <button type="button" onClick={handleFinalKlaim} disabled={!!busy} style={busy === 'klaim-final' ? btnDisabled : btnPrimary}>
                   {busy === 'klaim-final' ? 'Memproses...' : 'Final Klaim'}
                 </button>
               ) : (
-                <div style={{ fontSize: 12, color: '#16a34a' }}>✓ Klaim sudah final.</div>
+                <>
+                  <div style={{ marginBottom: 12, border: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex' }}>
+                      <div style={{ flex: 1, padding: '6px 10px', fontSize: 12.5, color: '#6b7280' }}>Status Klaim</div>
+                      <div style={{ flex: 2, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
+                        {klaimStatusCd === 'final' ? 'Final' : klaimStatusCd === 'normal' ? 'Normal' : (klaimStatusCd || '-')}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', borderTop: '1px solid #e5e7eb' }}>
+                      <div style={{ flex: 1, padding: '6px 10px', fontSize: 12.5, color: '#6b7280' }}>Status DC Kemkes</div>
+                      <div style={{ flex: 2, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
+                        {dcKemkesStatusCd === 'sent' ? 'Terkirim' : dcKemkesStatusCd === 'unsent' ? 'Belum Terkirim' : (dcKemkesStatusCd || '-')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" onClick={handleCetakKlaim} disabled={!!busy} style={busy === 'cetak' ? btnDisabled : btnSecondary}>
+                        {busy === 'cetak' ? 'Menyiapkan...' : 'Cetak Klaim'}
+                      </button>
+                      <button type="button" onClick={handleKirimKlaim} disabled={!!busy} style={busy === 'kirim' ? btnDisabled : btnPrimary}>
+                        {busy === 'kirim' ? 'Mengirim...' : 'Kirim Klaim Online'}
+                      </button>
+                    </div>
+                    <button type="button" onClick={handleEditUlangKlaim} disabled={!!busy} style={busy === 'klaim-reedit' ? btnDisabled : btnSecondary}>
+                      Edit Ulang Klaim
+                    </button>
+                  </div>
+                </>
               )}
-            </div>
-          )}
-
-          {/* Step 6 — Kirim & Cetak (method #22-23, #27) — status box + tombol
-              aksi dibuat sepadan tampilan resmi 192.168.1.10/E-Klaim (box
-              "Status Klaim" di atas, Cetak Klaim/Kirim Klaim Online rata
-              kiri, Edit Ulang Klaim rata kanan sebaris). */}
-          {stage === 'klaim_final' && (
-            <div style={stageStyle}>
-              <div style={stageTitle}>6. Kirim & Cetak Klaim</div>
-
-              <div style={{ marginBottom: 12, border: '1px solid #e5e7eb' }}>
-                <div style={{ padding: '6px 10px', background: '#f3f4f6', fontWeight: 700, fontSize: 12.5, textAlign: 'center', color: '#111827' }}>
-                  Status Klaim
-                </div>
-                <div style={{ display: 'flex', borderTop: '1px solid #e5e7eb' }}>
-                  <div style={{ flex: 1, padding: '6px 10px', fontSize: 12.5, color: '#6b7280' }}>Status Klaim</div>
-                  <div style={{ flex: 2, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
-                    {klaimStatusCd === 'final' ? 'Final' : klaimStatusCd === 'normal' ? 'Normal' : (klaimStatusCd || '-')}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', borderTop: '1px solid #e5e7eb' }}>
-                  <div style={{ flex: 1, padding: '6px 10px', fontSize: 12.5, color: '#6b7280' }}>Status DC Kemkes</div>
-                  <div style={{ flex: 2, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, color: '#111827' }}>
-                    {dcKemkesStatusCd === 'sent' ? 'Terkirim' : dcKemkesStatusCd === 'unsent' ? 'Belum Terkirim' : (dcKemkesStatusCd || '-')}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" onClick={handleCetakKlaim} disabled={!!busy} style={busy === 'cetak' ? btnDisabled : btnSecondary}>
-                    {busy === 'cetak' ? 'Menyiapkan...' : 'Cetak Klaim'}
-                  </button>
-                  <button type="button" onClick={handleKirimKlaim} disabled={!!busy} style={busy === 'kirim' ? btnDisabled : btnPrimary}>
-                    {busy === 'kirim' ? 'Mengirim...' : 'Kirim Klaim Online'}
-                  </button>
-                </div>
-                <button type="button" onClick={handleEditUlangKlaim} disabled={!!busy} style={busy === 'klaim-reedit' ? btnDisabled : btnSecondary}>
-                  Edit Ulang Klaim
-                </button>
-              </div>
             </div>
           )}
         </>
@@ -2261,7 +2260,7 @@ export const GroupingInacbgView: React.FC<Props> = ({ noRawat, onBack }) => {
       </div>
 
       {showBilling && data && (
-        <ModalBilling noRawat={noRawat} namaPasien={data.nm_pasien} onClose={() => setShowBilling(false)} />
+        <ModalBilling noRawat={noRawat} namaPasien={data.nm_pasien} jaminan={data.jaminan} onClose={() => setShowBilling(false)} />
       )}
 
       {showSepPrint && (
