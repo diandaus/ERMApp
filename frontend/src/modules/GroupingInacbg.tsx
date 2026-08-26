@@ -582,14 +582,32 @@ const TARIF_KOLOM: { key: string; label: string }[][] = [
 const gLabel: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontStyle: 'italic' };
 const gInput: React.CSSProperties = { padding: '6px 10px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 12.5, outline: 'none', width: '100%', boxSizing: 'border-box' };
 
-// Style sub-section "Data Klinis" (Step 2) — dibuat sub-card kecil per
-// kelompok field spy jelas mana yg satu topik (Persalinan/APGAR/dst),
-// bukan satu grid rata semua field spt Tarif RS.
-const dkSection: React.CSSProperties = { border: '1px solid #e5e7eb', padding: 10, marginBottom: 10 };
-const dkSectionTitle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 };
+// Style sub-section "Data Klinis" (Step 2) — dkRow/dkFieldLabel dipakai
+// khusus kartu "Kelahiran" (per-bayi, tetap rata kiri krn banyak field),
+// sisanya (Tekanan Darah/Persalinan/APGAR/ADL/dst) pakai style rata-tengah
+// dkCenter* di bawah.
 const dkRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' };
 const dkFieldLabel: React.CSSProperties = { ...gLabel, minWidth: 140 };
 const dkNumInput: React.CSSProperties = { ...gInput, width: 90 };
+
+// Style Data Klinis versi rata-tengah + divider (sepadan tampilan resmi
+// E-Klaim) — dipakai gantiin dkSection/dkSectionTitle (kartu berbingkai
+// rata-kiri) versi sebelumnya.
+const dkCenterBlock: React.CSSProperties = { padding: '14px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' };
+const dkCenterTitle: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontStyle: 'italic', marginBottom: 8 };
+const dkCenterCol: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 };
+const dkCenterInput: React.CSSProperties = { ...gInput, width: 70, textAlign: 'center' };
+const dkCenterSubLabel: React.CSSProperties = { fontSize: 10.5, color: '#374151', fontWeight: 600 };
+const dkRevealLink: React.CSSProperties = { background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 };
+
+// Style tabel "Hasil Grouping iDRG/INACBG" — sepadan tampilan resmi
+// E-Klaim (band judul abu-hijau + baris label/value bergaris), dipakai
+// gantiin box ringkas <div><b>Label:</b> value</div> yg sebelumnya.
+const grBox = (danger: boolean): React.CSSProperties => ({ marginTop: 12, border: `1px solid ${danger ? '#fecaca' : '#bbf7d0'}` });
+const grHeader = (danger: boolean): React.CSSProperties => ({ padding: '6px 10px', background: danger ? '#fee2e2' : '#dcfce7', fontWeight: 700, fontSize: 12.5, textAlign: 'center', color: '#111827' });
+const grRow = (danger: boolean): React.CSSProperties => ({ display: 'flex', borderTop: `1px solid ${danger ? '#fecaca' : '#bbf7d0'}` });
+const grLabel = (danger: boolean): React.CSSProperties => ({ width: 150, flexShrink: 0, padding: '5px 10px', fontSize: 12, color: '#374151', background: danger ? '#fef2f2' : '#f0fdf4' });
+const grValue: React.CSSProperties = { flex: 1, padding: '5px 10px', fontSize: 12.5, color: '#111827' };
 
 // Data Klinis — field opsional method #4 (set_claim_data), persis nama &
 // struktur field di Manual Web Service E-Klaim hal. 13-22 & contoh respons
@@ -817,6 +835,15 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   const [apgarMenit1, setApgarMenit1] = React.useState<ApgarScore>(APGAR_DEFAULT);
   const [apgarMenit5, setApgarMenit5] = React.useState<ApgarScore>(APGAR_DEFAULT);
   const [deliveryList, setDeliveryList] = React.useState<DeliveryRow[]>([]);
+  // Grup Data Klinis TANPA kondisi diagnosa (ADL/ICU/Naik Kelas/Bayi Lahir)
+  // default disembunyikan kalau semua field-nya kosong — "revealX" dipakai
+  // spy staf tetap bisa buka grup itu manual (klik "+ Tambah ...") walau
+  // belum ada isinya, tanpa itu grup yg disembunyikan tak akan pernah bisa
+  // diisi pertama kali.
+  const [revealAdl, setRevealAdl] = React.useState(false);
+  const [revealIcu, setRevealIcu] = React.useState(false);
+  const [revealNaikKelas, setRevealNaikKelas] = React.useState(false);
+  const [revealBayiLahir, setRevealBayiLahir] = React.useState(false);
   // Payor ID/Code & Kode Tarif sekarang setting tetap per-RS (Admin >
   // Pengaturan Bridging > E-Klaim), bukan diisi ulang tiap klaim —
   // backend/eklaim_handler.go
@@ -1331,6 +1358,17 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
   //    di bawah), bukan di Data Klinis (Step 2) spt versi sebelumnya.
   const isNewborn = !!header?.berat_lahir;
   const hasPersalinanDx = header?.tipe === 'RI' && idrgDiagnosaList.some((d) => /^O/i.test(d.code));
+  // Grup tanpa kondisi diagnosa — tampil kalau salah satu field-nya terisi,
+  // ATAU staf sudah buka manual lewat "+ Tambah ..." (revealX).
+  const adlFilled = dataKlinis.adl_sub_acute !== '' || dataKlinis.adl_chronic !== '';
+  const icuFilled = dataKlinis.icu_indikator || dataKlinis.icu_los !== '' || dataKlinis.ventilator_use_ind
+    || dataKlinis.ventilator_start !== '' || dataKlinis.ventilator_stop !== '' || dataKlinis.ventilator_hour !== '';
+  const naikKelasFilled = dataKlinis.upgrade_class_ind || dataKlinis.upgrade_class_los !== '' || dataKlinis.add_payment_pct !== '';
+  const bayiLahirFilled = dataKlinis.bayi_lahir_status_cd !== '';
+  const showAdl = adlFilled || revealAdl;
+  const showIcu = icuFilled || revealIcu;
+  const showNaikKelas = naikKelasFilled || revealNaikKelas;
+  const showBayiLahir = bayiLahirFilled || revealBayiLahir;
   const showDialyzerKantong = inacbgCode === 'N-3-15-0';
   const showAlteplase = inacbgCode.startsWith('G-4-14-');
 
@@ -1392,229 +1430,283 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
             </div>
 
             {/* Data Klinis — sepadan tampilan resmi E-Klaim (field opsional
-                method #4), disertakan bareng klik Group iDRG. Semua field
-                selalu tersedia diisi — E-Klaim yg menentukan relevan/tidak
-                per kasus (lihat buildDataKlinisFields di atas). */}
+                method #4), disertakan bareng klik Group iDRG. Layout rata
+                tengah + divider persis tampilan asli. Grup TANPA kondisi
+                diagnosa jelas (ADL/ICU/Naik Kelas/Bayi Lahir) disembunyikan
+                default kalau kosong — otomatis tampil begitu salah satu
+                field-nya terisi, atau staf buka manual via "+ Tambah ...". */}
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: '#111827', marginBottom: 10, textAlign: 'center' }}>Data Klinis</div>
 
-              <div style={dkSection}>
-                <div style={dkSectionTitle}>Tekanan Darah (mmHg)</div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Sistole / Diastole</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.sistole} onChange={(e) => setDK('sistole', e.target.value)} />
-                  <span style={{ color: '#9ca3af' }}>/</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.diastole} onChange={(e) => setDK('diastole', e.target.value)} />
-                </div>
-              </div>
-
-              <div style={dkSection}>
-                <div style={dkSectionTitle}>ADL Score</div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Sub Acute (12-60)</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.adl_sub_acute} onChange={(e) => setDK('adl_sub_acute', e.target.value)} />
-                </div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Chronic (12-60)</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.adl_chronic} onChange={(e) => setDK('adl_chronic', e.target.value)} />
+              <div style={dkCenterBlock}>
+                <div style={dkCenterTitle}>Tekanan Darah (mmHg):</div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+                  <div style={dkCenterCol}>
+                    <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.sistole} onChange={(e) => setDK('sistole', e.target.value)} />
+                    <span style={dkCenterSubLabel}>Sistole</span>
+                  </div>
+                  <div style={dkCenterCol}>
+                    <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.diastole} onChange={(e) => setDK('diastole', e.target.value)} />
+                    <span style={dkCenterSubLabel}>Diastole</span>
+                  </div>
                 </div>
               </div>
 
               {hasPersalinanDx && (
-              <div style={dkSection}>
-                <div style={dkSectionTitle}>Persalinan (khusus rawat inap dgn diagnosa persalinan)</div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Usia Kehamilan (minggu)</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.usia_kehamilan} onChange={(e) => setDK('usia_kehamilan', e.target.value)} />
-                </div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Gravida / Partus / Abortus</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.gravida} onChange={(e) => setDK('gravida', e.target.value)} />
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.partus} onChange={(e) => setDK('partus', e.target.value)} />
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.abortus} onChange={(e) => setDK('abortus', e.target.value)} />
-                </div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Onset Kontraksi</span>
-                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 220 }} value={dataKlinis.onset_kontraksi} onChange={(e) => setDK('onset_kontraksi', e.target.value)}>
-                    <option value="">— pilih —</option>
-                    <option value="spontan">Timbul Spontan</option>
-                    <option value="induksi">Dengan Induksi</option>
-                    <option value="non_spontan_non_induksi">SC Tanpa Kontraksi/Induksi</option>
-                  </select>
-                </div>
-
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ ...dkFieldLabel, minWidth: 0, marginBottom: 6 }}>Kelahiran</div>
-                  {deliveryList.map((row, idx) => (
-                    <div key={idx} style={{ border: '1px solid #e5e7eb', padding: 8, marginBottom: 6, background: '#f9fafb' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>Bayi ke-{row.delivery_sequence}</span>
-                        {stage === 'idrg_input' && (
-                          <button type="button" onClick={() => setDeliveryList((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, delivery_sequence: i + 1 })))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11.5 }}>
-                            Hapus
-                          </button>
-                        )}
-                      </div>
-                      <div style={dkRow}>
-                        <span style={{ ...dkFieldLabel, minWidth: 100 }}>Metode</span>
-                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.delivery_method} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, delivery_method: e.target.value } : r)))}>
-                          <option value="vaginal">Vaginal</option>
-                          <option value="sc">SC</option>
-                        </select>
-                        <span style={{ ...dkFieldLabel, minWidth: 90 }}>Letak Janin</span>
-                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.letak_janin} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, letak_janin: e.target.value } : r)))}>
-                          <option value="kepala">Kepala</option>
-                          <option value="sungsang">Sungsang</option>
-                          <option value="lintang">Lintang</option>
-                        </select>
-                      </div>
-                      <div style={dkRow}>
-                        <span style={{ ...dkFieldLabel, minWidth: 100 }}>Waktu Lahir</span>
-                        <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={row.delivery_dttm} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, delivery_dttm: e.target.value } : r)))} />
-                        <span style={{ ...dkFieldLabel, minWidth: 90 }}>Kondisi Bayi</span>
-                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.kondisi} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, kondisi: e.target.value } : r)))}>
-                          <option value="livebirth">Livebirth</option>
-                          <option value="stillbirth">Stillbirth</option>
-                        </select>
-                      </div>
-                      <div style={dkRow}>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_manual} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_manual: e.target.checked } : r)))} /> Manual
-                        </label>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_forcep} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_forcep: e.target.checked } : r)))} /> Forcep
-                        </label>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_vacuum} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_vacuum: e.target.checked } : r)))} /> Vacuum
-                        </label>
-                      </div>
-                      <div style={dkRow}>
-                        <span style={{ ...dkFieldLabel, minWidth: 100 }}>Spesimen SHK</span>
-                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 100 }} value={row.shk_spesimen_ambil} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_spesimen_ambil: e.target.value } : r)))}>
-                          <option value="tidak">Tidak</option>
-                          <option value="ya">Ya</option>
-                        </select>
-                        {row.shk_spesimen_ambil === 'ya' && (
-                          <>
-                            <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 100 }} value={row.shk_lokasi} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_lokasi: e.target.value } : r)))}>
-                              <option value="tumit">Tumit</option>
-                              <option value="vena">Vena</option>
-                            </select>
-                            <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.shk_alasan} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_alasan: e.target.value } : r)))}>
-                              <option value="akses-sulit">Akses Sulit</option>
-                              <option value="tidak-dapat">Tidak Dapat</option>
-                            </select>
-                            <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={row.shk_spesimen_dttm} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_spesimen_dttm: e.target.value } : r)))} />
-                          </>
-                        )}
+                <>
+                  <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
+                    <div style={{ flex: 1, padding: '14px 10px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+                      <div style={dkCenterTitle}>Usia Kehamilan (minggu):</div>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.usia_kehamilan} onChange={(e) => setDK('usia_kehamilan', e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1, padding: '14px 10px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+                      <div style={dkCenterTitle}>Riwayat Kehamilan Sebelumnya:</div>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+                        <div style={dkCenterCol}>
+                          <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.gravida} onChange={(e) => setDK('gravida', e.target.value)} />
+                          <span style={dkCenterSubLabel}>Gravida</span>
+                        </div>
+                        <div style={dkCenterCol}>
+                          <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.partus} onChange={(e) => setDK('partus', e.target.value)} />
+                          <span style={dkCenterSubLabel}>Partus</span>
+                        </div>
+                        <div style={dkCenterCol}>
+                          <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.abortus} onChange={(e) => setDK('abortus', e.target.value)} />
+                          <span style={dkCenterSubLabel}>Abortus</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                  {stage === 'idrg_input' && (
-                    <button type="button" onClick={() => setDeliveryList((prev) => [...prev, newDeliveryRow(prev.length + 1)])} style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11.5 }}>
-                      + Tambah Bayi
-                    </button>
-                  )}
-                </div>
-              </div>
+                    <div style={{ flex: 1, padding: '14px 10px', textAlign: 'center' }}>
+                      <div style={dkCenterTitle}>Onset Kontraksi:</div>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                        {([['spontan', 'Timbul Spontan'], ['induksi', 'Dengan Induksi'], ['non_spontan_non_induksi', 'SC Tanpa Kontraksi/Induksi']] as [string, string][]).map(([val, label]) => (
+                          <label key={val} style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 6, cursor: stage === 'idrg_input' ? 'pointer' : 'default' }}>
+                            <input type="radio" disabled={stage !== 'idrg_input'} checked={dataKlinis.onset_kontraksi === val} onChange={() => setDK('onset_kontraksi', val)} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={dkCenterBlock}>
+                    <div style={dkCenterTitle}>Kelahiran:</div>
+                    {deliveryList.length > 0 && (
+                      <div style={{ textAlign: 'left' }}>
+                        {deliveryList.map((row, idx) => (
+                          <div key={idx} style={{ border: '1px solid #e5e7eb', padding: 8, marginBottom: 6, background: '#f9fafb' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontSize: 11.5, fontWeight: 600, color: '#374151' }}>Bayi ke-{row.delivery_sequence}</span>
+                              {stage === 'idrg_input' && (
+                                <button type="button" onClick={() => setDeliveryList((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, delivery_sequence: i + 1 })))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11.5 }}>
+                                  Hapus
+                                </button>
+                              )}
+                            </div>
+                            <div style={dkRow}>
+                              <span style={{ ...dkFieldLabel, minWidth: 100 }}>Metode</span>
+                              <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.delivery_method} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, delivery_method: e.target.value } : r)))}>
+                                <option value="vaginal">Vaginal</option>
+                                <option value="sc">SC</option>
+                              </select>
+                              <span style={{ ...dkFieldLabel, minWidth: 90 }}>Letak Janin</span>
+                              <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.letak_janin} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, letak_janin: e.target.value } : r)))}>
+                                <option value="kepala">Kepala</option>
+                                <option value="sungsang">Sungsang</option>
+                                <option value="lintang">Lintang</option>
+                              </select>
+                            </div>
+                            <div style={dkRow}>
+                              <span style={{ ...dkFieldLabel, minWidth: 100 }}>Waktu Lahir</span>
+                              <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={row.delivery_dttm} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, delivery_dttm: e.target.value } : r)))} />
+                              <span style={{ ...dkFieldLabel, minWidth: 90 }}>Kondisi Bayi</span>
+                              <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.kondisi} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, kondisi: e.target.value } : r)))}>
+                                <option value="livebirth">Livebirth</option>
+                                <option value="stillbirth">Stillbirth</option>
+                              </select>
+                            </div>
+                            <div style={dkRow}>
+                              <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_manual} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_manual: e.target.checked } : r)))} /> Manual
+                              </label>
+                              <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_forcep} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_forcep: e.target.checked } : r)))} /> Forcep
+                              </label>
+                              <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <input type="checkbox" disabled={stage !== 'idrg_input'} checked={row.use_vacuum} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, use_vacuum: e.target.checked } : r)))} /> Vacuum
+                              </label>
+                            </div>
+                            <div style={dkRow}>
+                              <span style={{ ...dkFieldLabel, minWidth: 100 }}>Spesimen SHK</span>
+                              <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 100 }} value={row.shk_spesimen_ambil} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_spesimen_ambil: e.target.value } : r)))}>
+                                <option value="tidak">Tidak</option>
+                                <option value="ya">Ya</option>
+                              </select>
+                              {row.shk_spesimen_ambil === 'ya' && (
+                                <>
+                                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 100 }} value={row.shk_lokasi} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_lokasi: e.target.value } : r)))}>
+                                    <option value="tumit">Tumit</option>
+                                    <option value="vena">Vena</option>
+                                  </select>
+                                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={row.shk_alasan} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_alasan: e.target.value } : r)))}>
+                                    <option value="akses-sulit">Akses Sulit</option>
+                                    <option value="tidak-dapat">Tidak Dapat</option>
+                                  </select>
+                                  <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={row.shk_spesimen_dttm} onChange={(e) => setDeliveryList((prev) => prev.map((r, i) => (i === idx ? { ...r, shk_spesimen_dttm: e.target.value } : r)))} />
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {stage === 'idrg_input' && (
+                      <button type="button" onClick={() => setDeliveryList((prev) => [...prev, newDeliveryRow(prev.length + 1)])} style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11.5 }}>
+                        + Tambah Bayi
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
 
               {isNewborn && (
-              <div style={dkSection}>
-                <div style={dkSectionTitle}>APGAR (khusus bayi umur ≤ 1 hari)</div>
-                {([['Menit 1', apgarMenit1, setApgarMenit1], ['Menit 5', apgarMenit5, setApgarMenit5]] as [string, ApgarScore, React.Dispatch<React.SetStateAction<ApgarScore>>][]).map(([label, score, setScore]) => (
-                  <div key={label} style={dkRow}>
-                    <span style={{ ...dkFieldLabel, minWidth: 60 }}>{label}</span>
-                    {(['appearance', 'pulse', 'grimace', 'activity', 'respiration'] as (keyof ApgarScore)[]).map((key) => (
-                      <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                        <span style={{ fontSize: 10, color: '#9ca3af', textTransform: 'capitalize' }}>{key}</span>
-                        <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 52 }} value={score[key]} onChange={(e) => setScore((prev) => ({ ...prev, [key]: e.target.value }))}>
-                          <option value="">-</option>
-                          <option value="0">0</option>
-                          <option value="1">1</option>
-                          <option value="2">2</option>
-                        </select>
+                <div style={dkCenterBlock}>
+                  <div style={dkCenterTitle}>APGAR (khusus bayi umur ≤ 1 hari):</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap' }}>
+                    {([['Menit 1', apgarMenit1, setApgarMenit1], ['Menit 5', apgarMenit5, setApgarMenit5]] as [string, ApgarScore, React.Dispatch<React.SetStateAction<ApgarScore>>][]).map(([label, score, setScore]) => (
+                      <div key={label} style={dkCenterCol}>
+                        <span style={dkCenterSubLabel}>{label}</span>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {(['appearance', 'pulse', 'grimace', 'activity', 'respiration'] as (keyof ApgarScore)[]).map((key) => (
+                            <div key={key} style={dkCenterCol}>
+                              <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 52 }} value={score[key]} onChange={(e) => setScore((prev) => ({ ...prev, [key]: e.target.value }))}>
+                                <option value="">-</option>
+                                <option value="0">0</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                              </select>
+                              <span style={{ fontSize: 9, color: '#9ca3af', textTransform: 'capitalize' }}>{key}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
-                ))}
-              </div>
+                </div>
               )}
 
-              <div style={dkSection}>
-                <div style={dkSectionTitle}>ICU & Ventilator</div>
-                <div style={dkRow}>
-                  <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, minWidth: 140 }}>
-                    <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.icu_indikator} onChange={(e) => setDK('icu_indikator', e.target.checked)} /> Rawat ICU
-                  </label>
-                  {dataKlinis.icu_indikator && (
-                    <>
-                      <span style={{ ...gLabel }}>Lama Hari (ICU LOS)</span>
-                      <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.icu_los} onChange={(e) => setDK('icu_los', e.target.value)} />
-                    </>
-                  )}
-                </div>
-                <div style={dkRow}>
-                  <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, minWidth: 140 }}>
-                    <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.ventilator_use_ind} onChange={(e) => setDK('ventilator_use_ind', e.target.checked)} /> Pakai Ventilator
-                  </label>
-                  {dataKlinis.ventilator_use_ind && (
-                    <>
-                      <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.ventilator_start} onChange={(e) => setDK('ventilator_start', e.target.value)} />
-                      <span style={{ color: '#9ca3af' }}>s/d</span>
-                      <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.ventilator_stop} onChange={(e) => setDK('ventilator_stop', e.target.value)} />
-                    </>
-                  )}
-                </div>
-                <div style={dkRow}>
-                  <span style={dkFieldLabel}>Jam Pemakaian Ventilator</span>
-                  <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.ventilator_hour} onChange={(e) => setDK('ventilator_hour', e.target.value)} />
-                </div>
-              </div>
-
-              <div style={dkSection}>
-                <div style={dkSectionTitle}>Naik Kelas</div>
-                <div style={dkRow}>
-                  <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, minWidth: 140 }}>
-                    <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.upgrade_class_ind} onChange={(e) => setDK('upgrade_class_ind', e.target.checked)} /> Naik Kelas
-                  </label>
-                </div>
-                {dataKlinis.upgrade_class_ind && (
-                  <>
-                    <div style={dkRow}>
-                      <span style={dkFieldLabel}>Kenaikan Ke Kelas</span>
-                      <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={dataKlinis.upgrade_class_class} onChange={(e) => setDK('upgrade_class_class', e.target.value)}>
-                        <option value="kelas_1">Kelas 1</option>
-                        <option value="kelas_2">Kelas 2</option>
-                        <option value="vip">VIP</option>
-                      </select>
-                      <span style={dkFieldLabel}>Lama Hari Naik Kelas</span>
-                      <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.upgrade_class_los} onChange={(e) => setDK('upgrade_class_los', e.target.value)} />
+              {showAdl ? (
+                <div style={dkCenterBlock}>
+                  <div style={dkCenterTitle}>ADL Score:</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+                    <div style={dkCenterCol}>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.adl_sub_acute} onChange={(e) => setDK('adl_sub_acute', e.target.value)} />
+                      <span style={dkCenterSubLabel}>Sub Acute (12-60)</span>
                     </div>
-                    <div style={dkRow}>
-                      <span style={dkFieldLabel}>Sumber Pembayaran Tambahan</span>
-                      <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 170 }} value={dataKlinis.upgrade_class_payor} onChange={(e) => setDK('upgrade_class_payor', e.target.value)}>
-                        <option value="peserta">Peserta</option>
-                        <option value="pemberi_kerja">Pemberi Kerja</option>
-                        <option value="asuransi_tambahan">Asuransi Tambahan</option>
-                      </select>
-                      <span style={dkFieldLabel}>% Koefisien Tambahan</span>
-                      <input type="number" disabled={stage !== 'idrg_input'} style={dkNumInput} value={dataKlinis.add_payment_pct} onChange={(e) => setDK('add_payment_pct', e.target.value)} />
+                    <div style={dkCenterCol}>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.adl_chronic} onChange={(e) => setDK('adl_chronic', e.target.value)} />
+                      <span style={dkCenterSubLabel}>Chronic (12-60)</span>
                     </div>
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              ) : stage === 'idrg_input' && (
+                <div style={{ ...dkCenterBlock, padding: '8px 10px' }}>
+                  <button type="button" onClick={() => setRevealAdl(true)} style={dkRevealLink}>+ Tambah ADL Score</button>
+                </div>
+              )}
 
-              <div style={{ ...dkSection, marginBottom: 0 }}>
-                <div style={dkSectionTitle}>Status Bayi Lahir (khusus Jaminan Bayi Baru Lahir)</div>
-                <div style={dkRow}>
-                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.bayi_lahir_status_cd} onChange={(e) => setDK('bayi_lahir_status_cd', e.target.value)}>
+              {showIcu ? (
+                <div style={dkCenterBlock}>
+                  <div style={dkCenterTitle}>ICU & Ventilator:</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.icu_indikator} onChange={(e) => setDK('icu_indikator', e.target.checked)} /> Rawat ICU
+                      </label>
+                      {dataKlinis.icu_indikator && (
+                        <>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Lama Hari (ICU LOS)</span>
+                          <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.icu_los} onChange={(e) => setDK('icu_los', e.target.value)} />
+                        </>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.ventilator_use_ind} onChange={(e) => setDK('ventilator_use_ind', e.target.checked)} /> Pakai Ventilator
+                      </label>
+                      {dataKlinis.ventilator_use_ind && (
+                        <>
+                          <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.ventilator_start} onChange={(e) => setDK('ventilator_start', e.target.value)} />
+                          <span style={{ color: '#9ca3af' }}>s/d</span>
+                          <input type="datetime-local" disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190 }} value={dataKlinis.ventilator_stop} onChange={(e) => setDK('ventilator_stop', e.target.value)} />
+                        </>
+                      )}
+                    </div>
+                    <div style={dkCenterCol}>
+                      <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.ventilator_hour} onChange={(e) => setDK('ventilator_hour', e.target.value)} />
+                      <span style={dkCenterSubLabel}>Jam Pemakaian Ventilator</span>
+                    </div>
+                  </div>
+                </div>
+              ) : stage === 'idrg_input' && (
+                <div style={{ ...dkCenterBlock, padding: '8px 10px' }}>
+                  <button type="button" onClick={() => setRevealIcu(true)} style={dkRevealLink}>+ Tambah ICU & Ventilator</button>
+                </div>
+              )}
+
+              {showNaikKelas ? (
+                <div style={dkCenterBlock}>
+                  <div style={dkCenterTitle}>Naik Kelas:</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="checkbox" disabled={stage !== 'idrg_input'} checked={dataKlinis.upgrade_class_ind} onChange={(e) => setDK('upgrade_class_ind', e.target.checked)} /> Naik Kelas
+                    </label>
+                    {dataKlinis.upgrade_class_ind && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Kenaikan Ke Kelas</span>
+                          <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 130 }} value={dataKlinis.upgrade_class_class} onChange={(e) => setDK('upgrade_class_class', e.target.value)}>
+                            <option value="kelas_1">Kelas 1</option>
+                            <option value="kelas_2">Kelas 2</option>
+                            <option value="vip">VIP</option>
+                          </select>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Lama Hari</span>
+                          <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.upgrade_class_los} onChange={(e) => setDK('upgrade_class_los', e.target.value)} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Sumber Pembayaran Tambahan</span>
+                          <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 170 }} value={dataKlinis.upgrade_class_payor} onChange={(e) => setDK('upgrade_class_payor', e.target.value)}>
+                            <option value="peserta">Peserta</option>
+                            <option value="pemberi_kerja">Pemberi Kerja</option>
+                            <option value="asuransi_tambahan">Asuransi Tambahan</option>
+                          </select>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>% Koefisien Tambahan</span>
+                          <input type="number" disabled={stage !== 'idrg_input'} style={dkCenterInput} value={dataKlinis.add_payment_pct} onChange={(e) => setDK('add_payment_pct', e.target.value)} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : stage === 'idrg_input' && (
+                <div style={{ ...dkCenterBlock, padding: '8px 10px' }}>
+                  <button type="button" onClick={() => setRevealNaikKelas(true)} style={dkRevealLink}>+ Tambah Naik Kelas</button>
+                </div>
+              )}
+
+              {showBayiLahir ? (
+                <div style={{ ...dkCenterBlock, borderBottom: 'none' }}>
+                  <div style={dkCenterTitle}>Status Bayi Lahir (khusus Jaminan Bayi Baru Lahir):</div>
+                  <select disabled={stage !== 'idrg_input'} style={{ ...gInput, width: 190, margin: '0 auto' }} value={dataKlinis.bayi_lahir_status_cd} onChange={(e) => setDK('bayi_lahir_status_cd', e.target.value)}>
                     <option value="">— tidak berlaku —</option>
                     <option value="1">Tanpa Kelainan</option>
                     <option value="2">Dengan Kelainan</option>
                   </select>
                 </div>
-              </div>
+              ) : stage === 'idrg_input' && (
+                <div style={{ padding: '8px 10px', textAlign: 'center' }}>
+                  <button type="button" onClick={() => setRevealBayiLahir(true)} style={dkRevealLink}>+ Tambah Status Bayi Lahir</button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1732,14 +1824,71 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
             )}
 
             {idrgResult && (
-              <div style={{ marginTop: 12, padding: 10, background: idrgUngroupable ? '#fef2f2' : '#f0fdf4', border: `1px solid ${idrgUngroupable ? '#fecaca' : '#bbf7d0'}`, fontSize: 12.5 }}>
-                <div><b>DRG:</b> {idrgResult.drg_code} — {idrgResult.drg_description}</div>
-                <div><b>MDC:</b> {idrgResult.mdc_number} — {idrgResult.mdc_description}</div>
-                {idrgResult.total_tarif && <div><b>Total Tarif:</b> Rp {Number(idrgResult.total_tarif).toLocaleString('id-ID')}</div>}
-                {idrgUngroupable && <div style={{ color: '#991b1b', fontWeight: 600 }}>Ungroupable — tidak bisa lanjut Final iDRG.</div>}
+              <div style={grBox(idrgUngroupable)}>
+                <div style={grHeader(idrgUngroupable)}>
+                  Hasil Grouping iDRG{idrgResult.status_cd === 'final' ? ' - Final' : ''}
+                </div>
+                {coderNik && (
+                  <div style={grRow(idrgUngroupable)}>
+                    <div style={grLabel(idrgUngroupable)}>Info</div>
+                    <div style={grValue}>
+                      Coder {coderNik}
+                      {idrgResult.script_version ? ` — ${idrgResult.script_version}` : ''}
+                      {idrgResult.logic_version ? ` / ${idrgResult.logic_version}` : ''}
+                    </div>
+                  </div>
+                )}
+                <div style={grRow(idrgUngroupable)}>
+                  <div style={grLabel(idrgUngroupable)}>Jenis Rawat</div>
+                  <div style={grValue}>{header?.tipe === 'RI' ? 'Rawat Inap' : 'Rawat Jalan'}{header?.los ? ` (${header.los})` : ''}</div>
+                </div>
+                <div style={grRow(idrgUngroupable)}>
+                  <div style={grLabel(idrgUngroupable)}>MDC</div>
+                  <div style={grValue}>{idrgResult.mdc_description} <span style={{ color: '#6b7280' }}>({idrgResult.mdc_number})</span></div>
+                </div>
+                <div style={grRow(idrgUngroupable)}>
+                  <div style={grLabel(idrgUngroupable)}>DRG</div>
+                  <div style={{ ...grValue, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span>{idrgResult.drg_description} <span style={{ color: '#6b7280' }}>({idrgResult.drg_code})</span></span>
+                    {idrgResult.cost_weight != null && <span style={{ color: '#2563eb', whiteSpace: 'nowrap' }}>CW: {idrgResult.cost_weight}</span>}
+                  </div>
+                </div>
+                {idrgResult.kris_cost_weight != null && (
+                  <div style={grRow(idrgUngroupable)}>
+                    <div style={grLabel(idrgUngroupable)}>KRIS Cost Weight</div>
+                    <div style={grValue}>{idrgResult.kris_cost_weight}</div>
+                  </div>
+                )}
+                {idrgResult.total_cost_weight != null && (
+                  <div style={grRow(idrgUngroupable)}>
+                    <div style={grLabel(idrgUngroupable)}>Total Cost Weight</div>
+                    <div style={grValue}>{idrgResult.total_cost_weight}</div>
+                  </div>
+                )}
+                {idrgResult.nbr != null && (
+                  <div style={grRow(idrgUngroupable)}>
+                    <div style={grLabel(idrgUngroupable)}>NBR</div>
+                    <div style={grValue}>Rp {Number(idrgResult.nbr).toLocaleString('id-ID')}</div>
+                  </div>
+                )}
+                {idrgResult.total_tarif != null && (
+                  <div style={grRow(idrgUngroupable)}>
+                    <div style={grLabel(idrgUngroupable)}>Total Klaim</div>
+                    <div style={{ ...grValue, fontWeight: 700, fontSize: 13.5 }}>Rp {Number(idrgResult.total_tarif).toLocaleString('id-ID')}</div>
+                  </div>
+                )}
+                <div style={grRow(idrgUngroupable)}>
+                  <div style={grLabel(idrgUngroupable)}>Status</div>
+                  <div style={{ ...grValue, fontWeight: 600, color: idrgResult.status_cd === 'final' ? '#16a34a' : '#374151' }}>{idrgResult.status_cd || '-'}</div>
+                </div>
+                {idrgUngroupable && (
+                  <div style={{ padding: '8px 10px', color: '#991b1b', fontWeight: 600, fontSize: 12, borderTop: '1px solid #fecaca' }}>
+                    Ungroupable — tidak bisa lanjut Final iDRG.
+                  </div>
+                )}
 
                 {Array.isArray(idrgResult.topup_options) && idrgResult.topup_options.length > 0 && stage === 'idrg_grouped' && (
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ padding: '8px 10px', borderTop: '1px solid #bbf7d0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <select style={{ ...gInput, width: 240 }} value={idrgTopupPick} onChange={(e) => setIdrgTopupPick(e.target.value)}>
                       <option value="">— pilih top up —</option>
                       {idrgResult.topup_options.map((t: any) => (
@@ -1802,13 +1951,92 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
               )}
 
               {inacbgResult && (
-                <div style={{ marginTop: 12, padding: 10, background: inacbgUngroupable ? '#fef2f2' : '#f0fdf4', border: `1px solid ${inacbgUngroupable ? '#fecaca' : '#bbf7d0'}`, fontSize: 12.5 }}>
-                  <div><b>CBG:</b> {inacbgResult.cbg?.code} — {inacbgResult.cbg?.description}</div>
-                  {inacbgResult.tariff && <div><b>Tarif:</b> Rp {Number(inacbgResult.tariff).toLocaleString('id-ID')}</div>}
-                  {inacbgUngroupable && <div style={{ color: '#991b1b', fontWeight: 600 }}>Ungroupable — tidak bisa lanjut Final INACBG.</div>}
+                <div style={grBox(inacbgUngroupable)}>
+                  <div style={grHeader(inacbgUngroupable)}>
+                    Hasil Grouping INACBG{inacbgResult.status_cd === 'final' ? ' - Final' : ''}
+                  </div>
+                  {coderNik && (
+                    <div style={grRow(inacbgUngroupable)}>
+                      <div style={grLabel(inacbgUngroupable)}>Info</div>
+                      <div style={grValue}>
+                        Coder {coderNik}
+                        {inacbgResult.kelas ? ` — ${String(inacbgResult.kelas).replace('kelas_', 'Kelas ')}` : ''}
+                        {inacbgResult.inacbg_version ? ` (${inacbgResult.inacbg_version})` : ''}
+                      </div>
+                    </div>
+                  )}
+                  <div style={grRow(inacbgUngroupable)}>
+                    <div style={grLabel(inacbgUngroupable)}>Jenis Rawat</div>
+                    <div style={grValue}>{header?.tipe === 'RI' ? 'Rawat Inap' : 'Rawat Jalan'}{header?.los ? ` (${header.los})` : ''}</div>
+                  </div>
+                  <div style={grRow(inacbgUngroupable)}>
+                    <div style={grLabel(inacbgUngroupable)}>Group</div>
+                    <div style={{ ...grValue, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span>{inacbgResult.cbg?.description} <span style={{ color: '#6b7280' }}>({inacbgResult.cbg?.code})</span></span>
+                      {inacbgResult.tariff != null && <span style={{ color: '#2563eb', whiteSpace: 'nowrap' }}>Rp {Number(inacbgResult.tariff).toLocaleString('id-ID')}</span>}
+                    </div>
+                  </div>
+
+                  {/* Dialyzer/Kantong Darah/Alteplase — BUKAN bagian Data
+                      Klinis (Step 2) krn kondisi munculnya (kode CBG N-3-15-0
+                      / G-4-14-*) baru diketahui SESUDAH grouping INACBG,
+                      persis posisinya di tampilan resmi (muncul sbg baris
+                      tambahan di hasil grouping, sebelum Total Klaim/Final). */}
+                  {showDialyzerKantong && (
+                    <>
+                      <div style={grRow(inacbgUngroupable)}>
+                        <div style={grLabel(inacbgUngroupable)}>Penggunaan Dialyzer</div>
+                        <div style={{ ...grValue, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={!dataKlinis.dializer_single_use} onChange={() => setDK('dializer_single_use', false)} /> Multiple Use (reuse)
+                          </label>
+                          <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={dataKlinis.dializer_single_use} onChange={() => setDK('dializer_single_use', true)} /> Single Use
+                          </label>
+                        </div>
+                      </div>
+                      <div style={grRow(inacbgUngroupable)}>
+                        <div style={grLabel(inacbgUngroupable)}>Transfusi Darah</div>
+                        <div style={{ ...grValue, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          Jumlah kantong darah:
+                          <input type="number" disabled={stage !== 'inacbg_grouped'} style={dkNumInput} value={dataKlinis.kantong_darah} onChange={(e) => setDK('kantong_darah', e.target.value)} />
+                          kantong
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {showAlteplase && (
+                    <div style={grRow(inacbgUngroupable)}>
+                      <div style={grLabel(inacbgUngroupable)}>Pemberian Alteplase</div>
+                      <div style={{ ...grValue, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={!dataKlinis.alteplase_ind} onChange={() => setDK('alteplase_ind', false)} /> Tidak diberikan
+                        </label>
+                        <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={dataKlinis.alteplase_ind} onChange={() => setDK('alteplase_ind', true)} /> Diberikan
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {inacbgResult.tariff != null && (
+                    <div style={grRow(inacbgUngroupable)}>
+                      <div style={grLabel(inacbgUngroupable)}>Total Klaim</div>
+                      <div style={{ ...grValue, fontWeight: 700, fontSize: 13.5 }}>Rp {Number(inacbgResult.tariff).toLocaleString('id-ID')}</div>
+                    </div>
+                  )}
+                  <div style={grRow(inacbgUngroupable)}>
+                    <div style={grLabel(inacbgUngroupable)}>Status</div>
+                    <div style={{ ...grValue, fontWeight: 600, color: inacbgResult.status_cd === 'final' ? '#16a34a' : '#374151' }}>{inacbgResult.status_cd || '-'}</div>
+                  </div>
+                  {inacbgUngroupable && (
+                    <div style={{ padding: '8px 10px', color: '#991b1b', fontWeight: 600, fontSize: 12, borderTop: '1px solid #fecaca' }}>
+                      Ungroupable — tidak bisa lanjut Final INACBG.
+                    </div>
+                  )}
 
                   {Array.isArray(inacbgResult.special_cmg_option) && inacbgResult.special_cmg_option.length > 0 && stage === 'inacbg_grouped' && (
-                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ padding: '8px 10px', borderTop: '1px solid #bbf7d0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <select style={{ ...gInput, width: 240 }} value={inacbgCmgPick} onChange={(e) => setInacbgCmgPick(e.target.value)}>
                         <option value="">— pilih special CMG —</option>
                         {inacbgResult.special_cmg_option.map((t: any) => (
@@ -1818,42 +2046,6 @@ const GroupingFormView: React.FC<{ noRawat: string; header: GroupingHeader | nul
                       <button type="button" onClick={handleGroupInacbgStage2} disabled={!inacbgCmgPick || !!busy} style={!inacbgCmgPick || busy ? btnDisabled : btnSecondary}>
                         Terapkan CMG (Stage 2)
                       </button>
-                    </div>
-                  )}
-
-                  {/* Dialyzer/Kantong Darah/Alteplase — BUKAN bagian Data
-                      Klinis (Step 2) krn kondisi munculnya (kode CBG N-3-15-0
-                      / G-4-14-*) baru diketahui SESUDAH grouping INACBG,
-                      persis posisinya di tampilan resmi (muncul sbg baris
-                      tambahan di hasil grouping, sebelum Final INACBG). */}
-                  {showDialyzerKantong && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #bbf7d0' }}>
-                      <div style={dkRow}>
-                        <span style={dkFieldLabel}>Penggunaan Dialyzer</span>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={!dataKlinis.dializer_single_use} onChange={() => setDK('dializer_single_use', false)} /> Multiple Use (reuse)
-                        </label>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={dataKlinis.dializer_single_use} onChange={() => setDK('dializer_single_use', true)} /> Single Use
-                        </label>
-                      </div>
-                      <div style={dkRow}>
-                        <span style={dkFieldLabel}>Jumlah Kantong Darah</span>
-                        <input type="number" disabled={stage !== 'inacbg_grouped'} style={dkNumInput} value={dataKlinis.kantong_darah} onChange={(e) => setDK('kantong_darah', e.target.value)} />
-                      </div>
-                    </div>
-                  )}
-                  {showAlteplase && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #bbf7d0' }}>
-                      <div style={dkRow}>
-                        <span style={dkFieldLabel}>Pemberian Alteplase</span>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={!dataKlinis.alteplase_ind} onChange={() => setDK('alteplase_ind', false)} /> Tidak diberikan
-                        </label>
-                        <label style={{ fontSize: 11.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="radio" disabled={stage !== 'inacbg_grouped'} checked={dataKlinis.alteplase_ind} onChange={() => setDK('alteplase_ind', true)} /> Diberikan
-                        </label>
-                      </div>
                     </div>
                   )}
                 </div>

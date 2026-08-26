@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +19,11 @@ import (
 //
 // jnspelayanan di bridging_sep: "1" = Rawat Inap, "2" = Rawat Jalan (sama
 // persis konvensi yg sudah dipakai BpjsSep.tsx/getBridgingSepList).
+//
+// CATATAN: kolom "Status Klaim" (checkpoint lokal + live get_claim_data per
+// SEP ke E-Klaim) pernah ada di sini tapi DIHAPUS — panggilan live per baris
+// bikin List Klaim jadi sangat lambat menampilkan pasien, jadi lebih baik
+// tidak ada drpd ada tapi bikin worklist ini tidak nyaman dipakai.
 
 type ListKlaimRow struct {
 	NoRawat  string `json:"no_rawat"`
@@ -36,14 +40,6 @@ type ListKlaimRow struct {
 	TglSep    string `json:"tgl_sep"`
 	TglRegis  string `json:"tgl_regis"`
 	TglPulang string `json:"tgl_pulang"`
-	// StatusKlaim — DEFAULT dari checkpoint lokal (fallback cepat kalau
-	// E-Klaim tidak terjangkau), tapi kalau kredensial E-Klaim tersedia &
-	// server bisa dihubungi, DITIMPA hasil live get_claim_data
-	// (DeriveStatusKlaimLive di eklaim_handler.go) — supaya akurat utk klaim
-	// yg diproses lewat aplikasi APA PUN (Khanza lama, aplikasi E-Klaim resmi
-	// langsung, atau ERMApp ini), bukan cuma yg kebetulan nulis checkpoint
-	// lokal.
-	StatusKlaim string `json:"status_klaim"`
 }
 
 // GET /api/casemix/list-klaim?jenis=ralan|ranap&tgl_dari=&tgl_sampai=&search=
@@ -88,19 +84,9 @@ func getListKlaim(db *sql.DB) gin.HandlerFunc {
 					FROM kamar_inap ki2
 					WHERE ki2.no_rawat = bs.no_rawat
 					ORDER BY ki2.tgl_masuk DESC, ki2.jam_masuk DESC LIMIT 1
-				), '') AS tgl_pulang,
-				CASE
-					WHEN igs1.no_sep IS NOT NULL OR igs12.no_sep IS NOT NULL THEN 'Sudah Grouping INACBG'
-					WHEN idt.no_sep IS NOT NULL THEN 'Data Klaim Terkirim'
-					WHEN ikb.no_sep IS NOT NULL THEN 'Klaim Dibuat'
-					ELSE 'Belum Diproses'
-				END AS status_klaim
+				), '') AS tgl_pulang
 			FROM bridging_sep bs
 			LEFT JOIN reg_periksa rp ON rp.no_rawat = bs.no_rawat
-			LEFT JOIN inacbg_klaim_baru ikb ON ikb.no_sep = bs.no_sep
-			LEFT JOIN inacbg_data_terkirim idt ON idt.no_sep = bs.no_sep
-			LEFT JOIN inacbg_grouping_stage1 igs1 ON igs1.no_sep = bs.no_sep
-			LEFT JOIN inacbg_grouping_stage12 igs12 ON igs12.no_sep = bs.no_sep
 			WHERE bs.jnspelayanan = ? AND bs.tglsep BETWEEN ? AND ?`
 		args := []interface{}{jnsPelayanan, tglDari, tglSampai}
 
@@ -122,33 +108,9 @@ func getListKlaim(db *sql.DB) gin.HandlerFunc {
 		for rows.Next() {
 			var r ListKlaimRow
 			if err := rows.Scan(&r.NoRawat, &r.NoRM, &r.NmPasien, &r.Unit, &r.Kamar, &r.NmDokter,
-				&r.NoSep, &r.TglSep, &r.TglRegis, &r.TglPulang, &r.StatusKlaim); err == nil {
+				&r.NoSep, &r.TglSep, &r.TglRegis, &r.TglPulang); err == nil {
 				list = append(list, r)
 			}
-		}
-
-		// Timpa status default (checkpoint lokal) dgn hasil LIVE get_claim_data
-		// per SEP — paralel dgn batas concurrency (jangan banjiri E-Klaim) &
-		// timeout pendek per panggilan (satu SEP lambat tidak boleh bikin
-		// seluruh list nunggu lama). Kalau E-Klaim belum dikonfigurasi / semua
-		// panggilan gagal konek, diam-diam tetap pakai status checkpoint lokal.
-		if cfg, cfgErr := getEklaimConfig(db); cfgErr == nil {
-			const maxConcurrent = 6
-			const perCallTimeout = 8 * time.Second
-			sem := make(chan struct{}, maxConcurrent)
-			var wg sync.WaitGroup
-			for i := range list {
-				wg.Add(1)
-				sem <- struct{}{}
-				go func(idx int) {
-					defer wg.Done()
-					defer func() { <-sem }()
-					if status, ok := DeriveStatusKlaimLive(cfg, list[idx].NoSep, perCallTimeout); ok {
-						list[idx].StatusKlaim = status
-					}
-				}(i)
-			}
-			wg.Wait()
 		}
 
 		c.JSON(http.StatusOK, list)

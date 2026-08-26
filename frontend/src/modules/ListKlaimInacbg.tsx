@@ -11,22 +11,6 @@ import { GroupingInacbgView } from './GroupingInacbg';
 type ListKlaimRow = {
   no_rawat: string; no_rm: string; nm_pasien: string; unit: string; kamar: string;
   nm_dokter: string; no_sep: string; tgl_sep: string; tgl_regis: string; tgl_pulang: string;
-  status_klaim: string;
-};
-
-// Badge warna per tahap Status Klaim — hasil LIVE get_claim_data ke E-Klaim
-// (backend/list_klaim_handler.go > DeriveStatusKlaimLive), jadi akurat utk
-// klaim yg diproses lewat aplikasi apa pun (bukan cuma lewat ERMApp ini),
-// diurutkan makin hijau/tegas makin lanjut prosesnya.
-const STATUS_KLAIM_STYLE: Record<string, { bg: string; color: string }> = {
-  'Belum Diproses': { bg: '#f3f4f6', color: '#6b7280' },
-  'Klaim Dibuat': { bg: '#fef3c7', color: '#92400e' },
-  'Data Klaim Terkirim': { bg: '#fde68a', color: '#78350f' },
-  'Grouping iDRG': { bg: '#dbeafe', color: '#1e40af' },
-  'iDRG Final': { bg: '#bfdbfe', color: '#1e3a8a' },
-  'Grouping INACBG': { bg: '#e0e7ff', color: '#3730a3' },
-  'INACBG Final': { bg: '#c7d2fe', color: '#312e81' },
-  'Klaim Final': { bg: '#dcfce7', color: '#166534' },
 };
 
 type Jenis = 'ralan' | 'ranap';
@@ -43,8 +27,8 @@ const filterInputStyle: React.CSSProperties = {
 // Tab Rawat Jalan tampilkan Unit + Nama Dokter; tab Rawat Inap tampilkan
 // Kamar sbg gantinya (tanpa Nama Dokter) — sesuai kolom List Klaim Khanza
 // Desktop yang beda antara dua tab ini.
-const COLUMNS_RALAN = ['No Rawat', 'No RM', 'Nama Pasien', 'Unit', 'Nama Dokter', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang', 'Status Klaim'];
-const COLUMNS_RANAP = ['No Rawat', 'No RM', 'Nama Pasien', 'Kamar', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang', 'Status Klaim'];
+const COLUMNS_RALAN = ['No Rawat', 'No RM', 'Nama Pasien', 'Unit', 'Nama Dokter', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang'];
+const COLUMNS_RANAP = ['No Rawat', 'No RM', 'Nama Pasien', 'Kamar', 'No SEP', 'Tgl SEP', 'Tgl. Regis', 'Tgl Pulang'];
 
 export const ListKlaimInacbgView: React.FC = () => {
   const [jenis, setJenis] = React.useState<Jenis>('ralan');
@@ -168,15 +152,6 @@ export const ListKlaimInacbgView: React.FC = () => {
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.tgl_sep || '-'}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.tgl_regis || '-'}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{r.tgl_pulang || '-'}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '3px 10px', borderRadius: 2, fontSize: 11, fontWeight: 400,
-                        background: (STATUS_KLAIM_STYLE[r.status_klaim] || STATUS_KLAIM_STYLE['Belum Diproses']).bg,
-                        color: (STATUS_KLAIM_STYLE[r.status_klaim] || STATUS_KLAIM_STYLE['Belum Diproses']).color,
-                      }}>
-                        {r.status_klaim || 'Belum Diproses'}
-                      </span>
-                    </td>
                   </tr>
                 );
               })

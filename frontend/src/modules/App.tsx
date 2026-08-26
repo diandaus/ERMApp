@@ -60,6 +60,12 @@ export type AppUser = {
   allowed_modules?: string;
   nip?: string;
   kd_dokter?: string;
+  // akun_mandiri — true kalau akun ini didaftarkan sendiri lewat halaman
+  // "Daftar" (bukan dibuatkan admin). Role akun mandiri sekarang bisa
+  // macam2 tergantung departemen (dokter/farmasi/radiologi/dst, bukan
+  // cuma 'pegawai'), jadi field INI (bukan role) yang jadi penanda utk
+  // paksa ke PresensiMobileView — lihat pemakaiannya di bawah.
+  akun_mandiri?: boolean;
 };
 
 type LoginViewProps = {
@@ -1072,14 +1078,18 @@ export const App: React.FC = () => {
     );
   }
 
-  // role 'pegawai' (akun hasil Daftar mandiri, lihat RegisterView di atas)
-  // SELALU dipaksa ke PresensiMobileView, walau login dari desktop —
+  // Akun mandiri (hasil "Daftar", lihat RegisterView di atas) SELALU
+  // dipaksa ke PresensiMobileView, walau login dari desktop —
   // PresensiMobileView sudah membatasi Menu Utama-nya ke Lembur/Cuti/Izin/
   // Tugas/Lapor IT saja (lihat LayananCard). Kalau cuma mengandalkan
   // isMobileLogin, akun ini bisa lolos lewat browser desktop lebar dan
   // mendarat di KepegawaianView (panel HR admin penuh, tanpa filter),
   // membocorkan akses yang seharusnya baru dibuka admin.
-  if (isMobileLogin || user.role === 'pegawai') {
+  // PENTING: dicek lewat `user.akun_mandiri`, BUKAN `user.role === 'pegawai'`
+  // — sejak role akun mandiri diturunkan otomatis dari departemen (bisa
+  // 'dokter'/'farmasi'/'radiologi'/dst, lihat auth_register_handler.go),
+  // role sendiri sudah tidak cukup jadi penanda "ini akun mandiri".
+  if (isMobileLogin || user.akun_mandiri) {
     return <PresensiMobileView user={user} onLogout={handleLogout} />;
   }
 

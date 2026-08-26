@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,11 @@ import (
 // 'eklaim') — pola SAMA persis dgn getBpjsConfigByKode (VClaim dkk),
 // dikelola lewat Admin.tsx > Pengaturan Bridging (perlu ditambah entry
 // BRIDGING_DEFS di frontend, belum termasuk di sini).
+
+// base64LikeRe — validasi cepat "teksnya kemungkinan base64" (alfabet
+// base64 + whitespace) sebelum dicoba dekripsi — lihat pemakaian di
+// eklaimRequestTimeout.
+var base64LikeRe = regexp.MustCompile(`^[A-Za-z0-9+/=\s]*$`)
 
 type eklaimConfig struct {
 	URL       string
@@ -214,7 +220,17 @@ func eklaimRequestTimeout(cfg *eklaimConfig, method string, extraMetadata map[st
 			text = strings.Join(lines[1:len(lines)-1], "")
 		}
 	}
-	decrypted, err := eklaimDecrypt(strings.TrimSpace(text), cfg.Key)
+	text = strings.TrimSpace(text)
+	// Kadang server E-Klaim sendiri lagi bermasalah (mis. database internalnya
+	// penuh koneksi) dan balas pesan error POLOS, bukan payload terenkripsi
+	// (dikonfirmasi nyata: "Connect Error (1040) Too many connections") —
+	// deteksi dini pakai validasi karakter base64 spy pesannya jelas ("server
+	// E-Klaim bermasalah") drpd nyasar jadi "base64 tidak valid" yg
+	// membingungkan (seolah bug di kita, padahal bukan).
+	if !base64LikeRe.MatchString(text) {
+		return nil, fmt.Errorf("server E-Klaim membalas error (bukan respons terenkripsi, kemungkinan server E-Klaim sedang bermasalah/sibuk): %s", text)
+	}
+	decrypted, err := eklaimDecrypt(text, cfg.Key)
 	if err != nil {
 		return nil, fmt.Errorf("gagal dekripsi respons E-Klaim: %w", err)
 	}
@@ -296,67 +312,6 @@ func writeInacbgGroupingStage12(db *sql.DB, noSep string, respInacbg map[string]
 		INSERT INTO inacbg_grouping_stage12 (no_sep, code_cbg, deskripsi, tarif) VALUES (?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE code_cbg=VALUES(code_cbg), deskripsi=VALUES(deskripsi), tarif=VALUES(tarif)
 	`, noSep, asString(cbg["code"]), asString(cbg["description"]), tarif)
-}
-
-// DeriveStatusKlaimLive — panggil get_claim_data LANGSUNG ke server E-Klaim
-// dan turunkan status, PERSIS logika sync stage di GroupingFormView
-// (frontend/src/modules/GroupingInacbg.tsx, efek "Sinkronkan progres...").
-// Sengaja LIVE (bukan baca tabel checkpoint lokal inacbg_klaim_baru dkk)
-// supaya akurat utk klaim yg diproses lewat aplikasi APA PUN — Khanza lama,
-// aplikasi E-Klaim resmi langsung, atau ERMApp ini — bukan cuma yg
-// kebetulan lewat salah satu aplikasi yg nulis checkpoint lokal itu.
-// Return (status, ok) — ok=false artinya gagal konek/timeout, PEMANGGIL
-// jangan menimpa status fallback dgn ini; ok=true (termasuk utk "Belum
-// Diproses" krn E-Klaim jawab bukan "Ok") berarti hasil definitif.
-func DeriveStatusKlaimLive(cfg *eklaimConfig, noSep string, timeout time.Duration) (string, bool) {
-	if noSep == "" {
-		return "", false
-	}
-	result, err := eklaimRequestTimeout(cfg, "get_claim_data", nil, map[string]interface{}{"nomor_sep": noSep}, timeout)
-	if err != nil {
-		return "", false
-	}
-	if !eklaimResultOk(result) {
-		return "Belum Diproses", true
-	}
-	resp, _ := result["response"].(map[string]interface{})
-	d, _ := resp["data"].(map[string]interface{})
-	if d == nil {
-		return "Belum Diproses", true
-	}
-
-	grouper, _ := d["grouper"].(map[string]interface{})
-	idrg, _ := grouper["response_idrg"].(map[string]interface{})
-	inacbg, _ := grouper["response_inacbg"].(map[string]interface{})
-	idrgGrouped := idrg != nil && asString(idrg["drg_code"]) != ""
-	inacbgCode := ""
-	if inacbg != nil {
-		if cbg, ok := inacbg["cbg"].(map[string]interface{}); ok {
-			inacbgCode = asString(cbg["code"])
-		}
-	}
-	inacbgGrouped := inacbgCode != ""
-
-	status := "Klaim Dibuat"
-	if asString(d["coder_nik"]) != "" {
-		status = "Data Klaim Terkirim"
-	}
-	if idrgGrouped {
-		status = "Grouping iDRG"
-	}
-	if idrgGrouped && asString(idrg["status_cd"]) == "final" {
-		status = "iDRG Final"
-	}
-	if idrgGrouped && asString(idrg["status_cd"]) == "final" && inacbgGrouped && !strings.HasPrefix(inacbgCode, "X") {
-		status = "Grouping INACBG"
-	}
-	if inacbgGrouped && asString(inacbg["status_cd"]) == "final" {
-		status = "INACBG Final"
-	}
-	if asString(d["klaim_status_cd"]) == "final" {
-		status = "Klaim Final"
-	}
-	return status, true
 }
 
 // POST /api/bridging/eklaim/new-claim

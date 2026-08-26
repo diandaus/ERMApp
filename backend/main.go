@@ -129,6 +129,16 @@ type AppUser struct {
 	AllowedModules string `json:"allowed_modules"`
 	Nip            string `json:"nip"`
 	KdDokter       string `json:"kd_dokter"`
+	// AkunMandiri — true kalau akun ini dibuat sendiri lewat halaman
+	// "Daftar" (registerAkunMandiri di auth_register_handler.go), BUKAN
+	// dibuatkan admin lewat Admin > Kelola User. Dipakai App.tsx (web) utk
+	// paksa akun ini SELALU ke PresensiMobileView (menu terbatas) walau
+	// login dari browser desktop lebar — sebelumnya dicek lewat
+	// `role === 'pegawai'`, tapi sejak role akun mandiri diturunkan
+	// otomatis dari departemen (bisa jadi 'dokter'/'farmasi'/'radiologi'/
+	// dst, bukan cuma 'pegawai'), field role sendiri sudah TIDAK CUKUP jadi
+	// penanda "ini akun mandiri" — makanya perlu flag terpisah ini.
+	AkunMandiri bool `json:"akun_mandiri"`
 }
 
 type LoginRequest struct {
@@ -240,6 +250,17 @@ func ensureAppUsersTable(db *sql.DB) error {
 	// pembatasan akses apapun.
 	if _, err := db.Exec(
 		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS departemen VARCHAR(100) NOT NULL DEFAULT ''`,
+	); err != nil {
+		return err
+	}
+
+	// Migrasi kolom akun_mandiri — penanda "akun ini didaftarkan sendiri
+	// lewat halaman Daftar" (bukan dibuatkan admin), dipakai App.tsx (web)
+	// utk paksa akun ini SELALU ke PresensiMobileView (menu terbatas) walau
+	// login dari desktop, TERLEPAS dari role-nya (role akun mandiri kini
+	// bisa macam2 tergantung departemen — lihat komentar struct AppUser).
+	if _, err := db.Exec(
+		`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS akun_mandiri TINYINT(1) NOT NULL DEFAULT 0`,
 	); err != nil {
 		return err
 	}
@@ -982,6 +1003,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi kolom petugas: %v", err)
 	}
 
+	if err := ensureDepartemenRoleTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel departemen_role: %v", err)
+	}
+
 	if err := ensurePembelianExtTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel pembelian_ext: %v", err)
 	}
@@ -1065,9 +1090,10 @@ func main() {
 
 		var user AppUser
 		var isActiveInt int
+		var akunMandiriInt int
 		var allowedModules sql.NullString
 		err := db.QueryRow(
-			`SELECT id, username, full_name, role, is_active, allowed_modules, nip, kd_dokter
+			`SELECT id, username, full_name, role, is_active, allowed_modules, nip, kd_dokter, akun_mandiri
 			 FROM app_users
 			 WHERE username = ? AND password_hash = ?
 			 LIMIT 1`,
@@ -1082,6 +1108,7 @@ func main() {
 			&allowedModules,
 			&user.Nip,
 			&user.KdDokter,
+			&akunMandiriInt,
 		)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -1097,6 +1124,7 @@ func main() {
 		}
 
 		user.IsActive = isActiveInt == 1
+		user.AkunMandiri = akunMandiriInt == 1
 		if allowedModules.Valid {
 			user.AllowedModules = allowedModules.String
 		}
