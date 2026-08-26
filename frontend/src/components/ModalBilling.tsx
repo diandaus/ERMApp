@@ -261,13 +261,14 @@ export const ModalBilling: React.FC<ModalBillingProps> = ({ noRawat, namaPasien,
           if (idxColon === -1) {
             rightText(namaTrim, 8);
           } else {
-            // Label "Total <kategori> :" SENGAJA diindentasi (itemIndent),
-            // bukan rata kiri sejajar header kategori — biar keliatan
-            // menjorok ke dalam, sama spt nama item. Titik dua digabung
-            // jadi SATU string dgn labelnya (bukan digambar terpisah di
-            // col.pemisah) — krn col.pemisah kebetulan == col.uraian+
-            // itemIndent, kalau dipisah keduanya numpuk di titik yg sama.
-            text(namaTrim.slice(0, idxColon) + ' :', col.uraian + itemIndent, 8);
+            // Label "Total <kategori> :" diindentasi 2x itemIndent (lebih
+            // dalam dari nama item) — biar makin keliatan sbg baris
+            // penutup/ringkasan kategori, bukan rata kiri sejajar header.
+            // Titik dua digabung jadi SATU string dgn labelnya (bukan
+            // digambar terpisah di col.pemisah) — krn posisi col.pemisah
+            // sekarang ada DI DALAM area indentasi ini, kalau dipisah
+            // keduanya numpuk.
+            text(namaTrim.slice(0, idxColon) + ' :', col.uraian + itemIndent * 2, 8);
             rightAlignAt(namaTrim.slice(idxColon + 3), colEnd.total, 8);
           }
         } else {
