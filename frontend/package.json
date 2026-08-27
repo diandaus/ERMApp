@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:presensi": "vite build --config vite.presensi.config.ts && mv dist-presensi/index-presensi.html dist-presensi/index.html",
     "build:capacitor": "VITE_API_BASE_URL=http://192.168.0.100:8080 vite build",
     "preview": "vite preview",
     "lint": "echo \"no linter configured yet\""

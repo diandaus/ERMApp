@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { toSpokenCase } from '../utils/tts';
-import type { AppUser } from './App';
+import type { AppUser } from './Auth';
 import { ModalPengajuanSEP, type SepItem } from '../components/ModalPengajuanSEP';
 import { HistoriPelayananBpjsModal } from '../components/HistoriPelayananBpjsModal';
 import { SepPrintView } from '../components/SepPrintView';
