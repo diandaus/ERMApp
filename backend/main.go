@@ -1574,6 +1574,7 @@ func main() {
 	r.GET("/api/presensi/rekap", getPresensiRekap(db))
 	r.GET("/api/presensi/jadwal", getPresensiJadwal(db))
 	r.GET("/api/presensi/profil", getPresensiProfil(db))
+	r.PUT("/api/presensi/profil", updatePresensiProfil(db))
 	r.PUT("/api/presensi/profil/foto", updatePresensiProfilFoto(db))
 
 	// Fitur Jadwal Pegawai (Kepegawaian) — grid shift bulanan, padanan

@@ -1,5 +1,7 @@
 /// Padanan PresensiProfil di backend/presensi_handler.go (GET
-/// /api/presensi/profil?nik=) — semua field read-only kecuali photo.
+/// /api/presensi/profil?nik=). NIP & Departemen read-only; Nama/No.
+/// Handphone/Email/Photo bisa diedit lewat ProfilDetailView (lihat
+/// PresensiService.updateProfil/updateFotoProfil).
 class PresensiProfil {
   final String nik;
   final String nama;

@@ -261,6 +261,12 @@ const IconIdCard: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) 
   </svg>
 );
 
+const IconEdit: React.FC<IconProps> = ({ size = 16, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+  </svg>
+);
+
 type AppUserLite = {
   id: number;
   full_name: string;
@@ -1240,6 +1246,18 @@ const ProfilDetailView: React.FC<{ nik: string; onBack: () => void; onFotoUpdate
   const [uploading, setUploading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Mode edit — Nama/No. Handphone/Email bisa diubah dari sini, NIP
+  // TIDAK (dipakai sbg kunci pencarian baris di backend, lihat
+  // updatePresensiProfil di presensi_handler.go). formX diisi ulang dari
+  // profil tiap kali masuk mode edit (bukan langsung dari fetch), spy
+  // ketikan user tidak ketimpa kalau fetchProfil() jalan lagi di
+  // background saat lagi ngetik.
+  const [editing, setEditing] = React.useState(false);
+  const [formNama, setFormNama] = React.useState('');
+  const [formNoTelp, setFormNoTelp] = React.useState('');
+  const [formEmail, setFormEmail] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
   const fetchProfil = React.useCallback(() => {
     if (!nik) return;
     setLoading(true);
@@ -1251,6 +1269,48 @@ const ProfilDetailView: React.FC<{ nik: string; onBack: () => void; onFotoUpdate
   }, [nik]);
 
   React.useEffect(() => { fetchProfil(); }, [fetchProfil]);
+
+  const mulaiEdit = () => {
+    setFormNama(profil?.nama || '');
+    setFormNoTelp(profil?.no_telp || '');
+    setFormEmail(profil?.email || '');
+    setEditing(true);
+  };
+
+  const handleSimpanProfil = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formNama.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Nama wajib diisi', confirmButtonColor: '#059669' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/presensi/profil', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nik, nama: formNama.trim(), no_telp: formNoTelp.trim(), email: formEmail.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal memperbarui profil');
+
+      setEditing(false);
+      fetchProfil();
+      if (data.peringatan) {
+        await Swal.fire({ icon: 'warning', title: 'Sebagian tersimpan', text: data.peringatan, confirmButtonColor: '#059669' });
+      } else {
+        await Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Profil berhasil diperbarui', confirmButtonColor: '#059669', timer: 1500, showConfirmButton: false });
+      }
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#059669' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 10, color: '#9ca3af', marginBottom: 4 };
 
   const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1309,11 +1369,47 @@ const ProfilDetailView: React.FC<{ nik: string; onBack: () => void; onFotoUpdate
           </div>
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '4px 14px' }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '4px 14px 14px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Memuat...</div>
           ) : !profil ? (
             <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 24 }}>Data profil tidak ditemukan</div>
+          ) : editing ? (
+            <form onSubmit={handleSimpanProfil} style={{ paddingTop: 10 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelStyle}>NIP</label>
+                <div style={{ ...inputStyle, background: '#f3f4f6', color: '#6b7280' }}>{profil.nik}</div>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelStyle}>Nama</label>
+                <input type="text" value={formNama} onChange={e => setFormNama(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelStyle}>No. Handphone</label>
+                <input type="tel" value={formNoTelp} onChange={e => setFormNoTelp(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Email</label>
+                <input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  disabled={saving}
+                  style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: saving ? '#a7f3d0' : GRADIENT, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}
+                >
+                  {saving ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </form>
           ) : (
             <>
               <ProfilRow icon={<IconIdCard size={15} />} label="NIP" value={profil.nik} />
@@ -1321,6 +1417,18 @@ const ProfilDetailView: React.FC<{ nik: string; onBack: () => void; onFotoUpdate
               <ProfilRow icon={<IconPhone size={15} />} label="No. Handphone" value={profil.no_telp} />
               <ProfilRow icon={<IconMail size={15} />} label="Email" value={profil.email} />
               <ProfilRow icon={<IconBuilding size={15} />} label="Departemen" value={profil.departemen} />
+              <button
+                type="button"
+                onClick={mulaiEdit}
+                style={{
+                  width: '100%', marginTop: 10, marginBottom: 6, padding: '10px', borderRadius: 10, border: '1px solid #d1d5db',
+                  background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <IconEdit size={14} />
+                Edit Profil
+              </button>
             </>
           )}
         </div>

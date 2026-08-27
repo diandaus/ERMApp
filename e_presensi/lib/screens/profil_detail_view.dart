@@ -9,9 +9,10 @@ const _kGreenDark = Color(0xFF059669);
 const _kGreenLight = Color(0xFF34D399);
 const _kBorder = Color(0xFFE5E7EB);
 
-/// Padanan ProfilDetailView di PresensiMobile.tsx — data diri read-only
-/// (NIP/Nama/No.HP/Email/Departemen), satu-satunya field yg bisa diubah
-/// dari sini adalah foto profil (via FAB kamera di avatar).
+/// Padanan ProfilDetailView di PresensiMobile.tsx — data diri
+/// (NIP/Nama/No.HP/Email/Departemen). NIP & Departemen read-only; Nama/
+/// No. Handphone/Email bisa diedit lewat tombol pensil di AppBar (lihat
+/// _editing). Foto profil tetap via FAB kamera di avatar spt sebelumnya.
 class ProfilDetailView extends StatefulWidget {
   final String nik;
   final VoidCallback onFotoUpdated;
@@ -26,10 +27,24 @@ class _ProfilDetailViewState extends State<ProfilDetailView> {
   PresensiProfil? _profil;
   bool _uploadingFoto = false;
 
+  bool _editing = false;
+  bool _saving = false;
+  final _namaCtrl = TextEditingController();
+  final _noTelpCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _namaCtrl.dispose();
+    _noTelpCtrl.dispose();
+    _emailCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -44,6 +59,50 @@ class _ProfilDetailViewState extends State<ProfilDetailView> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
+    }
+  }
+
+  void _mulaiEdit() {
+    _namaCtrl.text = _profil?.nama ?? '';
+    _noTelpCtrl.text = _profil?.noTelp ?? '';
+    _emailCtrl.text = _profil?.email ?? '';
+    setState(() => _editing = true);
+  }
+
+  Future<void> _simpanProfil() async {
+    final nama = _namaCtrl.text.trim();
+    if (nama.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nama wajib diisi.'), backgroundColor: Color(0xFFDC2626)),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final resp = await PresensiService.updateProfil(
+        nik: widget.nik,
+        nama: nama,
+        noTelp: _noTelpCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() => _editing = false);
+      await _load();
+      final peringatan = resp['peringatan'] as String?;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(peringatan ?? 'Profil berhasil diperbarui.'),
+          backgroundColor: peringatan != null ? const Color(0xFFF59E0B) : _kGreenDark,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memperbarui profil: $e'), backgroundColor: const Color(0xFFDC2626)),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -118,6 +177,14 @@ class _ProfilDetailViewState extends State<ProfilDetailView> {
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF111827),
         elevation: 0,
+        actions: [
+          if (!_loading && _profil != null && !_editing)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit Profil',
+              onPressed: _mulaiEdit,
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -171,19 +238,100 @@ class _ProfilDetailViewState extends State<ProfilDetailView> {
                     const SizedBox(height: 20),
                     Container(
                       decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      child: Column(
-                        children: [
-                          _ProfilRow(icon: Icons.badge_outlined, label: 'NIP', value: _profil!.nik),
-                          _ProfilRow(icon: Icons.person_outline, label: 'Nama', value: _profil!.nama),
-                          _ProfilRow(icon: Icons.phone_outlined, label: 'No. Handphone', value: _profil!.noTelp.isEmpty ? '-' : _profil!.noTelp),
-                          _ProfilRow(icon: Icons.email_outlined, label: 'Email', value: _profil!.email.isEmpty ? '-' : _profil!.email),
-                          _ProfilRow(icon: Icons.apartment_outlined, label: 'Departemen', value: _profil!.departemen.isEmpty ? '-' : _profil!.departemen, isLast: true),
-                        ],
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: _editing ? 14 : 4),
+                      child: _editing
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('NIP', style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
+                                const SizedBox(height: 4),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                                  decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(8)),
+                                  child: Text(_profil!.nik, style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280))),
+                                ),
+                                const SizedBox(height: 12),
+                                _EditField(label: 'Nama', controller: _namaCtrl, keyboardType: TextInputType.name),
+                                const SizedBox(height: 12),
+                                _EditField(label: 'No. Handphone', controller: _noTelpCtrl, keyboardType: TextInputType.phone),
+                                const SizedBox(height: 12),
+                                _EditField(label: 'Email', controller: _emailCtrl, keyboardType: TextInputType.emailAddress),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: _saving ? null : () => setState(() => _editing = false),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          side: const BorderSide(color: Color(0xFFD1D5DB)),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        child: const Text('Batal', style: TextStyle(color: Color(0xFF374151), fontWeight: FontWeight.w600)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _saving ? null : _simpanProfil,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _kGreenDark,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        child: _saving
+                                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                            : const Text('Simpan', style: TextStyle(fontWeight: FontWeight.w600)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                _ProfilRow(icon: Icons.badge_outlined, label: 'NIP', value: _profil!.nik),
+                                _ProfilRow(icon: Icons.person_outline, label: 'Nama', value: _profil!.nama),
+                                _ProfilRow(icon: Icons.phone_outlined, label: 'No. Handphone', value: _profil!.noTelp.isEmpty ? '-' : _profil!.noTelp),
+                                _ProfilRow(icon: Icons.email_outlined, label: 'Email', value: _profil!.email.isEmpty ? '-' : _profil!.email),
+                                _ProfilRow(icon: Icons.apartment_outlined, label: 'Departemen', value: _profil!.departemen.isEmpty ? '-' : _profil!.departemen, isLast: true),
+                              ],
+                            ),
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+class _EditField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final TextInputType keyboardType;
+  const _EditField({required this.label, required this.controller, required this.keyboardType});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF))),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFD1D5DB))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFD1D5DB))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _kGreenDark)),
+          ),
+        ),
+      ],
     );
   }
 }

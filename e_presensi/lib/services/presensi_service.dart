@@ -38,6 +38,27 @@ class PresensiService {
     return ApiClient.putJson('/api/presensi/profil/foto', {'nik': nik, 'photo': photoUrl});
   }
 
+  /// Padanan PUT /api/presensi/profil (updatePresensiProfil di
+  /// presensi_handler.go) — Nama & Email disimpan ke pegawai, No.
+  /// Handphone ke petugas/dokter (NIP tidak ikut dikirim, dipakai murni
+  /// kunci pencarian baris). Balikin body mentah (bukan cuma void) krn
+  /// backend bisa sisipkan {"peringatan": "..."} kalau No. Handphone
+  /// gagal tersimpan (akun belum tertaut ke petugas/dokter) walau Nama/
+  /// Email tetap berhasil.
+  static Future<Map<String, dynamic>> updateProfil({
+    required String nik,
+    required String nama,
+    required String noTelp,
+    required String email,
+  }) {
+    return ApiClient.putJson('/api/presensi/profil', {
+      'nik': nik,
+      'nama': nama,
+      'no_telp': noTelp,
+      'email': email,
+    });
+  }
+
   static Future<String> uploadFotoProfil(List<int> bytes) async {
     final filename = 'profil-${DateTime.now().millisecondsSinceEpoch}.jpg';
     final data = await ApiClient.uploadFile('/api/upload', bytes, filename);

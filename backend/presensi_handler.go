@@ -705,8 +705,78 @@ func getPresensiProfil(db *sql.DB) gin.HandlerFunc {
 		if err := db.QueryRow(`SELECT COALESCE(no_telp,''), COALESCE(email,'') FROM petugas WHERE nip = ?`, nik).Scan(&p.NoTelp, &p.Email); err != nil {
 			db.QueryRow(`SELECT COALESCE(no_telp,''), COALESCE(email,'') FROM dokter WHERE kd_dokter = ?`, nik).Scan(&p.NoTelp, &p.Email)
 		}
+		// Fallback email ke pegawai.email — dipakai updatePresensiProfil di
+		// bawah sbg tempat simpan email hasil edit user sendiri (tabel
+		// petugas/dokter bisa jadi tidak py baris sama sekali utk akun yg
+		// daftar sendiri lewat "Daftar Akun", lihat auth_register_handler.go).
+		// Cuma dipakai kalau petugas/dokter belum py email, supaya data
+		// petugas/dokter yg SUDAH diisi admin tidak ketutup diam-diam.
+		if p.Email == "" {
+			db.QueryRow(`SELECT COALESCE(email,'') FROM pegawai WHERE nik = ?`, nik).Scan(&p.Email)
+		}
 
 		c.JSON(http.StatusOK, p)
+	}
+}
+
+// PUT /api/presensi/profil — edit profil sendiri dari tab Saya (Nama, No.
+// Handphone, Email; NIP TIDAK bisa diedit dari sini, dipakai sbg kunci
+// pencarian baris). Nama & Email disimpan ke pegawai (kolom asli, SELALU
+// ada barisnya utk nik manapun yg bisa login presensi). No. Handphone
+// TIDAK disimpan ke pegawai (tabel itu tidak py kolom telepon sama
+// sekali) — dicoba simpan ke petugas dulu (WHERE nip=nik), fallback ke
+// dokter (WHERE kd_dokter=nik), sama persis pola baca di getPresensiProfil
+// di atas. Kalau akun ini tidak py baris di petugas MAUPUN dokter (kasus
+// akun daftar-sendiri yg belum ditautkan admin), No. Handphone tidak ada
+// tempat tersimpan — dikembalikan sbg peringatan (bukan error keras),
+// krn Nama/Email tetap berhasil disimpan.
+func updatePresensiProfil(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var p struct {
+			NIK    string `json:"nik" binding:"required"`
+			Nama   string `json:"nama" binding:"required"`
+			NoTelp string `json:"no_telp"`
+			Email  string `json:"email"`
+		}
+		if err := c.ShouldBindJSON(&p); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		res, err := db.Exec(`UPDATE pegawai SET nama=?, email=? WHERE nik=?`, p.Nama, p.Email, p.NIK)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pegawai tidak ditemukan"})
+			return
+		}
+
+		// Cek keberadaan baris via COUNT(*) dulu (BUKAN cuma andalkan
+		// RowsAffected dari UPDATE) — MySQL balikin RowsAffected=0 kalau
+		// nilai yg diupdate SAMA PERSIS dgn yg lama (baris tetap match,
+		// cuma tidak dianggap "berubah"), jadi RowsAffected doang bisa
+		// salah nunjukkin "baris tidak ada" padahal cuma tidak berubah.
+		teleponTersimpan := false
+		var cnt int
+		db.QueryRow(`SELECT COUNT(*) FROM petugas WHERE nip=?`, p.NIK).Scan(&cnt)
+		if cnt > 0 {
+			db.Exec(`UPDATE petugas SET no_telp=? WHERE nip=?`, p.NoTelp, p.NIK)
+			teleponTersimpan = true
+		} else {
+			db.QueryRow(`SELECT COUNT(*) FROM dokter WHERE kd_dokter=?`, p.NIK).Scan(&cnt)
+			if cnt > 0 {
+				db.Exec(`UPDATE dokter SET no_telp=? WHERE kd_dokter=?`, p.NoTelp, p.NIK)
+				teleponTersimpan = true
+			}
+		}
+
+		resp := gin.H{"message": "Profil berhasil diperbarui"}
+		if !teleponTersimpan {
+			resp["peringatan"] = "No. Handphone belum bisa disimpan karena akun ini belum tertaut ke data petugas/dokter. Hubungi admin."
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
