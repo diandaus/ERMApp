@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import Swal from 'sweetalert2';
-import { AppUser, LoginView, RegisterView, BATAS_TIDAK_AKTIF_MS, catatAktivitas } from './modules/Auth';
+import { AppUser, LoginView, RegisterView } from './modules/Auth';
 import { PresensiMobileView } from './modules/PresensiMobile';
 import { patchFetchForCapacitor } from './utils/apiBase';
 import { safeStorage } from './utils/safeStorage';
@@ -17,31 +16,25 @@ patchFetchForCapacitor();
 // supaya bundle-nya jauh lebih kecil dari app desktop penuh (yg 943KB gzip).
 // Alasan pemisahan: HP yg sinyalnya lemah gagal/lama download bundle
 // raksasa itu cuma buat nampilin form Login → layar putih tanpa error.
-// Sesi login (sessionStorage 'ermapp_user') & auto-logout 12 jam SENGAJA
-// disamakan persis dgn App.tsx supaya kompatibel kalau suatu saat user
-// pindah antara domain presensi & domain app penuh (subdomain lain,
-// menyusul).
+//
+// Sesi login di localStorage (BUKAN sessionStorage spt App.tsx desktop) +
+// TANPA auto-logout 12 jam — App.tsx sengaja logout otomatis krn satu
+// komputer desktop bisa dipakai gantian banyak staf, tapi domain ini
+// (padanan Flutter e_presensi) dipakai dari HP PRIBADI masing2 staf, jadi
+// user TIDAK boleh dipaksa logout (baik krn nutup browser maupun idle
+// terlalu lama) — cuma keluar kalau tap tombol Keluar sendiri.
 const PresensiApp: React.FC = () => {
   const [user, setUser] = React.useState<AppUser | null>(null);
   const [authView, setAuthView] = React.useState<'login' | 'register'>('login');
   const [checkedSession, setCheckedSession] = React.useState(false);
 
   React.useEffect(() => {
-    safeStorage.remove('local', 'ermapp_user');
-    const stored = safeStorage.get('session', 'ermapp_user');
+    const stored = safeStorage.get('local', 'ermapp_user');
     if (stored) {
       try {
-        const parsed = JSON.parse(stored) as AppUser;
-        const lastActivity = Number(safeStorage.get('session', 'ermapp_last_activity') || '0');
-        if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
-          safeStorage.remove('session', 'ermapp_user');
-          safeStorage.remove('session', 'ermapp_last_activity');
-        } else {
-          setUser(parsed);
-          catatAktivitas();
-        }
+        setUser(JSON.parse(stored) as AppUser);
       } catch {
-        safeStorage.remove('session', 'ermapp_user');
+        safeStorage.remove('local', 'ermapp_user');
       }
     }
     setCheckedSession(true);
@@ -49,47 +42,13 @@ const PresensiApp: React.FC = () => {
 
   const handleLogin = (u: AppUser) => {
     setUser(u);
-    safeStorage.set('session', 'ermapp_user', JSON.stringify(u));
-    catatAktivitas();
+    safeStorage.set('local', 'ermapp_user', JSON.stringify(u));
   };
 
   const handleLogout = () => {
     setUser(null);
-    safeStorage.remove('session', 'ermapp_user');
-    safeStorage.remove('session', 'ermapp_last_activity');
+    safeStorage.remove('local', 'ermapp_user');
   };
-
-  // Auto-logout setelah 12 jam tanpa aktivitas — sama pola dgn App.tsx.
-  React.useEffect(() => {
-    if (!user) return;
-
-    let lastWrite = 0;
-    const catat = () => {
-      const now = Date.now();
-      if (now - lastWrite < 30_000) return;
-      lastWrite = now;
-      catatAktivitas();
-    };
-    catat();
-
-    const events: Array<keyof WindowEventMap> = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
-    events.forEach((ev) => window.addEventListener(ev, catat, { passive: true }));
-
-    const cekTimeout = () => {
-      const lastActivity = Number(safeStorage.get('session', 'ermapp_last_activity') || '0');
-      if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
-        handleLogout();
-        Swal.fire({ icon: 'info', title: 'Sesi Berakhir', text: 'Anda otomatis keluar karena 12 jam tidak ada aktivitas.', confirmButtonColor: '#2563eb' });
-      }
-    };
-    const interval = window.setInterval(cekTimeout, 60_000);
-
-    return () => {
-      events.forEach((ev) => window.removeEventListener(ev, catat));
-      window.clearInterval(interval);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
 
   if (!checkedSession) return null;
 
