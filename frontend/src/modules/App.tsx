@@ -27,6 +27,7 @@ import { AdminView } from './Admin';
 import { PresensiMobileView } from './PresensiMobile';
 import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
 import { AppUser, LoginView, RegisterView, BATAS_TIDAK_AKTIF_MS, catatAktivitas } from './Auth';
+import { safeStorage } from '../utils/safeStorage';
 
 type MenuKey =
   | 'menu-utama'
@@ -309,8 +310,8 @@ export const App: React.FC = () => {
     // localStorage — sengaja TIDAK dipakai lagi (localStorage bertahan
     // lintas restart komputer, yang justru mau dihindari), langsung
     // dibuang. Sesi yang valid sekarang cuma dari sessionStorage.
-    window.localStorage.removeItem('ermapp_user');
-    const stored = window.sessionStorage.getItem('ermapp_user');
+    safeStorage.remove('local', 'ermapp_user');
+    const stored = safeStorage.get('session', 'ermapp_user');
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as AppUser;
@@ -318,16 +319,16 @@ export const App: React.FC = () => {
         // tab yang dibiarkan terbuka lama tanpa disentuh tetap harus
         // login ulang, bukan cuma dipertahankan krn browsernya belum
         // ditutup.
-        const lastActivity = Number(window.sessionStorage.getItem('ermapp_last_activity') || '0');
+        const lastActivity = Number(safeStorage.get('session', 'ermapp_last_activity') || '0');
         if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
-          window.sessionStorage.removeItem('ermapp_user');
-          window.sessionStorage.removeItem('ermapp_last_activity');
+          safeStorage.remove('session', 'ermapp_user');
+          safeStorage.remove('session', 'ermapp_last_activity');
         } else {
           setUser(parsed);
           catatAktivitas();
         }
       } catch {
-        window.sessionStorage.removeItem('ermapp_user');
+        safeStorage.remove('session', 'ermapp_user');
       }
     }
   }, []);
@@ -352,7 +353,7 @@ export const App: React.FC = () => {
     events.forEach((ev) => window.addEventListener(ev, catat, { passive: true }));
 
     const cekTimeout = () => {
-      const lastActivity = Number(window.sessionStorage.getItem('ermapp_last_activity') || '0');
+      const lastActivity = Number(safeStorage.get('session', 'ermapp_last_activity') || '0');
       if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
         handleLogout();
         Swal.fire({ icon: 'info', title: 'Sesi Berakhir', text: 'Anda otomatis keluar karena 12 jam tidak ada aktivitas.', confirmButtonColor: '#2563eb' });
@@ -391,16 +392,16 @@ export const App: React.FC = () => {
   // lagi bikin sesi login bertahan lintas restart.
   const handleLogin = (u: AppUser, _remember: boolean) => {
     setUser(u);
-    window.sessionStorage.setItem('ermapp_user', JSON.stringify(u));
-    window.localStorage.removeItem('ermapp_user');
+    safeStorage.set('session', 'ermapp_user', JSON.stringify(u));
+    safeStorage.remove('local', 'ermapp_user');
     catatAktivitas();
   };
 
   const handleLogout = () => {
     setUser(null);
-    window.localStorage.removeItem('ermapp_user');
-    window.sessionStorage.removeItem('ermapp_user');
-    window.sessionStorage.removeItem('ermapp_last_activity');
+    safeStorage.remove('local', 'ermapp_user');
+    safeStorage.remove('session', 'ermapp_user');
+    safeStorage.remove('session', 'ermapp_last_activity');
   };
 
   const canAccessMenu = (menu: MenuKey, role: AppUser['role']) => {

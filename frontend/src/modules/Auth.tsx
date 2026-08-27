@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { useMediaQuery } from '../hooks/useBreakpoint';
+import { safeStorage } from '../utils/safeStorage';
 
 // Auth.tsx — LoginView/RegisterView dipisah dari App.tsx supaya bisa dipakai
 // bareng oleh DUA entry point terpisah: App.tsx (aplikasi desktop penuh) DAN
@@ -36,7 +37,7 @@ type LoginViewProps = {
 // & effect pelacak aktivitas di App.tsx / main-presensi.tsx.
 export const BATAS_TIDAK_AKTIF_MS = 12 * 60 * 60 * 1000;
 export const catatAktivitas = () => {
-  window.sessionStorage.setItem('ermapp_last_activity', String(Date.now()));
+  safeStorage.set('session', 'ermapp_last_activity', String(Date.now()));
 };
 
 type InstansiSettings = {
@@ -53,7 +54,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
   // tetap terisi otomatis di form login walau user sudah logout
   // (handleLogout cuma hapus sesi, bukan ermapp_remembered_username).
   const [username, setUsername] = React.useState<string>(
-    () => window.localStorage.getItem('ermapp_remembered_username') || ''
+    () => safeStorage.get('local', 'ermapp_remembered_username') || ''
   );
   const [password, setPassword] = React.useState<string>('');
   const [showPassword, setShowPassword] = React.useState<boolean>(false);
@@ -102,9 +103,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
       }
       const user: AppUser = (data as any).user;
       if (rememberMe) {
-        window.localStorage.setItem('ermapp_remembered_username', username);
+        safeStorage.set('local', 'ermapp_remembered_username', username);
       } else {
-        window.localStorage.removeItem('ermapp_remembered_username');
+        safeStorage.remove('local', 'ermapp_remembered_username');
       }
       onLogin(user, rememberMe);
     } catch (e) {
@@ -482,7 +483,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onBackToLogin }) => 
       }
       // Prefill username di halaman Masuk, sama seperti kalau baru saja
       // centang "Ingat saya" — supaya staf tinggal ketik kata sandi.
-      window.localStorage.setItem('ermapp_remembered_username', found.nip);
+      safeStorage.set('local', 'ermapp_remembered_username', found.nip);
       // Username (NIP) ditampilkan besar + tombol copy di dialog sukses —
       // staf yang daftar pakai NIK KTP (bukan hafal NIP-nya) sering
       // bingung mau login pakai apa krn cuma inget password yg baru

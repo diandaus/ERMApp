@@ -4,6 +4,8 @@ import Swal from 'sweetalert2';
 import { AppUser, LoginView, RegisterView, BATAS_TIDAK_AKTIF_MS, catatAktivitas } from './modules/Auth';
 import { PresensiMobileView } from './modules/PresensiMobile';
 import { patchFetchForCapacitor } from './utils/apiBase';
+import { safeStorage } from './utils/safeStorage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './App.css';
 
 patchFetchForCapacitor();
@@ -25,21 +27,21 @@ const PresensiApp: React.FC = () => {
   const [checkedSession, setCheckedSession] = React.useState(false);
 
   React.useEffect(() => {
-    window.localStorage.removeItem('ermapp_user');
-    const stored = window.sessionStorage.getItem('ermapp_user');
+    safeStorage.remove('local', 'ermapp_user');
+    const stored = safeStorage.get('session', 'ermapp_user');
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as AppUser;
-        const lastActivity = Number(window.sessionStorage.getItem('ermapp_last_activity') || '0');
+        const lastActivity = Number(safeStorage.get('session', 'ermapp_last_activity') || '0');
         if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
-          window.sessionStorage.removeItem('ermapp_user');
-          window.sessionStorage.removeItem('ermapp_last_activity');
+          safeStorage.remove('session', 'ermapp_user');
+          safeStorage.remove('session', 'ermapp_last_activity');
         } else {
           setUser(parsed);
           catatAktivitas();
         }
       } catch {
-        window.sessionStorage.removeItem('ermapp_user');
+        safeStorage.remove('session', 'ermapp_user');
       }
     }
     setCheckedSession(true);
@@ -47,14 +49,14 @@ const PresensiApp: React.FC = () => {
 
   const handleLogin = (u: AppUser) => {
     setUser(u);
-    window.sessionStorage.setItem('ermapp_user', JSON.stringify(u));
+    safeStorage.set('session', 'ermapp_user', JSON.stringify(u));
     catatAktivitas();
   };
 
   const handleLogout = () => {
     setUser(null);
-    window.sessionStorage.removeItem('ermapp_user');
-    window.sessionStorage.removeItem('ermapp_last_activity');
+    safeStorage.remove('session', 'ermapp_user');
+    safeStorage.remove('session', 'ermapp_last_activity');
   };
 
   // Auto-logout setelah 12 jam tanpa aktivitas — sama pola dgn App.tsx.
@@ -74,7 +76,7 @@ const PresensiApp: React.FC = () => {
     events.forEach((ev) => window.addEventListener(ev, catat, { passive: true }));
 
     const cekTimeout = () => {
-      const lastActivity = Number(window.sessionStorage.getItem('ermapp_last_activity') || '0');
+      const lastActivity = Number(safeStorage.get('session', 'ermapp_last_activity') || '0');
       if (lastActivity && Date.now() - lastActivity > BATAS_TIDAK_AKTIF_MS) {
         handleLogout();
         Swal.fire({ icon: 'info', title: 'Sesi Berakhir', text: 'Anda otomatis keluar karena 12 jam tidak ada aktivitas.', confirmButtonColor: '#2563eb' });
@@ -104,6 +106,8 @@ const PresensiApp: React.FC = () => {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <PresensiApp />
+    <ErrorBoundary>
+      <PresensiApp />
+    </ErrorBoundary>
   </React.StrictMode>
 );
