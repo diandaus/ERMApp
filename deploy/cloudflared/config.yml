@@ -2,12 +2,15 @@
 # lalu ganti <TUNNEL-UUID> dan <TUNNEL-UUID>.json sesuai output dari:
 #   cloudflared tunnel create ermapp-izin
 #
-# Tunnel ini mengarah ke vhost Apache eksternal (ermapp-external.conf, port
-# 8082), BUKAN ke port 80 (vhost internal RS) — seluruh ERMApp bisa diakses
-# lewat tunnel ini KECUALI endpoint absen (checkin/checkout), yang diblokir
-# di level Apache (lihat komentar di ermapp-external.conf). WAJIB pasang
-# Cloudflare Access di depan hostname ini sebelum tunnel diaktifkan — lihat
-# peringatan keamanan di ermapp-external.conf.
+# Satu tunnel, DUA hostname, masing2 ke vhost Apache eksternal beda port:
+#   - presensi.rsislamibnusinasigli.com -> :8082 (ermapp-external.conf) —
+#     KHUSUS PresensiMobile.tsx (dist-presensi, bundle kecil).
+#   - erm.rsislamibnusinasigli.com -> :8083 (erm-external.conf) — aplikasi
+#     web PENUH (App.tsx: RM pasien/billing/casemix/radiologi/dst).
+# Endpoint absen (checkin/checkout) diblokir di KEDUA vhost Apache di atas
+# (bukan di sini) — lihat komentar masing2 file. WAJIB pasang Cloudflare
+# Access di depan KEDUA hostname ini sebelum tunnel diaktifkan — lihat
+# peringatan keamanan di ermapp-external.conf & erm-external.conf.
 
 tunnel: <TUNNEL-UUID>
 credentials-file: /home/<user>/.cloudflared/<TUNNEL-UUID>.json
@@ -15,4 +18,6 @@ credentials-file: /home/<user>/.cloudflared/<TUNNEL-UUID>.json
 ingress:
   - hostname: presensi.rsislamibnusinasigli.com
     service: http://127.0.0.1:8082
+  - hostname: erm.rsislamibnusinasigli.com
+    service: http://127.0.0.1:8083
   - service: http_status:404

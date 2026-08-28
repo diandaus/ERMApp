@@ -11,6 +11,8 @@ Jalur kedua ini **sama sekali tidak lewat internet** — Apache & backend Go-nya
 
 **Satu-satunya titik rawan**: kalau HP staf query DNS ke server DNS publik (mis. `8.8.8.8`/`1.1.1.1`) alih-alih ke Mikrotik, maka begitu internet mati, HP gagal menerjemahkan `presensi.rsislamibnusinasigli.com` jadi IP sama sekali — padahal server-nya sendiri hidup dan bisa dijangkau lewat jaringan lokal. Dokumen ini langkah-langkah memastikan itu tidak terjadi.
 
+**Berlaku juga untuk `erm.rsislamibnusinasigli.com`** (aplikasi web penuh, `deploy/erm.conf` + `deploy/erm-external.conf`) — pola split-horizon-nya identik, tinggal tambah satu entri static DNS lagi di Mikrotik (langkah 2 di bawah) yang mengarah ke IP internal server yang sama.
+
 ## 1. Pastikan DHCP WiFi RS membagikan DNS Mikrotik (bukan DNS publik)
 
 Buka **Winbox** (atau WebFig via browser ke IP Mikrotik):
