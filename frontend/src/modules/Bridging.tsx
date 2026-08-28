@@ -1,6 +1,7 @@
 import React from 'react';
 import { SatuSehatView } from './SatuSehat';
 import { BridgingBpjsView } from './BridgingBpjs';
+import { PeruriView } from './Peruri';
 
 type BridgingTab = 'bpjs' | 'satu-sehat' | 'orthanc' | 'peruri';
 
@@ -31,6 +32,13 @@ export const BridgingView: React.FC = () => {
       </div>
     );
   }
+  if (activeTab === 'peruri') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+        <PeruriView onBack={() => setActiveTab(null)} />
+      </div>
+    );
+  }
 
   // Sub-halaman penuh setelah salah satu kartu diklik — grid tidak lagi terlihat.
   // Kembali ke grid dengan klik menu "Bridging" di sidebar (bukan tombol kembali).
@@ -41,11 +49,6 @@ export const BridgingView: React.FC = () => {
           {activeTab === 'orthanc' && (
             <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 12 }}>
               Fitur Bridging Orthanc akan dikembangkan nanti.
-            </div>
-          )}
-          {activeTab === 'peruri' && (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 12 }}>
-              Fitur Bridging Peruri akan dikembangkan nanti.
             </div>
           )}
         </div>

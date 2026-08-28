@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import QRCode from 'qrcode';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 // ModalHasilRadiologi — "Input Data Hasil Periksa Radiologi", padanan
 // header form DlgPeriksaRadiologi.java (Khanza Desktop): No.Rawat/No.RM/
@@ -76,6 +77,8 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
 
   const [saving, setSaving] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
+  const [signing, setSigning] = React.useState(false);
+  const [previewingTtd, setPreviewingTtd] = React.useState(false);
 
   const todayStr = () => {
     const d = new Date();
@@ -335,6 +338,365 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setPrinting(false);
+    }
+  };
+
+  // Kotak posisi tanda tangan elektronik Peruri — koordinat PDF (origin
+  // kiri-bawah, satuan pt), pojok KIRI-bawah halaman (Penanggung Jawab
+  // dipindah ke kiri, Petugas Radiologi di kanan — lihat komentar di
+  // buildRadiologiPdfUntukTtd). Angka INI PERSIS yg dikirim ke Peruri
+  // (signer.lowerLeftX/Y, upperRightX/Y) supaya area yg di-stample Peruri
+  // match dgn kotak "Penanggung Jawab" yg digambar buildRadiologiPdfUntukTtd
+  // di bawah — sengaja dibiarkan kosong di dalam kotaknya (bukan digambar
+  // QR sendiri spt versi cetak/window.print), krn stample tanda tangan
+  // asli yg ditaruh Peruri di posisi ini.
+  const SIGN_BOX = { lowerLeftX: 40, lowerLeftY: 40, upperRightX: 200, upperRightY: 120, page: '1' };
+
+  // buildRadiologiPdfUntukTtd — PENGECUALIAN dari CETAK_STANDAR.md §1
+  // (sama pola dgn buildBillingPdf di ModalBilling.tsx): fitur kirim ke
+  // Peruri genuinely butuh byte PDF asli (base64Document), window.print()
+  // tidak bisa diambil sbg byte oleh JS. Layout best-effort mendekati
+  // handleCetak (BUKAN identik — font Helvetica pdf-lib, bukan Tahoma asli).
+  const buildRadiologiPdfUntukTtd = async (): Promise<{ pdfBytes: Uint8Array; email: string; namaDokterPj: string }> => {
+    if (!kdDokterPj) {
+      throw new Error('Pilih Dokter P.J. dulu.');
+    }
+    // Dokter P.J. & email-nya diambil dari STATE FORM YANG SEDANG DIPILIH
+    // (kdDokterPj/dokterPjQuery), BUKAN dari /api/radiologi/cetak/:noorder
+    // — endpoint itu balikin data sesi TERSIMPAN TERAKHIR di DB, yg bisa
+    // beda dari dokter yg baru saja dipilih user di form ini tapi belum
+    // di-"Simpan Hasil" (ini akar penyebab bug "nama di pesan sukses
+    // ternyata dokter perujuk, bukan dokter P.J. yg dipilih di form").
+    const [dataRes, settingsRes, emailRes] = await Promise.all([
+      fetch(`/api/radiologi/cetak/${encodeURIComponent(noorder)}`),
+      fetch('/api/admin/settings'),
+      fetch(`/api/dokter/${encodeURIComponent(kdDokterPj)}/email`),
+    ]);
+    const data = await dataRes.json();
+    if (!dataRes.ok) throw new Error(data.error || 'Gagal memuat data cetak');
+    let settings = { nama_instansi: '', alamat: '', logo_url: '', kota_rs: '', kontak: '', email_rs: '' };
+    if (settingsRes.ok) settings = await settingsRes.json();
+    const emailData = await emailRes.json().catch(() => ({}));
+    if (!emailRes.ok) throw new Error(emailData.error || 'Dokter P.J. tidak ditemukan');
+    const namaDokterPj = dokterPjQuery || emailData.nm_dokter || '-';
+    if (!emailData.email) {
+      throw new Error(`Email dokter penanggung jawab (${namaDokterPj}) belum diisi. Hubungi admin untuk menambahkan email di data dokter.`);
+    }
+    const emailDokterPj = emailData.email as string;
+
+    const pdf = await PDFDocument.create();
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
+    const margin = 40;
+    const page = pdf.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - margin;
+
+    const text = (s: string, x: number, size = 10, bold = false) => {
+      page.drawText(s, { x, y, size, font: bold ? fontBold : font, color: rgb(0, 0, 0) });
+    };
+    const centerText = (s: string, size = 10, bold = false) => {
+      const f = bold ? fontBold : font;
+      const w = f.widthOfTextAtSize(s, size);
+      page.drawText(s, { x: (pageWidth - w) / 2, y, size, font: f, color: rgb(0, 0, 0) });
+    };
+    // wrapText — pecah baris panjang sesuai lebar kolom (px), dipakai
+    // Hasil Pemeriksaan yg bisa berisi paragraf panjang.
+    const wrapText = (s: string, maxWidth: number, size = 10): string[] => {
+      const words = s.split(' ');
+      const lines: string[] = [];
+      let line = '';
+      for (const w of words) {
+        const test = line ? `${line} ${w}` : w;
+        if (font.widthOfTextAtSize(test, size) > maxWidth && line) {
+          lines.push(line);
+          line = w;
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    };
+
+    // Kop 3-kolom PERSIS buildBillingPdf (ModalBilling.tsx, "Preview
+    // Upload"/"Simpan ke Berkas Rawat") — 20% logo / 60% nama+alamat+
+    // kontak+email / 20% kosong (di Billing kolom ke-3 dipakai cara
+    // bayar, di sini tidak ada info setara jadi dibiarkan kosong, TAPI
+    // proporsi kolom & posisi logo/teksnya disamakan persis).
+    let logoImg: Awaited<ReturnType<typeof pdf.embedPng>> | Awaited<ReturnType<typeof pdf.embedJpg>> | null = null;
+    if (settings.logo_url) {
+      try {
+        const logoSrc = settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url;
+        const imgRes = await fetch(logoSrc);
+        if (imgRes.ok) {
+          const bytes = await imgRes.arrayBuffer();
+          const isJpg = /\.(jpe?g)($|\?)/i.test(logoSrc) || (imgRes.headers.get('content-type') || '').includes('jpeg');
+          logoImg = isJpg ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
+        }
+      } catch { /* lanjut tanpa logo kalau gagal fetch/embed */ }
+    }
+
+    const contentWidth = pageWidth - margin * 2;
+    const col1X = margin;
+    const col2X = margin + contentWidth * 0.20;
+    const col2Width = contentWidth * 0.60;
+    const centerInCol = (s: string, colX: number, colWidth: number, size = 9, bold = false) => {
+      const f = bold ? fontBold : font;
+      const w = f.widthOfTextAtSize(s, size);
+      page.drawText(s, { x: colX + (colWidth - w) / 2, y, size, font: f, color: rgb(0, 0, 0) });
+    };
+
+    const kopTop = y;
+    const logoSize = 45; // PERSIS buildBillingPdf (width/height 45)
+    if (logoImg) {
+      page.drawImage(logoImg, { x: col1X, y: kopTop - logoSize + 8, width: logoSize, height: logoSize });
+    }
+    if (settings.nama_instansi) { centerInCol(settings.nama_instansi, col2X, col2Width, 14, false); y -= 11; }
+    if (settings.alamat) { centerInCol(settings.alamat, col2X, col2Width, 9); y -= 11; }
+    if (settings.kontak) { centerInCol(settings.kontak, col2X, col2Width, 9); y -= 11; }
+    if (settings.email_rs) { centerInCol(`E-mail : ${settings.email_rs}`, col2X, col2Width, 9); y -= 0; }
+    // Batas minimum tinggi kop — PERSIS perhitungan buildBillingPdf (logo
+    // digambar mulai kopTop-logoSize+8, jadi tepi bawahnya di situ, bukan
+    // di kopTop-logoSize).
+    y = Math.min(y, kopTop - logoSize + 8 - 4);
+    y -= 1;
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 1, color: rgb(0, 0, 0) });
+    y -= 18;
+    centerText('HASIL PEMERIKSAAN RADIOLOGI', 12, false);
+    y -= 22;
+
+    const colLeftX = margin;
+    const colRightX = pageWidth / 2 + 10;
+    const alamatSingkat = (data.alamat || '-').length > 40 ? `${(data.alamat as string).slice(0, 40)}...` : (data.alamat || '-');
+    const infoLeft: [string, string][] = [
+      ['No.RM', data.no_rm], ['Nama Pasien', data.nama_pasien],
+      ['JK/Umur', `${data.jk || '-'} / ${umurDariTglLahir(data.tgl_lahir)}`],
+      ['Alamat', alamatSingkat],
+      ['No.Periksa', data.no_periksa],
+    ];
+    const infoRight: [string, string][] = [
+      ['Penanggung Jawab', namaDokterPj], ['Dokter Pengirim', data.dokter_pengirim || '-'],
+      ['Tgl.Pemeriksaan', data.tgl_pemeriksaan], ['Jam Pemeriksaan', data.jam_pemeriksaan],
+      [data.poli_label || 'Poli', data.poli || '-'],
+    ];
+    const rowStartY = y;
+    infoLeft.forEach(([label, value], i) => {
+      y = rowStartY - i * 14;
+      text(label, colLeftX, 9.5); text(`: ${value}`, colLeftX + 90, 9.5);
+    });
+    infoRight.forEach(([label, value], i) => {
+      y = rowStartY - i * 14;
+      text(label, colRightX, 9.5); text(`: ${value}`, colRightX + 100, 9.5);
+    });
+    y = rowStartY - infoLeft.length * 14;
+    text('Pemeriksaan', colLeftX, 9.5); text(`: ${data.pemeriksaan}`, colLeftX + 90, 9.5);
+    y -= 20;
+
+    text('Hasil Pemeriksaan :', margin, 10, false);
+    y -= 18;
+    // hasil dari STATE textarea yg sedang diketik user (konsisten dgn
+    // penanggung jawab di atas), bukan data.hasil dari sesi tersimpan.
+    const hasilLines = (hasil.trim() || '-').split('\n').flatMap((line: string) => wrapText(line || ' ', pageWidth - margin * 2 - 16, 9.5));
+    const hasilBoxTop = y;
+    for (const line of hasilLines) {
+      text(line, margin + 8, 9.5);
+      y -= 13;
+    }
+    page.drawRectangle({
+      x: margin, y: y - 6, width: pageWidth - margin * 2, height: hasilBoxTop - y + 20,
+      borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 1,
+    });
+    y -= 30;
+
+    // Kolom KANAN — Petugas Radiologi. Ini BUKAN area stample Peruri (beda
+    // dari kotak Penanggung Jawab di kiri) — QR-nya e-signature LOKAL biasa
+    // (persis pola qrPetugas di handleCetak, digenerate sendiri lewat lib
+    // "qrcode", bukan barcode resmi dari Peruri) krn Petugas Radiologi
+    // memang tidak ikut proses tanda tangan digital Peruri, cuma dicatat
+    // spt pola cetak PDF biasa.
+    const petugasBoxX = { start: 395, end: 555 };
+    const petugasBoxCenterX = (petugasBoxX.start + petugasBoxX.end) / 2;
+    const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      + ' ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const fingerPetugas =
+      `Dikeluarkan di ${settings.nama_instansi || ''}, Kabupaten/Kota ${settings.kota_rs || ''}\n` +
+      `Ditandatangani secara elektronik oleh ${data.petugas_nama || '-'}\n` +
+      `ID ${data.petugas_nip || '-'}\n${tanggalCetak}`;
+    let qrPetugasImg: Awaited<ReturnType<typeof pdf.embedPng>> | null = null;
+    try {
+      const qrDataUrl = await QRCode.toDataURL(fingerPetugas, { width: 80, margin: 1 });
+      const qrBytes = await fetch(qrDataUrl).then((r) => r.arrayBuffer());
+      qrPetugasImg = await pdf.embedPng(qrBytes);
+    } catch { /* lanjut tanpa QR kalau gagal generate/embed */ }
+
+    // Tgl.Cetak — di atas kolom kanan (Petugas Radiologi), persis posisi di handleCetak.
+    const tglCetakText = `Tgl.Cetak : ${tanggalCetak}`;
+    const tglCetakW = font.widthOfTextAtSize(tglCetakText, 8.5);
+    page.drawText(tglCetakText, {
+      x: petugasBoxCenterX - tglCetakW / 2, y: SIGN_BOX.upperRightY + 14, size: 8.5, font, color: rgb(0, 0, 0),
+    });
+
+    // Kotak KIRI — Penanggung Jawab. Area RESERVED utk stample Peruri (SAMA
+    // PERSIS koordinatnya dgn SIGN_BOX yg dikirim ke Peruri), sengaja
+    // dibiarkan kosong di dalamnya — border putus-putus jadi penanda "area
+    // ini", bukan tanda tangan lokal spt kolom kanan.
+    page.drawRectangle({
+      x: SIGN_BOX.lowerLeftX, y: SIGN_BOX.lowerLeftY,
+      width: SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX, height: SIGN_BOX.upperRightY - SIGN_BOX.lowerLeftY,
+      borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.7, borderDashArray: [3, 2],
+    });
+    const signLabelY = SIGN_BOX.upperRightY - 12;
+    const signLabelW = fontBold.widthOfTextAtSize('Penanggung Jawab', 9);
+    page.drawText('Penanggung Jawab', {
+      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - signLabelW) / 2, y: signLabelY,
+      size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
+    });
+    const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
+    page.drawText(namaDokterPj, {
+      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: SIGN_BOX.lowerLeftY + 8,
+      size: 9, font, color: rgb(0.3, 0.3, 0.3),
+    });
+
+    // Isi kolom kanan — Petugas Radiologi: label, QR lokal, nama. TANPA
+    // border (bukan area reserved, ini tanda tangan yg sudah "jadi").
+    const petugasLabelW = fontBold.widthOfTextAtSize('Petugas Radiologi', 9);
+    page.drawText('Petugas Radiologi', {
+      x: petugasBoxCenterX - petugasLabelW / 2, y: signLabelY, size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
+    });
+    if (qrPetugasImg) {
+      const qrSize = 40;
+      page.drawImage(qrPetugasImg, { x: petugasBoxCenterX - qrSize / 2, y: SIGN_BOX.lowerLeftY + 22, width: qrSize, height: qrSize });
+    }
+    const petugasNamaW = font.widthOfTextAtSize(data.petugas_nama || '-', 9);
+    page.drawText(data.petugas_nama || '-', {
+      x: petugasBoxCenterX - petugasNamaW / 2, y: SIGN_BOX.lowerLeftY + 8, size: 9, font, color: rgb(0.3, 0.3, 0.3),
+    });
+
+    const pdfBytes = await pdf.save();
+    return { pdfBytes, email: emailDokterPj, namaDokterPj };
+  };
+
+  // handlePreviewTtd — "Review PDF", buka PDF yg AKAN dikirim ke Peruri
+  // (buildRadiologiPdfUntukTtd, byte yg sama persis dgn yg diupload
+  // handleTandaTangan) di tab baru TANPA benar-benar mengirim apa pun ke
+  // Peruri — padanan handlePreviewUpload di ModalBilling.tsx, supaya user
+  // bisa cek dulu isinya sebelum benar-benar submit ke Peruri.
+  const handlePreviewTtd = async () => {
+    setPreviewingTtd(true);
+    try {
+      const { pdfBytes } = await buildRadiologiPdfUntukTtd();
+      const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPreviewingTtd(false);
+    }
+  };
+
+  // peruriPost — helper kecil, panggil endpoint proxy Peruri (JSON), balikin
+  // response.response (raw upstream Peruri) sambil lempar Error kalau
+  // gagal di level HTTP KITA (bukan level Peruri) ATAU resultCode Peruri
+  // bukan "0" (envelope resultCode/resultDesc/data — sama pola dgn
+  // response Generate JWT yg sudah dikonfirmasi, dipakai jaga2 di semua
+  // endpoint lain krn belum semuanya dites langsung).
+  const peruriPost = async (path: string, body: unknown): Promise<any> => {
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal memanggil ${path}`);
+    const upstream = data.response;
+    if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
+      throw new Error(upstream.resultDesc || `${path} gagal (resultCode ${upstream.resultCode})`);
+    }
+    return upstream;
+  };
+
+  // handleTandaTangan — tombol "Tanda Tangan" di samping tombol printer,
+  // sekali klik menjalankan alur Digital Signature Peruri langkah 1-4
+  // berurutan (persis diagram yg diberikan user):
+  //   1. Send Document -> dapat orderId
+  //   2. Set Signature Position (pakai orderId)
+  //   3. Get OTP (Session Initiate) -> dapat tokenSession, Peruri kirim
+  //      kode OTP ke email dokter P.J. lewat email/SMS/WhatsApp
+  //   4. User diminta input OTP (dialog) -> Validate OTP (Session
+  //      Validation) -> Signing (Signing Session)
+  // PDF hasil generate (buildRadiologiPdfUntukTtd) diupload sbg file
+  // SEMENTARA (dihapus otomatis di backend begitu terkirim ke Peruri,
+  // lihat sendPeruriDocumentFromFile) — tidak pernah tersimpan permanen.
+  const handleTandaTangan = async () => {
+    setSigning(true);
+    try {
+      const { pdfBytes, email, namaDokterPj } = await buildRadiologiPdfUntukTtd();
+
+      // 1. Send Document
+      const form = new FormData();
+      form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), `HasilRadiologi_${noorder.replace(/\//g, '_')}.pdf`);
+      form.append('email', email);
+      form.append('isVisualSign', 'YES');
+      form.append('lowerLeftX', String(SIGN_BOX.lowerLeftX));
+      form.append('lowerLeftY', String(SIGN_BOX.lowerLeftY));
+      form.append('upperRightX', String(SIGN_BOX.upperRightX));
+      form.append('upperRightY', String(SIGN_BOX.upperRightY));
+      form.append('page', SIGN_BOX.page);
+      form.append('certificateLevel', 'NOT_CERTIFIED');
+      form.append('varLocation', 'Jakarta');
+      form.append('varReason', 'Signed');
+      form.append('orderType', 'INDIVIDUAL');
+
+      const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) throw new Error(sendData.error || 'Gagal mengirim dokumen ke Peruri');
+      if (sendData.response && typeof sendData.response === 'object' && 'resultCode' in sendData.response && sendData.response.resultCode !== '0') {
+        throw new Error(sendData.response.resultDesc || 'Send Document gagal');
+      }
+      const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
+      if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
+
+      // 2. Set Signature Position
+      await peruriPost('/api/peruri/set-signature', {
+        orderId,
+        signer: {
+          isVisualSign: 'YES',
+          lowerLeftX: String(SIGN_BOX.lowerLeftX), lowerLeftY: String(SIGN_BOX.lowerLeftY),
+          upperRightX: String(SIGN_BOX.upperRightX), upperRightY: String(SIGN_BOX.upperRightY),
+          page: SIGN_BOX.page, certificateLevel: 'NOT_CERTIFIED', varLocation: 'Jakarta', varReason: 'Signed',
+        },
+      });
+
+      // 3. Get OTP (Session Initiate) — Peruri kirim kode OTP ke email ini.
+      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+      const tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+      if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+      // 4. Minta user input OTP, lalu Validate OTP + Signing.
+      const { value: otpCode } = await Swal.fire({
+        icon: 'info',
+        title: 'Masukkan Kode OTP',
+        html: `Kode OTP sudah dikirim ke <b>${email}</b> (email/SMS/WhatsApp).`,
+        input: 'text',
+        inputLabel: 'Kode OTP',
+        inputPlaceholder: '6 digit kode OTP',
+        inputAttributes: { maxlength: '6', inputmode: 'numeric' },
+        showCancelButton: true,
+        confirmButtonText: 'Verifikasi & Tanda Tangan',
+        cancelButtonText: 'Batal',
+        inputValidator: (value) => (!value ? 'Kode OTP wajib diisi' : undefined),
+      });
+      if (!otpCode) return; // user batal — orderId sudah dibuat di Peruri, tapi belum ditandatangani
+
+      await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      await peruriPost('/api/peruri/signing', { orderId });
+
+      await Swal.fire({
+        icon: 'success', title: 'Berhasil ditandatangani',
+        html: `Dokumen berhasil ditandatangani oleh <b>${namaDokterPj}</b> (${email}).<br/>Order ID: <b>${orderId}</b>`,
+      });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSigning(false);
     }
   };
 
@@ -605,6 +967,29 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                     <polyline points="6 9 6 2 18 2 18 9"></polyline>
                     <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                     <rect x="6" y="14" width="12" height="8"></rect>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePreviewTtd}
+                  disabled={previewingTtd}
+                  title="Review PDF yang akan dikirim ke Peruri"
+                  style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: previewingTtd ? '#9ca3af' : '#374151', cursor: previewingTtd ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTandaTangan}
+                  disabled={signing}
+                  title="Tanda Tangan Elektronik (Peruri)"
+                  style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: signing ? '#9ca3af' : '#374151', cursor: signing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
                   </svg>
                 </button>
                 <button type="button" onClick={onClose} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>

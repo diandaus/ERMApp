@@ -357,6 +357,12 @@ func getCetakHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 		var nmPetugas string
 		db.QueryRow(`SELECT IFNULL(nama,'') FROM petugas WHERE nip = ?`, nip).Scan(&nmPetugas)
 
+		// Email dokter P.J. — dipakai fitur Tanda Tangan Elektronik Peruri
+		// (ModalHasilRadiologi.tsx), penandatangan dokumen ini SELALU dokter
+		// penanggung jawab (bukan petugas radiografer).
+		var emailDokterPj string
+		db.QueryRow(`SELECT IFNULL(email,'') FROM dokter WHERE kd_dokter = ?`, kdDokterPj).Scan(&emailDokterPj)
+
 		var hasil string
 		db.QueryRow(`SELECT hasil FROM hasil_radiologi WHERE no_rawat = ? AND tgl_periksa = ? AND jam = ?`, noRawat, tglPeriksa, jam).Scan(&hasil)
 
@@ -374,10 +380,15 @@ func getCetakHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 
 		// Poli/Ruang — persis pola CASE WHEN di getPermintaanRadiologiList
 		// (ralan: poliklinik registrasi, ranap: kamar+bangsal terbaru).
-		var poli string
+		// poliLabel dikirim terpisah dari nilainya ("Kamar" utk ranap, "Poli"
+		// utk ralan/poliklinik) — dipakai frontend (ModalHasilRadiologi.tsx,
+		// buildRadiologiPdfUntukTtd) buat label baris info yg sesuai, bukan
+		// selalu "Poli" walau sebenarnya kamar rawat inap.
+		var poli, poliLabel string
 		var statusLanjut string
 		db.QueryRow(`SELECT status_lanjut FROM reg_periksa WHERE no_rawat = ?`, noRawat).Scan(&statusLanjut)
 		if strings.EqualFold(statusLanjut, "ranap") {
+			poliLabel = "Kamar"
 			var kdKamar, nmBangsal string
 			db.QueryRow(`SELECT kd_kamar FROM kamar_inap WHERE no_rawat = ? ORDER BY tgl_masuk DESC, jam_masuk DESC LIMIT 1`, noRawat).Scan(&kdKamar)
 			if kdKamar != "" {
@@ -387,6 +398,7 @@ func getCetakHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 				poli = "Ranap Gabung"
 			}
 		} else {
+			poliLabel = "Poli"
 			db.QueryRow(`
 				SELECT IFNULL(poliklinik.nm_poli,'') FROM reg_periksa
 				LEFT JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
@@ -400,22 +412,24 @@ func getCetakHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"no_periksa":          noOrder,
-			"no_rm":               noRkmMedis,
-			"nama_pasien":         nmPasien,
-			"jk":                  jk,
-			"tgl_lahir":           tglLahir,
-			"alamat":              alamat,
-			"pemeriksaan":         strings.Join(pemeriksaanList, ", "),
-			"penanggung_jawab":    nmDokterPj,
-			"kd_penanggung_jawab": kdDokterPj,
-			"dokter_pengirim":     nmDokterPerujuk,
-			"tgl_pemeriksaan":     tglFormatted,
-			"jam_pemeriksaan":     jam,
-			"poli":                poli,
-			"hasil":               hasil,
-			"petugas_nip":         nip,
-			"petugas_nama":        nmPetugas,
+			"no_periksa":             noOrder,
+			"no_rm":                  noRkmMedis,
+			"nama_pasien":            nmPasien,
+			"jk":                     jk,
+			"tgl_lahir":              tglLahir,
+			"alamat":                 alamat,
+			"pemeriksaan":            strings.Join(pemeriksaanList, ", "),
+			"penanggung_jawab":       nmDokterPj,
+			"kd_penanggung_jawab":    kdDokterPj,
+			"email_penanggung_jawab": emailDokterPj,
+			"dokter_pengirim":        nmDokterPerujuk,
+			"tgl_pemeriksaan":        tglFormatted,
+			"jam_pemeriksaan":        jam,
+			"poli":                   poli,
+			"poli_label":             poliLabel,
+			"hasil":                  hasil,
+			"petugas_nip":            nip,
+			"petugas_nama":           nmPetugas,
 		})
 	}
 }

@@ -962,6 +962,14 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel setting_bridging: %v", err)
 	}
 
+	if err := ensurePeruriKonfigurasiTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel peruri_konfigurasi: %v", err)
+	}
+
+	if err := ensureAkunPeruriTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel akun_peruri: %v", err)
+	}
+
 	if err := ensureSatuSehatPasienDokterTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel satu_sehat_pasien/satu_sehat_dokter: %v", err)
 	}
@@ -1557,6 +1565,7 @@ func main() {
 	// padanan DlgDokter.java, terpisah dari GET /api/dokter ringan
 	// di atas (yang cuma kd_dokter+nama utk typeahead).
 	r.GET("/api/dokter/list", getDokterList(db))
+	r.GET("/api/dokter/:kd_dokter/email", getDokterEmail(db))
 	r.POST("/api/dokter", tambahDokter(db))
 	r.PUT("/api/dokter/:kd_dokter", editDokter(db))
 	r.DELETE("/api/dokter/:kd_dokter", hapusDokter(db))
@@ -3870,6 +3879,26 @@ func main() {
 	// Registrasi List endpoint
 	r.GET("/api/registrasi/list", getRegistrasiList(db))
 	r.DELETE("/api/registrasi/*no_rawat", deleteRegistrasi(db))
+
+	// Peruri (TTE/e-meterai) endpoints
+	r.GET("/api/peruri/config", getPeruriConfig(db))
+	r.POST("/api/peruri/config", savePeruriConfig(db))
+	r.POST("/api/peruri/test-jwt", testPeruriJWT(db))
+	r.POST("/api/peruri/send-document", sendPeruriDocument(db))
+	r.POST("/api/peruri/set-signature", setPeruriSignature(db))
+	r.POST("/api/peruri/get-otp", getPeruriOtp(db))
+	r.POST("/api/peruri/validate-otp", validatePeruriOtp(db))
+	r.POST("/api/peruri/signing", signPeruriDocument(db))
+	r.POST("/api/peruri/download-document", downloadPeruriDocument(db))
+	r.POST("/api/peruri/send-document-tmp", sendPeruriDocumentFromFile(db))
+	r.POST("/api/peruri/check-certificate", checkPeruriCertificate(db))
+
+	// Peruri — Data Pengguna (akun_peruri)
+	r.GET("/api/akun-peruri", getAkunPeruriList(db))
+	r.GET("/api/akun-peruri/:email", getAkunPeruriDetail(db))
+	r.POST("/api/akun-peruri", createAkunPeruri(db))
+	r.PUT("/api/akun-peruri/:email", updateAkunPeruri(db))
+	r.DELETE("/api/akun-peruri/:email", deleteAkunPeruri(db))
 
 	// Satu Sehat endpoints
 	r.GET("/api/satu-sehat/config", getConfigSatuSehat(db))

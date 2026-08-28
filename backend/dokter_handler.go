@@ -310,3 +310,25 @@ func hapusDokterPermanen(db *sql.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"message": "Dokter berhasil dihapus permanen"})
 	}
 }
+
+// GET /api/dokter/:kd_dokter/email — lookup ringan satu dokter (nama +
+// email), dipakai fitur Tanda Tangan Elektronik Peruri (mis.
+// ModalHasilRadiologi.tsx) utk ambil email dokter yg SEDANG dipilih di
+// form (state React kd_dokter_pj), BUKAN dari endpoint /cetak/:noorder
+// (yg balikin data sesi TERSIMPAN terakhir di DB — bisa beda dari dokter
+// yg baru saja dipilih user di form tapi belum di-"Simpan Hasil").
+func getDokterEmail(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		kdDokter := c.Param("kd_dokter")
+		if kdDokter == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "kd_dokter wajib diisi"})
+			return
+		}
+		var nmDokter, email string
+		if err := db.QueryRow(`SELECT nm_dokter, IFNULL(email,'') FROM dokter WHERE kd_dokter = ?`, kdDokter).Scan(&nmDokter, &email); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Dokter tidak ditemukan"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"kd_dokter": kdDokter, "nm_dokter": nmDokter, "email": email})
+	}
+}

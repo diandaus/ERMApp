@@ -1,3 +1,25 @@
+import { safeStorage } from './safeStorage';
+
+// readErmappUser — sesi login 'ermapp_user' disimpan di TEMPAT BEDA
+// tergantung entry point: App.tsx (aplikasi desktop, mis. Apotek/
+// Kepegawaian/PemeriksaanRanap — pemakai utama helper2 di file ini) pakai
+// sessionStorage, sementara main-presensi.tsx (domain presensi berdiri
+// sendiri) pakai localStorage (sengaja persisten, lihat komentar di
+// main-presensi.tsx). Cek sessionStorage DULU (cocok utk mayoritas
+// pemanggil file ini), localStorage sbg fallback — sebelumnya cuma baca
+// localStorage, jadi SELALU kosong di app desktop (App.tsx malah aktif
+// menghapus localStorage.ermapp_user tiap load), bikin field "Petugas"
+// gagal auto-terisi dari user login sama sekali.
+function readErmappUser(): Record<string, unknown> | null {
+  const raw = safeStorage.get('session', 'ermapp_user') || safeStorage.get('local', 'ermapp_user');
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 // Padanan akses.getkode() Java: identitas operator yang sedang login,
 // dipakai sebagai "petugas" saat mencatat riwayat_barang_medis (lihat
 // backend/apotek_riwayat_barang_medis.go) — BUKAN field bisnis
@@ -5,14 +27,8 @@
 // yang punya arti berbeda (staf yang tercatat bertanggung jawab, bisa
 // beda dari operator yang login).
 export function getCurrentPetugas(): string {
-  try {
-    const stored = window.localStorage.getItem('ermapp_user');
-    if (!stored) return '';
-    const user = JSON.parse(stored) as { full_name?: string; username?: string };
-    return user.full_name || user.username || '';
-  } catch {
-    return '';
-  }
+  const user = readErmappUser() as { full_name?: string; username?: string } | null;
+  return user?.full_name || user?.username || '';
 }
 
 // NIP petugas Khanza (tabel `petugas`) yang di-link ke akun login ini
@@ -23,14 +39,8 @@ export function getCurrentPetugas(): string {
 // ke NIP manapun (mis. akun admin generik) — pemanggil harus tetap
 // membiarkan field-nya bisa diisi manual sebagai fallback.
 export function getCurrentUserNip(): string {
-  try {
-    const stored = window.localStorage.getItem('ermapp_user');
-    if (!stored) return '';
-    const user = JSON.parse(stored) as { nip?: string };
-    return user.nip || '';
-  } catch {
-    return '';
-  }
+  const user = readErmappUser() as { nip?: string } | null;
+  return user?.nip || '';
 }
 
 // Role akun yang sedang login ('admin', 'dokter', 'farmasi', dst — lihat
@@ -41,12 +51,6 @@ export function getCurrentUserNip(): string {
 // ModalCariPetugas), sementara akun non-admin tetap terkunci ke
 // identitasnya sendiri.
 export function getCurrentUserRole(): string {
-  try {
-    const stored = window.localStorage.getItem('ermapp_user');
-    if (!stored) return '';
-    const user = JSON.parse(stored) as { role?: string };
-    return user.role || '';
-  } catch {
-    return '';
-  }
+  const user = readErmappUser() as { role?: string } | null;
+  return user?.role || '';
 }
