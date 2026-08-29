@@ -167,13 +167,13 @@ const PERURI_SECTIONS: PeruriSection[] = [
   {
     title: 'Single Signing',
     fields: [
-      { key: 'SINGLE_SEND_DOCUMENT', label: 'API Send Document', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/sendDocument/v1' },
+      { key: 'SINGLE_SEND_DOCUMENT', label: 'API Send Document', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureSession/1.0/sendDocument/v1' },
       { key: 'SINGLE_SET_SIGNATURE', label: 'API Set Signature', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/setSignature/v1' },
       { key: 'SINGLE_VIEW_DOCUMENT', label: 'API View Document (Unsigned)', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/viewDocument/v1' },
       { key: 'SINGLE_UPDATE_DOCUMENT_PASSWORD', label: 'API Update Document Password', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/updateDocumentPassword/v1' },
       { key: 'SINGLE_SEND_OTP', label: 'API Send OTP', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/sendOtp/v1' },
       { key: 'SINGLE_SIGNING', label: 'API Signing', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/signing/v2' },
-      { key: 'SINGLE_DOWNLOAD_DOCUMENT', label: 'API Download Document', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/downloadDocument/v1' },
+      { key: 'SINGLE_DOWNLOAD_DOCUMENT', label: 'API Download Document', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureSession/1.0/downloadDocument/v1' },
       { key: 'SINGLE_CHECK_DOCUMENT_STATUS', label: 'API Check Document Status', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/checkDocumentStatus/v1' },
       { key: 'SINGLE_DELETE_ORDER', label: 'API Delete Order', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/deleteOrder/v1' },
     ],

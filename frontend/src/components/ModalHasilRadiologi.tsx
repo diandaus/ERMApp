@@ -662,13 +662,18 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   };
 
   // handleTandaTangan — tombol "Tanda Tangan" di samping tombol printer,
-  // sekali klik menjalankan alur Digital Signature Peruri langkah 1-4
-  // berurutan (persis diagram yg diberikan user):
-  //   1. Send Document -> dapat orderId
-  //   2. Set Signature Position (pakai orderId)
-  //   3. Get OTP (Session Initiate) -> dapat tokenSession, Peruri kirim
+  // sekali klik menjalankan alur Digital Signature Peruri (SEMUA di
+  // namespace digitalSignatureSession — sendDocument, sessionInitiate,
+  // sessionValidation, signingSession, downloadDocument HARUS satu
+  // namespace yg sama, lihat ApiPeruri.java referensi produksi; jangan
+  // campur dgn digitalSignatureFullJwtSandbox spt setSignature, orderId
+  // dari namespace beda tidak saling dikenali → "Failed to Sign"):
+  //   1. Send Document -> dapat orderId (signer, termasuk posisi TTD &
+  //      teraImage, SUDAH ikut di payload ini — TIDAK ADA API Set
+  //      Signature terpisah)
+  //   2. Get OTP (Session Initiate) -> dapat tokenSession, Peruri kirim
   //      kode OTP ke email dokter P.J. lewat email/SMS/WhatsApp
-  //   4. User diminta input OTP (dialog) -> Validate OTP (Session
+  //   3. User diminta input OTP (dialog) -> Validate OTP (Session
   //      Validation) -> Signing (Signing Session)
   // PDF hasil generate (buildRadiologiPdfUntukTtd) diupload sbg file
   // SEMENTARA (dihapus otomatis di backend begitu terkirim ke Peruri,
@@ -768,7 +773,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       form.append('upperRightY', String(signBox.upperRightY));
       form.append('page', signBox.page);
       form.append('certificateLevel', 'NOT_CERTIFIED');
-      form.append('varLocation', 'Jakarta');
+      form.append('varLocation', 'Sigli');
       form.append('varReason', 'Signed');
       form.append('teraImage', 'QR-DETECSI');
       form.append('orderType', 'INDIVIDUAL');
@@ -782,18 +787,17 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
       if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
 
-      // 2. Set Signature Position
-      await peruriPost('/api/peruri/set-signature', {
-        orderId,
-        signer: {
-          isVisualSign: 'YES',
-          lowerLeftX: String(signBox.lowerLeftX), lowerLeftY: String(signBox.lowerLeftY),
-          upperRightX: String(signBox.upperRightX), upperRightY: String(signBox.upperRightY),
-          page: signBox.page, certificateLevel: 'NOT_CERTIFIED', varLocation: 'Jakarta', varReason: 'Signed',
-        },
-      });
+      // (TIDAK ADA langkah "Set Signature Position" terpisah — posisi TTD,
+      // certificateLevel, varLocation/varReason, & teraImage SUDAH ikut
+      // terkirim di payload Send Document di atas (field signer), persis
+      // referensi ApiPeruri.java produksi. Endpoint setSignature ada di
+      // namespace digitalSignatureFullJwtSandbox yg BEDA dgn sendDocument/
+      // sessionInitiate/sessionValidation/signingSession/downloadDocument
+      // (semua digitalSignatureSession) — orderId dari sendDocument TIDAK
+      // dikenali kalau dipakai lintas-namespace, itu penyebab
+      // "Failed to Sign | %docSigningOutput/errorMessage%".)
 
-      // 3. Cek dulu apakah email ini masih punya sesi OTP tervalidasi yg
+      // 2. Cek dulu apakah email ini masih punya sesi OTP tervalidasi yg
       // belum expired (durasi bisa diatur s.d. 24 jam di Pengaturan) —
       // kalau masih valid, LEWATI Get OTP + dialog input OTP + Validate
       // OTP, langsung Signing. OTP hanya diminta ulang kalau sesi
@@ -805,12 +809,12 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       if (sessionRes.ok && sessionData.valid) {
         sesiDipakaiUlang = true;
       } else {
-        // 3a. Get OTP (Session Initiate) — Peruri kirim kode OTP ke email ini.
+        // 2a. Get OTP (Session Initiate) — Peruri kirim kode OTP ke email ini.
         const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
         let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
         if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
 
-        // 3b. Minta user input OTP, lalu Validate OTP.
+        // 2b. Minta user input OTP, lalu Validate OTP.
         hideProcessing();
         const otpCode = await showOtpDialog(email, async () => {
           const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
@@ -824,7 +828,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
       }
 
-      // 4. Signing — pakai orderId, tidak perlu OTP lagi (baik sesi lama
+      // 3. Signing — pakai orderId, tidak perlu OTP lagi (baik sesi lama
       // yg dipakai ulang, maupun sesi baru yg barusan divalidasi).
       if (sesiDipakaiUlang) showProcessing('Sesi OTP masih aktif, menandatangani dokumen, mohon tunggu...');
       await peruriPost('/api/peruri/signing', { orderId });
