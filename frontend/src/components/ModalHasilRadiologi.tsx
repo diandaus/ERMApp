@@ -682,9 +682,9 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   // supaya user tau proses TTE sedang berjalan (bukan hang), krn alur ini
   // memanggil beberapa API Peruri berurutan yg total bisa makan waktu
   // beberapa detik.
-  const showProcessing = (text: string) => {
+  const showProcessing = (html: string) => {
     Swal.fire({
-      title: text,
+      html,
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
@@ -787,6 +787,12 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
       if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
 
+      // Tampilkan dulu Order ID yg berhasil didapat dari Send Document
+      // sebentar, supaya user tau dokumennya sudah benar2 terkirim ke
+      // Peruri SEBELUM lanjut ke proses OTP/Signing berikutnya.
+      showProcessing(`Dokumen berhasil terkirim ke Peruri.<br/>Order ID: <b>${orderId}</b><br/><span style="font-size:12px;color:#6b7280;">Melanjutkan proses tanda tangan...</span>`);
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+
       // (TIDAK ADA langkah "Set Signature Position" terpisah — posisi TTD,
       // certificateLevel, varLocation/varReason, & teraImage SUDAH ikut
       // terkirim di payload Send Document di atas (field signer), persis
@@ -810,14 +816,14 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         sesiDipakaiUlang = true;
       } else {
         // 2a. Get OTP (Session Initiate) — Peruri kirim kode OTP ke email ini.
-        const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+        const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
         let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
         if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
 
         // 2b. Minta user input OTP, lalu Validate OTP.
         hideProcessing();
         const otpCode = await showOtpDialog(email, async () => {
-          const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+          const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
           const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
           if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
           tokenSession = newTokenSession;
@@ -831,7 +837,21 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       // 3. Signing — pakai orderId, tidak perlu OTP lagi (baik sesi lama
       // yg dipakai ulang, maupun sesi baru yg barusan divalidasi).
       if (sesiDipakaiUlang) showProcessing('Sesi OTP masih aktif, menandatangani dokumen, mohon tunggu...');
-      await peruriPost('/api/peruri/signing', { orderId });
+      try {
+        await peruriPost('/api/peruri/signing', { orderId });
+      } catch (err) {
+        // Sesi "Aktif" di tracking_tte_session TIDAK menjamin sesi itu
+        // masih valid persis di sisi Peruri (bisa saja Peruri sudah
+        // menganggapnya expired lbh cepat dari 24 jam kita) — persis
+        // ditangani sama di kode Khanza (MnKirimDanTandaTanganActionPerformed):
+        // deteksi pesan error yg menyinggung otp/session/expired, arahkan
+        // user klik "Minta OTP Ulang" dulu, BUKAN dianggap bug/gagal total.
+        const msg = err instanceof Error ? err.message : '';
+        if (/otp|session|expired/i.test(msg)) {
+          throw new Error('Masa berlaku sesi OTP sudah habis di sisi Peruri. Silakan klik tombol "Minta OTP Ulang" terlebih dahulu, lalu coba Tanda Tangan lagi.');
+        }
+        throw err;
+      }
       hideProcessing();
 
       await Swal.fire({
@@ -871,13 +891,13 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       }
       const email = emailData.email as string;
 
-      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
       let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
       if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
 
       hideProcessing();
       const otpCode = await showOtpDialog(email, async () => {
-        const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+        const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
         const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
         if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
         tokenSession = newTokenSession;
