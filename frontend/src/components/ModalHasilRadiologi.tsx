@@ -48,6 +48,30 @@ const ClipIcon = () => (
   </svg>
 );
 
+// PERURI_SIGNING_ERROR_MAP — tabel kode resultCode resmi API Signing
+// Peruri (dikirim langsung oleh user, bukan hasil tebakan), dipakai
+// handleTandaTangan supaya pesan error yg ditampilkan ke user jelas
+// menyebut penyebabnya, bukan cuma resultDesc mentah yg kadang berupa
+// placeholder rusak spt "%docSigningOutput/errorMessage%".
+const PERURI_SIGNING_ERROR_MAP: Record<string, string> = {
+  '01': 'OTP tidak valid/gagal. Silakan klik "Minta OTP Ulang" lalu coba Tanda Tangan lagi.',
+  '02': 'Expired key.',
+  '03': 'Dokumen sudah kadaluarsa atau sudah pernah ditandatangani. Coba ulangi dari awal (klik Tanda Tangan lagi).',
+  '4001': 'Sertifikat elektronik dokter ini belum tersedia di Peruri. Cek status via tombol "Sertifikat" di Bridging > Peruri > Data Pengguna.',
+  '4003': 'Worker Peruri belum tersedia. Coba lagi beberapa saat.',
+  '4004': 'Worker Peruri sedang bermasalah. Coba lagi beberapa saat.',
+  '4005': 'Spesimen tanda tangan tidak ditemukan — dokter kemungkinan belum submit spesimen tanda tangan ke Peruri.',
+  '4006': 'Gagal mengambil data spesimen tanda tangan dari Peruri.',
+  '4007': 'Gagal menambahkan visibility penandatangan.',
+  '4008': 'Gagal mengubah visibility penandatangan.',
+  '4009': 'File dokumen tidak ditemukan di Peruri.',
+  '4012': 'Gagal melakukan proses penandatanganan di server Peruri.',
+  '4014': 'Koordinat posisi tanda tangan tidak ditemukan di dokumen oleh Peruri.',
+  '4015': 'Gagal generate Peruri Tera (stample tanda tangan).',
+  '4017': 'Gagal generate kode QR tanda tangan.',
+  '4026': 'Gagal memvalidasi token dan OTP. Silakan klik "Minta OTP Ulang" lalu coba Tanda Tangan lagi.',
+};
+
 type Props = { noorder: string; nip?: string; onClose: () => void; onSaved: () => void };
 
 export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, onSaved }) => {
@@ -656,7 +680,12 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     if (!res.ok) throw new Error(data.error || `Gagal memanggil ${path}`);
     const upstream = data.response;
     if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
-      throw new Error(upstream.resultDesc || `${path} gagal (resultCode ${upstream.resultCode})`);
+      // resultCode WAJIB ikut ditampilkan (bukan cuma resultDesc) — Peruri
+      // punya tabel kode error signing resmi (01 OTP invalid, 4001
+      // sertifikat blm ada, 4014 koordinat tdk ditemukan, dst) yg jadi
+      // satu2nya cara membedakan penyebab sebenarnya krn resultDesc-nya
+      // kadang cuma placeholder rusak spt "%docSigningOutput/errorMessage%".
+      throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || `${path} gagal`}`);
     }
     return upstream;
   };
@@ -782,7 +811,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       const sendData = await sendRes.json();
       if (!sendRes.ok) throw new Error(sendData.error || 'Gagal mengirim dokumen ke Peruri');
       if (sendData.response && typeof sendData.response === 'object' && 'resultCode' in sendData.response && sendData.response.resultCode !== '0') {
-        throw new Error(sendData.response.resultDesc || 'Send Document gagal');
+        throw new Error(`[${sendData.response.resultCode}] ${sendData.response.resultDesc || 'Send Document gagal'}`);
       }
       const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
       if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
@@ -840,13 +869,19 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       try {
         await peruriPost('/api/peruri/signing', { orderId });
       } catch (err) {
-        // Sesi "Aktif" di tracking_tte_session TIDAK menjamin sesi itu
-        // masih valid persis di sisi Peruri (bisa saja Peruri sudah
-        // menganggapnya expired lbh cepat dari 24 jam kita) — persis
-        // ditangani sama di kode Khanza (MnKirimDanTandaTanganActionPerformed):
-        // deteksi pesan error yg menyinggung otp/session/expired, arahkan
-        // user klik "Minta OTP Ulang" dulu, BUKAN dianggap bug/gagal total.
         const msg = err instanceof Error ? err.message : '';
+        // Cocokkan resultCode (format "[kode] pesan", lihat peruriPost) thd
+        // tabel kode error resmi API Signing Peruri, supaya pesan yg
+        // ditampilkan ke user jelas — bukan cuma resultDesc mentah yg
+        // kadang berupa placeholder rusak spt "%docSigningOutput/errorMessage%".
+        const codeMatch = msg.match(/^\[([^\]]+)\]/);
+        const code = codeMatch?.[1];
+        if (code && code in PERURI_SIGNING_ERROR_MAP) {
+          throw new Error(`[${code}] ${PERURI_SIGNING_ERROR_MAP[code]}`);
+        }
+        // Fallback (kode tdk ada di tabel, atau bukan error terstruktur) —
+        // tetap deteksi kata kunci otp/session/expired spt kode Khanza
+        // (MnKirimDanTandaTanganActionPerformed) sblm nyerah ke pesan asli.
         if (/otp|session|expired/i.test(msg)) {
           throw new Error('Masa berlaku sesi OTP sudah habis di sisi Peruri. Silakan klik tombol "Minta OTP Ulang" terlebih dahulu, lalu coba Tanda Tangan lagi.');
         }
