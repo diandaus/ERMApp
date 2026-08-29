@@ -814,7 +814,10 @@ func sendPeruriDocumentFromFile(db *sql.DB) gin.HandlerFunc {
 		signer.CertificateLevel = defVal(c.PostForm("certificateLevel"), "NOT_CERTIFIED")
 		signer.VarLocation = c.PostForm("varLocation")
 		signer.VarReason = defVal(c.PostForm("varReason"), "Signed")
-		signer.TeraImage = defVal(c.PostForm("teraImage"), "QR-DETECSI")
+		// TeraImage TIDAK di-default ke "QR-DETECSI" lagi (sementara, utk
+		// isolasi penyebab error [4012] Signing) — cuma terisi kalau
+		// frontend eksplisit mengirim field "teraImage".
+		signer.TeraImage = c.PostForm("teraImage")
 		orderType := defVal(c.PostForm("orderType"), "INDIVIDUAL")
 
 		tmpDir := "./tmp_peruri"

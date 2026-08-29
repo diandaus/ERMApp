@@ -804,7 +804,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       form.append('certificateLevel', 'NOT_CERTIFIED');
       form.append('varLocation', 'Sigli');
       form.append('varReason', 'Signed');
-      form.append('teraImage', 'QR-DETECSI');
+      // teraImage: 'QR-DETECSI' — SEMENTARA DILEPAS utk isolasi penyebab
+      // error [4012] "Gagal melakukan proses penandatanganan di server
+      // Peruri" (satu2nya field yg beda dari saat TTE terakhir kali
+      // berhasil). Pasang lagi kalau terbukti bukan penyebabnya.
       form.append('orderType', 'INDIVIDUAL');
 
       const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
