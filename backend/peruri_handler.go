@@ -814,10 +814,11 @@ func sendPeruriDocumentFromFile(db *sql.DB) gin.HandlerFunc {
 		signer.CertificateLevel = defVal(c.PostForm("certificateLevel"), "NOT_CERTIFIED")
 		signer.VarLocation = c.PostForm("varLocation")
 		signer.VarReason = defVal(c.PostForm("varReason"), "Signed")
-		// TeraImage TIDAK di-default ke "QR-DETECSI" lagi (sementara, utk
-		// isolasi penyebab error [4012] Signing) — cuma terisi kalau
-		// frontend eksplisit mengirim field "teraImage".
-		signer.TeraImage = c.PostForm("teraImage")
+		// teraImage: QR-DETECSI TERBUKTI BUKAN penyebab error [4012] Signing
+		// (sudah dites dilepas, errornya tetap sama) — didefault lagi krn
+		// kode Khanza yg terbukti jalan (ApiPeruri.java) SELALU
+		// menyertakan field ini di setiap sendDocument.
+		signer.TeraImage = defVal(c.PostForm("teraImage"), "QR-DETECSI")
 		orderType := defVal(c.PostForm("orderType"), "INDIVIDUAL")
 
 		tmpDir := "./tmp_peruri"

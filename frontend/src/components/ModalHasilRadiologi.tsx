@@ -366,19 +366,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     }
   };
 
-  // Ukuran kotak tanda tangan elektronik Peruri (Penanggung Jawab, kiri) —
-  // POSISI-nya (x/y) dihitung DINAMIS di dalam buildRadiologiPdfUntukTtd,
-  // persis di bawah kotak "Hasil Pemeriksaan" (bukan posisi tetap di dasar
-  // halaman) — supaya kalau hasil pemeriksaannya pendek/panjang, kotak TTD
-  // ikut naik/turun mengikuti, tidak numpuk atau kejauhan dari kotak hasil.
-  // Peruri sendiri sejauh ini cuma terima koordinat X/Y eksplisit (belum
-  // ketemu fitur setara "tag_koordinat" Sertisign di curl manapun yg
-  // dikirim user — beda vendor, jadi TIDAK diasumsikan ada), jadi
-  // "otomatis"-nya dikerjakan di sisi kita: kita yg hitung Y-nya, bukan
-  // Peruri yg deteksi sendiri dari isi dokumen.
-  const SIGN_BOX_WIDTH = 160;
-  const SIGN_BOX_HEIGHT = 80;
-  const SIGN_BOX_GAP_BELOW_HASIL = 16;
+  // Kotak tanda tangan elektronik Peruri (Penanggung Jawab, kiri) — posisi
+  // koordinatnya FIXED (lihat SIGN_BOX di buildRadiologiPdfUntukTtd),
+  // BUKAN dihitung otomatis dari posisi kotak "Hasil Pemeriksaan" —
+  // dikembalikan ke versi ini utk isolasi penyebab error [4012] Signing.
 
   // buildRadiologiPdfUntukTtd — PENGECUALIAN dari CETAK_STANDAR.md §1
   // (sama pola dgn buildBillingPdf di ModalBilling.tsx): fitur kirim ke
@@ -552,17 +543,14 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     });
     y -= 6; // tepi bawah kotak hasil (sama spt y yg dipakai utk drawRectangle di atas)
 
-    // SIGN_BOX — posisi kotak TTD dihitung DI SINI, persis di bawah kotak
-    // Hasil Pemeriksaan (y saat ini) dikurangi jarak SIGN_BOX_GAP_BELOW_HASIL
-    // — bukan lagi posisi tetap di dasar halaman. Diclamp ke margin bawah
-    // halaman spy tidak digambar meluber keluar kalau hasil pemeriksaannya
-    // sangat panjang (belum ada dukungan halaman baru/pagination di sini).
-    const signBoxTop = Math.max(margin + SIGN_BOX_HEIGHT, y - SIGN_BOX_GAP_BELOW_HASIL);
-    const SIGN_BOX = {
-      lowerLeftX: margin, lowerLeftY: signBoxTop - SIGN_BOX_HEIGHT,
-      upperRightX: margin + SIGN_BOX_WIDTH, upperRightY: signBoxTop,
-      page: '1',
-    };
+    // SIGN_BOX — koordinat TETAP (BUKAN dihitung otomatis dari posisi kotak
+    // Hasil Pemeriksaan) — dikembalikan ke nilai fixed spt saat TTE
+    // terakhir kali TERBUKTI berhasil, utk isolasi apakah koordinat
+    // dinamis (yg bisa hasilkan nilai berbeda2 tiap dokumen) penyebab
+    // error [4012] "Gagal melakukan proses penandatanganan di server
+    // Peruri". SIGN_BOX_WIDTH/HEIGHT/GAP_BELOW_HASIL di atas jadi tidak
+    // terpakai sementara.
+    const SIGN_BOX = { lowerLeftX: 40, lowerLeftY: 40, upperRightX: 200, upperRightY: 120, page: '1' };
     y = SIGN_BOX.lowerLeftY - 10;
 
     // Kolom KANAN — Petugas Radiologi. Ini BUKAN area stample Peruri (beda
@@ -804,10 +792,11 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       form.append('certificateLevel', 'NOT_CERTIFIED');
       form.append('varLocation', 'Sigli');
       form.append('varReason', 'Signed');
-      // teraImage: 'QR-DETECSI' — SEMENTARA DILEPAS utk isolasi penyebab
-      // error [4012] "Gagal melakukan proses penandatanganan di server
-      // Peruri" (satu2nya field yg beda dari saat TTE terakhir kali
-      // berhasil). Pasang lagi kalau terbukti bukan penyebabnya.
+      // teraImage: QR-DETECSI TERBUKTI BUKAN penyebab [4012] (sudah dites
+      // dilepas, errornya tetap sama persis) — dipasang lagi krn kode
+      // Khanza yg terbukti jalan (ApiPeruri.java) SELALU menyertakan
+      // field ini di setiap sendDocument, tanpa terkecuali.
+      form.append('teraImage', 'QR-DETECSI');
       form.append('orderType', 'INDIVIDUAL');
 
       const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
