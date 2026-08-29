@@ -160,7 +160,7 @@ const PERURI_SECTIONS: PeruriSection[] = [
       { key: 'CERT_VIDEO_VERIFICATION', label: 'API Video Verification', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/videoVerification/v1' },
       { key: 'CERT_VIDEO_VERIFICATION_RENEWAL', label: 'API Video Verification for Renewal', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/videoVerificationForRenewal/v1' },
       { key: 'CERT_SEND_SPECIMEN', label: 'API Send Specimen', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/sendSpeciment/v1' },
-      { key: 'CERT_CHECK_BY_EMAIL', label: 'API Check Certificate By Email', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/checkCertificate/v1' },
+      { key: 'CERT_CHECK_BY_EMAIL', label: 'API Check Certificate By Email', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureSession/1.0/checkCertificate/v1' },
       { key: 'CERT_CHECK_BY_KTP', label: 'API Check Certificate By KTP', defaultValue: 'https://apgdev.peruri.co.id:19044/gateway/digitalSignatureFullJwtSandbox/1.0/checkCertificateByKTP/v1' },
     ],
   },
