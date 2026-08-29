@@ -966,6 +966,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel peruri_konfigurasi: %v", err)
 	}
 
+	if err := ensureTrackingTteSessionTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel tracking_tte_session: %v", err)
+	}
+
 	if err := ensureAkunPeruriTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel akun_peruri: %v", err)
 	}
@@ -3888,6 +3892,7 @@ func main() {
 	r.POST("/api/peruri/set-signature", setPeruriSignature(db))
 	r.POST("/api/peruri/get-otp", getPeruriOtp(db))
 	r.POST("/api/peruri/validate-otp", validatePeruriOtp(db))
+	r.GET("/api/peruri/session-status", getPeruriSessionStatus(db))
 	r.POST("/api/peruri/signing", signPeruriDocument(db))
 	r.POST("/api/peruri/download-document", downloadPeruriDocument(db))
 	r.POST("/api/peruri/send-document-tmp", sendPeruriDocumentFromFile(db))

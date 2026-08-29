@@ -35,6 +35,33 @@ func ensurePeruriKonfigurasiTable(db *sql.DB) error {
 	return err
 }
 
+// ensureTrackingTteSessionTable — log sesi OTP tervalidasi per email dokter
+// (Session Validation Peruri, "duration" menitnya user-configurable s.d. 24
+// jam). Dipakai supaya alur Tanda Tangan TIDAK minta OTP ulang di setiap
+// dokumen selama sesi email tsb belum expired — persis maksud "duration"
+// pada API sessionValidation Peruri (sesi tervalidasi dipakai ulang sampai
+// durasinya abis, bukan re-submit OTP tiap signing).
+//
+// Tabel ini SUDAH ADA di DB legacy (disalin dari ibnusinadev, kolom
+// email/token_session/tgl_session/status TANPA primary key) — dipakai
+// APA ADANYA (append-only log, satu baris per validasi OTP sukses),
+// hanya ditambah kolom "id" (AUTO_INCREMENT PRIMARY KEY) supaya bisa
+// ambil baris TERBARU per email. CREATE TABLE di sini cuma fallback utk
+// instalasi baru yg belum punya tabelnya sama sekali.
+func ensureTrackingTteSessionTable(db *sql.DB) error {
+	const createTable = `
+		CREATE TABLE IF NOT EXISTS tracking_tte_session (
+			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+			email VARCHAR(255) DEFAULT NULL,
+			token_session VARCHAR(255) DEFAULT NULL,
+			tgl_session DATETIME DEFAULT NULL,
+			status ENUM('Aktif','Expired') DEFAULT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+	`
+	_, err := db.Exec(createTable)
+	return err
+}
+
 // getPeruriConfigMap — versi internal getPeruriConfig TANPA masking, dipakai
 // handler lain (mis. testPeruriJWT) yg genuinely butuh API_KEY asli utk
 // manggil server Peruri, bukan cuma ditampilkan ke browser.
@@ -276,6 +303,12 @@ type peruriSigner struct {
 	CertificateLevel string `json:"certificateLevel"`
 	VarLocation      string `json:"varLocation"`
 	VarReason        string `json:"varReason"`
+	// TeraImage — nilai literal "QR-DETECSI" (bukan gambar base64 spt nama
+	// field-nya menyiratkan) mengganti visual stample TTE Peruri jadi
+	// bentuk QR/barcode, dipakai KHUSUS di Send Document (bukan Set
+	// Signature Position) — sesi tanda tangan sblmnya TIDAK pakai field
+	// ini sama sekali.
+	TeraImage string `json:"teraImage,omitempty"`
 }
 
 // POST /api/peruri/send-document — panggil API "Send Document" PERURI
@@ -486,6 +519,19 @@ func getPeruriOtp(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi server Peruri: " + err.Error()})
 			return
 		}
+
+		// OTP baru berhasil diminta (baik permintaan pertama maupun "Kirim
+		// Ulang") — baris "Aktif" LAMA milik email ini di tracking_tte_session
+		// dihapus, digantikan sesi OTP yg terbaru begitu user berhasil
+		// validate-otp (lihat validatePeruriOtp, insert baris baru
+		// status='Aktif'). Mencegah dua baris "Aktif" nyangkut bareng utk
+		// email yg sama di getPeruriSessionStatus.
+		if m, ok := parsed.(map[string]interface{}); ok {
+			if rc, ok := m["resultCode"].(string); ok && rc == "0" {
+				_, _ = db.Exec(`DELETE FROM tracking_tte_session WHERE email = ? AND status = 'Aktif'`, reqIn.Email)
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{"status_code": statusCode, "response": parsed})
 	}
 }
@@ -559,7 +605,75 @@ func validatePeruriOtp(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi server Peruri: " + err.Error()})
 			return
 		}
+
+		// Sesi tervalidasi dicatat HANYA kalau Peruri benar2 sukses
+		// (resultCode "0") — supaya sesi gagal tidak ikut tercatat "Aktif"
+		// dan bikin signing berikutnya diloloskan tanpa OTP yg valid.
+		// tracking_tte_session APPEND-ONLY (satu baris per validasi OTP
+		// sukses, tabel legacy tanpa expires_at) — validitas dihitung dari
+		// tgl_session + jendela waktu tetap saat baca (getPeruriSessionStatus),
+		// bukan disimpan per-baris.
+		if m, ok := parsed.(map[string]interface{}); ok {
+			if rc, ok := m["resultCode"].(string); ok && rc == "0" {
+				_, _ = db.Exec(`
+					INSERT INTO tracking_tte_session (email, token_session, tgl_session, status)
+					VALUES (?, ?, NOW(), 'Aktif')
+				`, reqIn.Email, reqIn.TokenSession)
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{"status_code": statusCode, "response": parsed})
+	}
+}
+
+// trackingTteSessionWindow — jendela waktu tetap (24 jam) dipakai
+// getPeruriSessionStatus utk anggap baris tracking_tte_session TERBARU
+// milik suatu email masih valid. Tabelnya legacy (tanpa kolom
+// expires_at/duration per-baris), jadi durasinya TIDAK per-baris kayak
+// desain awal (peruri_signing_session yg sudah dihapus) — disamakan
+// dgn nilai "duration" yg selama ini SELALU dikirim frontend ("1440"
+// menit = 24 jam, lihat handleTandaTangan/handleMintaOtpUlang di
+// ModalHasilRadiologi.tsx).
+const trackingTteSessionWindow = 24 * time.Hour
+
+// GET /api/peruri/session-status?email=... — cek apakah email dokter ini
+// masih punya sesi OTP tervalidasi yg belum expired (baris TERBARU di
+// tracking_tte_session, lihat ensureTrackingTteSessionTable). Dipakai
+// frontend SEBELUM memulai alur Get OTP: kalau masih valid, langsung
+// lompat ke Signing tanpa minta OTP ulang — persis maksud "duration" pada
+// sessionValidation Peruri.
+func getPeruriSessionStatus(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		email := c.Query("email")
+		if email == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "email wajib diisi"})
+			return
+		}
+		var tglSession time.Time
+		err := db.QueryRow(`
+			SELECT tgl_session FROM tracking_tte_session
+			WHERE email = ? AND status = 'Aktif'
+			ORDER BY id DESC LIMIT 1
+		`, email).Scan(&tglSession)
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusOK, gin.H{"valid": false})
+			return
+		}
+		if err == nil && time.Since(tglSession) > trackingTteSessionWindow {
+			// Sesi ini sudah lewat 24 jam — bukan cuma dianggap tidak valid,
+			// tapi baris (Aktif ATAU tersisa lainnya) utk email ini langsung
+			// DIHAPUS di sini juga (bukan diubah jadi status "Expired") supaya
+			// tracking_tte_session tidak menumpuk baris basi selamanya kalau
+			// dokternya tidak pernah minta OTP baru lagi.
+			_, _ = db.Exec(`DELETE FROM tracking_tte_session WHERE email = ?`, email)
+			c.JSON(http.StatusOK, gin.H{"valid": false})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"valid": true, "expires_at": tglSession.Add(trackingTteSessionWindow).Format("2006-01-02 15:04:05")})
 	}
 }
 
@@ -700,6 +814,7 @@ func sendPeruriDocumentFromFile(db *sql.DB) gin.HandlerFunc {
 		signer.CertificateLevel = defVal(c.PostForm("certificateLevel"), "NOT_CERTIFIED")
 		signer.VarLocation = c.PostForm("varLocation")
 		signer.VarReason = defVal(c.PostForm("varReason"), "Signed")
+		signer.TeraImage = defVal(c.PostForm("teraImage"), "QR-DETECSI")
 		orderType := defVal(c.PostForm("orderType"), "INDIVIDUAL")
 
 		tmpDir := "./tmp_peruri"

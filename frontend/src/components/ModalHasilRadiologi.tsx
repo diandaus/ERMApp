@@ -79,6 +79,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   const [printing, setPrinting] = React.useState(false);
   const [signing, setSigning] = React.useState(false);
   const [previewingTtd, setPreviewingTtd] = React.useState(false);
+  const [requestingOtp, setRequestingOtp] = React.useState(false);
 
   const todayStr = () => {
     const d = new Date();
@@ -341,23 +342,29 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     }
   };
 
-  // Kotak posisi tanda tangan elektronik Peruri — koordinat PDF (origin
-  // kiri-bawah, satuan pt), pojok KIRI-bawah halaman (Penanggung Jawab
-  // dipindah ke kiri, Petugas Radiologi di kanan — lihat komentar di
-  // buildRadiologiPdfUntukTtd). Angka INI PERSIS yg dikirim ke Peruri
-  // (signer.lowerLeftX/Y, upperRightX/Y) supaya area yg di-stample Peruri
-  // match dgn kotak "Penanggung Jawab" yg digambar buildRadiologiPdfUntukTtd
-  // di bawah — sengaja dibiarkan kosong di dalam kotaknya (bukan digambar
-  // QR sendiri spt versi cetak/window.print), krn stample tanda tangan
-  // asli yg ditaruh Peruri di posisi ini.
-  const SIGN_BOX = { lowerLeftX: 40, lowerLeftY: 40, upperRightX: 200, upperRightY: 120, page: '1' };
+  // Ukuran kotak tanda tangan elektronik Peruri (Penanggung Jawab, kiri) —
+  // POSISI-nya (x/y) dihitung DINAMIS di dalam buildRadiologiPdfUntukTtd,
+  // persis di bawah kotak "Hasil Pemeriksaan" (bukan posisi tetap di dasar
+  // halaman) — supaya kalau hasil pemeriksaannya pendek/panjang, kotak TTD
+  // ikut naik/turun mengikuti, tidak numpuk atau kejauhan dari kotak hasil.
+  // Peruri sendiri sejauh ini cuma terima koordinat X/Y eksplisit (belum
+  // ketemu fitur setara "tag_koordinat" Sertisign di curl manapun yg
+  // dikirim user — beda vendor, jadi TIDAK diasumsikan ada), jadi
+  // "otomatis"-nya dikerjakan di sisi kita: kita yg hitung Y-nya, bukan
+  // Peruri yg deteksi sendiri dari isi dokumen.
+  const SIGN_BOX_WIDTH = 160;
+  const SIGN_BOX_HEIGHT = 80;
+  const SIGN_BOX_GAP_BELOW_HASIL = 16;
 
   // buildRadiologiPdfUntukTtd — PENGECUALIAN dari CETAK_STANDAR.md §1
   // (sama pola dgn buildBillingPdf di ModalBilling.tsx): fitur kirim ke
   // Peruri genuinely butuh byte PDF asli (base64Document), window.print()
   // tidak bisa diambil sbg byte oleh JS. Layout best-effort mendekati
   // handleCetak (BUKAN identik — font Helvetica pdf-lib, bukan Tahoma asli).
-  const buildRadiologiPdfUntukTtd = async (): Promise<{ pdfBytes: Uint8Array; email: string; namaDokterPj: string }> => {
+  const buildRadiologiPdfUntukTtd = async (): Promise<{
+    pdfBytes: Uint8Array; email: string; namaDokterPj: string;
+    signBox: { lowerLeftX: number; lowerLeftY: number; upperRightX: number; upperRightY: number; page: string };
+  }> => {
     if (!kdDokterPj) {
       throw new Error('Pilih Dokter P.J. dulu.');
     }
@@ -469,7 +476,18 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
 
     const colLeftX = margin;
     const colRightX = pageWidth / 2 + 10;
-    const alamatSingkat = (data.alamat || '-').length > 40 ? `${(data.alamat as string).slice(0, 40)}...` : (data.alamat || '-');
+    const infoValueX = colLeftX + 90;
+    const infoValuePrefixWidth = font.widthOfTextAtSize(': ', 9.5);
+    const alamatMaxWidth = colRightX - infoValueX - 8 - infoValuePrefixWidth;
+    const truncateToWidth = (s: string, size: number, maxWidth: number) => {
+      if (font.widthOfTextAtSize(s, size) <= maxWidth) return s;
+      let truncated = s;
+      while (truncated.length > 0 && font.widthOfTextAtSize(`${truncated}...`, size) > maxWidth) {
+        truncated = truncated.slice(0, -1);
+      }
+      return `${truncated}...`;
+    };
+    const alamatSingkat = truncateToWidth(data.alamat || '-', 9.5, alamatMaxWidth);
     const infoLeft: [string, string][] = [
       ['No.RM', data.no_rm], ['Nama Pasien', data.nama_pasien],
       ['JK/Umur', `${data.jk || '-'} / ${umurDariTglLahir(data.tgl_lahir)}`],
@@ -508,7 +526,20 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       x: margin, y: y - 6, width: pageWidth - margin * 2, height: hasilBoxTop - y + 20,
       borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 1,
     });
-    y -= 30;
+    y -= 6; // tepi bawah kotak hasil (sama spt y yg dipakai utk drawRectangle di atas)
+
+    // SIGN_BOX — posisi kotak TTD dihitung DI SINI, persis di bawah kotak
+    // Hasil Pemeriksaan (y saat ini) dikurangi jarak SIGN_BOX_GAP_BELOW_HASIL
+    // — bukan lagi posisi tetap di dasar halaman. Diclamp ke margin bawah
+    // halaman spy tidak digambar meluber keluar kalau hasil pemeriksaannya
+    // sangat panjang (belum ada dukungan halaman baru/pagination di sini).
+    const signBoxTop = Math.max(margin + SIGN_BOX_HEIGHT, y - SIGN_BOX_GAP_BELOW_HASIL);
+    const SIGN_BOX = {
+      lowerLeftX: margin, lowerLeftY: signBoxTop - SIGN_BOX_HEIGHT,
+      upperRightX: margin + SIGN_BOX_WIDTH, upperRightY: signBoxTop,
+      page: '1',
+    };
+    y = SIGN_BOX.lowerLeftY - 10;
 
     // Kolom KANAN — Petugas Radiologi. Ini BUKAN area stample Peruri (beda
     // dari kotak Penanggung Jawab di kiri) — QR-nya e-signature LOKAL biasa
@@ -535,7 +566,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     const tglCetakText = `Tgl.Cetak : ${tanggalCetak}`;
     const tglCetakW = font.widthOfTextAtSize(tglCetakText, 8.5);
     page.drawText(tglCetakText, {
-      x: petugasBoxCenterX - tglCetakW / 2, y: SIGN_BOX.upperRightY + 14, size: 8.5, font, color: rgb(0, 0, 0),
+      x: petugasBoxCenterX - tglCetakW / 2, y: SIGN_BOX.upperRightY + 4, size: 8.5, font, color: rgb(0, 0, 0),
     });
 
     // Kotak KIRI — Penanggung Jawab. Area RESERVED utk stample Peruri (SAMA
@@ -574,8 +605,25 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       x: petugasBoxCenterX - petugasNamaW / 2, y: SIGN_BOX.lowerLeftY + 8, size: 9, font, color: rgb(0.3, 0.3, 0.3),
     });
 
+    // Footer legal — jarak TETAP dari tepi bawah kertas (bukan dari
+    // SIGN_BOX, yg posisinya dinamis tp diclamp agar tidak pernah turun
+    // sampai di bawah margin), jadi footer selalu di posisi yg sama.
+    const footerSeparatorY = margin - 10;
+    page.drawLine({
+      start: { x: margin, y: footerSeparatorY }, end: { x: pageWidth - margin, y: footerSeparatorY },
+      thickness: 0.5, color: rgb(0.75, 0.75, 0.75),
+    });
+    const footerText = 'Dokumen ini sah dan telah ditandatangani secara elektronik menggunakan sertifikat digital yang diterbitkan oleh Peruri';
+    const footerLines = wrapText(footerText, pageWidth - margin * 2, 7.5);
+    let footerLineY = footerSeparatorY - 10;
+    footerLines.forEach((line) => {
+      const w = font.widthOfTextAtSize(line, 7.5);
+      page.drawText(line, { x: (pageWidth - w) / 2, y: footerLineY, size: 7.5, font, color: rgb(0.45, 0.45, 0.45) });
+      footerLineY -= 9;
+    });
+
     const pdfBytes = await pdf.save();
-    return { pdfBytes, email: emailDokterPj, namaDokterPj };
+    return { pdfBytes, email: emailDokterPj, namaDokterPj, signBox: SIGN_BOX };
   };
 
   // handlePreviewTtd — "Review PDF", buka PDF yg AKAN dikirim ke Peruri
@@ -625,24 +673,104 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   // PDF hasil generate (buildRadiologiPdfUntukTtd) diupload sbg file
   // SEMENTARA (dihapus otomatis di backend begitu terkirim ke Peruri,
   // lihat sendPeruriDocumentFromFile) — tidak pernah tersimpan permanen.
+  // showProcessing/hideProcessing — modal loading Swal (spinner + pesan)
+  // supaya user tau proses TTE sedang berjalan (bukan hang), krn alur ini
+  // memanggil beberapa API Peruri berurutan yg total bisa makan waktu
+  // beberapa detik.
+  const showProcessing = (text: string) => {
+    Swal.fire({
+      title: text,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+  };
+  const hideProcessing = () => Swal.close();
+
+  // showOtpDialog — dialog input kode OTP bergaya "Check your email" (ikon
+  // amplop, judul besar, satu kolom input SAJA — bukan kotak per-digit —
+  // link "Kirim ulang" di bawah input, tombol biru penuh), dipakai bareng
+  // oleh handleTandaTangan & handleMintaOtpUlang. onResend dipanggil saat
+  // link "Kirim ulang" diklik — caller yg update tokenSession-nya sendiri
+  // (assign ke variabel `let` di closure-nya) krn tokenSession baru cuma
+  // diketahui pemanggil, bukan dialog ini.
+  const showOtpDialog = async (email: string, onResend: () => Promise<void>, confirmButtonText: string): Promise<string | undefined> => {
+    const { value: otpCode } = await Swal.fire({
+      html: `
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+          <div style="width:64px;height:64px;border-radius:50%;background:#eff6ff;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 6-10 7L2 6"></path></svg>
+          </div>
+          <div style="font-size:19px;font-weight:700;color:#111827;margin-bottom:6px;">Masukkan Kode OTP</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.5;">Kode verifikasi sudah dikirim ke<br/><b style="color:#111827;">${email}</b></div>
+        </div>
+      `,
+      input: 'text',
+      inputAttributes: { maxlength: '6', inputmode: 'numeric', autocomplete: 'one-time-code' },
+      showCancelButton: false,
+      showCloseButton: true,
+      confirmButtonText,
+      confirmButtonColor: '#2563eb',
+      inputValidator: (value) => (!value ? 'Kode OTP wajib diisi' : undefined),
+      didOpen: (popup) => {
+        const input = popup.querySelector('.swal2-input') as HTMLInputElement | null;
+        if (input) {
+          input.placeholder = '6 digit kode OTP';
+          Object.assign(input.style, {
+            textAlign: 'center', fontSize: '22px', fontWeight: '700', letterSpacing: '8px',
+            maxWidth: '220px', margin: '4px auto 6px', borderRadius: '10px',
+          });
+        }
+        const confirmBtn = popup.querySelector('.swal2-confirm') as HTMLButtonElement | null;
+        if (confirmBtn) Object.assign(confirmBtn.style, { width: '85%', margin: '10px auto 0', borderRadius: '8px', fontWeight: '700' });
+
+        const resendWrap = document.createElement('div');
+        resendWrap.style.cssText = 'text-align:center;font-size:12.5px;color:#6b7280;margin-top:4px;';
+        resendWrap.innerHTML = 'Tidak menerima kode? <button id="btnResendOtpDialog" type="button" style="background:none;border:none;color:#2563eb;font-weight:600;font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0;">Kirim ulang</button>';
+        input?.insertAdjacentElement('afterend', resendWrap);
+
+        const resendBtn = resendWrap.querySelector('#btnResendOtpDialog') as HTMLButtonElement | null;
+        resendBtn?.addEventListener('click', async () => {
+          resendBtn.disabled = true;
+          resendBtn.textContent = 'Mengirim ulang...';
+          try {
+            await onResend();
+            resendBtn.textContent = 'Kode baru terkirim';
+          } catch (err) {
+            resendBtn.textContent = err instanceof Error ? err.message : 'Gagal kirim ulang';
+          } finally {
+            window.setTimeout(() => {
+              resendBtn.disabled = false;
+              resendBtn.textContent = 'Kirim ulang';
+            }, 3000);
+          }
+        });
+      },
+    });
+    return otpCode as string | undefined;
+  };
+
   const handleTandaTangan = async () => {
     setSigning(true);
+    showProcessing('Menyiapkan & mengirim dokumen ke Peruri, mohon tunggu...');
     try {
-      const { pdfBytes, email, namaDokterPj } = await buildRadiologiPdfUntukTtd();
+      const { pdfBytes, email, namaDokterPj, signBox } = await buildRadiologiPdfUntukTtd();
 
       // 1. Send Document
       const form = new FormData();
       form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), `HasilRadiologi_${noorder.replace(/\//g, '_')}.pdf`);
       form.append('email', email);
       form.append('isVisualSign', 'YES');
-      form.append('lowerLeftX', String(SIGN_BOX.lowerLeftX));
-      form.append('lowerLeftY', String(SIGN_BOX.lowerLeftY));
-      form.append('upperRightX', String(SIGN_BOX.upperRightX));
-      form.append('upperRightY', String(SIGN_BOX.upperRightY));
-      form.append('page', SIGN_BOX.page);
+      form.append('lowerLeftX', String(signBox.lowerLeftX));
+      form.append('lowerLeftY', String(signBox.lowerLeftY));
+      form.append('upperRightX', String(signBox.upperRightX));
+      form.append('upperRightY', String(signBox.upperRightY));
+      form.append('page', signBox.page);
       form.append('certificateLevel', 'NOT_CERTIFIED');
       form.append('varLocation', 'Jakarta');
       form.append('varReason', 'Signed');
+      form.append('teraImage', 'QR-DETECSI');
       form.append('orderType', 'INDIVIDUAL');
 
       const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
@@ -659,44 +787,112 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         orderId,
         signer: {
           isVisualSign: 'YES',
-          lowerLeftX: String(SIGN_BOX.lowerLeftX), lowerLeftY: String(SIGN_BOX.lowerLeftY),
-          upperRightX: String(SIGN_BOX.upperRightX), upperRightY: String(SIGN_BOX.upperRightY),
-          page: SIGN_BOX.page, certificateLevel: 'NOT_CERTIFIED', varLocation: 'Jakarta', varReason: 'Signed',
+          lowerLeftX: String(signBox.lowerLeftX), lowerLeftY: String(signBox.lowerLeftY),
+          upperRightX: String(signBox.upperRightX), upperRightY: String(signBox.upperRightY),
+          page: signBox.page, certificateLevel: 'NOT_CERTIFIED', varLocation: 'Jakarta', varReason: 'Signed',
         },
       });
 
-      // 3. Get OTP (Session Initiate) — Peruri kirim kode OTP ke email ini.
-      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
-      const tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
-      if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+      // 3. Cek dulu apakah email ini masih punya sesi OTP tervalidasi yg
+      // belum expired (durasi bisa diatur s.d. 24 jam di Pengaturan) —
+      // kalau masih valid, LEWATI Get OTP + dialog input OTP + Validate
+      // OTP, langsung Signing. OTP hanya diminta ulang kalau sesi
+      // sebelumnya sudah habis masa berlakunya.
+      const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
+      const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
+      let sesiDipakaiUlang = false;
 
-      // 4. Minta user input OTP, lalu Validate OTP + Signing.
-      const { value: otpCode } = await Swal.fire({
-        icon: 'info',
-        title: 'Masukkan Kode OTP',
-        html: `Kode OTP sudah dikirim ke <b>${email}</b> (email/SMS/WhatsApp).`,
-        input: 'text',
-        inputLabel: 'Kode OTP',
-        inputPlaceholder: '6 digit kode OTP',
-        inputAttributes: { maxlength: '6', inputmode: 'numeric' },
-        showCancelButton: true,
-        confirmButtonText: 'Verifikasi & Tanda Tangan',
-        cancelButtonText: 'Batal',
-        inputValidator: (value) => (!value ? 'Kode OTP wajib diisi' : undefined),
-      });
-      if (!otpCode) return; // user batal — orderId sudah dibuat di Peruri, tapi belum ditandatangani
+      if (sessionRes.ok && sessionData.valid) {
+        sesiDipakaiUlang = true;
+      } else {
+        // 3a. Get OTP (Session Initiate) — Peruri kirim kode OTP ke email ini.
+        const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+        let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+        if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
 
-      await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+        // 3b. Minta user input OTP, lalu Validate OTP.
+        hideProcessing();
+        const otpCode = await showOtpDialog(email, async () => {
+          const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+          const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+          if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+          tokenSession = newTokenSession;
+        }, 'Verifikasi & Tanda Tangan');
+        if (!otpCode) return; // user batal — orderId sudah dibuat di Peruri, tapi belum ditandatangani
+
+        showProcessing('Memverifikasi OTP & menandatangani dokumen, mohon tunggu...');
+        await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      }
+
+      // 4. Signing — pakai orderId, tidak perlu OTP lagi (baik sesi lama
+      // yg dipakai ulang, maupun sesi baru yg barusan divalidasi).
+      if (sesiDipakaiUlang) showProcessing('Sesi OTP masih aktif, menandatangani dokumen, mohon tunggu...');
       await peruriPost('/api/peruri/signing', { orderId });
+      hideProcessing();
 
       await Swal.fire({
         icon: 'success', title: 'Berhasil ditandatangani',
-        html: `Dokumen berhasil ditandatangani oleh <b>${namaDokterPj}</b> (${email}).<br/>Order ID: <b>${orderId}</b>`,
+        html: `Dokumen berhasil ditandatangani oleh <b>${namaDokterPj}</b> (${email}).<br/>Order ID: <b>${orderId}</b>`
+          + (sesiDipakaiUlang ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
       });
     } catch (err) {
+      hideProcessing();
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setSigning(false);
+    }
+  };
+
+  // handleMintaOtpUlang — tombol terpisah di deretan aksi modal (sebelum
+  // Tanda Tangan), dipakai kalau dokter P.J. ingin memperbarui/memvalidasi
+  // ulang sesi OTP-nya SEBELUM benar2 menandatangani dokumen (mis. sesi
+  // lama sudah/hampir expired). Alurnya cuma Get OTP -> input OTP ->
+  // Validate OTP (sesi tervalidasi otomatis tersimpan di
+  // peruri_signing_session, lihat handleTandaTangan poin 3) — TIDAK
+  // menyentuh send-document/set-signature/signing sama sekali krn belum
+  // tentu ada dokumen yg mau ditandatangani saat tombol ini diklik.
+  const handleMintaOtpUlang = async () => {
+    if (!kdDokterPj) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih Dokter P.J. dulu' });
+      return;
+    }
+    setRequestingOtp(true);
+    showProcessing('Mengirim kode OTP, mohon tunggu...');
+    try {
+      const emailRes = await fetch(`/api/dokter/${encodeURIComponent(kdDokterPj)}/email`);
+      const emailData = await emailRes.json();
+      if (!emailRes.ok) throw new Error(emailData.error || 'Dokter P.J. tidak ditemukan');
+      if (!emailData.email) {
+        throw new Error(`Email dokter penanggung jawab (${dokterPjQuery || emailData.nm_dokter || '-'}) belum diisi. Hubungi admin untuk menambahkan email di data dokter.`);
+      }
+      const email = emailData.email as string;
+
+      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+      let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+      if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+      hideProcessing();
+      const otpCode = await showOtpDialog(email, async () => {
+        const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '1', sendWhatsapp: '1' });
+        const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+        if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+        tokenSession = newTokenSession;
+      }, 'Verifikasi');
+      if (!otpCode) return;
+
+      showProcessing('Memverifikasi OTP, mohon tunggu...');
+      await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      hideProcessing();
+
+      await Swal.fire({
+        icon: 'success', title: 'Sesi OTP diperbarui',
+        html: `Sesi OTP untuk <b>${email}</b> berhasil divalidasi ulang dan aktif selama 24 jam ke depan.`,
+      });
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setRequestingOtp(false);
     }
   };
 
@@ -983,13 +1179,24 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                 </button>
                 <button
                   type="button"
+                  onClick={handleMintaOtpUlang}
+                  disabled={requestingOtp}
+                  title="Minta OTP Ulang (perbarui sesi Peruri Dokter P.J.)"
+                  style={{ padding: '9px 12px', borderRadius: 8, border: 'none', background: 'transparent', color: requestingOtp ? '#9ca3af' : '#374151', cursor: requestingOtp ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 15 15" fill="none">
+                    <path d="M6 5.5H9M7.5 5.5V10M10.5 10V7.5M10.5 7.5V5.5H11.5C12.0523 5.5 12.5 5.94772 12.5 6.5C12.5 7.05228 12.0523 7.5 11.5 7.5H10.5ZM4.5 6.5V8.5C4.5 9.05228 4.05228 9.5 3.5 9.5C2.94772 9.5 2.5 9.05228 2.5 8.5V6.5C2.5 5.94772 2.94772 5.5 3.5 5.5C4.05228 5.5 4.5 5.94772 4.5 6.5ZM1.5 0.5H13.5C14.0523 0.5 14.5 0.947715 14.5 1.5V13.5C14.5 14.0523 14.0523 14.5 13.5 14.5H1.5C0.947716 14.5 0.5 14.0523 0.5 13.5V1.5C0.5 0.947716 0.947715 0.5 1.5 0.5Z" stroke="currentColor"/>
+                  </svg>
+                </button>
+                <button
+                  type="button"
                   onClick={handleTandaTangan}
                   disabled={signing}
                   title="Tanda Tangan Elektronik (Peruri)"
                   style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: signing ? '#9ca3af' : '#374151', cursor: signing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                  <svg width="22" height="22" viewBox="0 1.5 14 11" fill="currentColor">
+                    <path d="m 1.0324444,11.139308 c 0.0179,-0.1218 0.061,-0.2215 0.0958,-0.2215 0.0348,0 0.0633,-0.064 0.0633,-0.1428 0,-0.079 0.0321,-0.1428 0.0714,-0.1428 0.0393,0 0.0714,-0.064 0.0714,-0.1427 0,-0.079 0.0321,-0.1428 0.0714,-0.1428 0.0393,0 0.0714,-0.047 0.0714,-0.1045 0,-0.058 0.08,-0.2479001 0.17776,-0.4230001 0.12606,-0.2258 0.16557,-0.3794 0.13583,-0.528 -0.0254,-0.1269 0.002,-0.2942 0.0687,-0.4236 0.0608,-0.1177 0.18066,-0.4193 0.26627,-0.6702 0.0856,-0.251 0.17774,-0.4885 0.20472,-0.5277 0.027,-0.039 0.0925,-0.216 0.14571,-0.3927 0.0532,-0.1766 0.1232,-0.3517 0.15563,-0.389 0.0324,-0.037 0.059,-0.1417 0.059,-0.232 0,-0.09 0.0321,-0.1642 0.0714,-0.1642 0.0393,0 0.0714,-0.094 0.0714,-0.21 0,-0.1154 0.0321,-0.2298 0.0714,-0.254 0.0393,-0.024 0.073,-0.099 0.0749,-0.1649 0.002,-0.066 0.16547,-0.2492 0.36338,-0.4062 0.1979,-0.1571 0.43577,-0.3579 0.5286,-0.4462 0.0928,-0.088 0.1866,-0.1606 0.20838,-0.1606 0.0218,0 0.13637,-0.093 0.25466,-0.2056 0.11829,-0.113 0.3509,-0.2977 0.51691,-0.4104 0.16601,-0.1128 0.31254,-0.2291 0.32563,-0.2585 0.0131,-0.029 0.0683,-0.053 0.12276,-0.053 0.0544,0 0.21335,-0.064 0.35316,-0.1428 0.26925,-0.1512 0.60679,-0.1909 0.60679,-0.071 0,0.039 0.0421,0.071 0.0936,0.071 0.0515,0 0.15589,0.058 0.23201,0.1285 0.24872,0.231 0.37942,0.24 0.55068,0.038 0.30396,-0.3586 1.0957,-1.1308 1.25041,-1.2194 0.18638,-0.1068 0.51461,-0.1182 0.51461,-0.018 0,0.039 0.043,0.071 0.0956,0.071 0.12754,0 0.26131,0.3072 0.26131,0.6002 0,0.2369 -0.24982,0.6817 -0.50955,0.9073 -0.0731,0.063 -0.13294,0.139 -0.13294,0.1677 0,0.029 -0.0964,0.1422 -0.21416,0.2523 -0.23429,0.2188 -0.26247,0.3229 -0.12217,0.4512 0.18171,0.1662 0.89017,0.5482 1.01669,0.5482 0.0577,0 0.10491,0.029 0.10491,0.063 0,0.035 0.20949,0.1202 0.46554,0.1895 0.4572796,0.1237 0.4683696,0.1234 0.6246396,-0.018 0.1522,-0.1379 0.20395,-0.1411 1.19421,-0.074 0.56932,0.038 1.0438,0.078 1.05441,0.087 0.0106,0.01 0.0719,0.2706 0.13625,0.5806 0.22137,1.0669 0.1397,2.7256 -0.19548,3.9704001 l -0.0726,0.2698 -1.10376,0 -1.10375,0 0,-0.2142 c 0,-0.1178 -0.0321,-0.2142 -0.0714,-0.2142 -0.0393,0 -0.0714,-0.068 -0.0714,-0.1504 0,-0.1163 -0.0283,-0.1381 -0.12493,-0.096 -0.0687,0.03 -0.2373696,0.067 -0.3747896,0.083 -0.13742,0.016 -0.31799,0.063 -0.40128,0.1034 -0.15948,0.078 -0.59017,0.053 -1.4191,-0.084 -0.56756,-0.093 -0.48797,-0.091 -1.12627,-0.028 -0.26608,0.026 -0.50088,0.076 -0.52177,0.1096 -0.0539,0.087 -1.79571,0.078 -1.84994,-0.01 -0.0243,-0.039 -0.15276,-0.071 -0.28555,-0.071 -0.13279,0 -0.26128,-0.032 -0.28555,-0.071 -0.0243,-0.039 -0.15836,-0.071 -0.29798,-0.071 -0.20152,0 -0.30517,0.055 -0.50271,0.2677 -0.13687,0.1473 -0.29749,0.34 -0.35693,0.4284 -0.0594,0.088 -0.16674,0.1606 -0.23843,0.1606 -0.0717,0 -0.15021,0.032 -0.17447,0.071 -0.0243,0.039 -0.10154,0.071 -0.17172,0.071 -0.0702,0 -0.22087,0.046 -0.33487,0.1034 -0.11401,0.057 -0.33873,0.1244 -0.49939,0.1501 l -0.29211,0.047 0.0325,-0.2215 z m 0.83725,-0.2929 c 0.0243,-0.039 0.10648,-0.071 0.18268,-0.071 0.0762,0 0.13857,-0.032 0.13857,-0.071 0,-0.039 0.0482,-0.071 0.10708,-0.071 0.0589,0 0.10708,-0.048 0.10708,-0.1065 0,-0.1314 -0.28157,-0.4646 -0.39263,-0.4646 -0.11106,0 -0.39263,0.3332 -0.39263,0.4646 0,0.059 -0.0321,0.1065 -0.0714,0.1065 -0.0393,0 -0.0714,0.064 -0.0714,0.1428 0,0.1038 0.0476,0.1428 0.17426,0.1428 0.0958,0 0.19411,-0.032 0.21837,-0.071 z m 9.7914796,-0.4796 c 0.56959,-0.044 0.51279,0.02 0.6796,-0.7697001 0.10998,-0.5207 0.15529,-2.1091 0.0628,-2.2016 -0.0416,-0.042 -0.0756,-0.1661 -0.0756,-0.2766 0,-0.1106 -0.0399,-0.329 -0.0888,-0.4855 l -0.0888,-0.2844 -0.54608,0 c -0.62148,0 -0.64971,0.026 -0.55725,0.5046 0.11336,0.5873 0.075,1.9136 -0.0772,2.6663 -0.15299,0.7568001 -0.13618,1.0112001 0.0617,0.9332001 0.0652,-0.026 0.34848,-0.064 0.62959,-0.086 z M 6.1529444,9.9283079 c 0.15705,-0.042 0.48897,-0.1306 0.73759,-0.1971 0.4275,-0.1144 0.48566,-0.1141 1.07082,0.01 0.34032,0.07 0.81151,0.1273 1.04709,0.1279 0.50257,0.001 1.3830896,-0.1952 1.5309896,-0.3415 0.10718,-0.1061 0.23238,-0.8318 0.23976,-1.3898 0.005,-0.3722 -0.0687,-0.9074 -0.18342,-1.3327 -0.0786,-0.2915 -0.0876,-0.2983 -0.44116,-0.3348 -0.5742096,-0.059 -0.8963196,-0.1281 -0.8963196,-0.1915 0,-0.032 -0.0723,-0.082 -0.16062,-0.1096 -0.0883,-0.028 -0.36468,-0.1746 -0.61409,-0.326 -0.24941,-0.1514 -0.48231,-0.2753 -0.51756,-0.2753 -0.0352,0 -0.0641,-0.032 -0.0641,-0.071 0,-0.1875 -0.27918,-0.03 -0.65538,0.3706 -0.37178,0.3956 -0.41543,0.474 -0.41543,0.7454 0,0.1668 -0.0321,0.3232 -0.0714,0.3474 -0.0393,0.024 -0.0714,0.1069 -0.0714,0.1837 0,0.1551 -0.11414,0.3784 -0.30339,0.5936 -0.0687,0.078 -0.12493,0.1681 -0.12493,0.1999 0,0.1 0.34485,0.063 0.75135,-0.079 0.38822,-0.1364 0.39085,-0.1364 0.39085,0 0,0.078 -0.0993,0.2321 -0.22063,0.3429 l -0.22062,0.2015 -1.10194,0 c -0.7526,0 -1.12849,0.023 -1.18571,0.08 -0.0461,0.046 -0.17371,0.084 -0.28365,0.084 -0.10994,0 -0.19989,0.032 -0.19989,0.071 0,0.039 -0.0642,0.071 -0.14277,0.071 -0.0785,0 -0.14278,0.027 -0.14278,0.059 0,0.033 -0.0779,0.101 -0.17302,0.152 -0.18219,0.098 -0.28332,0.3465 -0.21403,0.5271 0.0461,0.1201 0.52553,0.3324 0.75054,0.3324 0.0805,0 0.19232,-0.046 0.24841,-0.1019 0.1151,-0.1151 0.14054,-0.6833 0.0306,-0.6833 -0.0393,0 -0.0714,-0.064 -0.0714,-0.1428 0,-0.1852 0.0407,-0.18 0.25311,0.033 0.12743,0.1274 0.17522,0.2528 0.17522,0.4598 0,0.1565 -0.0321,0.3044 -0.0714,0.3287 -0.13127,0.081 -0.0734,0.2215 0.12493,0.3028 0.22116,0.091 0.76798,0.071 1.19574,-0.043 z m -3.49888,-1.0793 c 0.20573,-0.3259 0.22956,-0.6039 0.0658,-0.7677 -0.0966,-0.097 -0.12355,-0.099 -0.1804,-0.013 -0.0368,0.055 -0.0861,0.1892 -0.10953,0.2971 -0.0235,0.108 -0.0656,0.1964 -0.0937,0.1964 -0.0642,0 -0.2167,0.3289 -0.2167,0.4673 0,0.063 0.0699,0.1038 0.17757,0.1038 0.12939,0 0.22625,-0.077 0.35694,-0.2842 z m 0.48514,0.048 c 0.26307,-0.271 0.4081,-0.5016 0.4081,-0.6489 0,-0.056 0.0241,-0.1128 0.0535,-0.1259 0.0294,-0.013 0.13385,-0.1992 0.23201,-0.4135 0.0982,-0.2144 0.31499,-0.5268 0.48186,-0.6942 0.16687,-0.1674 0.3034,-0.321 0.3034,-0.3412 0,-0.068 0.24679,-0.3411 1.08866,-1.2037 0.46134,-0.4727 0.8388,-0.888 0.8388,-0.9229 0,-0.1533 -0.39705,-0.4103 -0.63371,-0.4103 -0.16776,0 -0.63626,0.2586 -0.80241,0.443 -0.0635,0.071 -0.14859,0.1281 -0.18909,0.1281 -0.0405,0 -0.23766,0.1606 -0.43816,0.3569 -0.20049,0.1963 -0.3832,0.3569 -0.40602,0.3569 -0.0846,0 -0.78643,0.7789 -0.8785,0.9749 -0.0525,0.1117 -0.12374,0.2588 -0.15842,0.327 -0.0347,0.068 -0.0631,0.1726 -0.0631,0.232 0,0.059 -0.0321,0.1081 -0.0714,0.1081 -0.0393,0 -0.0714,0.094 -0.0714,0.2082 0,0.1145 -0.0388,0.2211 -0.0862,0.2369 -0.0576,0.019 -0.0357,0.083 0.0658,0.1919 0.22734,0.2441 0.34549,0.5655 0.24483,0.6662 -0.0449,0.045 -0.0817,0.1537 -0.0817,0.2417 0,0.088 -0.0321,0.1798 -0.0714,0.2041 -0.0732,0.045 -0.10182,0.3212 -0.0333,0.3212 0.0209,0 0.1414,-0.1064 0.2677,-0.2365 z m 2.72831,-1.0663 c 0.13638,-0.088 0.24836,-0.2008 0.24885,-0.2499 4.8e-4,-0.049 0.033,-0.089 0.0723,-0.089 0.0393,0 0.0714,-0.064 0.0714,-0.1428 0,-0.079 0.0321,-0.1427 0.0714,-0.1427 0.0393,0 0.0714,-0.08 0.0714,-0.1785 0,-0.2216 -0.0932,-0.2288 -0.23214,-0.018 -0.0582,0.088 -0.26617,0.3284 -0.4622,0.5335 -0.19602,0.2051 -0.3395,0.3899 -0.31884,0.4105 0.0753,0.075 0.23533,0.034 0.4779,-0.123 z"></path>
                   </svg>
                 </button>
                 <button type="button" onClick={onClose} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
