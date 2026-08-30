@@ -635,24 +635,11 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       x: petugasBoxCenterX - tglCetakW / 2, y: labelY + 14, size: 8.5, font, color: rgb(0, 0, 0),
     });
 
-    // Kotak KIRI — Penanggung Jawab. Area RESERVED utk stample Peruri —
-    // digambar 40x40 (SAMA besar dgn QR Petugas Radiologi di kanan, utk
-    // konsistensi visual), di-CENTER pd titik tengah SIGN_BOX yg SAMA.
-    // Ukuran visual ini TIDAK memengaruhi koordinat yg benar2 dikirim ke
-    // Peruri (SIGN_BOX 35x34 tetap dipakai apa adanya utk API — sudah
-    // terbukti berhasil, jangan diubah) — cuma kotak dashed-nya saja yg
-    // digambar lebih besar, krn stample ASLI Peruri jg ternyata dirender
-    // lebih besar dari 35x34.
+    // Kolom KIRI — Penanggung Jawab. Area stample Peruri (SIGN_BOX,
+    // 40x40) — TIDAK digambar apa pun di sini (kosong, sengaja
+    // dibiarkan tanpa border), stample-nya BENAR2 ditempel Peruri
+    // sendiri di dokumen hasil tanda tangan.
     const visualBoxCenterX = (SIGN_BOX.lowerLeftX + SIGN_BOX.upperRightX) / 2;
-    const visualBox = {
-      lowerLeftX: visualBoxCenterX - qrSize / 2, lowerLeftY: blockCenterY - qrSize / 2,
-      upperRightX: visualBoxCenterX + qrSize / 2, upperRightY: blockCenterY + qrSize / 2,
-    };
-    page.drawRectangle({
-      x: visualBox.lowerLeftX, y: visualBox.lowerLeftY,
-      width: visualBox.upperRightX - visualBox.lowerLeftX, height: visualBox.upperRightY - visualBox.lowerLeftY,
-      borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.7, borderDashArray: [3, 2],
-    });
     const signLabelW = font.widthOfTextAtSize('Penanggung Jawab', 9);
     page.drawText('Penanggung Jawab', {
       x: visualBoxCenterX - signLabelW / 2, y: labelY,
@@ -845,19 +832,6 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     showProcessing('Menyiapkan & mengirim dokumen ke Peruri, mohon tunggu...');
     try {
       const { pdfBytes, email, namaDokterPj, signBox } = await buildRadiologiPdfUntukTtd();
-
-      // Koordinat posisi tag "#A#" (SIGN_BOX) SUDAH selesai dihitung di
-      // sini (dalam buildRadiologiPdfUntukTtd, sebelum PDF byte
-      // dikembalikan) — ditampilkan dulu (spinner + console) supaya
-      // nilainya bisa diverifikasi langsung SEBELUM benar2 kirim ke
-      // Peruri, baru lanjut ke Send Document.
-      console.log('[Peruri TTE] SIGN_BOX yang akan dikirim:', signBox);
-      showProcessing(
-        `Posisi TTD dihitung: lowerLeftX=${signBox.lowerLeftX}, lowerLeftY=${signBox.lowerLeftY}, `
-        + `upperRightX=${signBox.upperRightX}, upperRightY=${signBox.upperRightY}<br/>`
-        + '<span style="font-size:12px;color:#6b7280;">Mengirim dokumen ke Peruri...</span>',
-      );
-      await new Promise((resolve) => window.setTimeout(resolve, 1200));
 
       // 1. Send Document
       const form = new FormData();
