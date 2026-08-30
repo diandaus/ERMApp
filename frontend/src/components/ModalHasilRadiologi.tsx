@@ -566,8 +566,13 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     // duluan (itu kesalahan implementasi kita sebelumnya).
     const tagX = margin + 60;
     const tagY = Math.max(margin + SIGN_BOX_HEIGHT / 2, y - SIGN_BOX_GAP_BELOW_HASIL - SIGN_BOX_HEIGHT / 2);
-    const centeredX = tagX - SIGN_BOX_WIDTH / 2 + 5;
-    const centeredY = tagY - SIGN_BOX_HEIGHT / 2;
+    // (int) cast persis QRCodePositionHelper.java ("(int) centeredX") —
+    // pageHeight A4 (841.89) bikin y berantai jadi desimal terus, kalau
+    // koordinatnya dikirim ke Peruri sbg string desimal (mis. "87.5")
+    // kemungkinan besar itu penyebab [4012] "Gagal melakukan proses
+    // penandatanganan" (koordinat fixed sebelumnya SEMUA bilangan bulat).
+    const centeredX = Math.trunc(tagX - SIGN_BOX_WIDTH / 2 + 5);
+    const centeredY = Math.trunc(tagY - SIGN_BOX_HEIGHT / 2);
     const SIGN_BOX = {
       lowerLeftX: centeredX, lowerLeftY: centeredY,
       upperRightX: centeredX + SIGN_BOX_WIDTH, upperRightY: centeredY + SIGN_BOX_HEIGHT,
