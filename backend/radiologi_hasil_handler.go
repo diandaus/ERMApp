@@ -136,13 +136,25 @@ func getPermintaanRadiologiDetail(db *sql.DB) gin.HandlerFunc {
 		// Hasil terakhir — dipakai tombol "Lihat Hasil" di Radiologi.tsx
 		// supaya modal langsung menampilkan bacaan yg sudah pernah diisi
 		// (bukan textarea kosong), diambil dari hasil_radiologi berdasarkan
-		// no_rawat, baris terbaru.
-		var hasilTerakhir string
+		// no_rawat, baris terbaru. Petugas yg menginput hasil itu jg diambil
+		// (dari periksa_radiologi.nip, baris terbaru dgn pola sama) supaya
+		// field "Petugas" di modal ikut nampilin siapa yg ngerjain SEBELUMNYA
+		// — bukan default ke user yg sedang login (itu cuma default utk
+		// entri BARU, lihat frontend ModalHasilRadiologi.tsx).
+		var hasilTerakhir, petugasNipTerakhir, petugasNamaTerakhir string
 		if sudahAdaHasil {
 			db.QueryRow(`
 				SELECT hasil FROM hasil_radiologi WHERE no_rawat = ?
 				ORDER BY tgl_periksa DESC, jam DESC LIMIT 1
 			`, noRawat).Scan(&hasilTerakhir)
+
+			db.QueryRow(`
+				SELECT nip FROM periksa_radiologi WHERE no_rawat = ?
+				ORDER BY tgl_periksa DESC, jam DESC LIMIT 1
+			`, noRawat).Scan(&petugasNipTerakhir)
+			if petugasNipTerakhir != "" {
+				db.QueryRow(`SELECT IFNULL(nama,'') FROM petugas WHERE nip = ?`, petugasNipTerakhir).Scan(&petugasNamaTerakhir)
+			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -152,7 +164,9 @@ func getPermintaanRadiologiDetail(db *sql.DB) gin.HandlerFunc {
 			"sudah_ada_hasil": sudahAdaHasil,
 			"pemeriksaan":     exams,
 			"kd_dokter_pj":    kdDokterPj, "nm_dokter_pj": nmDokterPj,
-			"hasil_terakhir": hasilTerakhir,
+			"hasil_terakhir":        hasilTerakhir,
+			"petugas_nip_terakhir":  petugasNipTerakhir,
+			"petugas_nama_terakhir": petugasNamaTerakhir,
 		})
 	}
 }

@@ -169,13 +169,21 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         if (data.hasil_terakhir) {
           setHasil(data.hasil_terakhir);
         }
-        // Default Petugas dari akun yg sedang login (persis pola
-        // ModalTelaahResep.tsx) — tetap bisa diganti manual lewat
-        // pencarian/ModalCariPetugas kalau yg mengerjakan beda dari yg login.
-        const currentNip = getCurrentUserNip();
-        if (currentNip) {
-          setPetugasNip(currentNip);
-          setPetugasQuery(getCurrentPetugas() || currentNip);
+        // Petugas — kalau hasil SUDAH pernah diisi sebelumnya (klik "Lihat
+        // Hasil" dari Radiologi.tsx), default ke petugas yg MENGINPUT hasil
+        // itu (petugas_nip_terakhir/petugas_nama_terakhir dari backend).
+        // Kalau ini entri BARU (belum ada hasil), default ke akun yg sedang
+        // login (persis pola ModalTelaahResep.tsx). Keduanya tetap bisa
+        // diganti manual lewat pencarian/ModalCariPetugas.
+        if (data.sudah_ada_hasil && data.petugas_nip_terakhir) {
+          setPetugasNip(data.petugas_nip_terakhir);
+          setPetugasQuery(data.petugas_nama_terakhir || data.petugas_nip_terakhir);
+        } else {
+          const currentNip = getCurrentUserNip();
+          if (currentNip) {
+            setPetugasNip(currentNip);
+            setPetugasQuery(getCurrentPetugas() || currentNip);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
