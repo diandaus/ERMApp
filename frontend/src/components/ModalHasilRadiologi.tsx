@@ -618,18 +618,27 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       x: petugasBoxCenterX - tglCetakW / 2, y: labelY + 14, size: 8.5, font, color: rgb(0, 0, 0),
     });
 
-    // Kotak KIRI — Penanggung Jawab. Area RESERVED utk stample Peruri (SAMA
-    // PERSIS koordinatnya dgn SIGN_BOX yg dikirim ke Peruri), sengaja
-    // dibiarkan kosong di dalamnya — border putus-putus jadi penanda "area
-    // ini", bukan tanda tangan lokal spt kolom kanan.
+    // Kotak KIRI — Penanggung Jawab. Area RESERVED utk stample Peruri —
+    // digambar 40x40 (SAMA besar dgn QR Petugas Radiologi di kanan, utk
+    // konsistensi visual), di-CENTER pd titik tengah SIGN_BOX yg SAMA.
+    // Ukuran visual ini TIDAK memengaruhi koordinat yg benar2 dikirim ke
+    // Peruri (SIGN_BOX 35x34 tetap dipakai apa adanya utk API — sudah
+    // terbukti berhasil, jangan diubah) — cuma kotak dashed-nya saja yg
+    // digambar lebih besar, krn stample ASLI Peruri jg ternyata dirender
+    // lebih besar dari 35x34.
+    const visualBoxCenterX = (SIGN_BOX.lowerLeftX + SIGN_BOX.upperRightX) / 2;
+    const visualBox = {
+      lowerLeftX: visualBoxCenterX - qrSize / 2, lowerLeftY: blockCenterY - qrSize / 2,
+      upperRightX: visualBoxCenterX + qrSize / 2, upperRightY: blockCenterY + qrSize / 2,
+    };
     page.drawRectangle({
-      x: SIGN_BOX.lowerLeftX, y: SIGN_BOX.lowerLeftY,
-      width: SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX, height: SIGN_BOX.upperRightY - SIGN_BOX.lowerLeftY,
+      x: visualBox.lowerLeftX, y: visualBox.lowerLeftY,
+      width: visualBox.upperRightX - visualBox.lowerLeftX, height: visualBox.upperRightY - visualBox.lowerLeftY,
       borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.7, borderDashArray: [3, 2],
     });
     const signLabelW = fontBold.widthOfTextAtSize('Penanggung Jawab', 9);
     page.drawText('Penanggung Jawab', {
-      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - signLabelW) / 2, y: labelY,
+      x: visualBoxCenterX - signLabelW / 2, y: labelY,
       size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
     });
     // Tag "#A#" — digambar PERSIS di (tagX, tagY), titik anchor yg dipakai
@@ -640,7 +649,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
     const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
     page.drawText(namaDokterPj, {
-      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: nameY,
+      x: visualBoxCenterX - namaW / 2, y: nameY,
       size: 9, font, color: rgb(0.3, 0.3, 0.3),
     });
 
