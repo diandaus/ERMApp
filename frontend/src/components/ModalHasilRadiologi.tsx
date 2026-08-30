@@ -383,7 +383,15 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   // dalam box yg dihitung duluan spt percobaan sebelumnya.
   const SIGN_BOX_WIDTH = 35;
   const SIGN_BOX_HEIGHT = 34;
-  const SIGN_BOX_GAP_BELOW_HASIL = 16;
+  // Jarak dari tepi bawah kotak Hasil Pemeriksaan ke TITIK TENGAH
+  // SIGN_BOX (blockCenterY/tagY) — HARUS cukup lebar utk menampung
+  // seluruh tumpukan visual di ATAS titik tengah itu (label +12, lalu
+  // Tgl.Cetak +14 lagi di atas label, +-8 tinggi teks, +10 jarak aman =
+  // ~64pt total dari blockCenterY). 16 (nilai lama) KURANG kalau hasil
+  // pemeriksaannya pendek — kotak Hasil Pemeriksaan jadi kecil/di atas,
+  // label & Tgl.Cetak ketimpa garis bawah kotaknya. Lihat blockCenterY,
+  // labelY, tglCetakText di buildRadiologiPdfUntukTtd.
+  const SIGN_BOX_GAP_BELOW_HASIL = 55;
 
   // buildRadiologiPdfUntukTtd — PENGECUALIAN dari CETAK_STANDAR.md §1
   // (sama pola dgn buildBillingPdf di ModalBilling.tsx): fitur kirim ke
