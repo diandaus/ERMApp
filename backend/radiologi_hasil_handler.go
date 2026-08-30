@@ -178,6 +178,11 @@ type saveHasilRadiologiRequest struct {
 	Hasil       string                    `json:"hasil"`
 	Tgl         string                    `json:"tgl"` // opsional — kosong = waktu sekarang (checkbox "Otomatis" di frontend)
 	Jam         string                    `json:"jam"`
+	// DokterPerujuk — opsional, dikirim dari ModalCariDokter kalau petugas
+	// mengoreksi dokter perujuk yg salah di data permintaan asal (fitur
+	// baru di ModalHasilRadiologi.tsx). Kosong = pakai nilai yg sudah ada
+	// di permintaan_radiologi (perilaku lama, tidak berubah).
+	DokterPerujuk string `json:"dokter_perujuk"`
 }
 
 // POST /api/radiologi/hasil — simpan hasil pemeriksaan radiologi.
@@ -198,6 +203,10 @@ func saveHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 			Scan(&dokterPerujuk, &statusLower); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Permintaan radiologi tidak ditemukan"})
 			return
+		}
+		dokterPerujukDikoreksi := req.DokterPerujuk != "" && req.DokterPerujuk != dokterPerujuk
+		if dokterPerujukDikoreksi {
+			dokterPerujuk = req.DokterPerujuk
 		}
 		// periksa_radiologi.status enum-nya 'Ranap'/'Ralan' (kapital),
 		// permintaan_radiologi.status 'ralan'/'ranap' (huruf kecil) — beda
@@ -270,6 +279,13 @@ func saveHasilRadiologi(db *sql.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal update status permintaan: " + err.Error()})
 			return
+		}
+
+		if dokterPerujukDikoreksi {
+			if _, err := tx.Exec(`UPDATE permintaan_radiologi SET dokter_perujuk = ? WHERE noorder = ?`, dokterPerujuk, req.NoOrder); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal update dokter perujuk: " + err.Error()})
+				return
+			}
 		}
 
 		if err := tx.Commit(); err != nil {

@@ -2,12 +2,15 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import QRCode from 'qrcode';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { ModalCariDokter } from './ModalCariDokter';
+import { ModalCariPetugas } from './ModalCariPetugas';
 
 // ModalHasilRadiologi — "Input Data Hasil Periksa Radiologi", padanan
 // header form DlgPeriksaRadiologi.java (Khanza Desktop): No.Rawat/No.RM/
 // Pasien, Dokter P.J. (default dari set_pjlab.kd_dokterrad — Penanggung
 // Jawab Radiologi, bisa diganti manual), Petugas (radiografer, dicari
-// manual), Dokter Perujuk (tetap, dari permintaan), Tanggal+Jam (checkbox
+// manual), Dokter Perujuk (default dari permintaan, TAPI bisa dikoreksi
+// lewat ModalCariDokter kalau salah input), Tanggal+Jam (checkbox
 // "Otomatis" = pakai waktu sekarang, sama seperti ChkJln di Java). Di
 // bawah header: gambar dari PACS Orthanc (kiri, reuse endpoint preview yg
 // sama dgn ModalityWorklist.tsx) dan input Hasil/Bacaan (kanan).
@@ -37,15 +40,27 @@ const pill: React.CSSProperties = {
 };
 const pillReadOnly: React.CSSProperties = { ...pill, background: '#f9fafb', color: '#374151' };
 const labelSm: React.CSSProperties = { fontSize: 13, color: '#374151', flexShrink: 0, width: 96 };
-const clipBtn: React.CSSProperties = {
-  width: 30, height: 30, borderRadius: 4, border: '1px solid #e5e7eb', background: '#ffffff',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default', flexShrink: 0, color: '#9ca3af',
-};
 
-const ClipIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-  </svg>
+// StepperButton — pengganti paperklip dekoratif (dulu tidak fungsional),
+// tombol hijau yg BENAR2 buka ModalCariDokter/ModalCariPetugas — DI
+// DALAM kolom input-nya sendiri (overlay kanan, persis pola StepperIcon
+// di AkunPeruri.tsx), bukan lagi tombol terpisah di sebelah kolom.
+const StepperButton: React.FC<{ onClick: () => void; title: string }> = ({ onClick, title }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    style={{
+      position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+      width: 22, height: 22, borderRadius: 2, border: 'none', background: '#2563eb',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+    }}
+  >
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </button>
 );
 
 // PERURI_SIGNING_ERROR_MAP — tabel kode resultCode resmi API Signing
@@ -90,6 +105,16 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   const [kdDokterPj, setKdDokterPj] = React.useState('');
   const [dokterPjList, setDokterPjList] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
   const [showDokterPjDropdown, setShowDokterPjDropdown] = React.useState(false);
+  const [showCariDokterPj, setShowCariDokterPj] = React.useState(false);
+
+  // dokterPerujukKode/Nama — di-decouple dari detail.dokter_perujuk/
+  // nm_dokter (yg cuma tampilan awal dari data permintaan) supaya bisa
+  // dikoreksi via ModalCariDokter; diisi ulang dari detail begitu selesai
+  // dimuat (lihat useEffect noorder di bawah).
+  const [dokterPerujukKode, setDokterPerujukKode] = React.useState('');
+  const [dokterPerujukNama, setDokterPerujukNama] = React.useState('');
+  const [showCariDokterPerujuk, setShowCariDokterPerujuk] = React.useState(false);
+  const [showCariPetugas, setShowCariPetugas] = React.useState(false);
 
   const [otomatisJam, setOtomatisJam] = React.useState(true);
   const [tglPeriksa, setTglPeriksa] = React.useState('');
@@ -98,6 +123,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   const [foto, setFoto] = React.useState<{ instances: DicomInstance[]; series: DicomSeries[] }>({ instances: [], series: [] });
   const [loadingFoto, setLoadingFoto] = React.useState(false);
   const [previewFoto, setPreviewFoto] = React.useState<string | null>(null);
+  // uploadingFotoIds — instance DICOM yg sedang diupload ke webapps
+  // radiologi (Set krn tiap kartu foto Orthanc punya tombol Upload
+  // sendiri-sendiri, bisa beberapa jalan hampir bersamaan).
+  const [uploadingFotoIds, setUploadingFotoIds] = React.useState<Set<string>>(new Set());
 
   const [saving, setSaving] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
@@ -134,6 +163,8 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           setDokterPjQuery(data.nm_dokter_pj || '');
           setDokterPjList([{ kd_dokter: data.kd_dokter_pj, nm_dokter: data.nm_dokter_pj || '' }]);
         }
+        setDokterPerujukKode(data.dokter_perujuk || '');
+        setDokterPerujukNama(data.nm_dokter || '');
         if (data.hasil_terakhir) {
           setHasil(data.hasil_terakhir);
         }
@@ -162,6 +193,30 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       finally { setLoadingFoto(false); }
     })();
   }, [noorder]);
+
+  // handleUploadFotoOrthanc — padanan btnUploudActionPerformed Khanza:
+  // upload SATU foto Orthanc (per kartu, bukan galeri) ke server webapps
+  // radiologi. Backend yg cari no_rawat/tgl_periksa/jam & tulis filenya
+  // (lihat uploadFotoOrthancRadiologi, backend/radiologi_foto_orthanc_handler.go)
+  // — perlu Hasil Pemeriksaan sudah tersimpan dulu (gambar_radiologi
+  // nempel ke baris hasil_radiologi terbaru).
+  const handleUploadFotoOrthanc = async (instanceId: string) => {
+    setUploadingFotoIds((prev) => new Set(prev).add(instanceId));
+    try {
+      const res = await fetch('/api/radiologi/upload-foto-orthanc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ noorder, instance_id: instanceId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal upload foto');
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: data.message || 'Foto berhasil diupload', timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setUploadingFotoIds((prev) => { const next = new Set(prev); next.delete(instanceId); return next; });
+    }
+  };
 
   React.useEffect(() => {
     const t = setTimeout(async () => {
@@ -1074,6 +1129,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           no_rawat: detail!.no_rawat,
           nip: petugasNip,
           kd_dokter: kdDokterPj,
+          dokter_perujuk: dokterPerujukKode,
           pemeriksaan: checkedExams.map((e) => ({
             kd_jenis_prw: e.kd_jenis_prw, proyeksi: e.proyeksi, kV: e.kV, mAS: e.mAS,
             FFD: e.FFD, BSF: e.BSF, inak: e.inak, jml_penyinaran: e.jml_penyinaran, dosis: e.dosis,
@@ -1137,16 +1193,17 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={labelSm}>Dokter P.J. :</span>
-                <input readOnly value={kdDokterPj} style={{ ...pillReadOnly, width: 100 }} />
-                <div style={{ position: 'relative', width: 200 }}>
+                <input readOnly value={kdDokterPj} style={{ ...pillReadOnly, width: 140 }} />
+                <div style={{ position: 'relative', width: 240 }}>
                   <input
                     value={dokterPjQuery}
                     onChange={(e) => { setDokterPjQuery(e.target.value); setKdDokterPj(''); setShowDokterPjDropdown(true); }}
                     onFocus={() => setShowDokterPjDropdown(true)}
                     onBlur={() => setTimeout(() => setShowDokterPjDropdown(false), 200)}
                     placeholder="Cari dokter..."
-                    style={{ ...pill, width: '100%' }}
+                    style={{ ...pill, width: '100%', paddingRight: 30 }}
                   />
+                  <StepperButton onClick={() => setShowCariDokterPj(true)} title="Cari Dokter P.J." />
                   {showDokterPjDropdown && dokterPjList.length > 0 && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10 }}>
                       {dokterPjList.map((d) => (
@@ -1159,19 +1216,19 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                     </div>
                   )}
                 </div>
-                <div style={clipBtn}><ClipIcon /></div>
 
                 <span style={{ ...labelSm, width: 60, marginLeft: 8 }}>Petugas :</span>
-                <input readOnly value={petugasNip} style={{ ...pillReadOnly, width: 90 }} />
-                <div style={{ position: 'relative', width: 200 }}>
+                <input readOnly value={petugasNip} style={{ ...pillReadOnly, width: 130 }} />
+                <div style={{ position: 'relative', width: 240 }}>
                   <input
                     value={petugasQuery}
                     onChange={(e) => { setPetugasQuery(e.target.value); setPetugasNip(''); setShowPetugasDropdown(true); }}
                     onFocus={() => setShowPetugasDropdown(true)}
                     onBlur={() => setTimeout(() => setShowPetugasDropdown(false), 200)}
                     placeholder="Cari nama petugas..."
-                    style={{ ...pill, width: '100%' }}
+                    style={{ ...pill, width: '100%', paddingRight: 30 }}
                   />
+                  <StepperButton onClick={() => setShowCariPetugas(true)} title="Cari Petugas" />
                   {showPetugasDropdown && petugasList.length > 0 && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10 }}>
                       {petugasList.map((p) => (
@@ -1184,14 +1241,15 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                     </div>
                   )}
                 </div>
-                <div style={clipBtn}><ClipIcon /></div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={labelSm}>Dokter Perujuk :</span>
-                <input readOnly value={detail.dokter_perujuk} style={{ ...pillReadOnly, width: 100 }} />
-                <input readOnly value={detail.nm_dokter} style={{ ...pillReadOnly, width: 200 }} />
-                <div style={clipBtn}><ClipIcon /></div>
+                <input readOnly value={dokterPerujukKode} style={{ ...pillReadOnly, width: 140 }} />
+                <div style={{ position: 'relative', width: 240 }}>
+                  <input readOnly value={dokterPerujukNama} style={{ ...pillReadOnly, width: '100%', paddingRight: 30 }} />
+                  <StepperButton onClick={() => setShowCariDokterPerujuk(true)} title="Cari Dokter Perujuk" />
+                </div>
 
                 <span style={{ ...labelSm, width: 60, marginLeft: 8 }}>Tanggal :</span>
                 <input
@@ -1257,11 +1315,12 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
                       {foto.instances.map((inst) => {
                         const src = `/api/satu-sehat/dicom/preview-image/${inst.id}`;
+                        const isUploading = uploadingFotoIds.has(inst.id);
                         return (
                           <div
                             key={inst.id}
                             onClick={() => setPreviewFoto(src)}
-                            style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid #374151', cursor: 'zoom-in' }}
+                            style={{ position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid #374151', cursor: 'zoom-in' }}
                           >
                             <img
                               src={src}
@@ -1269,6 +1328,23 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                               style={{ width: '100%', display: 'block', aspectRatio: '1 / 1', objectFit: 'contain', background: '#111827' }}
                               onError={(e) => { e.currentTarget.style.display = 'none'; }}
                             />
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); if (!isUploading) handleUploadFotoOrthanc(inst.id); }}
+                              disabled={isUploading}
+                              title={isUploading ? 'Mengupload...' : 'Upload foto ini ke server webapps'}
+                              style={{
+                                position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: 5,
+                                border: 'none', background: 'rgba(17,24,39,0.75)', color: isUploading ? '#6b7280' : '#e5e7eb',
+                                cursor: isUploading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                              </svg>
+                            </button>
                           </div>
                         );
                       })}
@@ -1397,6 +1473,22 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           </button>
         </div>
       )}
+
+      <ModalCariDokter
+        isOpen={showCariDokterPj}
+        onClose={() => setShowCariDokterPj(false)}
+        onSelect={(kode, nama) => { setKdDokterPj(kode); setDokterPjQuery(nama); }}
+      />
+      <ModalCariDokter
+        isOpen={showCariDokterPerujuk}
+        onClose={() => setShowCariDokterPerujuk(false)}
+        onSelect={(kode, nama) => { setDokterPerujukKode(kode); setDokterPerujukNama(nama); }}
+      />
+      <ModalCariPetugas
+        isOpen={showCariPetugas}
+        onClose={() => setShowCariPetugas(false)}
+        onSelect={(nip, nama) => { setPetugasNip(nip); setPetugasQuery(nama); }}
+      />
     </div>
   );
 };
