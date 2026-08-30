@@ -43,6 +43,7 @@ type lamaPelayananRow struct {
 	DurasiValidasi   float64 `json:"durasi_validasi"`
 	DurasiPenyerahan float64 `json:"durasi_penyerahan"`
 	DurasiPelayanan  float64 `json:"durasi_pelayanan"`
+	IsRacikan        bool    `json:"is_racikan"`
 }
 
 type lamaPelayananBucket struct {
@@ -75,9 +76,46 @@ type lamaPelayananSummary struct {
 	BucketPelayanan  lamaPelayananBucket `json:"bucket_pelayanan"`
 }
 
+// lamaPelayananAccumulator — akumulator rata-rata + bucket per kelompok
+// (Non-Racikan / Racikan), dipakai supaya getApotekLamaPelayanan cukup
+// looping rows sekali sambil membagi baris ke 2 kelompok berdasarkan
+// is_racikan (EXISTS di resep_dokter_racikan).
+type lamaPelayananAccumulator struct {
+	count                                             int
+	sumValidasi, sumPenyerahan, sumPelayanan          float64
+	bucketValidasi, bucketPenyerahan, bucketPelayanan lamaPelayananBucket
+}
+
+func (a *lamaPelayananAccumulator) add(r lamaPelayananRow) {
+	a.count++
+	a.sumValidasi += r.DurasiValidasi
+	a.sumPenyerahan += r.DurasiPenyerahan
+	a.sumPelayanan += r.DurasiPelayanan
+	bucketAdd(&a.bucketValidasi, r.DurasiValidasi)
+	bucketAdd(&a.bucketPenyerahan, r.DurasiPenyerahan)
+	bucketAdd(&a.bucketPelayanan, r.DurasiPelayanan)
+}
+
+func (a *lamaPelayananAccumulator) summary() lamaPelayananSummary {
+	s := lamaPelayananSummary{
+		Count:            a.count,
+		BucketValidasi:   a.bucketValidasi,
+		BucketPenyerahan: a.bucketPenyerahan,
+		BucketPelayanan:  a.bucketPelayanan,
+	}
+	if a.count > 0 {
+		n := float64(a.count)
+		s.RataValidasi = round2(a.sumValidasi / n)
+		s.RataPenyerahan = round2(a.sumPenyerahan / n)
+		s.RataPelayanan = round2(a.sumPelayanan / n)
+	}
+	return s
+}
+
 type lamaPelayananResponse struct {
-	Items   []lamaPelayananRow   `json:"items"`
-	Summary lamaPelayananSummary `json:"summary"`
+	Items             []lamaPelayananRow   `json:"items"`
+	SummaryNonRacikan lamaPelayananSummary `json:"summary_non_racikan"`
+	SummaryRacikan    lamaPelayananSummary `json:"summary_racikan"`
 }
 
 func round2(v float64) float64 {
@@ -112,7 +150,8 @@ func getApotekLamaPelayanan(db *sql.DB) gin.HandlerFunc {
 				ROUND(TIMESTAMPDIFF(SECOND,
 					CONCAT(resep_obat.tgl_peresepan,' ',resep_obat.jam_peresepan),
 					CONCAT(resep_obat.tgl_penyerahan,' ',resep_obat.jam_penyerahan)
-				)/60, 2) AS durasi_pelayanan
+				)/60, 2) AS durasi_pelayanan,
+				EXISTS (SELECT 1 FROM resep_dokter_racikan rdr WHERE rdr.no_resep = resep_obat.no_resep) AS is_racikan
 			FROM reg_periksa
 			INNER JOIN dokter ON reg_periksa.kd_dokter = dokter.kd_dokter
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -139,38 +178,28 @@ func getApotekLamaPelayanan(db *sql.DB) gin.HandlerFunc {
 		defer rows.Close()
 
 		items := []lamaPelayananRow{}
-		var sumValidasi, sumPenyerahan, sumPelayanan float64
-		var bucketValidasi, bucketPenyerahan, bucketPelayanan lamaPelayananBucket
+		var accNonRacikan, accRacikan lamaPelayananAccumulator
 		for rows.Next() {
 			var r lamaPelayananRow
 			if rows.Scan(
 				&r.NoRkmMedis, &r.NmPasien, &r.NmDokter, &r.NmPoli,
 				&r.Peresepan, &r.Validasi, &r.Penyerahan,
 				&r.DurasiValidasi, &r.DurasiPenyerahan, &r.DurasiPelayanan,
+				&r.IsRacikan,
 			) == nil {
 				items = append(items, r)
-				sumValidasi += r.DurasiValidasi
-				sumPenyerahan += r.DurasiPenyerahan
-				sumPelayanan += r.DurasiPelayanan
-				bucketAdd(&bucketValidasi, r.DurasiValidasi)
-				bucketAdd(&bucketPenyerahan, r.DurasiPenyerahan)
-				bucketAdd(&bucketPelayanan, r.DurasiPelayanan)
+				if r.IsRacikan {
+					accRacikan.add(r)
+				} else {
+					accNonRacikan.add(r)
+				}
 			}
 		}
 
-		summary := lamaPelayananSummary{
-			Count:            len(items),
-			BucketValidasi:   bucketValidasi,
-			BucketPenyerahan: bucketPenyerahan,
-			BucketPelayanan:  bucketPelayanan,
-		}
-		if len(items) > 0 {
-			n := float64(len(items))
-			summary.RataValidasi = round2(sumValidasi / n)
-			summary.RataPenyerahan = round2(sumPenyerahan / n)
-			summary.RataPelayanan = round2(sumPelayanan / n)
-		}
-
-		c.JSON(http.StatusOK, lamaPelayananResponse{Items: items, Summary: summary})
+		c.JSON(http.StatusOK, lamaPelayananResponse{
+			Items:             items,
+			SummaryNonRacikan: accNonRacikan.summary(),
+			SummaryRacikan:    accRacikan.summary(),
+		})
 	}
 }

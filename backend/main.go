@@ -3849,6 +3849,7 @@ func main() {
 	r.GET("/api/apotek/darurat-stok", getDaruratStok(db))
 	r.PUT("/api/apotek/darurat-stok/:kode_brng/stok-minimal", updateStokMinimal(db))
 	r.GET("/api/apotek/lama-pelayanan", getApotekLamaPelayanan(db))
+	r.GET("/api/apotek/total-resep", getApotekTotalResep(db))
 	r.GET("/api/apotek/detail-pemberian-obat", getApotekDetailPemberianObat(db))
 	r.GET("/api/apotek/detail-pemberian-obat/items", getApotekDetailPemberianObatItems(db))
 

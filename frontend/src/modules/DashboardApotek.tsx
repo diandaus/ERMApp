@@ -1,5 +1,6 @@
 import React from 'react';
 import { ApotekLamaPelayananView } from './ApotekLamaPelayanan';
+import { ApotekTotalResepView } from './ApotekTotalResep';
 
 // Tab "Dashboard" (key 'overview') di sidebar Apotek — dipisah dari
 // Apotek.tsx supaya file induk tidak terus membengkak tiap tab baru
@@ -123,6 +124,7 @@ export const DashboardApotekView: React.FC<DashboardApotekProps> = ({
         />
       </div>
       <ApotekLamaPelayananView />
+      <ApotekTotalResepView />
     </>
   );
 };
