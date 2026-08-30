@@ -377,9 +377,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   // deteksi ulang scan PDF — krn PDF-nya kita generate sendiri, kita
   // sudah tau persis koordinatnya, tidak perlu scan ulang spt Khanza yg
   // PDF-nya dari Jasper Report terpisah).
-  // Ukuran box diperkecil mendekati default Khanza (lowerLeftX=537,
-  // lowerLeftY=8, upperRightX=572, upperRightY=42 -> 35x34) — bukan
-  // "area reserved" visual besar lagi spt sebelumnya (160x80).
+  // Ukuran box 35x34 (persis QR_WIDTH/QR_HEIGHT di
+  // QRCodePositionHelper.java) — box di-CENTER pd posisi tag (offset
+  // -width/2+5 horizontal, -height/2 vertikal), BUKAN tag ditaruh di
+  // dalam box yg dihitung duluan spt percobaan sebelumnya.
   const SIGN_BOX_WIDTH = 35;
   const SIGN_BOX_HEIGHT = 34;
   const SIGN_BOX_GAP_BELOW_HASIL = 16;
@@ -556,13 +557,20 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     });
     y -= 6; // tepi bawah kotak hasil (sama spt y yg dipakai utk drawRectangle di atas)
 
-    // SIGN_BOX — posisi Y dihitung dinamis, persis di bawah kotak Hasil
-    // Pemeriksaan (diclamp ke margin bawah halaman spy tidak meluber kalau
-    // hasil pemeriksaannya panjang).
-    const signBoxTop = Math.max(margin + SIGN_BOX_HEIGHT, y - SIGN_BOX_GAP_BELOW_HASIL);
+    // Tag "#A#" — posisi (tagX, tagY) dihitung DULU (dinamis, persis di
+    // bawah kotak Hasil Pemeriksaan, diclamp ke margin bawah halaman),
+    // BARU SIGN_BOX di-CENTER tepat di posisi tag ini — persis formula
+    // QRCodePositionHelper.detectQRPosition milik Khanza (bridging/
+    // QRCodePositionHelper.java): box 35x34 di-center pd (tagX,tagY)
+    // dgn offset +5 ke kanan, BUKAN tag ditaruh di dalam box yg dihitung
+    // duluan (itu kesalahan implementasi kita sebelumnya).
+    const tagX = margin + 60;
+    const tagY = Math.max(margin + SIGN_BOX_HEIGHT / 2, y - SIGN_BOX_GAP_BELOW_HASIL - SIGN_BOX_HEIGHT / 2);
+    const centeredX = tagX - SIGN_BOX_WIDTH / 2 + 5;
+    const centeredY = tagY - SIGN_BOX_HEIGHT / 2;
     const SIGN_BOX = {
-      lowerLeftX: margin, lowerLeftY: signBoxTop - SIGN_BOX_HEIGHT,
-      upperRightX: margin + SIGN_BOX_WIDTH, upperRightY: signBoxTop,
+      lowerLeftX: centeredX, lowerLeftY: centeredY,
+      upperRightX: centeredX + SIGN_BOX_WIDTH, upperRightY: centeredY + SIGN_BOX_HEIGHT,
       page: '1',
     };
     y = SIGN_BOX.lowerLeftY - 10;
@@ -614,17 +622,12 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - signLabelW) / 2, y: signLabelY,
       size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
     });
-    // Tag "#A#" — persis pola Khanza (QRCodePositionHelper, cari tag ini
-    // di atas nama dokter di PDF). Di sini fungsinya cuma penanda visual
-    // (kita generate PDF-nya sendiri via pdf-lib, jadi koordinat SIGN_BOX
-    // di atas SUDAH dihitung langsung dari posisi tag ini — bukan hasil
-    // scan ulang PDF spt Khanza yg PDF-nya dari Jasper Report terpisah).
-    const tagAY = SIGN_BOX.lowerLeftY + 14;
-    const tagAW = font.widthOfTextAtSize('#A#', 7);
-    page.drawText('#A#', {
-      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - tagAW) / 2, y: tagAY,
-      size: 7, font, color: rgb(0.6, 0.6, 0.6),
-    });
+    // Tag "#A#" — digambar PERSIS di (tagX, tagY), titik anchor yg dipakai
+    // buat hitung SIGN_BOX di atas (posisi karakter pertama tag — sama
+    // dgn yg ditangkap TextPosition.getXDirAdj()/getYDirAdj() di
+    // QRCodePositionHelper.java kalau discan ulang, tapi di sini kita
+    // sudah tau persis nilainya krn kita yg menggambar).
+    page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
     const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
     page.drawText(namaDokterPj, {
       x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: SIGN_BOX.lowerLeftY + 3,
