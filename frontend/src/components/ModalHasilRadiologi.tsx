@@ -561,7 +561,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     }
     page.drawRectangle({
       x: margin, y: y - 6, width: pageWidth - margin * 2, height: hasilBoxTop - y + 20,
-      borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 1,
+      borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 1,
     });
     y -= 6; // tepi bawah kotak hasil (sama spt y yg dipakai utk drawRectangle di atas)
 
@@ -644,10 +644,10 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       width: visualBox.upperRightX - visualBox.lowerLeftX, height: visualBox.upperRightY - visualBox.lowerLeftY,
       borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.7, borderDashArray: [3, 2],
     });
-    const signLabelW = fontBold.widthOfTextAtSize('Penanggung Jawab', 9);
+    const signLabelW = font.widthOfTextAtSize('Penanggung Jawab', 9);
     page.drawText('Penanggung Jawab', {
       x: visualBoxCenterX - signLabelW / 2, y: labelY,
-      size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
+      size: 9, font, color: rgb(0, 0, 0),
     });
     // Tag "#A#" — digambar PERSIS di (tagX, tagY), titik anchor yg dipakai
     // buat hitung SIGN_BOX di atas (posisi karakter pertama tag — sama
@@ -658,21 +658,21 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
     page.drawText(namaDokterPj, {
       x: visualBoxCenterX - namaW / 2, y: nameY,
-      size: 9, font, color: rgb(0.3, 0.3, 0.3),
+      size: 9, font, color: rgb(0, 0, 0),
     });
 
     // Isi kolom kanan — Petugas Radiologi: label, QR lokal, nama. TANPA
     // border (bukan area reserved, ini tanda tangan yg sudah "jadi").
-    const petugasLabelW = fontBold.widthOfTextAtSize('Petugas Radiologi', 9);
+    const petugasLabelW = font.widthOfTextAtSize('Petugas Radiologi', 9);
     page.drawText('Petugas Radiologi', {
-      x: petugasBoxCenterX - petugasLabelW / 2, y: labelY, size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
+      x: petugasBoxCenterX - petugasLabelW / 2, y: labelY, size: 9, font, color: rgb(0, 0, 0),
     });
     if (qrPetugasImg) {
       page.drawImage(qrPetugasImg, { x: petugasBoxCenterX - qrSize / 2, y: blockCenterY - qrSize / 2, width: qrSize, height: qrSize });
     }
     const petugasNamaW = font.widthOfTextAtSize(data.petugas_nama || '-', 9);
     page.drawText(data.petugas_nama || '-', {
-      x: petugasBoxCenterX - petugasNamaW / 2, y: nameY, size: 9, font, color: rgb(0.3, 0.3, 0.3),
+      x: petugasBoxCenterX - petugasNamaW / 2, y: nameY, size: 9, font, color: rgb(0, 0, 0),
     });
 
     // Footer legal — jarak TETAP dari tepi bawah kertas (bukan dari
