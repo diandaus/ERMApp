@@ -104,6 +104,12 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   const [signing, setSigning] = React.useState(false);
   const [previewingTtd, setPreviewingTtd] = React.useState(false);
   const [requestingOtp, setRequestingOtp] = React.useState(false);
+  const [downloadingTte, setDownloadingTte] = React.useState(false);
+  // lastTteOrderId — orderId dari Send Document/Signing TERAKHIR di sesi
+  // modal ini (bukan disimpan permanen), dipakai tombol Download utk
+  // ambil dokumen yg sudah ditandatangani dari Peruri. null sebelum ada
+  // dokumen yg dikirim sama sekali di sesi ini.
+  const [lastTteOrderId, setLastTteOrderId] = React.useState<string | null>(null);
 
   const todayStr = () => {
     const d = new Date();
@@ -954,6 +960,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         throw err;
       }
       hideProcessing();
+      setLastTteOrderId(orderId);
 
       await Swal.fire({
         icon: 'success', title: 'Berhasil ditandatangani',
@@ -965,6 +972,54 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setSigning(false);
+    }
+  };
+
+  // handleDownloadDokumen — tombol Download di antara Minta OTP Ulang &
+  // Tanda Tangan, ambil dokumen yg SUDAH ditandatangani dari Peruri
+  // (downloadDocument/v1, orderId dari signing TERAKHIR di sesi modal
+  // ini — lastTteOrderId). Field base64 di response Peruri belum
+  // terkonfirmasi nama persisnya dari dokumentasi (belum ada contoh
+  // response nyata sejauh ini) — dicoba beberapa nama kemungkinan; kalau
+  // tidak ketemu, tampilkan raw response-nya spy bisa diperiksa manual
+  // (sama pola debugging spt endpoint Peruri lain di sesi ini).
+  const handleDownloadDokumen = async () => {
+    if (!lastTteOrderId) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani di sesi ini. Lakukan Tanda Tangan dulu.' });
+      return;
+    }
+    setDownloadingTte(true);
+    showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
+    try {
+      const upstream = await peruriPost('/api/peruri/download-document', { orderId: lastTteOrderId });
+      const data = upstream?.data || upstream || {};
+      const base64Doc: string | undefined = data.base64Document || data.document || data.file || data.base64;
+      if (!base64Doc) {
+        hideProcessing();
+        Swal.fire({
+          icon: 'warning', title: 'Format respons tidak dikenali',
+          html: `Peruri tidak mengembalikan field dokumen yg dikenali. Response mentah:<br/><pre style="text-align:left;font-size:11px;white-space:pre-wrap;">${JSON.stringify(upstream, null, 2)}</pre>`,
+        });
+        return;
+      }
+      const byteChars = atob(base64Doc);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `TTE_HasilRadiologi_${noorder.replace(/\//g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      hideProcessing();
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setDownloadingTte(false);
     }
   };
 
@@ -1311,6 +1366,17 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 15 15" fill="none">
                     <path d="M6 5.5H9M7.5 5.5V10M10.5 10V7.5M10.5 7.5V5.5H11.5C12.0523 5.5 12.5 5.94772 12.5 6.5C12.5 7.05228 12.0523 7.5 11.5 7.5H10.5ZM4.5 6.5V8.5C4.5 9.05228 4.05228 9.5 3.5 9.5C2.94772 9.5 2.5 9.05228 2.5 8.5V6.5C2.5 5.94772 2.94772 5.5 3.5 5.5C4.05228 5.5 4.5 5.94772 4.5 6.5ZM1.5 0.5H13.5C14.0523 0.5 14.5 0.947715 14.5 1.5V13.5C14.5 14.0523 14.0523 14.5 13.5 14.5H1.5C0.947716 14.5 0.5 14.0523 0.5 13.5V1.5C0.5 0.947716 0.947715 0.5 1.5 0.5Z" stroke="currentColor"/>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadDokumen}
+                  disabled={downloadingTte || !lastTteOrderId}
+                  title={lastTteOrderId ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen tertandatangani di sesi ini'}
+                  style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: (downloadingTte || !lastTteOrderId) ? '#9ca3af' : '#374151', cursor: (downloadingTte || !lastTteOrderId) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9.517 3.31h4.966v6.621h3.31L12 16.552 6.207 9.931h3.31V3.31zM0 19.034h24v1.655H0v-1.655z"/>
                   </svg>
                 </button>
                 <button
