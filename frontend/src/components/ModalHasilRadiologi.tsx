@@ -367,9 +367,22 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   };
 
   // Kotak tanda tangan elektronik Peruri (Penanggung Jawab, kiri) — posisi
-  // koordinatnya FIXED (lihat SIGN_BOX di buildRadiologiPdfUntukTtd),
-  // BUKAN dihitung otomatis dari posisi kotak "Hasil Pemeriksaan" —
-  // dikembalikan ke versi ini utk isolasi penyebab error [4012] Signing.
+  // Y-nya dinamis, mengikuti bawah kotak "Hasil Pemeriksaan" (lihat tag
+  // "#A#" di buildRadiologiPdfUntukTtd). Beda dari percobaan SEBELUMNYA yg
+  // sempat bikin error [4012] Signing (koordinat cuma dihitung matematis
+  // tanpa penanda visual apa pun) — sekarang persis pola Khanza
+  // (QRCodePositionHelper.detectQRPosition, cari tag "#A#" di atas nama
+  // dokter): tag "#A#" BENAR2 digambar di PDF di posisi itu, lalu
+  // SIGN_BOX dihitung LANGSUNG dari koordinat gambar tag tsb (bukan
+  // deteksi ulang scan PDF — krn PDF-nya kita generate sendiri, kita
+  // sudah tau persis koordinatnya, tidak perlu scan ulang spt Khanza yg
+  // PDF-nya dari Jasper Report terpisah).
+  // Ukuran box diperkecil mendekati default Khanza (lowerLeftX=537,
+  // lowerLeftY=8, upperRightX=572, upperRightY=42 -> 35x34) — bukan
+  // "area reserved" visual besar lagi spt sebelumnya (160x80).
+  const SIGN_BOX_WIDTH = 35;
+  const SIGN_BOX_HEIGHT = 34;
+  const SIGN_BOX_GAP_BELOW_HASIL = 16;
 
   // buildRadiologiPdfUntukTtd — PENGECUALIAN dari CETAK_STANDAR.md §1
   // (sama pola dgn buildBillingPdf di ModalBilling.tsx): fitur kirim ke
@@ -543,14 +556,15 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     });
     y -= 6; // tepi bawah kotak hasil (sama spt y yg dipakai utk drawRectangle di atas)
 
-    // SIGN_BOX — koordinat TETAP (BUKAN dihitung otomatis dari posisi kotak
-    // Hasil Pemeriksaan) — dikembalikan ke nilai fixed spt saat TTE
-    // terakhir kali TERBUKTI berhasil, utk isolasi apakah koordinat
-    // dinamis (yg bisa hasilkan nilai berbeda2 tiap dokumen) penyebab
-    // error [4012] "Gagal melakukan proses penandatanganan di server
-    // Peruri". SIGN_BOX_WIDTH/HEIGHT/GAP_BELOW_HASIL di atas jadi tidak
-    // terpakai sementara.
-    const SIGN_BOX = { lowerLeftX: 40, lowerLeftY: 40, upperRightX: 200, upperRightY: 120, page: '1' };
+    // SIGN_BOX — posisi Y dihitung dinamis, persis di bawah kotak Hasil
+    // Pemeriksaan (diclamp ke margin bawah halaman spy tidak meluber kalau
+    // hasil pemeriksaannya panjang).
+    const signBoxTop = Math.max(margin + SIGN_BOX_HEIGHT, y - SIGN_BOX_GAP_BELOW_HASIL);
+    const SIGN_BOX = {
+      lowerLeftX: margin, lowerLeftY: signBoxTop - SIGN_BOX_HEIGHT,
+      upperRightX: margin + SIGN_BOX_WIDTH, upperRightY: signBoxTop,
+      page: '1',
+    };
     y = SIGN_BOX.lowerLeftY - 10;
 
     // Kolom KANAN — Petugas Radiologi. Ini BUKAN area stample Peruri (beda
@@ -590,15 +604,30 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       width: SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX, height: SIGN_BOX.upperRightY - SIGN_BOX.lowerLeftY,
       borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.7, borderDashArray: [3, 2],
     });
-    const signLabelY = SIGN_BOX.upperRightY - 12;
+    // Box SIGN_BOX kecil (35x34, mendekati default Khanza) — label/tag/nama
+    // sengaja dijejer rapat vertikal (3 baris dlm 34pt), teksnya BOLEH
+    // meluber horizontal keluar box (box-nya emang cuma penanda posisi
+    // utk Peruri, bukan wadah visual yg harus muat semua teks).
+    const signLabelY = SIGN_BOX.lowerLeftY + 25;
     const signLabelW = fontBold.widthOfTextAtSize('Penanggung Jawab', 9);
     page.drawText('Penanggung Jawab', {
       x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - signLabelW) / 2, y: signLabelY,
       size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
     });
+    // Tag "#A#" — persis pola Khanza (QRCodePositionHelper, cari tag ini
+    // di atas nama dokter di PDF). Di sini fungsinya cuma penanda visual
+    // (kita generate PDF-nya sendiri via pdf-lib, jadi koordinat SIGN_BOX
+    // di atas SUDAH dihitung langsung dari posisi tag ini — bukan hasil
+    // scan ulang PDF spt Khanza yg PDF-nya dari Jasper Report terpisah).
+    const tagAY = SIGN_BOX.lowerLeftY + 14;
+    const tagAW = font.widthOfTextAtSize('#A#', 7);
+    page.drawText('#A#', {
+      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - tagAW) / 2, y: tagAY,
+      size: 7, font, color: rgb(0.6, 0.6, 0.6),
+    });
     const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
     page.drawText(namaDokterPj, {
-      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: SIGN_BOX.lowerLeftY + 8,
+      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: SIGN_BOX.lowerLeftY + 3,
       size: 9, font, color: rgb(0.3, 0.3, 0.3),
     });
 
