@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { ModalCariDokter } from './ModalCariDokter';
 import { ModalCariPetugas } from './ModalCariPetugas';
+import { getCurrentPetugas, getCurrentUserNip } from '../utils/currentUser';
 
 // ModalHasilRadiologi — "Input Data Hasil Periksa Radiologi", padanan
 // header form DlgPeriksaRadiologi.java (Khanza Desktop): No.Rawat/No.RM/
@@ -167,6 +168,14 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         setDokterPerujukNama(data.nm_dokter || '');
         if (data.hasil_terakhir) {
           setHasil(data.hasil_terakhir);
+        }
+        // Default Petugas dari akun yg sedang login (persis pola
+        // ModalTelaahResep.tsx) — tetap bisa diganti manual lewat
+        // pencarian/ModalCariPetugas kalau yg mengerjakan beda dari yg login.
+        const currentNip = getCurrentUserNip();
+        if (currentNip) {
+          setPetugasNip(currentNip);
+          setPetugasQuery(getCurrentPetugas() || currentNip);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
@@ -1445,7 +1454,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                   type="button" onClick={handleSubmit} disabled={saving}
                   style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#2563eb', color: '#fff', cursor: saving ? 'default' : 'pointer', fontSize: 13, fontWeight: 600 }}
                 >
-                  {saving ? 'Menyimpan...' : 'Simpan Hasil'}
+                  {saving ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </div>
