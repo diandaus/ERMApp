@@ -377,12 +377,15 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   // deteksi ulang scan PDF — krn PDF-nya kita generate sendiri, kita
   // sudah tau persis koordinatnya, tidak perlu scan ulang spt Khanza yg
   // PDF-nya dari Jasper Report terpisah).
-  // Ukuran box 35x34 (persis QR_WIDTH/QR_HEIGHT di
-  // QRCodePositionHelper.java) — box di-CENTER pd posisi tag (offset
-  // -width/2+5 horizontal, -height/2 vertikal), BUKAN tag ditaruh di
-  // dalam box yg dihitung duluan spt percobaan sebelumnya.
-  const SIGN_BOX_WIDTH = 35;
-  const SIGN_BOX_HEIGHT = 34;
+  // Ukuran box — awalnya 35x34 (persis QR_WIDTH/QR_HEIGHT di
+  // QRCodePositionHelper.java), diperbesar ke 40x40 (msh integer, aman)
+  // supaya stample ASLI Peruri (yg dirender mengikuti ukuran box ini)
+  // sama besar dgn QR Petugas Radiologi (jg 40x40, lihat qrSize) — box
+  // di-CENTER pd posisi tag (offset -width/2+5 horizontal, -height/2
+  // vertikal), BUKAN tag ditaruh di dalam box yg dihitung duluan spt
+  // percobaan sebelumnya.
+  const SIGN_BOX_WIDTH = 40;
+  const SIGN_BOX_HEIGHT = 40;
   // Jarak dari tepi bawah kotak Hasil Pemeriksaan ke TITIK TENGAH
   // SIGN_BOX (blockCenterY/tagY) — HARUS cukup lebar utk menampung
   // seluruh tumpukan visual di ATAS titik tengah itu (label +12, lalu
