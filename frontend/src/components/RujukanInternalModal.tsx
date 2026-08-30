@@ -8,8 +8,44 @@ type RujukanInternalModalProps = {
   onSuccess?: () => void;
 };
 
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// RujukStepperIcon — pengganti panah dropdown native pada <select>, warna
+// sama dgn tombol "Simpan Rujuk Keluar" (#0ea5e9).
+const RujukStepperIcon: React.FC = () => (
+  <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, background: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
 export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ patient, onClose, onSuccess }) => {
   const [activeTab, setActiveTab] = React.useState<'internal' | 'keluar'>('internal');
+
+  // Form simpan rujuk keluar
+  const [rujukKe, setRujukKe] = React.useState('');
+  const [rujukTglBaru, setRujukTglBaru] = React.useState(todayStr());
+  const [rujukJamBaru, setRujukJamBaru] = React.useState('');
+  const [rujukOtomatisJam, setRujukOtomatisJam] = React.useState(true);
+  const [rujukKetDiagnosa, setRujukKetDiagnosa] = React.useState('');
+  const [rujukKatRujuk, setRujukKatRujuk] = React.useState('-');
+  const [rujukAmbulance, setRujukAmbulance] = React.useState('-');
+  const [rujukKeterangan, setRujukKeterangan] = React.useState('');
+  const [savingRujuk, setSavingRujuk] = React.useState(false);
+  // Default Dokter Perujuk = dokter poli pasien ini (patient.kd_dokter/
+  // nm_dokter, sama data yg dipakai Pemeriksaan.tsx) — tetap bisa diganti
+  // manual lewat pencarian kalau dokter perujuknya beda dari dokter poli.
+  const [rujukKdDokter, setRujukKdDokter] = React.useState(patient.kd_dokter || '');
+  const [rujukNmDokter, setRujukNmDokter] = React.useState(patient.nm_dokter || '');
+  const [showRujukDokterDropdown, setShowRujukDokterDropdown] = React.useState(false);
+  const [searchRujukDokter, setSearchRujukDokter] = React.useState('');
+  const rujukDokterSearchWrapperRef = React.useRef<HTMLDivElement>(null);
+  const [rujukDokterDropdownPos, setRujukDokterDropdownPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const [kdDokter, setKdDokter] = React.useState('');
   const [nmDokter, setNmDokter] = React.useState('');
   const [kdPoli, setKdPoli] = React.useState('');
@@ -33,6 +69,20 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
   const dokterSearchWrapperRef = React.useRef<HTMLDivElement>(null);
   const [poliDropdownPos, setPoliDropdownPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const [dokterDropdownPos, setDokterDropdownPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Jam Rujuk otomatis — ikut jam berjalan (update tiap detik) selama
+  // checkbox "Otomatis" dicentang; berhenti & bisa diedit manual kalau
+  // di-uncheck.
+  React.useEffect(() => {
+    if (!rujukOtomatisJam) return;
+    const updateJam = () => {
+      const d = new Date();
+      setRujukJamBaru(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`);
+    };
+    updateJam();
+    const interval = setInterval(updateJam, 1000);
+    return () => clearInterval(interval);
+  }, [rujukOtomatisJam]);
 
   React.useEffect(() => {
     if (!showPoliDropdown) { setPoliDropdownPos(null); return; }
@@ -88,6 +138,29 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
       fetchDokterList(searchDokter);
     }
   }, [showDokterDropdown, searchDokter]);
+
+  // Dropdown dokter di form Rujuk Keluar — reuse fetchDokterList/dokterList
+  // (aman krn cuma satu tab yg aktif/kelihatan dlm satu waktu).
+  React.useEffect(() => {
+    if (showRujukDokterDropdown) {
+      fetchDokterList(searchRujukDokter);
+    }
+  }, [showRujukDokterDropdown, searchRujukDokter]);
+
+  React.useEffect(() => {
+    if (!showRujukDokterDropdown) { setRujukDokterDropdownPos(null); return; }
+    const updatePos = () => {
+      const rect = rujukDokterSearchWrapperRef.current?.getBoundingClientRect();
+      if (rect) setRujukDokterDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [showRujukDokterDropdown]);
 
   // Fetch list poli untuk dropdown
   React.useEffect(() => {
@@ -165,6 +238,59 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
       setPoliList([]);
     } finally {
       setLoadingPoli(false);
+    }
+  };
+
+  const handleSimpanRujuk = async () => {
+    if (!patient.no_rawat) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Data pasien tidak lengkap!' });
+      return;
+    }
+    if (!rujukKe.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Tempat Rujuk wajib diisi!' });
+      return;
+    }
+    if (!rujukKdDokter.trim() || !rujukNmDokter.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Dokter Perujuk wajib diisi!' });
+      return;
+    }
+    setSavingRujuk(true);
+    try {
+      const res = await fetch('/api/rujuk-keluar/simpan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          no_rawat: patient.no_rawat,
+          rujuk_ke: rujukKe.trim(),
+          tgl_rujuk: rujukTglBaru,
+          jam: rujukOtomatisJam ? '' : rujukJamBaru,
+          keterangan_diagnosa: rujukKetDiagnosa.trim(),
+          kd_dokter: rujukKdDokter.trim(),
+          kat_rujuk: rujukKatRujuk,
+          ambulance: rujukAmbulance,
+          keterangan: rujukKeterangan.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan rujuk keluar');
+
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message || 'Rujuk keluar berhasil disimpan', timer: 2000, showConfirmButton: false });
+
+      // Reset form
+      setRujukKe('');
+      setRujukTglBaru(todayStr());
+      setRujukJamBaru('');
+      setRujukKetDiagnosa('');
+      setRujukKatRujuk('-');
+      setRujukAmbulance('-');
+      setRujukKeterangan('');
+      setRujukKdDokter('');
+      setRujukNmDokter('');
+      setSearchRujukDokter('');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan saat menyimpan rujuk keluar' });
+    } finally {
+      setSavingRujuk(false);
     }
   };
 
@@ -355,8 +481,150 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
           </div>
 
           {activeTab === 'keluar' ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-              Fitur Rujuk Keluar akan dikembangkan nanti.
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Form simpan rujuk keluar baru — langsung tampil di BG modal (bukan card abu-abu terpisah) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 0.75fr 0.85fr auto', gap: 10, alignItems: 'end' }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                      Tempat Rujuk <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text" value={rujukKe} onChange={(e) => setRujukKe(e.target.value)}
+                      placeholder="Nama faskes/RS tujuan"
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>Tgl.Rujuk</label>
+                    <input
+                      type="date" value={rujukTglBaru} onChange={(e) => setRujukTglBaru(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>Jam Rujuk</label>
+                    <input
+                      type="time" step="1" value={rujukJamBaru} onChange={(e) => setRujukJamBaru(e.target.value)}
+                      disabled={rujukOtomatisJam}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none', opacity: rujukOtomatisJam ? 0.6 : 1 }}
+                    />
+                  </div>
+                  <input
+                    type="checkbox" checked={rujukOtomatisJam} onChange={(e) => setRujukOtomatisJam(e.target.checked)}
+                    title="Otomatis"
+                    style={{ cursor: 'pointer', width: 16, height: 16, marginBottom: 10 }}
+                  />
+                </div>
+
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                    Dokter Perujuk <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }} ref={rujukDokterSearchWrapperRef}>
+                    <input
+                      type="text"
+                      value={rujukNmDokter || rujukKdDokter}
+                      onChange={(e) => { const v = e.target.value; setRujukKdDokter(v); setSearchRujukDokter(v); setRujukNmDokter(''); }}
+                      onFocus={() => setShowRujukDokterDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowRujukDokterDropdown(false), 200)}
+                      placeholder="Cari dokter..."
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                    />
+                    {showRujukDokterDropdown && rujukDokterDropdownPos && createPortal(
+                      <div
+                        style={{
+                          position: 'fixed', top: rujukDokterDropdownPos.top, left: rujukDokterDropdownPos.left, width: rujukDokterDropdownPos.width,
+                          maxHeight: 240, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#ffffff',
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', zIndex: 999999,
+                        }}
+                      >
+                        {loadingDokter ? (
+                          <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat...</div>
+                        ) : dokterList.length === 0 ? (
+                          <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                            {rujukKdDokter.length > 0 ? 'Tidak ada hasil pencarian' : 'Ketik untuk mencari dokter...'}
+                          </div>
+                        ) : (
+                          dokterList.map((d, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => { setRujukKdDokter(d.kd_dokter); setRujukNmDokter(d.nm_dokter); setSearchRujukDokter(''); setShowRujukDokterDropdown(false); }}
+                              style={{ padding: '10px 12px', cursor: 'pointer', fontSize: 13, borderBottom: idx < dokterList.length - 1 ? '1px solid #f3f4f6' : 'none' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; }}
+                            >
+                              <div style={{ fontWeight: 500, color: '#111827' }}>{d.nm_dokter}</div>
+                              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Kode: {d.kd_dokter}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>,
+                      document.body
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>Kategori Rujuk</label>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        value={rujukKatRujuk} onChange={(e) => setRujukKatRujuk(e.target.value)}
+                        style={{ width: '100%', padding: '9px 30px 9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none', background: '#fff', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                      >
+                        <option value="-">-</option>
+                        <option value="Bedah">Bedah</option>
+                        <option value="Non Bedah">Non Bedah</option>
+                        <option value="Kebidanan">Kebidanan</option>
+                        <option value="Anak">Anak</option>
+                      </select>
+                      <RujukStepperIcon />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>Ambulance</label>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        value={rujukAmbulance} onChange={(e) => setRujukAmbulance(e.target.value)}
+                        style={{ width: '100%', padding: '9px 30px 9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none', background: '#fff', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                      >
+                        <option value="-">-</option>
+                        <option value="AGD">AGD</option>
+                        <option value="SENDIRI">SENDIRI</option>
+                        <option value="SWASTA">SWASTA</option>
+                      </select>
+                      <RujukStepperIcon />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>Keterangan Diagnosa</label>
+                  <input
+                    type="text" value={rujukKetDiagnosa} onChange={(e) => setRujukKetDiagnosa(e.target.value)}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>Keterangan</label>
+                  <input
+                    type="text" value={rujukKeterangan} onChange={(e) => setRujukKeterangan(e.target.value)}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button" onClick={handleSimpanRujuk} disabled={savingRujuk}
+                    style={{ padding: '8px 16px', borderRadius: 4, border: 'none', background: savingRujuk ? '#9ca3af' : '#0ea5e9', color: '#fff', cursor: savingRujuk ? 'default' : 'pointer', fontSize: 12, fontWeight: 500 }}
+                  >
+                    {savingRujuk ? 'Menyimpan...' : 'Simpan Rujuk Keluar'}
+                  </button>
+                </div>
+              </div>
+
             </div>
           ) : (
         <>

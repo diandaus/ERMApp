@@ -2386,6 +2386,9 @@ func main() {
 
 	// === Modul Rawat Jalan ===
 
+	r.GET("/api/rujuk-keluar/list", getRujukKeluarList(db))
+	r.POST("/api/rujuk-keluar/simpan", saveRujukKeluar(db))
+
 	// Simpan Rujukan Poli Internal
 	r.POST("/api/rujukan-internal/simpan", func(c *gin.Context) {
 		var payload struct {
