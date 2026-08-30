@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -740,10 +741,19 @@ func signPeruriDocument(db *sql.DB) gin.HandlerFunc {
 //	POST {{url}}/digitalSignatureFullJwtSandbox/1.0/downloadDocument/v1
 //	Header: x-Gateway-APIKey, Content-Type: application/json, Authorization: (kosong)
 //	Body: {"param": {"orderId"}}
-func downloadPeruriDocument(db *sql.DB) gin.HandlerFunc {
+//
+// Auto-upload ke webapps/berkasrawat/pages/upload — persis
+// MnDonwloadDokumenActionPerformed di Khanza (uploadPDFToServer, TANPA
+// insert ke berkas_digital_perawatan, cuma taruh fisik filenya di folder
+// yg sama dgn upload manual). NoRawat opsional (dari frontend, dipakai
+// utk nama file "Radiologi_<no_rawat>_signed.pdf" — sama pola Khanza);
+// kalau kosong (endpoint ini generik, dipakai jg oleh alur Peruri lain
+// nantinya) upload dilewati, cuma balikin base64-nya spt biasa.
+func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var reqIn struct {
 			OrderID string `json:"orderId" binding:"required"`
+			NoRawat string `json:"no_rawat"`
 		}
 		if err := c.ShouldBindJSON(&reqIn); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -779,7 +789,26 @@ func downloadPeruriDocument(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi server Peruri: " + err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status_code": statusCode, "response": parsed})
+
+		uploaded := false
+		if reqIn.NoRawat != "" {
+			if m, ok := parsed.(map[string]interface{}); ok {
+				if rc, ok := m["resultCode"].(string); ok && rc == "0" {
+					if data, ok := m["data"].(map[string]interface{}); ok {
+						if b64, ok := data["base64Document"].(string); ok && b64 != "" {
+							if pdfBytes, decErr := base64.StdEncoding.DecodeString(b64); decErr == nil {
+								fileName := "Radiologi_" + strings.ReplaceAll(reqIn.NoRawat, "/", "_") + "_signed.pdf"
+								if wErr := WriteWebappsFile(webappsCfg, "berkasrawat/pages/upload", fileName, pdfBytes); wErr == nil {
+									uploaded = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status_code": statusCode, "response": parsed, "uploaded_to_berkasrawat": uploaded})
 	}
 }
 

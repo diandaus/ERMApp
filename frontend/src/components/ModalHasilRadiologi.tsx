@@ -1037,7 +1037,18 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     setDownloadingTte(true);
     showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
     try {
-      const upstream = await peruriPost('/api/peruri/download-document', { orderId: lastTteOrderId });
+      // fetch langsung (bukan peruriPost) krn butuh field "uploaded_to_berkasrawat"
+      // di level atas response kita sendiri, bukan cuma "response" (upstream Peruri).
+      const res = await fetch('/api/peruri/download-document', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '' }),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
+      const upstream = resData.response;
+      if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
+        throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || 'Download Document gagal'}`);
+      }
       const data = upstream?.data || upstream || {};
       const base64Doc: string | undefined = data.base64Document || data.document || data.file || data.base64;
       if (!base64Doc) {
@@ -1061,6 +1072,9 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       hideProcessing();
+      if (resData.uploaded_to_berkasrawat) {
+        Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen terunduh & otomatis terupload ke Berkas Rawat.', timer: 2000, showConfirmButton: false });
+      }
     } catch (err) {
       hideProcessing();
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });

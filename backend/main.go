@@ -3895,7 +3895,7 @@ func main() {
 	r.POST("/api/peruri/validate-otp", validatePeruriOtp(db))
 	r.GET("/api/peruri/session-status", getPeruriSessionStatus(db))
 	r.POST("/api/peruri/signing", signPeruriDocument(db))
-	r.POST("/api/peruri/download-document", downloadPeruriDocument(db))
+	r.POST("/api/peruri/download-document", downloadPeruriDocument(db, khanzaCfg))
 	r.POST("/api/peruri/send-document-tmp", sendPeruriDocumentFromFile(db))
 	r.POST("/api/peruri/check-certificate", checkPeruriCertificate(db))
 
