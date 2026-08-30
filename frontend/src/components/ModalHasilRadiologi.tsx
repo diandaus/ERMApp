@@ -816,6 +816,19 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     try {
       const { pdfBytes, email, namaDokterPj, signBox } = await buildRadiologiPdfUntukTtd();
 
+      // Koordinat posisi tag "#A#" (SIGN_BOX) SUDAH selesai dihitung di
+      // sini (dalam buildRadiologiPdfUntukTtd, sebelum PDF byte
+      // dikembalikan) — ditampilkan dulu (spinner + console) supaya
+      // nilainya bisa diverifikasi langsung SEBELUM benar2 kirim ke
+      // Peruri, baru lanjut ke Send Document.
+      console.log('[Peruri TTE] SIGN_BOX yang akan dikirim:', signBox);
+      showProcessing(
+        `Posisi TTD dihitung: lowerLeftX=${signBox.lowerLeftX}, lowerLeftY=${signBox.lowerLeftY}, `
+        + `upperRightX=${signBox.upperRightX}, upperRightY=${signBox.upperRightY}<br/>`
+        + '<span style="font-size:12px;color:#6b7280;">Mengirim dokumen ke Peruri...</span>',
+      );
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+
       // 1. Send Document
       const form = new FormData();
       form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), `HasilRadiologi_${noorder.replace(/\//g, '_')}.pdf`);
