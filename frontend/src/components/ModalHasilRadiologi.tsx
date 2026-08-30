@@ -578,7 +578,6 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       upperRightX: centeredX + SIGN_BOX_WIDTH, upperRightY: centeredY + SIGN_BOX_HEIGHT,
       page: '1',
     };
-    y = SIGN_BOX.lowerLeftY - 10;
 
     // Kolom KANAN — Petugas Radiologi. Ini BUKAN area stample Peruri (beda
     // dari kotak Penanggung Jawab di kiri) — QR-nya e-signature LOKAL biasa
@@ -601,11 +600,22 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       qrPetugasImg = await pdf.embedPng(qrBytes);
     } catch { /* lanjut tanpa QR kalau gagal generate/embed */ }
 
-    // Tgl.Cetak — di atas kolom kanan (Petugas Radiologi), persis posisi di handleCetak.
+    // Layout label/gambar/nama kedua kolom dipisah TOTAL dari SIGN_BOX yg
+    // kecil (35x34, cuma target koordinat API Peruri) — dianchor ke titik
+    // tengah SIGN_BOX (blockCenterY, tetap ikut naik/turun dinamis) tapi
+    // dikasih jarak lebar supaya QR petugas (40x40) & stample ASLI Peruri
+    // (yg ternyata dirender LEBIH BESAR dari 35x34 yg diminta) tidak
+    // menimpa label/nama di atas & bawahnya.
+    const blockCenterY = (SIGN_BOX.lowerLeftY + SIGN_BOX.upperRightY) / 2;
+    const qrSize = 40;
+    const labelY = blockCenterY + qrSize / 2 + 12;
+    const nameY = blockCenterY - qrSize / 2 - 12;
+
+    // Tgl.Cetak — di atas label kolom kanan (Petugas Radiologi).
     const tglCetakText = `Tgl.Cetak : ${tanggalCetak}`;
     const tglCetakW = font.widthOfTextAtSize(tglCetakText, 8.5);
     page.drawText(tglCetakText, {
-      x: petugasBoxCenterX - tglCetakW / 2, y: SIGN_BOX.upperRightY + 4, size: 8.5, font, color: rgb(0, 0, 0),
+      x: petugasBoxCenterX - tglCetakW / 2, y: labelY + 14, size: 8.5, font, color: rgb(0, 0, 0),
     });
 
     // Kotak KIRI — Penanggung Jawab. Area RESERVED utk stample Peruri (SAMA
@@ -617,14 +627,9 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       width: SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX, height: SIGN_BOX.upperRightY - SIGN_BOX.lowerLeftY,
       borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.7, borderDashArray: [3, 2],
     });
-    // Box SIGN_BOX kecil (35x34, mendekati default Khanza) — label/tag/nama
-    // sengaja dijejer rapat vertikal (3 baris dlm 34pt), teksnya BOLEH
-    // meluber horizontal keluar box (box-nya emang cuma penanda posisi
-    // utk Peruri, bukan wadah visual yg harus muat semua teks).
-    const signLabelY = SIGN_BOX.lowerLeftY + 25;
     const signLabelW = fontBold.widthOfTextAtSize('Penanggung Jawab', 9);
     page.drawText('Penanggung Jawab', {
-      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - signLabelW) / 2, y: signLabelY,
+      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - signLabelW) / 2, y: labelY,
       size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
     });
     // Tag "#A#" — digambar PERSIS di (tagX, tagY), titik anchor yg dipakai
@@ -635,7 +640,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
     const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
     page.drawText(namaDokterPj, {
-      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: SIGN_BOX.lowerLeftY + 3,
+      x: SIGN_BOX.lowerLeftX + (SIGN_BOX.upperRightX - SIGN_BOX.lowerLeftX - namaW) / 2, y: nameY,
       size: 9, font, color: rgb(0.3, 0.3, 0.3),
     });
 
@@ -643,15 +648,14 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     // border (bukan area reserved, ini tanda tangan yg sudah "jadi").
     const petugasLabelW = fontBold.widthOfTextAtSize('Petugas Radiologi', 9);
     page.drawText('Petugas Radiologi', {
-      x: petugasBoxCenterX - petugasLabelW / 2, y: signLabelY, size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
+      x: petugasBoxCenterX - petugasLabelW / 2, y: labelY, size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3),
     });
     if (qrPetugasImg) {
-      const qrSize = 40;
-      page.drawImage(qrPetugasImg, { x: petugasBoxCenterX - qrSize / 2, y: SIGN_BOX.lowerLeftY + 22, width: qrSize, height: qrSize });
+      page.drawImage(qrPetugasImg, { x: petugasBoxCenterX - qrSize / 2, y: blockCenterY - qrSize / 2, width: qrSize, height: qrSize });
     }
     const petugasNamaW = font.widthOfTextAtSize(data.petugas_nama || '-', 9);
     page.drawText(data.petugas_nama || '-', {
-      x: petugasBoxCenterX - petugasNamaW / 2, y: SIGN_BOX.lowerLeftY + 8, size: 9, font, color: rgb(0.3, 0.3, 0.3),
+      x: petugasBoxCenterX - petugasNamaW / 2, y: nameY, size: 9, font, color: rgb(0.3, 0.3, 0.3),
     });
 
     // Footer legal — jarak TETAP dari tepi bawah kertas (bukan dari
