@@ -4,6 +4,7 @@ import { ModalRegistrasiIGD } from '../components/ModalRegistrasiIGD';
 import { ModalPengajuanSEP, type SepItem } from '../components/ModalPengajuanSEP';
 import { HistoriPelayananBpjsModal } from '../components/HistoriPelayananBpjsModal';
 import { SepPrintView } from '../components/SepPrintView';
+import { PemeriksaanIGDView } from './PemeriksaanIGD';
 import { localDateStr } from '../utils/date';
 
 // IGDK.tsx — hasil copy dari Registrasi.tsx (RegistrasiView), view
@@ -14,7 +15,7 @@ import { localDateStr } from '../utils/date';
 // kunjungan kd_poli='IGDK' (Pendaftaran biasa justru mengecualikannya,
 // lihat komentar getRegistrasiList di backend/main.go).
 
-type Patient = {
+export type Patient = {
   no_reg: string;
   no_rawat: string;
   tgl_registrasi: string;
@@ -66,7 +67,17 @@ type PatientBrief = {
   tgl_lahir: string;
 };
 
-export const IGDKView: React.FC = () => {
+type AppUser = {
+  username: string;
+  full_name: string;
+  role: string;
+};
+
+type IGDKViewProps = {
+  user?: AppUser;
+};
+
+export const IGDKView: React.FC<IGDKViewProps> = ({ user }) => {
   const [searchText, setSearchText] = React.useState<string>('');
   const [showFilterDropdown, setShowFilterDropdown] = React.useState<boolean>(false);
   const [tglDari, setTglDari] = React.useState<string>(localDateStr());
@@ -76,6 +87,7 @@ export const IGDKView: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [hoveredNoRegIndex, setHoveredNoRegIndex] = React.useState<number | null>(null);
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
+  const [periksaPatient, setPeriksaPatient] = React.useState<Patient | null>(null);
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
 
   // Dropdown "[BPJS] > Cetak SEP / Riwayat Kunjungan" — pola persis dgn
@@ -437,6 +449,18 @@ export const IGDKView: React.FC = () => {
     }
   }, [showFilterDropdown]);
 
+  if (periksaPatient) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+        <PemeriksaanIGDView
+          patient={periksaPatient}
+          onBack={() => setPeriksaPatient(null)}
+          user={user}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Modal Component */}
@@ -780,8 +804,29 @@ export const IGDKView: React.FC = () => {
                           {patient.no_reg}
                         </button>
                       </td>
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, fontWeight: 600, color: '#2563eb' }}>
-                        {patient.no_rawat}
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPeriksaPatient(patient);
+                          }}
+                          title="Buka Pemeriksaan IGD"
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            border: '1px solid #2563eb',
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#1d4ed8'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = '#2563eb'; }}
+                        >
+                          {patient.no_rawat}
+                        </button>
                       </td>
                       <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                         {formatDate(patient.tgl_registrasi)}

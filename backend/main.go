@@ -3387,6 +3387,9 @@ func main() {
 
 	// Triase IGD endpoint
 	r.GET("/api/triase-igd/*no_rawat", getTriaseIGD(db))
+	r.GET("/api/triase-igd-macam-kasus", getMasterTriaseMacamKasus(db))
+	r.GET("/api/triase-igd-skala/:n", getMasterTriaseSkala(db))
+	r.POST("/api/triase-igd/simpan", saveTriaseIGD(db))
 
 	// Asuhan Medis IGD endpoint
 	r.GET("/api/asuhan-medis-igd/*no_rawat", getAsuhanMedisIGD(db))

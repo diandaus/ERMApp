@@ -484,7 +484,7 @@ export const App: React.FC = () => {
       case 'pendaftaran':
         return <RegistrasiView />;
       case 'igd':
-        return <IGDKView />;
+        return <IGDKView user={user} />;
       case 'rawat-jalan':
         return <RawatJalanView onSelectPatient={setSelectedPatientForExam} user={user} />;
       case 'rawat-inap':
