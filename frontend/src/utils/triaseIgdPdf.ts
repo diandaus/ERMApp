@@ -48,10 +48,6 @@ const SKALA_LABEL: Record<number, string> = {
   4: 'SEMI URGENSI/URGENSI RENDAH',
   5: 'NON URGENSI',
 };
-// Judul bar merah maroon (header dokumen) — warna TETAP, tidak ikut
-// berubah warna skala (beda dari baris Plan/Keputusan & checklist yang
-// warnanya dinamis sesuai kegawatan).
-const TITLE_BAR_COLOR = '#8B0000';
 const SECTION_HEADER_COLOR = '#EFEAD2'; // krem, header "KETERANGAN"/"PEMERIKSAAN"/"Petugas ..."
 
 const hexToRgb = (hex: string) => {
@@ -84,20 +80,29 @@ export async function buildTriasePdfUntukTtd(
   const valueColX = tableX + labelColWidth;
   const valueColWidth = tableWidth - labelColWidth;
 
+  // wrapText — pecah dulu per baris baru ASLI (\n/\r\n dari textarea, mis.
+  // isian Keluhan Utama/Catatan dgn Enter) SEBELUM word-wrap per kata.
+  // WAJIB: kalau "\n" ikut kebawa ke page.drawText(), WinAnsiEncoding
+  // pdf-lib melempar error "WinAnsi cannot encode "\n" (0x000a)" — lihat
+  // catatan sama di awalMedisIgdPdf.ts (bug yg sama persis, dilaporkan
+  // user di production utk Awal Medis, fix jaga2 di sini jg krn field
+  // Triase yg berupa textarea rentan sama).
   const wrapText = (s: string, maxWidth: number, size: number, f = font): string[] => {
-    const words = s.split(' ');
     const lines: string[] = [];
-    let line = '';
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w;
-      if (f.widthOfTextAtSize(test, size) > maxWidth && line) {
-        lines.push(line);
-        line = w;
-      } else {
-        line = test;
+    s.split(/\r\n|\r|\n/).forEach((para) => {
+      const words = para.split(' ');
+      let line = '';
+      for (const w of words) {
+        const test = line ? `${line} ${w}` : w;
+        if (f.widthOfTextAtSize(test, size) > maxWidth && line) {
+          lines.push(line);
+          line = w;
+        } else {
+          line = test;
+        }
       }
-    }
-    if (line) lines.push(line);
+      lines.push(line);
+    });
     return lines;
   };
 
@@ -134,13 +139,29 @@ export async function buildTriasePdfUntukTtd(
     }
   };
 
+  // Warna keputusan/kegawatan (skala tertinggi yg tercentang) — dipakai
+  // DUA tempat: bar judul kop (per permintaan user, "titel barnya warna
+  // mengikuti skala warna juga") DAN baris Plan/Keputusan di bawah.
+  // Dihitung di awal (bukan cuma di dekat Plan) supaya kop bisa
+  // memakainya duluan.
+  let keputusanHex = '#969696';
+  if (jenis === 'primer') {
+    if (data.skala1?.length > 0) keputusanHex = '#AA0000';
+    if (data.skala2?.length > 0) keputusanHex = '#FF0000';
+  } else {
+    if (data.skala3?.length > 0) keputusanHex = '#C8C800';
+    if (data.skala4?.length > 0) keputusanHex = '#00AA00';
+    if (data.skala5?.length > 0) keputusanHex = '#969696';
+  }
+
   let y = pageHeight - margin;
 
   // ── Kop surat — 3 sel berborder (logo | instansi | info pasien).
   // Bar judul "TRIASE PASIEN GAWAT DARURAT" dipindah ke bawah kolom
   // logo+instansi SAJA (bukan lagi lebar penuh) — sel info pasien di
   // kanan menyambung 1 sel utuh dari atas s/d bawah bar judul, persis
-  // referensi cetak.
+  // referensi cetak. Warna bar JUGA mengikuti skala (keputusanHex),
+  // bukan lagi warna maroon tetap.
   const titleBarH = 20;
   const kopH = 55;
   const kopTotalH = kopH + titleBarH;
@@ -154,7 +175,7 @@ export async function buildTriasePdfUntukTtd(
   drawCell(kopLogoX, y, kopLogoW, kopH);
   drawCell(kopInstansiX, y, kopInstansiW, kopH);
   drawCell(kopPatientX, y, kopPatientW, kopTotalH);
-  drawCell(kopLogoX, y - kopH, kopLogoW + kopInstansiW, titleBarH, hexToRgb(TITLE_BAR_COLOR));
+  drawCell(kopLogoX, y - kopH, kopLogoW + kopInstansiW, titleBarH, hexToRgb(keputusanHex));
   textInCell('TRIASE PASIEN GAWAT DARURAT', kopLogoX, y - kopH, kopLogoW + kopInstansiW, titleBarH, { size: 11, color: rgb(1, 1, 1), center: true });
 
   const logoSize = 40;
@@ -292,19 +313,10 @@ export async function buildTriasePdfUntukTtd(
     drawSkalaGroup(5, data.skala5);
   }
 
-  // Plan/Keputusan — baris berwarna sesuai kegawatan (logika PERSIS
-  // renderTriasePrimer/Sekunder: prefix "Zona Merah" khusus Primer).
-  let keputusanHex = '#969696';
-  let planText = data.plan || '-';
-  if (jenis === 'primer') {
-    if (data.skala1?.length > 0) keputusanHex = '#AA0000';
-    if (data.skala2?.length > 0) keputusanHex = '#FF0000';
-    planText = `Zona Merah ${data.plan || '-'}`;
-  } else {
-    if (data.skala3?.length > 0) keputusanHex = '#C8C800';
-    if (data.skala4?.length > 0) keputusanHex = '#00AA00';
-    if (data.skala5?.length > 0) keputusanHex = '#969696';
-  }
+  // Plan/Keputusan — baris berwarna sesuai kegawatan (keputusanHex sudah
+  // dihitung di awal fungsi, dipakai jg utk bar judul kop). Prefix "Zona
+  // Merah" khusus Primer (logika PERSIS renderTriasePrimer/Sekunder).
+  const planText = jenis === 'primer' ? `Zona Merah ${data.plan || '-'}` : (data.plan || '-');
   {
     const h = 20;
     drawCell(tableX, y, labelColWidth, h);

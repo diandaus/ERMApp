@@ -59,20 +59,30 @@ export async function buildAwalMedisPdfUntukTtd(
   const tableX = margin;
   const tableWidth = pageWidth - margin * 2;
 
+  // wrapText — pecah dulu per baris baru ASLI (\n/\r\n dari textarea, mis.
+  // isian Keluhan Utama/Tatalaksana dgn Enter) SEBELUM word-wrap per kata.
+  // WAJIB: kalau karakter "\n" ikut kebawa ke page.drawText() (mis. karena
+  // cuma di-split(' ') tanpa pisah newline dulu), WinAnsiEncoding pdf-lib
+  // melempar error "WinAnsi cannot encode "\n" (0x000a)" — ini penyebab
+  // persis error yg dilaporkan user di production (data Awal Medis asli
+  // isinya multi-baris, beda dari data uji coba sebelumnya yg kebetulan
+  // satu baris).
   const wrapText = (s: string, maxWidth: number, size: number): string[] => {
-    const words = s.split(' ');
     const lines: string[] = [];
-    let line = '';
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w;
-      if (font.widthOfTextAtSize(test, size) > maxWidth && line) {
-        lines.push(line);
-        line = w;
-      } else {
-        line = test;
+    s.split(/\r\n|\r|\n/).forEach((para) => {
+      const words = para.split(' ');
+      let line = '';
+      for (const w of words) {
+        const test = line ? `${line} ${w}` : w;
+        if (font.widthOfTextAtSize(test, size) > maxWidth && line) {
+          lines.push(line);
+          line = w;
+        } else {
+          line = test;
+        }
       }
-    }
-    if (line) lines.push(line);
+      lines.push(line);
+    });
     return lines;
   };
 
