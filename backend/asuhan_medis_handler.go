@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -64,7 +65,7 @@ func getAsuhanMedisIGD(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-	query := `
+		query := `
 		SELECT
 			DATE_FORMAT(penilaian_medis_igd.tanggal, '%d/%m/%Y %H:%i:%s') as tanggal,
 			penilaian_medis_igd.kd_dokter,
@@ -165,3 +166,82 @@ func getAsuhanMedisIGD(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// saveAsuhanMedisIGDRequest — field & urutan PERSIS simpan() di
+// RMPenilaianAwalMedisIGD.java (Sequel.menyimpantf ke tabel
+// penilaian_medis_igd, 36 kolom termasuk no_rawat). no_rawat PRIMARY KEY
+// (tanpa upsert di Java — BtnSimpan utk baru, BtnEdit/ganti() terpisah utk
+// koreksi baris yg sudah ada; endpoint ini padanan BtnSimpan/simpan() SAJA,
+// jadi kirim balik error jelas kalau no_rawat sudah py data sebelumnya).
+type saveAsuhanMedisIGDRequest struct {
+	NoRawat      string `json:"no_rawat" binding:"required"`
+	Tanggal      string `json:"tanggal" binding:"required"`
+	KdDokter     string `json:"kd_dokter" binding:"required"`
+	Anamnesis    string `json:"anamnesis" binding:"required"`
+	Hubungan     string `json:"hubungan"`
+	KeluhanUtama string `json:"keluhan_utama" binding:"required"`
+	RPS          string `json:"rps" binding:"required"`
+	RPD          string `json:"rpd" binding:"required"`
+	RPK          string `json:"rpk" binding:"required"`
+	RPO          string `json:"rpo" binding:"required"`
+	Alergi       string `json:"alergi"`
+	Keadaan      string `json:"keadaan" binding:"required"`
+	GCS          string `json:"gcs"`
+	Kesadaran    string `json:"kesadaran" binding:"required"`
+	TD           string `json:"td"`
+	Nadi         string `json:"nadi"`
+	RR           string `json:"rr"`
+	Suhu         string `json:"suhu"`
+	SpO          string `json:"spo"`
+	BB           string `json:"bb"`
+	TB           string `json:"tb"`
+	Kepala       string `json:"kepala" binding:"required"`
+	Mata         string `json:"mata" binding:"required"`
+	Gigi         string `json:"gigi" binding:"required"`
+	Leher        string `json:"leher" binding:"required"`
+	Thoraks      string `json:"thoraks" binding:"required"`
+	Abdomen      string `json:"abdomen" binding:"required"`
+	Genital      string `json:"genital" binding:"required"`
+	Ekstremitas  string `json:"ekstremitas" binding:"required"`
+	KetFisik     string `json:"ket_fisik"`
+	KetLokalis   string `json:"ket_lokalis"`
+	EKG          string `json:"ekg"`
+	Rad          string `json:"rad"`
+	Lab          string `json:"lab"`
+	Diagnosis    string `json:"diagnosis"`
+	Tata         string `json:"tata"`
+}
+
+// saveAsuhanMedisIGD — POST /api/asuhan-medis-igd/simpan, padanan
+// BtnSimpanActionPerformed -> simpan() di RMPenilaianAwalMedisIGD.java.
+func saveAsuhanMedisIGD(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req saveAsuhanMedisIGDRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data tidak lengkap: " + err.Error()})
+			return
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO penilaian_medis_igd (
+				no_rawat, tanggal, kd_dokter, anamnesis, hubungan, keluhan_utama, rps, rpd, rpk, rpo, alergi,
+				keadaan, gcs, kesadaran, td, nadi, rr, suhu, spo, bb, tb,
+				kepala, mata, gigi, leher, thoraks, abdomen, genital, ekstremitas,
+				ket_fisik, ket_lokalis, ekg, rad, lab, diagnosis, tata
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			req.NoRawat, req.Tanggal, req.KdDokter, req.Anamnesis, req.Hubungan, req.KeluhanUtama, req.RPS, req.RPD, req.RPK, req.RPO, req.Alergi,
+			req.Keadaan, req.GCS, req.Kesadaran, req.TD, req.Nadi, req.RR, req.Suhu, req.SpO, req.BB, req.TB,
+			req.Kepala, req.Mata, req.Gigi, req.Leher, req.Thoraks, req.Abdomen, req.Genital, req.Ekstremitas,
+			req.KetFisik, req.KetLokalis, req.EKG, req.Rad, req.Lab, req.Diagnosis, req.Tata,
+		)
+		if err != nil {
+			if strings.Contains(err.Error(), "Duplicate entry") {
+				c.JSON(http.StatusConflict, gin.H{"error": "Data awal medis untuk kunjungan ini sudah tersimpan sebelumnya."})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Awal medis berhasil disimpan"})
+	}
+}

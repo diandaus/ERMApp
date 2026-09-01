@@ -754,6 +754,7 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 		var reqIn struct {
 			OrderID string `json:"orderId" binding:"required"`
 			NoRawat string `json:"no_rawat"`
+			Prefix  string `json:"prefix"`
 		}
 		if err := c.ShouldBindJSON(&reqIn); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -797,7 +798,11 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 					if data, ok := m["data"].(map[string]interface{}); ok {
 						if b64, ok := data["base64Document"].(string); ok && b64 != "" {
 							if pdfBytes, decErr := base64.StdEncoding.DecodeString(b64); decErr == nil {
-								fileName := "Radiologi_" + strings.ReplaceAll(reqIn.NoRawat, "/", "_") + "_signed.pdf"
+								prefix := reqIn.Prefix
+								if prefix == "" {
+									prefix = "Radiologi_"
+								}
+								fileName := prefix + strings.ReplaceAll(reqIn.NoRawat, "/", "_") + "_signed.pdf"
 								if wErr := WriteWebappsFile(webappsCfg, "berkasrawat/pages/upload", fileName, pdfBytes); wErr == nil {
 									uploaded = true
 								}

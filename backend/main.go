@@ -1570,6 +1570,7 @@ func main() {
 	// di atas (yang cuma kd_dokter+nama utk typeahead).
 	r.GET("/api/dokter/list", getDokterList(db))
 	r.GET("/api/dokter/:kd_dokter/email", getDokterEmail(db))
+	r.GET("/api/pegawai/:nik/email", getPegawaiEmail(db))
 	r.POST("/api/dokter", tambahDokter(db))
 	r.PUT("/api/dokter/:kd_dokter", editDokter(db))
 	r.DELETE("/api/dokter/:kd_dokter", hapusDokter(db))
@@ -3393,6 +3394,7 @@ func main() {
 
 	// Asuhan Medis IGD endpoint
 	r.GET("/api/asuhan-medis-igd/*no_rawat", getAsuhanMedisIGD(db))
+	r.POST("/api/asuhan-medis-igd/simpan", saveAsuhanMedisIGD(db))
 
 	// Pemeriksaan Rawat Jalan endpoint
 	r.GET("/api/pemeriksaan-ralan/*no_rawat", getPemeriksaanRalan(db))
