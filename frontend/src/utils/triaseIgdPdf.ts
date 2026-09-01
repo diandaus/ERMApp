@@ -163,14 +163,32 @@ export async function buildTriasePdfUntukTtd(
   // referensi cetak. Warna bar JUGA mengikuti skala (keputusanHex),
   // bukan lagi warna maroon tetap.
   const titleBarH = 20;
-  const kopH = 55;
-  const kopTotalH = kopH + titleBarH;
   const kopLogoW = tableWidth * 0.11;
   const kopPatientW = tableWidth * 0.38;
   const kopInstansiW = tableWidth - kopLogoW - kopPatientW;
   const kopLogoX = tableX;
   const kopInstansiX = tableX + kopLogoW;
   const kopPatientX = kopInstansiX + kopInstansiW;
+
+  // Info pasien — WRAP dulu (terutama Nama, bisa panjang mis. "MUHAMMAD
+  // SHIDQI AZZHAFRAN") SEBELUM tau tinggi kop yg dibutuhkan. Sebelumnya
+  // patientRow pakai page.drawText() langsung tanpa wrap — teks yg
+  // kepanjangan tembus keluar sel, BUKAN turun ke baris baru. kopH
+  // sekarang ikut membesar otomatis kalau ada field yg wrap >1 baris.
+  const patientInfoLabelW = 62;
+  const patientLinePitch = 12;
+  const patientValueMaxWidth = kopPatientW - 8 - patientInfoLabelW - 8;
+  const patientFields: [string, string][] = [
+    ['Nomor RM', patient.no_rkm_medis || '-'],
+    ['Nama', patient.nm_pasien || '-'],
+    ['Tanggal Lahir', patient.tgl_lahir || '-'],
+    ['Jenis Kelamin', patient.jk === 'L' ? 'Laki-Laki' : patient.jk === 'P' ? 'Perempuan' : patient.jk || '-'],
+  ];
+  const patientFieldLines = patientFields.map(([label, value]) => ({ label, lines: wrapText(value, patientValueMaxWidth, 8.5) }));
+  const patientLineCount = patientFieldLines.reduce((sum, f) => sum + Math.max(1, f.lines.length), 0);
+  const patientContentH = 17 + patientLineCount * patientLinePitch + 6;
+  const kopH = Math.max(55, patientContentH - titleBarH);
+  const kopTotalH = kopH + titleBarH;
 
   drawCell(kopLogoX, y, kopLogoW, kopH);
   drawCell(kopInstansiX, y, kopInstansiW, kopH);
@@ -193,17 +211,16 @@ export async function buildTriasePdfUntukTtd(
   if (settings.kontak) { centerInBlock(settings.kontak, kopInstansiX, kopInstansiW, instansiY, 8.5); instansiY -= 11; }
   if (settings.email_rs) { centerInBlock(`E-mail : ${settings.email_rs}`, kopInstansiX, kopInstansiW, instansiY, 8.5); }
 
-  const patientInfoLabelW = 62;
+  // Label rata di baris pertama field; kalau value wrap >1 baris,
+  // lanjutannya menjorok sejajar kolom value (bukan tembus keluar sel).
   let py = y - 17;
-  const patientRow = (label: string, value: string) => {
+  patientFieldLines.forEach(({ label, lines }) => {
     page.drawText(label, { x: kopPatientX + 8, y: py, size: 8.5, font, color: rgb(0, 0, 0) });
-    page.drawText(`: ${value || '-'}`, { x: kopPatientX + 8 + patientInfoLabelW, y: py, size: 8.5, font, color: rgb(0, 0, 0) });
-    py -= 15;
-  };
-  patientRow('Nomor RM', patient.no_rkm_medis || '-');
-  patientRow('Nama', patient.nm_pasien || '-');
-  patientRow('Tanggal Lahir', patient.tgl_lahir || '-');
-  patientRow('Jenis Kelamin', patient.jk === 'L' ? 'Laki-Laki' : patient.jk === 'P' ? 'Perempuan' : patient.jk || '-');
+    lines.forEach((line, i) => {
+      page.drawText(i === 0 ? `: ${line}` : line, { x: kopPatientX + 8 + patientInfoLabelW, y: py, size: 8.5, font, color: rgb(0, 0, 0) });
+      py -= patientLinePitch;
+    });
+  });
 
   y -= kopTotalH;
 
