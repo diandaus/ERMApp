@@ -10,6 +10,7 @@ import { SoapCpptFormIGD } from '../components/SoapCpptFormIGD';
 import { RiwayatModal } from '../components/RiwayatModal';
 import { renderTriasePrimer, renderTriaseSekunder } from '../utils/triaseIgdDisplay';
 import { buildTriasePdfUntukTtd } from '../utils/triaseIgdPdf';
+import { buildAwalMedisPdfUntukTtd } from '../utils/awalMedisIgdPdf';
 import { renderAwalMedisRecord } from '../utils/awalMedisIgdDisplay';
 import { renderSoapCpptTable } from '../utils/soapCpptIgdDisplay';
 import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
@@ -116,9 +117,10 @@ const ComingSoon: React.FC<{ title: string }> = ({ title }) => (
 // simpan/form input, itu langkah berikutnya). Render tabelnya (kop judul +
 // seksi I-VI) dari utils/awalMedisIgdDisplay.tsx, persis pola TriaseDisplay
 // (file terpisah berdiri sendiri, RiwayatModal.tsx tidak disentuh).
-const AwalMedisDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ noRawat, refreshKey }) => {
+const AwalMedisDisplay: React.FC<{ noRawat: string; refreshKey: number; patient: IGDPatient }> = ({ noRawat, refreshKey, patient }) => {
   const [list, setList] = React.useState<any[] | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [previewingIdx, setPreviewingIdx] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     setLoading(true);
@@ -128,6 +130,22 @@ const AwalMedisDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ n
       .catch(() => setList([]))
       .finally(() => setLoading(false));
   }, [noRawat, refreshKey]);
+
+  // handlePreview — buka PDF yg AKAN dikirim ke Peruri (buildAwalMedisPdfUntukTtd)
+  // di tab baru TANPA mengirim apa pun ke Peruri, persis pola handlePreview
+  // di TriaseDisplay/hook useTriaseTte.
+  const handlePreview = async (idx: number, d: any) => {
+    setPreviewingIdx(idx);
+    try {
+      const { pdfBytes } = await buildAwalMedisPdfUntukTtd(d, patient);
+      const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPreviewingIdx(null);
+    }
+  };
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat data awal medis...</div>;
@@ -146,8 +164,19 @@ const AwalMedisDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ n
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {list.map((d, i) => (
-        <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
-          {renderAwalMedisRecord(d)}
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button" onClick={() => handlePreview(i, d)} disabled={previewingIdx === i}
+              style={{ padding: '5px 12px', borderRadius: 0, border: '1px solid #1AB1E5', background: '#fff', color: '#1AB1E5', cursor: 'pointer', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              {previewingIdx === i ? 'Membuka...' : 'Preview Dokumen'}
+            </button>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
+            {renderAwalMedisRecord(d)}
+          </div>
         </div>
       ))}
     </div>
@@ -1007,7 +1036,7 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
                     Input Awal Medis
                   </button>
                 </div>
-                <AwalMedisDisplay noRawat={patient.no_rawat} refreshKey={awalMedisRefreshKey} />
+                <AwalMedisDisplay noRawat={patient.no_rawat} refreshKey={awalMedisRefreshKey} patient={patient} />
               </div>
             )}
             {activeTab === 'soap' && (
