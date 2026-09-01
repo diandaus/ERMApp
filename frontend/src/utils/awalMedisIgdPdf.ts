@@ -179,7 +179,7 @@ export async function buildAwalMedisPdfUntukTtd(
   // ── Tabel bergaris — dari sini tiap baris digambar sbg sel berborder.
 
   // Baris split 50/50 — Tanggal | Anamnesis (+Hubungan).
-  const splitH = 20;
+  const splitH = 18;
   const halfW = tableWidth / 2;
   drawCell(tableX, y, halfW, splitH);
   drawCell(tableX + halfW, y, halfW, splitH);
@@ -190,7 +190,7 @@ export async function buildAwalMedisPdfUntukTtd(
   // sectionHeaderRow — bar krem lebar penuh, rata kiri (persis "I. RIWAYAT
   // KESEHATAN" dkk di referensi cetak — beda dari triaseIgdPdf.ts yg
   // headernya 2-kolom berpasangan, di sini cuma 1 judul per baris).
-  const sectionHeaderRow = (title: string, h = 18) => {
+  const sectionHeaderRow = (title: string, h = 16) => {
     drawCell(tableX, y, tableWidth, h, hexToRgb(SECTION_HEADER_COLOR));
     textInCell(title, tableX, y, tableWidth, h, { size: 9 });
     y -= h;
@@ -199,24 +199,24 @@ export async function buildAwalMedisPdfUntukTtd(
   // multiColRow — N sel sama lebar dlm satu baris, tiap sel "Label : Value"
   // (wrap otomatis), tinggi baris menyesuaikan sel dgn isi terpanjang.
   // Generalisasi fullTextRow (1 kolom)/splitRow (2 kolom)/splitRow3 (3 kolom).
-  const multiColRow = (cols: { label: string; value: string }[], minH = 18, size = 8.5) => {
+  const multiColRow = (cols: { label: string; value: string }[], minH = 16, size = 8.5) => {
     const colW = tableWidth / cols.length;
     const colLines = cols.map((c) => wrapText(c.label ? `${c.label} : ${c.value?.trim() || '-'}` : (c.value?.trim() || '-'), colW - 12, size));
     const maxLines = Math.max(1, ...colLines.map((l) => l.length));
-    const h = Math.max(minH, maxLines * 11 + 8);
+    const h = Math.max(minH, maxLines * 10 + 6);
     cols.forEach((_c, i) => {
       const cx = tableX + colW * i;
       drawCell(cx, y, colW, h);
-      let ty = y - 12;
-      colLines[i].forEach((line) => { page.drawText(line, { x: cx + 6, y: ty, size, font, color: rgb(0, 0, 0) }); ty -= 11; });
+      let ty = y - 11;
+      colLines[i].forEach((line) => { page.drawText(line, { x: cx + 6, y: ty, size, font, color: rgb(0, 0, 0) }); ty -= 10; });
     });
     y -= h;
   };
 
   // ── I. RIWAYAT KESEHATAN
   sectionHeaderRow('I. RIWAYAT KESEHATAN');
-  multiColRow([{ label: 'Keluhan Utama', value: data.keluhan_utama }], 20, 9);
-  multiColRow([{ label: 'Riwayat Penyakit Sekarang', value: data.rps }], 20, 9);
+  multiColRow([{ label: 'Keluhan Utama', value: data.keluhan_utama }], 18, 9);
+  multiColRow([{ label: 'Riwayat Penyakit Sekarang', value: data.rps }], 18, 9);
   multiColRow([
     { label: 'Riwayat Penyakit Dahulu', value: data.rpd },
     { label: 'Riwayat Penyakit dalam Keluarga', value: data.rpk },
@@ -234,13 +234,13 @@ export async function buildAwalMedisPdfUntukTtd(
     { label: 'GCS(E,V,M)', value: data.gcs },
   ]);
   const tandaVital = `TD : ${data.td || '-'} mmHg   N : ${data.nadi || '-'} x/m   R : ${data.rr || '-'} x/m   S : ${data.suhu || '-'}°   SPO2 : ${data.spo || '-'}%   BB : ${data.bb || '-'} Kg   TB : ${data.tb || '-'} cm`;
-  multiColRow([{ label: 'Tanda Vital', value: tandaVital }], 20, 8.5);
+  multiColRow([{ label: 'Tanda Vital', value: tandaVital }], 18, 8.5);
   multiColRow([{ label: 'Kepala', value: data.kepala }, { label: 'Thoraks', value: data.thoraks }]);
   multiColRow([{ label: 'Mata', value: data.mata }, { label: 'Abdomen', value: data.abdomen }]);
   multiColRow([{ label: 'Gigi & Mulut', value: data.gigi }, { label: 'Genital & Anus', value: data.genital }]);
   multiColRow([{ label: 'Leher', value: data.leher }, { label: 'Ekstremitas', value: data.ekstremitas }]);
   if (data.ket_fisik?.trim()) {
-    multiColRow([{ label: 'Ket. Pemeriksaan Fisik', value: data.ket_fisik }], 20, 9);
+    multiColRow([{ label: 'Ket. Pemeriksaan Fisik', value: data.ket_fisik }], 18, 9);
   }
 
   // ── III. STATUS LOKALIS
@@ -256,7 +256,7 @@ export async function buildAwalMedisPdfUntukTtd(
     page.drawImage(lokalisImg, { x: tableX + (tableWidth - imgW) / 2, y: y - rowH + 6, width: imgW, height: imgH });
     y -= rowH;
   }
-  multiColRow([{ label: 'Keterangan', value: data.ket_lokalis }], 20, 9);
+  multiColRow([{ label: 'Keterangan', value: data.ket_lokalis }], 18, 9);
 
   // ── IV. PEMERIKSAAN PENUNJANG
   sectionHeaderRow('IV. PEMERIKSAAN PENUNJANG');
@@ -268,11 +268,11 @@ export async function buildAwalMedisPdfUntukTtd(
 
   // ── V. DIAGNOSIS/ASESMEN
   sectionHeaderRow('V. DIAGNOSIS/ASESMEN');
-  multiColRow([{ label: '', value: data.diagnosis }], 20, 9);
+  multiColRow([{ label: '', value: data.diagnosis }], 18, 9);
 
   // ── VI. TATALAKSANA
   sectionHeaderRow('VI. TATALAKSANA');
-  multiColRow([{ label: '', value: data.tata }], 30, 9);
+  multiColRow([{ label: '', value: data.tata }], 28, 9);
 
   // Baris terakhir — Dokter Pemeriksa, tinggi diperbesar utk menampung
   // area tanda tangan (tag "#A#" + SIGN_BOX) di sisi kanan sel.
