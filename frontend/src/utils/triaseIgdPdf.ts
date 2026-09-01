@@ -173,8 +173,10 @@ export async function buildTriasePdfUntukTtd(
   // Info pasien — WRAP dulu (terutama Nama, bisa panjang mis. "MUHAMMAD
   // SHIDQI AZZHAFRAN") SEBELUM tau tinggi kop yg dibutuhkan. Sebelumnya
   // patientRow pakai page.drawText() langsung tanpa wrap — teks yg
-  // kepanjangan tembus keluar sel, BUKAN turun ke baris baru. kopH
-  // sekarang ikut membesar otomatis kalau ada field yg wrap >1 baris.
+  // kepanjangan tembus keluar sel, BUKAN turun ke baris baru. kopH TETAP
+  // (tidak ikut membesar walau ada field yg wrap >1 baris) — sel info
+  // pasien (kopTotalH = kopH+titleBarH) sudah cukup lega utk nampung
+  // baris tambahan tanpa perlu mengubah tinggi kop/header sama sekali.
   const patientInfoLabelW = 62;
   const patientLinePitch = 12;
   const patientValueMaxWidth = kopPatientW - 8 - patientInfoLabelW - 8;
@@ -185,9 +187,7 @@ export async function buildTriasePdfUntukTtd(
     ['Jenis Kelamin', patient.jk === 'L' ? 'Laki-Laki' : patient.jk === 'P' ? 'Perempuan' : patient.jk || '-'],
   ];
   const patientFieldLines = patientFields.map(([label, value]) => ({ label, lines: wrapText(value, patientValueMaxWidth, 8.5) }));
-  const patientLineCount = patientFieldLines.reduce((sum, f) => sum + Math.max(1, f.lines.length), 0);
-  const patientContentH = 17 + patientLineCount * patientLinePitch + 6;
-  const kopH = Math.max(55, patientContentH - titleBarH);
+  const kopH = 55;
   const kopTotalH = kopH + titleBarH;
 
   drawCell(kopLogoX, y, kopLogoW, kopH);
@@ -217,7 +217,10 @@ export async function buildTriasePdfUntukTtd(
   patientFieldLines.forEach(({ label, lines }) => {
     page.drawText(label, { x: kopPatientX + 8, y: py, size: 8.5, font, color: rgb(0, 0, 0) });
     lines.forEach((line, i) => {
-      page.drawText(i === 0 ? `: ${line}` : line, { x: kopPatientX + 8 + patientInfoLabelW, y: py, size: 8.5, font, color: rgb(0, 0, 0) });
+      // Baris lanjutan (i>0) ditambah 2 spasi biar sejajar isi value baris
+      // pertama (yg diawali ": ", bukan cuma spasi tunggal, mendekati
+      // lebar ": " itu sendiri).
+      page.drawText(i === 0 ? `: ${line}` : `  ${line}`, { x: kopPatientX + 8 + patientInfoLabelW, y: py, size: 8.5, font, color: rgb(0, 0, 0) });
       py -= patientLinePitch;
     });
   });
