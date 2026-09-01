@@ -54,7 +54,8 @@ export async function buildAwalMedisPdfUntukTtd(
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const pageWidth = 595.28;
   const pageHeight = 841.89;
-  const margin = 40;
+  const margin = 20;
+  const marginBottom = 30;
   const page = pdf.addPage([pageWidth, pageHeight]);
   const tableX = margin;
   const tableWidth = pageWidth - margin * 2;
@@ -302,8 +303,9 @@ export async function buildAwalMedisPdfUntukTtd(
 
   y -= signRowH;
 
-  // Footer legal — jarak tetap dari tepi bawah kertas.
-  const footerSeparatorY = margin - 10;
+  // Footer legal — jarak tetap dari tepi bawah kertas (marginBottom,
+  // beda dari margin atas/kiri/kanan per permintaan user).
+  const footerSeparatorY = marginBottom - 10;
   if (footerSeparatorY < y) {
     page.drawLine({ start: { x: margin, y: footerSeparatorY }, end: { x: pageWidth - margin, y: footerSeparatorY }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
     const footerText = 'Dokumen ini sah dan telah ditandatangani secara elektronik menggunakan sertifikat digital yang diterbitkan oleh Peruri';
