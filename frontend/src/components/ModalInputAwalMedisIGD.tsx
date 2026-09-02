@@ -412,7 +412,9 @@ export const ModalInputAwalMedisIGD: React.FC<ModalInputAwalMedisIGDProps> = ({ 
 
           {/* Grid Kepala/Thoraks/Mata/Abdomen/Gigi&Mulut/Genital&Anus/Leher/Ekstremitas
               (kiri, 2 kolom x 4 baris) + Ket.Fisik (kanan, textarea tinggi
-              menyamai grid) — PERSIS tata letak setBounds() Java. */}
+              menyamai grid) — PERSIS tata letak setBounds() Java / referensi
+              cetak Khanza Desktop (grid + kolom lebar di kanan, hemat ruang
+              vertikal — dikonfirmasi user via screenshot PDF Khanza asli). */}
           <div style={{ display: 'flex', gap: 16 }}>
             <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start' }}>
               <div>

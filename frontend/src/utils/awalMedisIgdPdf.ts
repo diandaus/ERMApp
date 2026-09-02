@@ -219,7 +219,9 @@ export async function buildAwalMedisPdfUntukTtd(
   // multiColRow — N sel sama lebar dlm satu baris, tiap sel "Label : Value"
   // (wrap otomatis), tinggi baris menyesuaikan sel dgn isi terpanjang.
   // Generalisasi fullTextRow (1 kolom)/splitRow (2 kolom)/splitRow3 (3 kolom).
-  const multiColRow = (cols: { label: string; value: string }[], minH = 16, size = 8.5) => {
+  // opts.center — tiap baris teks di-center horizontal dlm sel (bukan rata
+  // kiri spt default), dipakai baris "Tanda Vital" per permintaan user.
+  const multiColRow = (cols: { label: string; value: string }[], minH = 16, size = 8.5, opts: { center?: boolean } = {}) => {
     const colW = tableWidth / cols.length;
     const colLines = cols.map((c) => wrapText(c.label ? `${c.label} : ${c.value?.trim() || '-'}` : (c.value?.trim() || '-'), colW - 12, size));
     const maxLines = Math.max(1, ...colLines.map((l) => l.length));
@@ -228,9 +230,62 @@ export async function buildAwalMedisPdfUntukTtd(
       const cx = tableX + colW * i;
       drawCell(cx, y, colW, h);
       let ty = y - 11;
-      colLines[i].forEach((line) => { page.drawText(line, { x: cx + 6, y: ty, size, font, color: rgb(0, 0, 0) }); ty -= 10; });
+      colLines[i].forEach((line) => {
+        const lx = opts.center ? cx + Math.max(0, (colW - font.widthOfTextAtSize(line, size)) / 2) : cx + 6;
+        page.drawText(line, { x: lx, y: ty, size, font, color: rgb(0, 0, 0) });
+        ty -= 10;
+      });
     });
     y -= h;
+  };
+
+  // gridWithSidebar — grid label:value 2 kolom (N baris) di kiri (~65%
+  // lebar) + 1 kolom lebar di kanan (~35%) yg tingginya menyamai TOTAL
+  // tinggi grid (spt rowspan visual) — PERSIS referensi cetak Khanza
+  // Desktop (kolom "hpht=.../TTP=.../DJJ=..." di kanan grid Kepala/
+  // Thoraks dkk, dikonfirmasi user via screenshot PDF Khanza asli) — lebih
+  // hemat ruang vertikal drpd sidebar ditumpuk sbg baris sendiri di bawah
+  // grid (versi sebelumnya).
+  const gridWithSidebar = (
+    rows: { left: { label: string; value: string }; right: { label: string; value: string } }[],
+    sidebar: { value: string },
+    minRowH = 16,
+    size = 8.5,
+  ) => {
+    const gridW = tableWidth * 0.65;
+    const sidebarW = tableWidth - gridW;
+    const colW = gridW / 2;
+
+    const rowLines = rows.map((r) => [
+      wrapText(`${r.left.label} : ${r.left.value?.trim() || '-'}`, colW - 12, size),
+      wrapText(`${r.right.label} : ${r.right.value?.trim() || '-'}`, colW - 12, size),
+    ]);
+    const rowHeights = rowLines.map((lines) => Math.max(minRowH, Math.max(...lines.map((l) => l.length)) * 10 + 6));
+    const totalH = rowHeights.reduce((a, b) => a + b, 0);
+
+    const startY = y;
+    rows.forEach((_r, i) => {
+      const h = rowHeights[i];
+      const cx0 = tableX;
+      const cx1 = tableX + colW;
+      drawCell(cx0, y, colW, h);
+      drawCell(cx1, y, colW, h);
+      let ty0 = y - 11;
+      rowLines[i][0].forEach((line) => { page.drawText(line, { x: cx0 + 6, y: ty0, size, font, color: rgb(0, 0, 0) }); ty0 -= 10; });
+      let ty1 = y - 11;
+      rowLines[i][1].forEach((line) => { page.drawText(line, { x: cx1 + 6, y: ty1, size, font, color: rgb(0, 0, 0) }); ty1 -= 10; });
+      y -= h;
+    });
+
+    // Sidebar — satu sel setinggi TOTAL grid, ditempel di kanan. TANPA
+    // label ("Ket. Pemeriksaan Fisik :") di depan isinya — per permintaan
+    // user, cukup teksnya saja (spt referensi Khanza yg isi bebasnya juga
+    // tidak diawali label generik).
+    const sbX = tableX + gridW;
+    drawCell(sbX, startY, sidebarW, totalH);
+    const sbLines = wrapText(sidebar.value?.trim() || '-', sidebarW - 12, size);
+    let sty = startY - 11;
+    sbLines.forEach((line) => { page.drawText(line, { x: sbX + 6, y: sty, size, font, color: rgb(0, 0, 0) }); sty -= 10; });
   };
 
   // ── I. RIWAYAT KESEHATAN
@@ -254,14 +309,16 @@ export async function buildAwalMedisPdfUntukTtd(
     { label: 'GCS(E,V,M)', value: data.gcs },
   ]);
   const tandaVital = `TD : ${data.td || '-'} mmHg   N : ${data.nadi || '-'} x/m   R : ${data.rr || '-'} x/m   S : ${data.suhu || '-'}°   SPO2 : ${data.spo || '-'}%   BB : ${data.bb || '-'} Kg   TB : ${data.tb || '-'} cm`;
-  multiColRow([{ label: 'Tanda Vital', value: tandaVital }], 18, 8.5);
-  multiColRow([{ label: 'Kepala', value: data.kepala }, { label: 'Thoraks', value: data.thoraks }]);
-  multiColRow([{ label: 'Mata', value: data.mata }, { label: 'Abdomen', value: data.abdomen }]);
-  multiColRow([{ label: 'Gigi & Mulut', value: data.gigi }, { label: 'Genital & Anus', value: data.genital }]);
-  multiColRow([{ label: 'Leher', value: data.leher }, { label: 'Ekstremitas', value: data.ekstremitas }]);
-  if (data.ket_fisik?.trim()) {
-    multiColRow([{ label: 'Ket. Pemeriksaan Fisik', value: data.ket_fisik }], 18, 9);
-  }
+  multiColRow([{ label: 'Tanda Vital', value: tandaVital }], 18, 8.5, { center: true });
+  gridWithSidebar(
+    [
+      { left: { label: 'Kepala', value: data.kepala }, right: { label: 'Thoraks', value: data.thoraks } },
+      { left: { label: 'Mata', value: data.mata }, right: { label: 'Abdomen', value: data.abdomen } },
+      { left: { label: 'Gigi & Mulut', value: data.gigi }, right: { label: 'Genital & Anus', value: data.genital } },
+      { left: { label: 'Leher', value: data.leher }, right: { label: 'Ekstremitas', value: data.ekstremitas } },
+    ],
+    { value: data.ket_fisik },
+  );
 
   // ── III. STATUS LOKALIS
   sectionHeaderRow('III. STATUS LOKALIS');
