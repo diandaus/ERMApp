@@ -7,6 +7,7 @@ import { DiagnosaTab } from '../components/DiagnosaTab';
 import { ModalInputTriase } from '../components/ModalInputTriase';
 import { ModalInputAwalMedisIGD } from '../components/ModalInputAwalMedisIGD';
 import { SoapCpptFormIGD } from '../components/SoapCpptFormIGD';
+import { ResepTab } from '../components/ResepTab';
 import { RiwayatModal } from '../components/RiwayatModal';
 import { renderTriasePrimer, renderTriaseSekunder } from '../utils/triaseIgdDisplay';
 import { buildTriasePdfUntukTtd } from '../utils/triaseIgdPdf';
@@ -92,6 +93,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   triase: 'TRIASE',
   medis: 'AWAL MEDIS',
   soap: 'SOAP/CPPT',
+  resep: 'RESEP',
   keperawatan: 'AWAL KEPERAWATAN',
   lab: 'LABORATORIUM',
   rad: 'RADIOLOGI',
@@ -99,9 +101,9 @@ const TAB_LABELS: Record<TabKey, string> = {
   diagnosa: 'DIAGNOSA',
 };
 
-const TAB_ORDER: TabKey[] = ['triase', 'medis', 'soap', 'keperawatan', 'lab', 'rad', 'tindakan', 'diagnosa'];
+const TAB_ORDER: TabKey[] = ['triase', 'medis', 'soap', 'resep', 'keperawatan', 'lab', 'rad', 'tindakan', 'diagnosa'];
 
-type TabKey = 'triase' | 'medis' | 'soap' | 'keperawatan' | 'lab' | 'rad' | 'tindakan' | 'diagnosa';
+type TabKey = 'triase' | 'medis' | 'soap' | 'resep' | 'keperawatan' | 'lab' | 'rad' | 'tindakan' | 'diagnosa';
 
 const ComingSoon: React.FC<{ title: string }> = ({ title }) => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
@@ -782,7 +784,13 @@ type SoapRalanItem = {
   rtl: string; penilaian: string; instruksi: string; evaluasi: string; nip: string; nama: string; jbtn: string;
 };
 
-const SoapCpptDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ noRawat, refreshKey }) => {
+const SoapCpptDisplay: React.FC<{
+  noRawat: string;
+  refreshKey: number;
+  onEdit: (item: SoapRalanItem) => void;
+  onCopy: (item: SoapRalanItem) => void;
+  onDeleted: () => void;
+}> = ({ noRawat, refreshKey, onEdit, onCopy, onDeleted }) => {
   const [list, setList] = React.useState<SoapRalanItem[] | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -794,6 +802,38 @@ const SoapCpptDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ no
       .catch(() => setList([]))
       .finally(() => setLoading(false));
   }, [noRawat, refreshKey]);
+
+  // Hapus SOAP — endpoint pakai composite key no_rawat + tgl_perawatan +
+  // jam_rawat (SAMA persis dgn deleteSOAP di Pemeriksaan.tsx/Rawat Jalan).
+  // Baris tabel simpan tgl_perawatan sbg "DD/MM/YYYY" (lihat
+  // getPemeriksaanRalan di backend), jadi dikonversi dulu ke YYYY-MM-DD.
+  const handleDelete = async (item: SoapRalanItem) => {
+    const result = await Swal.fire({
+      title: 'Yakin ingin menghapus?',
+      text: 'Data SOAP ini akan dihapus secara permanen',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Hapus!',
+      cancelButtonText: 'Batal',
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      const [d, m, y] = (item.tgl_perawatan || '').split('/');
+      const tglIso = d && m && y ? `${y}-${m}-${d}` : item.tgl_perawatan;
+      const params = new URLSearchParams({ no_rawat: noRawat, tgl_perawatan: tglIso, jam_rawat: item.jam_rawat });
+      const res = await fetch(`/api/pemeriksaan/soap?${params.toString()}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus SOAP');
+
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message || 'SOAP berhasil dihapus', timer: 2000, showConfirmButton: false });
+      onDeleted();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Gagal menghapus SOAP' });
+    }
+  };
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat data SOAP/CPPT...</div>;
@@ -811,7 +851,7 @@ const SoapCpptDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ no
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
-      {renderSoapCpptTable(list)}
+      {renderSoapCpptTable(list, { onEdit, onCopy, onDelete: handleDelete })}
     </div>
   );
 };
@@ -824,6 +864,14 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
   const [showInputAwalMedis, setShowInputAwalMedis] = React.useState(false);
   const [awalMedisRefreshKey, setAwalMedisRefreshKey] = React.useState(0);
   const [soapCpptRefreshKey, setSoapCpptRefreshKey] = React.useState(0);
+  // Dinaikkan tiap kali user klik "Lanjutkan Input Resep" di dialog sukses
+  // simpan SOAP/CPPT — dipakai ResepTab utk auto-buka modal + pindah tab.
+  const [resepOpenSignal, setResepOpenSignal] = React.useState(0);
+  // Diisi saat user klik Edit/Copy pada baris SOAP tersimpan (lihat
+  // SoapCpptDisplay) — dikonsumsi SoapCpptFormIGD utk prefill form.
+  // `signal` unik (Date.now()) supaya klik Edit/Copy berulang pada item
+  // yg SAMA tetap memicu efek prefill (bukan cuma dibanding object ref).
+  const [soapPrefill, setSoapPrefill] = React.useState<{ mode: 'edit' | 'copy'; signal: number; item: SoapRalanItem } | null>(null);
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
   const triaseTte = useTriaseTte(patient.no_rawat, triaseRefreshKey, patient);
   const { isCompact } = useBreakpoint();
@@ -1084,9 +1132,33 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
             )}
             {activeTab === 'soap' && (
               <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <SoapCpptFormIGD patient={patient} user={user} onSaved={() => setSoapCpptRefreshKey((k) => k + 1)} />
-                <SoapCpptDisplay noRawat={patient.no_rawat} refreshKey={soapCpptRefreshKey} />
+                <SoapCpptFormIGD
+                  patient={patient}
+                  user={user}
+                  prefill={soapPrefill}
+                  onSaved={(lanjutResep) => {
+                    setSoapCpptRefreshKey((k) => k + 1);
+                    if (lanjutResep) {
+                      setActiveTab('resep');
+                      setResepOpenSignal((s) => s + 1);
+                    }
+                  }}
+                />
+                <SoapCpptDisplay
+                  noRawat={patient.no_rawat}
+                  refreshKey={soapCpptRefreshKey}
+                  onEdit={(item) => setSoapPrefill({ mode: 'edit', item, signal: Date.now() })}
+                  onCopy={(item) => setSoapPrefill({ mode: 'copy', item, signal: Date.now() })}
+                  onDeleted={() => setSoapCpptRefreshKey((k) => k + 1)}
+                />
               </div>
+            )}
+            {activeTab === 'resep' && (
+              <ResepTab
+                patient={patient}
+                openInputSignal={resepOpenSignal}
+                onResepChanged={() => setSoapCpptRefreshKey((k) => k + 1)}
+              />
             )}
             {activeTab === 'keperawatan' && <ComingSoon title="Awal Keperawatan" />}
             {activeTab === 'lab' && <LabTab patient={patient} />}

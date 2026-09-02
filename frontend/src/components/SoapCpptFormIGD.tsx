@@ -8,10 +8,32 @@ type AppUser = {
   role: string;
 };
 
+// SoapPrefill — dikirim dari PemeriksaanIGD.tsx saat user klik Edit/Copy
+// pada baris SOAP tersimpan (lihat SoapCpptDisplay/soapCpptIgdDisplay.tsx).
+// mode:'edit' → PUT (update record yg sama, Tanggal/Jam dikunci krn jadi
+// bagian primary key). mode:'copy' → tetap POST (entri baru), cuma isi
+// form yg di-prefill. `signal` (Date.now()) unik per-klik supaya klik
+// Edit/Copy berulang pada item yg SAMA tetap memicu efek prefill.
+type SoapPrefill = {
+  mode: 'edit' | 'copy';
+  signal: number;
+  item: {
+    tgl_perawatan: string; // "DD/MM/YYYY" (lihat getPemeriksaanRalan di backend)
+    jam_rawat: string; // "HH:MM:SS"
+    suhu_tubuh: string; tensi: string; nadi: string; respirasi: string; tinggi: string; berat: string;
+    spo2: string; gcs: string; kesadaran: string;
+    keluhan: string; pemeriksaan: string; alergi: string; lingkar_perut: string;
+    rtl: string; penilaian: string; instruksi: string; evaluasi: string;
+    nip: string; nama: string;
+  };
+};
+
 interface SoapCpptFormIGDProps {
   patient: any;
   user?: AppUser;
-  onSaved?: () => void;
+  prefill?: SoapPrefill | null;
+  // lanjutResep=true saat user klik "Lanjutkan Input Resep" di dialog sukses.
+  onSaved?: (lanjutResep?: boolean) => void;
 }
 
 // Enum PERSIS kolom pemeriksaan_ralan.kesadaran (DESCRIBE, dicek langsung
@@ -21,6 +43,15 @@ const KESADARAN_OPTIONS = ['Compos Mentis', 'Apatis', 'Somnolence', 'Sopor', 'Co
 
 const localDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const localTimeStr = (d = new Date()) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+// Konversi tgl_perawatan "DD/MM/YYYY" (format tampilan, dari
+// getPemeriksaanRalan backend) ke "YYYY-MM-DD" (format <input type="date">).
+const ddmmyyyyToIso = (s: string): string => {
+  const [d, m, y] = (s || '').split('/');
+  return d && m && y ? `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}` : localDateStr();
+};
+// "HH:MM:SS" → "HH:MM" (format <input type="time">).
+const hhmmssToHhmm = (s: string): string => ((s || '').slice(0, 5)) || localTimeStr();
 
 const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, marginBottom: 4, color: '#374151', fontWeight: 400 };
 const inputStyle: React.CSSProperties = { width: '100%', height: 30, padding: '5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: '#fff' };
@@ -53,9 +84,12 @@ const StepperIcon: React.FC = () => (
 // di seluruh backend, jadi TIDAK ADA endpoint/tabel baru. Validasi wajib
 // (keluhan/pemeriksaan/penilaian/nip) PERSIS binding:"required" di handler
 // POST /api/pemeriksaan/soap (backend/main.go).
-export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user, onSaved }) => {
+export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user, prefill, onSaved }) => {
   const [tglPerawatan, setTglPerawatan] = React.useState(() => localDateStr());
   const [jamRawat, setJamRawat] = React.useState(() => localTimeStr());
+  // true saat form diisi dari klik "Edit" (bukan "Copy") — Simpan jadi PUT,
+  // Tanggal/Jam dikunci (readOnly) krn itu bagian primary key record.
+  const [isEditMode, setIsEditMode] = React.useState(false);
 
   const [petugasNip, setPetugasNip] = React.useState('');
   const [petugasNama, setPetugasNama] = React.useState('');
@@ -99,7 +133,40 @@ export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user,
     setSuhuTubuh(''); setTensi(''); setNadi(''); setRespirasi(''); setTinggi(''); setBerat('');
     setSpo2(''); setGcs(''); setKesadaran(KESADARAN_OPTIONS[0]); setAlergi(''); setLingkarPerut('');
     setPenilaian(''); setRtl(''); setInstruksi(''); setEvaluasi('');
+    setIsEditMode(false);
   };
+
+  // Konsumsi prefill dari SoapCpptDisplay (klik Edit/Copy) — signal
+  // dibandingkan (bukan object ref) supaya klik berulang pd item yg SAMA
+  // tetap memicu prefill ulang (mis. setelah user sempat mengubah field).
+  const prevPrefillSignalRef = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => {
+    if (!prefill || prefill.signal === prevPrefillSignalRef.current) return;
+    prevPrefillSignalRef.current = prefill.signal;
+    const item = prefill.item;
+    setTglPerawatan(ddmmyyyyToIso(item.tgl_perawatan));
+    setJamRawat(hhmmssToHhmm(item.jam_rawat));
+    setPetugasNip(item.nip || '');
+    setPetugasNama(item.nama || '');
+    setSuhuTubuh(item.suhu_tubuh || '');
+    setTensi(item.tensi || '');
+    setNadi(item.nadi || '');
+    setRespirasi(item.respirasi || '');
+    setTinggi(item.tinggi || '');
+    setBerat(item.berat || '');
+    setSpo2(item.spo2 || '');
+    setGcs(item.gcs || '');
+    setKesadaran(item.kesadaran || KESADARAN_OPTIONS[0]);
+    setAlergi(item.alergi || '');
+    setLingkarPerut(item.lingkar_perut || '');
+    setKeluhan(item.keluhan || '');
+    setPemeriksaan(item.pemeriksaan || '');
+    setPenilaian(item.penilaian || '');
+    setRtl(item.rtl || '');
+    setInstruksi(item.instruksi || '');
+    setEvaluasi(item.evaluasi || '');
+    setIsEditMode(prefill.mode === 'edit');
+  }, [prefill]);
 
   // Validasi PERSIS binding:"required" di handler POST /api/pemeriksaan/soap.
   const validationError = (): string | null => {
@@ -144,15 +211,42 @@ export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user,
     setSaving(true);
     try {
       const res = await fetch('/api/pemeriksaan/soap', {
-        method: 'POST',
+        method: isEditMode ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan SOAP/CPPT');
-      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'SOAP/CPPT berhasil disimpan', timer: 1800, showConfirmButton: false });
+      if (!res.ok) throw new Error(data.error || (isEditMode ? 'Gagal mengupdate SOAP/CPPT' : 'Gagal menyimpan SOAP/CPPT'));
+
+      // Sama spt tab SOAP Pemeriksaan.tsx (Rawat Jalan): tawarkan lanjut ke
+      // Input Resep alih-alih toast biasa, supaya alurnya konsisten.
+      const result = await Swal.fire({
+        icon: 'success',
+        title: 'Berhasil!',
+        text: isEditMode ? 'SOAP/CPPT berhasil diupdate' : 'SOAP/CPPT berhasil disimpan',
+        showCancelButton: true,
+        showConfirmButton: true,
+        confirmButtonText: 'Lanjutkan Input Resep',
+        cancelButtonText: 'Tidak, tutup',
+        confirmButtonColor: '#1AB1E5',
+        cancelButtonColor: '#6b7280',
+        reverseButtons: false,
+        didOpen: (popup) => {
+          const actions = popup.querySelector('.swal2-actions') as HTMLElement | null;
+          if (actions) {
+            actions.style.flexDirection = 'column';
+            actions.style.width = '100%';
+            actions.style.gap = '8px';
+          }
+          popup.querySelectorAll<HTMLElement>('.swal2-actions button').forEach((btn) => {
+            btn.style.width = '80%';
+            btn.style.margin = '0';
+            btn.style.borderRadius = '0';
+          });
+        },
+      });
       resetForm();
-      onSaved?.();
+      onSaved?.(result.isConfirmed);
     } catch (e) {
       Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan saat menyimpan', confirmButtonColor: '#1AB1E5' });
     } finally {
@@ -162,6 +256,18 @@ export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user,
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {isEditMode && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 12px', background: '#e0f2fe', border: '1px solid #1AB1E5', color: '#0369a1', fontSize: 12.5, fontWeight: 500 }}>
+          <span>Mode Edit — mengubah data SOAP/CPPT tanggal {tglPerawatan} {jamRawat}. Tanggal/Jam dikunci karena jadi kunci data.</span>
+          <button
+            type="button"
+            onClick={resetForm}
+            style={{ padding: '4px 10px', borderRadius: 0, border: '1px solid #0369a1', background: '#fff', color: '#0369a1', cursor: 'pointer', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}
+          >
+            Batal Edit
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1.4 }}>
           <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Dokter/Petugas :</label>
@@ -179,11 +285,11 @@ export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user,
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Tanggal :</label>
-          <input type="date" value={tglPerawatan} onChange={(e) => setTglPerawatan(e.target.value)} onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ ...inputStyle, width: 160 }} />
+          <input type="date" value={tglPerawatan} onChange={(e) => setTglPerawatan(e.target.value)} onFocus={handleFieldFocus} onBlur={handleFieldBlur} readOnly={isEditMode} style={{ ...inputStyle, width: 160, background: isEditMode ? '#f3f4f6' : '#fff', cursor: isEditMode ? 'not-allowed' : 'text' }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Jam :</label>
-          <input type="time" value={jamRawat} onChange={(e) => setJamRawat(e.target.value)} onFocus={handleFieldFocus} onBlur={handleFieldBlur} style={{ ...inputStyle, width: 110 }} />
+          <input type="time" value={jamRawat} onChange={(e) => setJamRawat(e.target.value)} onFocus={handleFieldFocus} onBlur={handleFieldBlur} readOnly={isEditMode} style={{ ...inputStyle, width: 110, background: isEditMode ? '#f3f4f6' : '#fff', cursor: isEditMode ? 'not-allowed' : 'text' }} />
         </div>
       </div>
 
@@ -288,7 +394,7 @@ export const SoapCpptFormIGD: React.FC<SoapCpptFormIGDProps> = ({ patient, user,
         onMouseOver={(e) => { if (!saving) e.currentTarget.style.background = '#0891B2'; }}
         onMouseOut={(e) => { if (!saving) e.currentTarget.style.background = '#1AB1E5'; }}
       >
-        {saving ? 'Menyimpan...' : 'Simpan SOAP/CPPT'}
+        {saving ? 'Menyimpan...' : isEditMode ? 'Update SOAP/CPPT' : 'Simpan SOAP/CPPT'}
       </button>
 
       <ModalCariPegawai

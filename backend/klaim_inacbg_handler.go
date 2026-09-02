@@ -32,6 +32,7 @@ type KlaimInacbgItem struct {
 	NoRawat        string  `json:"no_rawat"`
 	NoRkmMedis     string  `json:"no_rkm_medis"`
 	NmPasien       string  `json:"nm_pasien"`
+	Kelas          string  `json:"kelas"`
 	NmDokter       string  `json:"nm_dokter"`
 	Diagnosa       string  `json:"diagnosa"`
 	BiayaObat      float64 `json:"biaya_obat"`
@@ -90,6 +91,15 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 				kamar_inap.no_rawat,
 				reg_periksa.no_rkm_medis,
 				pasien.nm_pasien,
+				-- Kelas rawat (hak kelas BPJS) dari bridging_sep.klsrawat — SAMA
+				-- pola dgn getGroupingInacbgHeader (grouping_inacbg_handler.go):
+				-- "FROM bridging_sep WHERE no_rawat = ? LIMIT 1", bukan JOIN,
+				-- krn no_rawat bukan kolom unik di bridging_sep (bisa ada SEP
+				-- suplesi/lebih dari satu terbit utk kunjungan yg sama).
+				COALESCE((
+					SELECT klsrawat FROM bridging_sep
+					WHERE bridging_sep.no_rawat = kamar_inap.no_rawat LIMIT 1
+				), '') AS kelas,
 				COALESCE((
 					SELECT GROUP_CONCAT(DISTINCT d.nm_dokter SEPARATOR ', ')
 					FROM dpjp_ranap dr
@@ -215,7 +225,7 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 		for rows.Next() {
 			var it KlaimInacbgItem
 			if err := rows.Scan(
-				&it.NoRawat, &it.NoRkmMedis, &it.NmPasien, &it.NmDokter, &it.Diagnosa,
+				&it.NoRawat, &it.NoRkmMedis, &it.NmPasien, &it.Kelas, &it.NmDokter, &it.Diagnosa,
 				&it.BiayaObat, &it.BiayaLab, &it.BiayaRadiologi, &it.BiayaDarah, &it.BiayaJasaMedis, &it.Billing, &it.KlaimInacbg,
 			); err != nil {
 				continue

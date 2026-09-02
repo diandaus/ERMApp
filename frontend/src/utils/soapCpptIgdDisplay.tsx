@@ -36,7 +36,30 @@ const nestedTableStyle: React.CSSProperties = {
   tableLayout: 'fixed',
 };
 
-export const renderSoapCpptTable = (list: any[]) => {
+// SoapCpptTableActions — Edit/Copy/Hapus per-baris, ditempel rapat (tanpa
+// gap, border dibagi) di KOLOM PERTAMA pada baris tepat SETELAH baris
+// tanggal (kolom pertama baris Subjek, yg sebelumnya kosong) — per
+// permintaan user. Opsional: saat tidak dikasih (mis. kalau file ini
+// dipakai murni utk tampilan cetak/riwayat read-only), tabel dirender
+// PERSIS spt sebelumnya.
+export type SoapCpptTableActions = {
+  onEdit: (item: any) => void;
+  onCopy: (item: any) => void;
+  onDelete: (item: any) => void;
+};
+
+// Tombol disatukan jadi satu strip (segmented, solid fill + font putih —
+// Edit:warning kuning, Copy:primary biru, Hapus:danger merah) — border
+// kanan dihapus kecuali tombol terakhir, marginLeft:-1 (kecuali tombol
+// pertama) utk kolaps border ganda, supaya benar-benar "tempel rapat".
+const actionBtnStyle = (bg: string, isFirst: boolean, isLast: boolean): React.CSSProperties => ({
+  padding: '2px 7px', borderRadius: 0, border: `1px solid ${bg}`,
+  borderRight: isLast ? `1px solid ${bg}` : 'none',
+  marginLeft: isFirst ? 0 : -1,
+  background: bg, color: '#fff', cursor: 'pointer', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap',
+});
+
+export const renderSoapCpptTable = (list: any[], actions?: SoapCpptTableActions) => {
   if (!list || list.length === 0) return null;
   return (
     <table style={nestedTableStyle}>
@@ -53,11 +76,19 @@ export const renderSoapCpptTable = (list: any[]) => {
               <td colSpan={7} style={cellStyle}>{d.nip} {d.nama}</td>
               <td colSpan={3} style={cellStyle}>{d.jbtn}</td>
             </tr>
-            {d.keluhan && (
+            {(d.keluhan || actions) && (
               <tr>
-                <td style={cellStyle}></td>
+                <td style={cellStyle}>
+                  {actions && (
+                    <div style={{ display: 'flex' }}>
+                      <button type="button" onClick={() => actions.onEdit(d)} title="Edit" style={actionBtnStyle('#f59e0b', true, false)}>Edit</button>
+                      <button type="button" onClick={() => actions.onCopy(d)} title="Copy ke form (entri baru)" style={actionBtnStyle('#2563eb', false, false)}>Copy</button>
+                      <button type="button" onClick={() => actions.onDelete(d)} title="Hapus" style={actionBtnStyle('#ef4444', false, true)}>Hapus</button>
+                    </div>
+                  )}
+                </td>
                 <td colSpan={2} style={cellStyle}>Subjek</td>
-                <td colSpan={8} style={cellStyle}>: {d.keluhan}</td>
+                <td colSpan={8} style={cellStyle}>: {d.keluhan || '-'}</td>
               </tr>
             )}
             {d.pemeriksaan && (

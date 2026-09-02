@@ -9,6 +9,9 @@ type KlaimItem = {
   no_rawat: string;
   no_rkm_medis: string;
   nm_pasien: string;
+  // Kelas rawat (hak kelas BPJS) — diambil backend dari bridging_sep.klsrawat
+  // ('1'/'2'/'3') berdasarkan no_rawat, kosong kalau belum ada SEP terbit.
+  kelas: string;
   nm_dokter: string;
   diagnosa: string;
   biaya_obat: number;
@@ -162,7 +165,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
   // jadi satu tabel (kolom DPJP ditambahkan) karena CSV/XLSX tidak punya
   // konsep header grup di baris tabelnya.
   const exportHeader = [
-    'No.Rawat', 'No.RM', 'Nama Pasien', 'DPJP', 'Diagnosa',
+    'No.Rawat', 'No.RM', 'Nama Pasien', 'Kelas', 'DPJP', 'Diagnosa',
     'Biaya Obat', 'Laboratorium', 'Radiologi', 'Pelayanan Darah', 'Gizi', 'Jasa Medis',
     'Billing', 'Selisih', 'Klaim INACBG',
   ];
@@ -172,7 +175,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
     groupedByDokter(filteredItems).forEach(([dokter, list]) => {
       list.forEach((item) => {
         rows.push([
-          item.no_rawat, item.no_rkm_medis, item.nm_pasien, dokter, item.diagnosa || '-',
+          item.no_rawat, item.no_rkm_medis, item.nm_pasien, item.kelas || '-', dokter, item.diagnosa || '-',
           item.biaya_obat, item.biaya_lab, item.biaya_radiologi, item.biaya_darah, item.biaya_gizi, item.biaya_jasa_medis,
           item.billing, item.selisih, item.klaim_inacbg,
         ]);
@@ -222,7 +225,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
       if (ws[cellRef]) { ws[cellRef].t = 's'; ws[cellRef].z = '@'; }
     });
     ws['!cols'] = [
-      { wch: 14 }, { wch: 10 }, { wch: 24 }, { wch: 20 }, { wch: 28 },
+      { wch: 14 }, { wch: 10 }, { wch: 24 }, { wch: 8 }, { wch: 20 }, { wch: 28 },
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
       { wch: 14 }, { wch: 14 }, { wch: 14 },
     ];
@@ -257,6 +260,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
           <td class="nowrap">${item.no_rawat}</td>
           <td class="nowrap">${item.no_rkm_medis}</td>
           <td>${item.nm_pasien}</td>
+          <td>${item.kelas || '-'}</td>
           <td>${item.diagnosa || '-'}</td>
           <td style="text-align:right">${formatAngkaExport(item.biaya_obat)}</td>
           <td style="text-align:right">${formatAngkaExport(item.biaya_lab)}</td>
@@ -270,7 +274,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
         </tr>
       `).join('');
       return `
-        <tr><td colspan="13" class="dpjp-row">DPJP : ${dokter}</td></tr>
+        <tr><td colspan="14" class="dpjp-row">DPJP : ${dokter}</td></tr>
         ${bodyRows}
       `;
     }).join('');
@@ -313,7 +317,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
           <table class="rincian">
             <thead>
               <tr>
-                <th>No.Rawat</th><th>No.RM</th><th>Nama Pasien</th><th>Diagnosa</th>
+                <th>No.Rawat</th><th>No.RM</th><th>Nama Pasien</th><th>Kelas</th><th>Diagnosa</th>
                 <th style="text-align:right">Obat</th><th style="text-align:right">Lab</th>
                 <th style="text-align:right">Radiologi</th><th style="text-align:right">Darah</th>
                 <th style="text-align:right">Gizi</th><th style="text-align:right">Jasa Medis</th>
@@ -725,6 +729,7 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Rawat</th>
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Nama Pasien</th>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Kelas</th>
                       <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Diagnosa</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Obat</th>
                       <th style={{ padding: '8px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>Laboratorium</th>
@@ -750,6 +755,9 @@ export const KlaimInacbgView: React.FC<KlaimInacbgViewProps> = ({ user }) => {
                           </td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#111827' }}>
                             {item.nm_pasien}
+                          </td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
+                            {item.kelas || '-'}
                           </td>
                           <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
                             {item.diagnosa || '-'}
