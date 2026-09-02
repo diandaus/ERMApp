@@ -636,7 +636,12 @@ export const IGDKView: React.FC<IGDKViewProps> = ({ user }) => {
                 }}
               >
                 <span>Filter</span>
-                <span style={{ fontSize: 10 }}>▼</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M10 8L20 8" stroke="currentColor" strokeLinecap="round" />
+                  <path d="M4 16L14 16" stroke="currentColor" strokeLinecap="round" />
+                  <ellipse cx="7" cy="8" rx="3" ry="3" transform="rotate(90 7 8)" stroke="currentColor" strokeLinecap="round" />
+                  <ellipse cx="17" cy="16" rx="3" ry="3" transform="rotate(90 17 16)" stroke="currentColor" strokeLinecap="round" />
+                </svg>
               </button>
 
               {/* Dropdown Filter */}

@@ -114,46 +114,25 @@ const ComingSoon: React.FC<{ title: string }> = ({ title }) => (
 );
 
 // ── Tampilan data Awal Medis IGD tersimpan (tab "Awal Medis") — konsumsi
-// GET /api/asuhan-medis-igd/{no_rawat} (backend/asuhan_medis_handler.go,
-// endpoint READ-ONLY, data lama dari Khanza Desktop — BELUM ada endpoint
-// simpan/form input, itu langkah berikutnya). Render tabelnya (kop judul +
-// seksi I-VI) dari utils/awalMedisIgdDisplay.tsx, persis pola TriaseDisplay
-// (file terpisah berdiri sendiri, RiwayatModal.tsx tidak disentuh).
-const AwalMedisDisplay: React.FC<{ noRawat: string; refreshKey: number; patient: IGDPatient }> = ({ noRawat, refreshKey, patient }) => {
-  const [list, setList] = React.useState<any[] | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [previewingIdx, setPreviewingIdx] = React.useState<number | null>(null);
-
-  React.useEffect(() => {
-    setLoading(true);
-    fetch(`/api/asuhan-medis-igd/${encodeURIComponent(noRawat)}`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((d) => setList(Array.isArray(d) ? d : []))
-      .catch(() => setList([]))
-      .finally(() => setLoading(false));
-  }, [noRawat, refreshKey]);
-
-  // handlePreview — buka PDF yg AKAN dikirim ke Peruri (buildAwalMedisPdfUntukTtd)
-  // di tab baru TANPA mengirim apa pun ke Peruri, persis pola handlePreview
-  // di TriaseDisplay/hook useTriaseTte.
-  const handlePreview = async (idx: number, d: any) => {
-    setPreviewingIdx(idx);
-    try {
-      const { pdfBytes } = await buildAwalMedisPdfUntukTtd(d, patient);
-      const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
-      window.open(URL.createObjectURL(blob), '_blank');
-    } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
-    } finally {
-      setPreviewingIdx(null);
-    }
-  };
-
+// GET /api/asuhan-medis-igd/{no_rawat} (backend/asuhan_medis_handler.go).
+// Render tabelnya (kop judul + seksi I-VI) dari utils/awalMedisIgdDisplay.tsx.
+// KOMPONEN PRESENTASIONAL murni (persis TriaseDisplay) — data/loading &
+// handler TTE (Preview/OTP/Download/Tanda Tangan) datang dari hook
+// useAwalMedisTte (dipanggil sekali di PemeriksaanIGDView, BUKAN di sini)
+// supaya tombol "Input Awal Medis" & 4 tombol aksi dokumen bisa ditaruh
+// SEBARIS di satu container flex row yg sama, sama alasan/pola dgn
+// useTriaseTte (lihat komentarnya di bawah).
+const AwalMedisDisplay: React.FC<{
+  data: any[] | null;
+  loading: boolean;
+  headerIndex: number | null;
+  renderActionButtons: (idx: number, item: any) => React.ReactNode;
+}> = ({ data, loading, headerIndex, renderActionButtons }) => {
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat data awal medis...</div>;
   }
 
-  if (!list || list.length === 0) {
+  if (!data || data.length === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
@@ -165,17 +144,17 @@ const AwalMedisDisplay: React.FC<{ noRawat: string; refreshKey: number; patient:
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {list.map((d, i) => (
+      {data.map((d, i) => (
         <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              type="button" onClick={() => handlePreview(i, d)} disabled={previewingIdx === i}
-              style={{ padding: '5px 12px', borderRadius: 0, border: '1px solid #1AB1E5', background: '#fff', color: '#1AB1E5', cursor: 'pointer', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-              {previewingIdx === i ? 'Membuka...' : 'Preview Dokumen'}
-            </button>
-          </div>
+          {/* Entri di headerIndex sudah dapat 4 tombol aksinya sebaris dgn
+              "Input Awal Medis" (lihat PemeriksaanIGDView) — entri lain
+              (kondisi langka, biasanya cuma 1 entri per kunjungan) tetap
+              dapat baris tombolnya sendiri di sini, persis pola TriaseDisplay. */}
+          {headerIndex !== i && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+              {renderActionButtons(i, d)}
+            </div>
+          )}
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
             {renderAwalMedisRecord(d)}
           </div>
@@ -578,6 +557,278 @@ const useTriaseTte = (noRawat: string, refreshKey: number, patient: IGDPatient) 
   return { data, loading, headerJenis, renderActionButtons };
 };
 
+// useAwalMedisTte — DUPLIKAT POLA useTriaseTte di atas (bukan diekstrak jadi
+// helper generik — pola file/hook terpisah berdiri sendiri yg sama dipakai
+// triaseIgdDisplay.tsx vs awalMedisIgdDisplay.tsx), disesuaikan utk Awal
+// Medis: (1) datanya LIST per-index (bisa >1 entri riwayat), bukan
+// primer/sekunder — headerIndex = entri PERTAMA (indeks 0) yg dapat 4
+// tombol aksi sebaris dgn "Input Awal Medis", entri lain (jarang terjadi)
+// tetap dpt baris tombolnya sendiri (lihat AwalMedisDisplay); (2)
+// penandatangan = DOKTER pemeriksa (kd_dokter/nm_dokter dari
+// buildAwalMedisPdfUntukTtd), BUKAN "Dokter/Petugas IGD" (nik) spt Triase
+// — getSignerEmail tetap generik & sudah fallback ke tabel dokter.
+const useAwalMedisTte = (noRawat: string, refreshKey: number, patient: IGDPatient) => {
+  const [data, setData] = React.useState<any[] | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [previewingIdx, setPreviewingIdx] = React.useState<number | null>(null);
+  const [signingIdx, setSigningIdx] = React.useState<number | null>(null);
+  const [requestingOtpIdx, setRequestingOtpIdx] = React.useState<number | null>(null);
+  const [downloadingIdx, setDownloadingIdx] = React.useState<number | null>(null);
+  const [lastTteOrderId, setLastTteOrderId] = React.useState<Record<number, string | null>>({});
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetch(`/api/asuhan-medis-igd/${encodeURIComponent(noRawat)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((d) => setData(Array.isArray(d) ? d : []))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+  }, [noRawat, refreshKey]);
+
+  // handlePreview — buka PDF yg AKAN dikirim ke Peruri (buildAwalMedisPdfUntukTtd)
+  // di tab baru TANPA mengirim apa pun ke Peruri, persis pola handlePreview
+  // di useTriaseTte.
+  const handlePreview = async (idx: number, d: any) => {
+    setPreviewingIdx(idx);
+    try {
+      const { pdfBytes } = await buildAwalMedisPdfUntukTtd(d, patient);
+      const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPreviewingIdx(null);
+    }
+  };
+
+  // handleTandaTangan — alur Digital Signature Peruri lengkap, PERSIS pola
+  // handleTandaTangan di useTriaseTte (lihat komentarnya di atas utk detail
+  // step Send Document -> [skip-OTP kalau sesi masih aktif] -> Signing).
+  const handleTandaTangan = async (idx: number, d: any) => {
+    setSigningIdx(idx);
+    showProcessing('Menyiapkan & mengirim dokumen ke Peruri, mohon tunggu...');
+    try {
+      const { pdfBytes, signBox, kdDokter, namaDokter } = await buildAwalMedisPdfUntukTtd(d, patient);
+      const { email, nama } = await getSignerEmail(kdDokter, namaDokter);
+
+      const form = new FormData();
+      form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), `AwalMedis_${noRawat.replace(/\//g, '_')}.pdf`);
+      form.append('email', email);
+      form.append('isVisualSign', 'YES');
+      form.append('lowerLeftX', String(signBox.lowerLeftX));
+      form.append('lowerLeftY', String(signBox.lowerLeftY));
+      form.append('upperRightX', String(signBox.upperRightX));
+      form.append('upperRightY', String(signBox.upperRightY));
+      form.append('page', signBox.page);
+      form.append('certificateLevel', 'NOT_CERTIFIED');
+      form.append('varLocation', 'Sigli');
+      form.append('varReason', 'Signed');
+      form.append('teraImage', 'QR-DETECSI');
+      form.append('orderType', 'INDIVIDUAL');
+
+      const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) throw new Error(sendData.error || 'Gagal mengirim dokumen ke Peruri');
+      if (sendData.response && typeof sendData.response === 'object' && 'resultCode' in sendData.response && sendData.response.resultCode !== '0') {
+        throw new Error(`[${sendData.response.resultCode}] ${sendData.response.resultDesc || 'Send Document gagal'}`);
+      }
+      const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
+      if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
+
+      showProcessing(`Dokumen berhasil terkirim ke Peruri.<br/>Order ID: <b>${orderId}</b><br/><span style="font-size:12px;color:#6b7280;">Melanjutkan proses tanda tangan...</span>`);
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+
+      const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
+      const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
+      let sesiDipakaiUlang = false;
+
+      if (sessionRes.ok && sessionData.valid) {
+        sesiDipakaiUlang = true;
+      } else {
+        const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+        let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+        if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+        hideProcessing();
+        const otpCode = await showOtpDialog(email, async () => {
+          const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+          const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+          if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+          tokenSession = newTokenSession;
+        }, 'Verifikasi & Tanda Tangan');
+        if (!otpCode) return;
+
+        showProcessing('Memverifikasi OTP & menandatangani dokumen, mohon tunggu...');
+        await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      }
+
+      if (sesiDipakaiUlang) showProcessing('Sesi OTP masih aktif, menandatangani dokumen, mohon tunggu...');
+      try {
+        await peruriPost('/api/peruri/signing', { orderId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        const codeMatch = msg.match(/^\[([^\]]+)\]/);
+        const code = codeMatch?.[1];
+        if (code && code in PERURI_SIGNING_ERROR_MAP) {
+          throw new Error(`[${code}] ${PERURI_SIGNING_ERROR_MAP[code]}`);
+        }
+        if (/otp|session|expired/i.test(msg)) {
+          throw new Error('Masa berlaku sesi OTP sudah habis di sisi Peruri. Silakan klik tombol "Minta OTP Ulang" terlebih dahulu, lalu coba Tanda Tangan lagi.');
+        }
+        throw err;
+      }
+      hideProcessing();
+      setLastTteOrderId((prev) => ({ ...prev, [idx]: orderId }));
+
+      await Swal.fire({
+        icon: 'success', title: 'Berhasil ditandatangani',
+        html: `Dokumen berhasil ditandatangani oleh <b>${nama}</b> (${email}).<br/>Order ID: <b>${orderId}</b>`
+          + (sesiDipakaiUlang ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
+      });
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSigningIdx(null);
+    }
+  };
+
+  // handleMintaOtpUlang — persis pola useTriaseTte, dipakai memperbarui/
+  // memvalidasi ulang sesi OTP SEBELUM benar2 menandatangani.
+  const handleMintaOtpUlang = async (idx: number, d: any) => {
+    setRequestingOtpIdx(idx);
+    showProcessing('Mengirim kode OTP, mohon tunggu...');
+    try {
+      const { email } = await getSignerEmail(d?.kd_dokter, d?.nm_dokter);
+
+      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+      let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+      if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+      hideProcessing();
+      const otpCode = await showOtpDialog(email, async () => {
+        const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+        const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+        if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+        tokenSession = newTokenSession;
+      }, 'Verifikasi');
+      if (!otpCode) return;
+
+      showProcessing('Memverifikasi OTP, mohon tunggu...');
+      await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      hideProcessing();
+
+      await Swal.fire({ icon: 'success', title: 'Sesi OTP diperbarui', html: `Sesi OTP untuk <b>${email}</b> berhasil divalidasi ulang dan aktif selama 24 jam ke depan.` });
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setRequestingOtpIdx(null);
+    }
+  };
+
+  // handleDownloadDokumen — ambil dokumen yg SUDAH ditandatangani dari
+  // Peruri & auto-upload ke berkasrawat (prefix "AwalMedis_" dikirim ke
+  // backend, lihat downloadPeruriDocument di peruri_handler.go).
+  const handleDownloadDokumen = async (idx: number) => {
+    const orderId = lastTteOrderId[idx];
+    if (!orderId) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani di sesi ini. Lakukan Tanda Tangan dulu.' });
+      return;
+    }
+    setDownloadingIdx(idx);
+    showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
+    try {
+      const res = await fetch('/api/peruri/download-document', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, no_rawat: noRawat, prefix: 'AwalMedis_' }),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
+      const upstream = resData.response;
+      if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
+        throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || 'Download Document gagal'}`);
+      }
+      const dataResp = upstream?.data || upstream || {};
+      const base64Doc: string | undefined = dataResp.base64Document || dataResp.document || dataResp.file || dataResp.base64;
+      if (!base64Doc) {
+        hideProcessing();
+        Swal.fire({
+          icon: 'warning', title: 'Format respons tidak dikenali',
+          html: `Peruri tidak mengembalikan field dokumen yg dikenali. Response mentah:<br/><pre style="text-align:left;font-size:11px;white-space:pre-wrap;">${JSON.stringify(upstream, null, 2)}</pre>`,
+        });
+        return;
+      }
+      const byteChars = atob(base64Doc);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `TTE_AwalMedis_${noRawat.replace(/\//g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      hideProcessing();
+      if (resData.uploaded_to_berkasrawat) {
+        Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen terunduh & otomatis terupload ke Berkas Rawat.', timer: 2000, showConfirmButton: false });
+      }
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setDownloadingIdx(null);
+    }
+  };
+
+  const previewButtonStyle: React.CSSProperties = { height: 30, padding: '0 12px', borderRadius: 0, border: '1px solid #1AB1E5', background: '#fff', color: '#1AB1E5', cursor: 'pointer', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box' };
+  const iconButtonStyle = (disabled: boolean): React.CSSProperties => ({ width: 30, height: 30, borderRadius: 0, border: '1px solid #d1d5db', background: '#fff', color: disabled ? '#9ca3af' : '#374151', cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' });
+
+  // headerIndex — entri PERTAMA (indeks 0) yg 4 tombol aksinya ditaruh
+  // sebaris dgn Input Awal Medis (dlm praktiknya biasanya cuma 1 entri per
+  // kunjungan, sama asumsi dgn Triase primer/sekunder).
+  const headerIndex: number | null = data && data.length > 0 ? 0 : null;
+
+  const renderActionButtons = (idx: number, d: any) => (
+    <React.Fragment>
+      <button
+        type="button" onClick={() => handleMintaOtpUlang(idx, d)} disabled={requestingOtpIdx === idx}
+        title="Minta OTP Ulang (perbarui sesi Peruri)" style={iconButtonStyle(requestingOtpIdx === idx)}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M6 5.5H9M7.5 5.5V10M10.5 10V7.5M10.5 7.5V5.5H11.5C12.0523 5.5 12.5 5.94772 12.5 6.5C12.5 7.05228 12.0523 7.5 11.5 7.5H10.5ZM4.5 6.5V8.5C4.5 9.05228 4.05228 9.5 3.5 9.5C2.94772 9.5 2.5 9.05228 2.5 8.5V6.5C2.5 5.94772 2.94772 5.5 3.5 5.5C4.05228 5.5 4.5 5.94772 4.5 6.5ZM1.5 0.5H13.5C14.0523 0.5 14.5 0.947715 14.5 1.5V13.5C14.5 14.0523 14.0523 14.5 13.5 14.5H1.5C0.947716 14.5 0.5 14.0523 0.5 13.5V1.5C0.5 0.947716 0.947715 0.5 1.5 0.5Z" stroke="currentColor"/>
+        </svg>
+      </button>
+      <button
+        type="button" onClick={() => handleDownloadDokumen(idx)} disabled={downloadingIdx === idx || !lastTteOrderId[idx]}
+        title={lastTteOrderId[idx] ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen tertandatangani di sesi ini'}
+        style={iconButtonStyle(downloadingIdx === idx || !lastTteOrderId[idx])}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M9.517 3.31h4.966v6.621h3.31L12 16.552 6.207 9.931h3.31V3.31zM0 19.034h24v1.655H0v-1.655z"/>
+        </svg>
+      </button>
+      <button
+        type="button" onClick={() => handleTandaTangan(idx, d)} disabled={signingIdx === idx}
+        title="Tanda Tangan Elektronik (Peruri)" style={{ ...iconButtonStyle(signingIdx === idx), width: 'auto', padding: '0 12px', gap: 6, fontSize: 12, fontWeight: 500, border: '1px solid #1AB1E5', color: signingIdx === idx ? '#9ca3af' : '#1AB1E5' }}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+        </svg>
+        {signingIdx === idx ? 'Memproses...' : 'Tanda Tangan'}
+      </button>
+      <button type="button" onClick={() => handlePreview(idx, d)} disabled={previewingIdx === idx} style={previewButtonStyle}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+        {previewingIdx === idx ? 'Membuka...' : 'Preview Dokumen'}
+      </button>
+    </React.Fragment>
+  );
+
+  return { data, loading, headerIndex, renderActionButtons };
+};
+
 // ── Tampilan data Triase tersimpan (tab "Triase", di bawah tombol Input
 // Triase) — komponen PRESENTASIONAL murni, konsumsi data/handler dari
 // useTriaseTte (dipanggil sekali di PemeriksaanIGDView, BUKAN di sini —
@@ -874,6 +1125,7 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
   const [soapPrefill, setSoapPrefill] = React.useState<{ mode: 'edit' | 'copy'; signal: number; item: SoapRalanItem } | null>(null);
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
   const triaseTte = useTriaseTte(patient.no_rawat, triaseRefreshKey, patient);
+  const awalMedisTte = useAwalMedisTte(patient.no_rawat, awalMedisRefreshKey, patient);
   const { isCompact } = useBreakpoint();
   void isCompact;
   // Sidebar info pasien permanen di layar >=1366px (laptop/desktop umum),
@@ -1113,7 +1365,7 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
             )}
             {activeTab === 'medis' && (
               <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => setShowInputAwalMedis(true)}
@@ -1126,8 +1378,18 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
                     </svg>
                     Input Awal Medis
                   </button>
+                  {awalMedisTte.headerIndex !== null && awalMedisTte.data && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {awalMedisTte.renderActionButtons(awalMedisTte.headerIndex, awalMedisTte.data[awalMedisTte.headerIndex])}
+                    </div>
+                  )}
                 </div>
-                <AwalMedisDisplay noRawat={patient.no_rawat} refreshKey={awalMedisRefreshKey} patient={patient} />
+                <AwalMedisDisplay
+                  data={awalMedisTte.data}
+                  loading={awalMedisTte.loading}
+                  headerIndex={awalMedisTte.headerIndex}
+                  renderActionButtons={awalMedisTte.renderActionButtons}
+                />
               </div>
             )}
             {activeTab === 'soap' && (
@@ -1154,11 +1416,13 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
               </div>
             )}
             {activeTab === 'resep' && (
-              <ResepTab
-                patient={patient}
-                openInputSignal={resepOpenSignal}
-                onResepChanged={() => setSoapCpptRefreshKey((k) => k + 1)}
-              />
+              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <ResepTab
+                  patient={patient}
+                  openInputSignal={resepOpenSignal}
+                  onResepChanged={() => setSoapCpptRefreshKey((k) => k + 1)}
+                />
+              </div>
             )}
             {activeTab === 'keperawatan' && <ComingSoon title="Awal Keperawatan" />}
             {activeTab === 'lab' && <LabTab patient={patient} />}

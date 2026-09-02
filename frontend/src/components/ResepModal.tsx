@@ -53,21 +53,38 @@ type Racikan = {
 // tabel lain di modal ini).
 const racikanInputStyle: React.CSSProperties = {
   width: '100%',
+  height: 30,
   padding: '5px 10px',
   borderRadius: 4,
   border: '1px solid #d1d5db',
-  fontSize: 14,
+  fontSize: 12,
   outline: 'none',
   boxSizing: 'border-box',
   background: '#ffffff',
 };
 
 export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onResepSaved, isRanap = false, editResep }) => {
+  // visible — animasi slide-in dari kanan, persis pola mounted/visible di
+  // ModalInputTriase.tsx/ModalInputAwalMedisIGD.tsx. Bedanya modal ini
+  // di-mount/unmount langsung oleh parent (`{showResepModal && <ResepModal.../>}`,
+  // BUKAN via prop isOpen), jadi cuma animasi masuk yg dipakai (tanpa
+  // animasi keluar 300ms spt Triase/Awal Medis — parent langsung unmount).
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
 
   // Non Racikan State
   const searchObatNonRacikanRef = React.useRef<HTMLInputElement>(null);
   const nonRacikanSearchWrapperRef = React.useRef<HTMLDivElement>(null);
+  // Ref ke dropdown hasil pencarian (di-portal ke document.body, jadi klik di
+  // dalamnya TIDAK otomatis dianggap "di dalam wrapper" oleh DOM biasa) —
+  // dipakai handler klik-di-luar di bawah supaya klik di dalam dropdown
+  // sendiri tidak ikut menutupnya.
+  const nonRacikanDropdownRef = React.useRef<HTMLDivElement>(null);
   const [nonRacikanDropdownPos, setNonRacikanDropdownPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const [searchObatNonRacikan, setSearchObatNonRacikan] = React.useState('');
   const [obatList, setObatList] = React.useState<ObatItem[]>([]);
@@ -79,6 +96,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   // Racikan State
   const namaRacikanRefs = React.useRef<Array<HTMLInputElement | null>>([]);
   const racikanSearchWrapperRef = React.useRef<HTMLDivElement>(null);
+  // Sama spt nonRacikanDropdownRef di atas — ref ke dropdown (di-portal)
+  // supaya klik di dalamnya tidak dianggap "di luar" & menutup dropdown.
+  const racikanDropdownRef = React.useRef<HTMLDivElement>(null);
   const [racikanDropdownPos, setRacikanDropdownPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const [searchObatRacikan, setSearchObatRacikan] = React.useState('');
   const [obatListRacikan, setObatListRacikan] = React.useState<ObatItem[]>([]);
@@ -154,8 +174,48 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     };
   }, [showObatDropdownRacikan]);
 
+  // Tutup dropdown pencarian obat saat klik di luar area combobox (wrapper
+  // input MAUPUN dropdown-nya sendiri, yg di-portal ke document.body jadi
+  // secara DOM bukan child dari wrapper). mousedown (bukan click) supaya
+  // konsisten dgn dropdown Filter dkk di modul lain & tidak race dgn
+  // onClick item combobox (yg pakai click biasa).
+  React.useEffect(() => {
+    if (!showObatDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const insideWrapper = nonRacikanSearchWrapperRef.current?.contains(target);
+      const insideDropdown = nonRacikanDropdownRef.current?.contains(target);
+      if (!insideWrapper && !insideDropdown) setShowObatDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showObatDropdown]);
+
+  React.useEffect(() => {
+    if (!showObatDropdownRacikan) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const insideWrapper = racikanSearchWrapperRef.current?.contains(target);
+      const insideDropdown = racikanDropdownRef.current?.contains(target);
+      if (!insideWrapper && !insideDropdown) setShowObatDropdownRacikan(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showObatDropdownRacikan]);
+
   // Riwayat Resep State
   const [showModalRiwayatResep, setShowModalRiwayatResep] = React.useState(false);
+  // riwayatVisible — animasi slide-in dari KIRI (panel Riwayat Resep
+  // ditempatkan di sisa ruang 50% sebelah kiri, berdampingan dgn panel
+  // Resep yg sudah nempel di kanan), sama pola dgn `visible` di atas.
+  const [riwayatVisible, setRiwayatVisible] = React.useState(false);
+  React.useEffect(() => {
+    if (showModalRiwayatResep) {
+      const t = setTimeout(() => setRiwayatVisible(true), 10);
+      return () => clearTimeout(t);
+    }
+    setRiwayatVisible(false);
+  }, [showModalRiwayatResep]);
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
 
@@ -959,7 +1019,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
       setRacikanList(resep.racikan.map((r: any) => ({
         nama_racikan: r.nama_racik || '',
         keterangan: '',
-        metode_racik: r.metode || '',
+        metode_racik: r.metode_racik || '',
         jml_dr: r.jml_dr || 1,
         aturan_pakai: r.aturan_pakai || '',
         detail: r.detail || []
@@ -983,42 +1043,84 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
   return (
     <>
-      {/* Main Modal Resep */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-        <div style={{ background: '#F3F4F6', borderRadius: 20, padding: '35px 8px 8px 8px', position: 'relative', maxWidth: 900, width: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+      {/* Main Modal Resep — redesain jadi panel slide-in dari kanan, PERSIS
+          pola ModalInputTriase.tsx/ModalInputAwalMedisIGD.tsx (overlay fixed
+          + panel anchor kanan full-height 50vw, header breadcrumb pasien +
+          tombol close bulat, body scrollable, footer sticky), ganti dari
+          versi lama (dialog card mengambang di tengah, radius 20/16). */}
+      <div
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
+        onClick={onClose}
+      >
+        <div
+          style={{
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+            background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
 
-          {/* Header — title + close button dalam satu baris flex, sejajar
-              vertikal (bukan dua elemen absolute yang saling menumpuk). */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 20px', color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              Input Resep
-              {isRanap && <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>RANAP</span>}
-            </span>
-            <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}>×</button>
+          {/* Header — breadcrumb pasien + close button bulat, PERSIS pola
+              ModalInputTriase.tsx. */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: '#000000', display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 6, rowGap: 2 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+                .filter(Boolean)
+                .map((v, i, arr) => (
+                  <React.Fragment key={i}>
+                    <span>{v}</span>
+                    {i < arr.length - 1 && <span>|</span>}
+                  </React.Fragment>
+                ))}
+              {isRanap && <span style={{ fontSize: 12, background: '#dbeafe', color: '#1d4ed8', borderRadius: 6, padding: '2px 8px', fontWeight: 400 }}>RANAP</span>}
+              {editResep && <span style={{ fontSize: 12, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 400 }}>Edit Resep {editResep.no_resep}</span>}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                flexShrink: 0,
+              }}
+            >
+              &times;
+            </button>
           </div>
 
-          {/* White Card Content */}
-          <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '12px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-            {/* Tab Navigation — segmented control di tengah + "+ Tambah
-                Racikan" di kanan (cuma tab Racikan), pola sama dengan
-                ModalValidasiObat.tsx supaya konsisten antar modal resep. */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', marginBottom: 16 }}>
-              <span />
-              <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4, justifySelf: 'center' }}>
-                {(['non-racikan', 'racikan'] as const).map((tab) => (
+          {/* Body — scrollable, flat (tanpa nested white-card-dlm-card
+              spt versi lama). */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {/* Tab Navigation — rata kiri + "+ Tambah Racikan" di kanan
+                (cuma tab Racikan), per permintaan user (sebelumnya di
+                tengah, pola grid 3-kolom ModalValidasiObat.tsx). */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              {/* Button group flat (radius 0, tombol nempel/berbagi border,
+                  aktif biru cyan #1AB1E5) — ganti dari pill segmented
+                  control lama, per permintaan user. */}
+              <div style={{ display: 'inline-flex' }}>
+                {(['non-racikan', 'racikan'] as const).map((tab, i) => (
                   <button
                     key={tab}
                     type="button"
                     onClick={() => setActiveResepTab(tab)}
                     style={{
                       padding: '6px 24px',
-                      borderRadius: 8,
-                      border: activeResepTab === tab ? '1px solid #2563eb' : '1px solid transparent',
-                      background: activeResepTab === tab ? '#ffffff' : 'transparent',
-                      color: activeResepTab === tab ? '#2563eb' : '#6b7280',
+                      borderRadius: 0,
+                      border: '1px solid #1AB1E5',
+                      borderLeft: i === 0 ? '1px solid #1AB1E5' : 'none',
+                      background: activeResepTab === tab ? '#1AB1E5' : '#ffffff',
+                      color: activeResepTab === tab ? '#ffffff' : '#1AB1E5',
                       cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: activeResepTab === tab ? 600 : 400,
+                      fontSize: 12,
+                      fontWeight: 400,
                       transition: 'all 0.2s ease',
                       boxShadow: 'none'
                     }}
@@ -1027,14 +1129,14 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                   </button>
                 ))}
               </div>
-              <div style={{ justifySelf: 'end' }}>
+              <div>
                 {activeResepTab === 'racikan' && (
                   <button type="button" onClick={() => {
                     setRacikanList(prev => [{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }, ...prev]);
                     setActiveRacikanIdx(0);
                   }} style={{
-                    padding: '6px 14px', borderRadius: 4, border: '1px solid #2563eb',
-                    background: '#2563eb', color: '#ffffff', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                    padding: '6px 14px', borderRadius: 0, border: '1px solid #000000',
+                    background: '#000000', color: '#ffffff', cursor: 'pointer', fontSize: 12, fontWeight: 400,
                   }}>
                     + Tambah Racikan
                   </button>
@@ -1047,9 +1149,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                 {/* Cari Obat tetap di paling atas modal (di luar area scroll) agar daftar hasil pencarian tidak terpotong */}
                 <div className="mb-3" style={{ flexShrink: 0 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12, alignItems: 'start' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'start' }}>
                     <div>
-                      <label className="form-label fw-bold">Cari Obat</label>
+                      <label className="form-label">Cari Obat</label>
                       <div className="search-obat-wrapper" ref={nonRacikanSearchWrapperRef}>
                         <span className="search-obat-icon">
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1070,13 +1172,14 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                         {/* Dropdown hasil pencarian — portal ke body, mengambang di depan modal, tidak tergantung ruang di bawahnya */}
                         {showObatDropdown && obatList && obatList.length > 0 && nonRacikanDropdownPos && createPortal(
                           <div
+                            ref={nonRacikanDropdownRef}
                             className="obat-dropdown"
                             style={{ position: 'fixed', top: nonRacikanDropdownPos.top, left: nonRacikanDropdownPos.left, width: nonRacikanDropdownPos.width, right: 'auto', marginTop: 0, zIndex: 999999 }}
                           >
                             <table className="table table-sm table-hover mb-0">
                               <thead className="table-light">
                                 <tr>
-                                  <th style={{ width: '15%' }}>Kode Barang</th>
+                                  <th style={{ width: '15%', whiteSpace: 'nowrap' }}>Kode Barang</th>
                                   <th>Nama Barang</th>
                                   <th style={{ width: '10%' }}>Satuan</th>
                                   <th style={{ width: '8%' }}>Kps</th>
@@ -1116,7 +1219,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
                         {/* Pesan jika tidak ada hasil */}
                         {showObatDropdown && obatList && obatList.length === 0 && (
-                          <div className="alert alert-info mt-2" style={{ fontSize: '13px' }}>
+                          <div className="alert alert-info mt-2" style={{ fontSize: '12px' }}>
                             Tidak ada obat ditemukan dengan kata kunci "{searchObatNonRacikan}"
                           </div>
                         )}
@@ -1124,10 +1227,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     </div>
 
                     <div>
-                      <label className="form-label fw-bold">Total</label>
+                      <label className="form-label">Total</label>
                       <div style={{
-                        border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px',
-                        fontSize: 13, fontWeight: 600, color: '#16a34a', background: '#f0fdf4',
+                        height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '5px 10px',
+                        fontSize: 12, fontWeight: 400, color: '#16a34a', background: '#f0fdf4',
                         textAlign: 'right', boxSizing: 'border-box',
                       }}>
                         Rp {formatRupiah(totalHargaNonRacikan)}
@@ -1138,10 +1241,12 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
                 <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 <div className="mb-3">
-                  <label className="form-label fw-bold">Daftar Obat yang Dipilih</label>
+                  <label className="form-label">Daftar Obat yang Dipilih</label>
                   {resepNonRacikan.length === 0 ? (
-                    <div className="alert alert-warning">
-                      Belum ada obat yang dipilih
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                      <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Obat Dipilih</div>
+                      <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Cari &amp; pilih obat non-racikan di atas untuk ditambahkan ke resep.</div>
                     </div>
                   ) : (
                     <div className="table-responsive" style={{ maxHeight: 300, overflowY: 'auto' }}>
@@ -1225,16 +1330,16 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     hasil pencarian tidak terpotong. */}
                 <div style={{ flexShrink: 0 }}>
                 <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ color: '#6b7280', fontWeight: 700 }}>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>No</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Nama Racikan</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Metode Racik</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700, width: '1%', whiteSpace: 'nowrap' }}>Jml.Racik/Bungkus</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Aturan Pakai</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 700 }}>Keterangan</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 700 }}>Aksi</th>
+                      <tr style={{ color: '#6b7280', fontWeight: 400 }}>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>No</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Nama Racikan</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Metode Racik</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400, width: '1%', whiteSpace: 'nowrap' }}>Jml.Racik/Bungkus</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Aturan Pakai</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Keterangan</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 400 }}>Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1277,7 +1382,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                           <td style={{ padding: '4px 6px', verticalAlign: 'middle' }}>
                             <input
                               type="number"
-                              style={{ ...racikanInputStyle, color: isSelected ? '#2563eb' : undefined, fontWeight: isSelected ? 600 : undefined }}
+                              style={{ ...racikanInputStyle, color: isSelected ? '#2563eb' : undefined }}
                               value={rac.jml_dr === 0 ? '' : rac.jml_dr}
                               placeholder="-"
                               onFocus={(e) => { setActiveRacikanIdx(idx); e.target.select(); }}
@@ -1313,7 +1418,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                 e.stopPropagation();
                                 setRacikanList(prev => prev.filter((_, i) => i !== idx));
                                 setActiveRacikanIdx(prev => Math.max(0, prev >= idx ? prev - 1 : prev));
-                              }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 12.5, fontWeight: 500 }}>
+                              }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
                                 Hapus
                               </button>
                             )}
@@ -1328,7 +1433,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 <hr />
 
                 <div className="mb-3">
-                  <label className="form-label fw-bold">Detail Obat Racikan</label>
+                  <label className="form-label">Detail Obat Racikan</label>
                   <div className="search-obat-wrapper" ref={racikanSearchWrapperRef}>
                     <span className="search-obat-icon">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1348,13 +1453,14 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     {/* Dropdown hasil pencarian racikan — portal ke body, mengambang di depan modal */}
                     {showObatDropdownRacikan && obatListRacikan && obatListRacikan.length > 0 && racikanDropdownPos && createPortal(
                       <div
+                        ref={racikanDropdownRef}
                         className="obat-dropdown"
                         style={{ position: 'fixed', top: racikanDropdownPos.top, left: racikanDropdownPos.left, width: racikanDropdownPos.width, right: 'auto', marginTop: 0, zIndex: 999999 }}
                       >
                         <table className="table table-sm table-hover mb-0">
                           <thead className="table-light">
                             <tr>
-                              <th style={{ width: '15%' }}>Kode Barang</th>
+                              <th style={{ width: '15%', whiteSpace: 'nowrap' }}>Kode Barang</th>
                               <th>Nama Barang</th>
                               <th style={{ width: '10%' }}>Satuan</th>
                               <th style={{ width: '8%' }}>Kps</th>
@@ -1394,7 +1500,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
                     {/* Pesan jika tidak ada hasil */}
                     {showObatDropdownRacikan && obatListRacikan && obatListRacikan.length === 0 && (
-                      <div className="alert alert-info mt-2" style={{ fontSize: '13px' }}>
+                      <div className="alert alert-info mt-2" style={{ fontSize: '12px' }}>
                         Tidak ada obat ditemukan dengan kata kunci "{searchObatRacikan}"
                       </div>
                     )}
@@ -1404,10 +1510,12 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
                 <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 <div className="mb-3">
-                  <label className="form-label fw-bold">Daftar Obat — {activeRacikan?.nama_racikan || `Racikan ${activeRacikanIdx + 1}`}</label>
+                  <label className="form-label">Daftar Obat — {activeRacikan?.nama_racikan || `Racikan ${activeRacikanIdx + 1}`}</label>
                   {(activeRacikan?.detail ?? []).length === 0 ? (
-                    <div className="alert alert-warning">
-                      Belum ada obat dalam racikan
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                      <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Obat dalam Racikan</div>
+                      <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Cari &amp; pilih obat di atas untuk ditambahkan ke racikan ini.</div>
                     </div>
                   ) : (
                     <div className="table-responsive" style={{ maxHeight: 250, overflowY: 'auto' }}>
@@ -1453,30 +1561,32 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 </div>
               </div>
             )}
-            {/* Footer Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
-              <button type="button" onClick={openModalRiwayatResep} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                </svg>
-                Riwayat Resep
+          </div>
+
+          {/* Footer — sticky, di luar area scroll body, PERSIS pola
+              ModalInputTriase.tsx (padding 16, borderTop). */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button type="button" onClick={openModalRiwayatResep} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              Riwayat Resep
+            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 0, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
+                Tutup
               </button>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
-                  Tutup
-                </button>
-                <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                    <polyline points="7 3 7 8 15 8"></polyline>
-                  </svg>
-                  Simpan
-                </button>
-              </div>
+              <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Simpan
+              </button>
             </div>
           </div>
         </div>
@@ -1550,7 +1660,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                           style={{
                             padding: '8px 12px',
                             cursor: 'pointer',
-                            fontSize: '13px',
+                            fontSize: '12px',
                             borderBottom: index < filteredAturanPakai.length - 1 ? '1px solid #e5e7eb' : 'none',
                             transition: 'background-color 0.15s'
                           }}
@@ -1586,9 +1696,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
             <div className="obat-racikan-info">
               <div className="obat-racikan-name">{selectedObatRacikan.nama_brng}</div>
               <div className="obat-racikan-details">
-                <span>Stok: <strong>{selectedObatRacikan.stok}</strong> {selectedObatRacikan.kode_sat}</span>
+                <span>Stok: {selectedObatRacikan.stok} {selectedObatRacikan.kode_sat}</span>
                 {selectedObatRacikan.kapasitas && (
-                  <span> &middot; Kapasitas: <strong>{selectedObatRacikan.kapasitas}</strong></span>
+                  <span> &middot; Kapasitas: {selectedObatRacikan.kapasitas}</span>
                 )}
               </div>
             </div>
@@ -1644,56 +1754,53 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         </div>
       )}
 
-      {/* Modal Riwayat Resep */}
+      {/* Modal Riwayat Resep — panel slide-in dari KIRI, lebar 50vw = sisa
+          ruang di samping panel Resep yg sudah nempel di kanan (juga 50vw),
+          jadi keduanya tampil BERDAMPINGAN — per permintaan user. Overlay
+          TANPA warna gelap (transparan, cuma click-catcher utk tutup saat
+          klik di luar panel) supaya panel Resep di kanan tetap kelihatan
+          jelas, tidak ikut redup. zIndex di atas overlay modal Resep (1000)
+          krn modal ini dibuka DARI DALAM modal Resep. */}
       {showModalRiwayatResep && (
         <div
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: 20,
-          }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1001 }}
           onClick={closeModalRiwayatResep}
         >
           <div
             style={{
-              background: '#F3F4F6', borderRadius: 20,
-              padding: '35px 8px 8px 8px', position: 'relative',
-              maxWidth: 900, width: '90%', maxHeight: '85vh',
-              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              position: 'absolute', top: 0, left: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+              background: '#ffffff', boxShadow: '8px 0 24px rgba(0,0,0,0.15)',
+              display: 'flex', flexDirection: 'column',
+              transform: riwayatVisible ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.3s ease',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div style={{
-              position: 'absolute', top: 0, left: 0, right: 0,
-              padding: '8px 16px 8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span style={{ color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                Riwayat Resep — {patient.nm_pasien} ({patient.no_rkm_medis})
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <span style={{ color: '#000000', fontSize: 12, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>Riwayat Resep</span>
+                <span>|</span>
+                <span>{patient.no_rkm_medis}</span>
+                <span>|</span>
+                <span>{patient.nm_pasien}</span>
               </span>
               <button
-                type="button" onClick={closeModalRiwayatResep}
+                type="button"
+                onClick={closeModalRiwayatResep}
                 style={{
-                  background: 'transparent', border: 'none',
-                  fontSize: 20, cursor: 'pointer', color: '#6b7280',
-                  padding: 0, lineHeight: 1,
+                  width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                  background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                  flexShrink: 0,
                 }}
-              >×</button>
+              >
+                &times;
+              </button>
             </div>
 
-            {/* White Card Content */}
-            <div style={{
-              background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db',
-              padding: 16, overflowY: 'auto', flex: 1, minHeight: 0,
-            }}>
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20, minHeight: 0 }}>
               {loadingRiwayatResep ? (
                 <div className="text-center p-5">
                   <div className="spinner-border text-primary" role="status">
@@ -1701,8 +1808,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                   </div>
                 </div>
               ) : riwayatResep.length === 0 ? (
-                <div className="alert alert-info">
-                  Belum ada riwayat resep untuk pasien ini
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                  <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Riwayat Resep</div>
+                  <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada riwayat resep untuk pasien ini.</div>
                 </div>
               ) : (
                 <div className="resep-history-container">
@@ -1721,7 +1830,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                 onClick={() => copyResepToForm(resep)}
                                 className="btn btn-sm btn-primary"
                                 title="Copy resep ini ke form input"
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', fontWeight: 400 }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', fontWeight: 400, fontSize: 11, borderRadius: 0 }}
                               >
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -1776,9 +1885,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                               <tr>
                                 <td></td>
                                 <td>No.Racik {racikan.no_racik}</td>
-                                <td><strong>{racikan.nama_racik}</strong></td>
+                                <td>{racikan.nama_racik}</td>
                                 <td className="text-center">{racikan.jml_dr}</td>
-                                <td className="text-center">{racikan.metode || '-'}</td>
+                                <td className="text-center">{racikan.metode_racik || '-'}</td>
                                 <td>{racikan.aturan_pakai}</td>
                               </tr>
                               {racikan.detail?.map((detail: any, didx: number) => (

@@ -51,7 +51,7 @@
 .modal-header-resep h5 {
   margin: 0;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 400;
   color: #1AB1E5;
   display: flex;
   align-items: center;
@@ -84,7 +84,7 @@
   color: #6b7280;
   cursor: pointer;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   text-decoration: none;
   border-bottom: 3px solid transparent;
   transition: all 0.2s;
@@ -103,7 +103,7 @@
 
 .nav-link.active {
   color: #1AB1E5;
-  font-weight: 600;
+  font-weight: 400;
   border-bottom: 3px solid #1AB1E5;
   background: #e0f2fe;
 }
@@ -131,22 +131,19 @@
 /* Form */
 .form-label {
   display: block;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   color: #374151;
   margin-bottom: 6px;
 }
 
-.form-label.fw-bold {
-  font-weight: 600;
-}
-
 .form-control {
   width: 100%;
-  padding: 8px 12px;
+  height: 30px;
+  padding: 5px 10px;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 4px;
+  font-size: 13px;
   font-family: inherit;
   box-sizing: border-box;
   transition: all 0.2s;
@@ -159,16 +156,18 @@
 }
 
 .form-control-sm {
-  padding: 6px 10px;
+  height: 30px;
+  padding: 5px 10px;
   font-size: 13px;
 }
 
 .form-select {
   width: 100%;
-  padding: 8px 12px;
+  height: 30px;
+  padding: 5px 10px;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 4px;
+  font-size: 13px;
   font-family: inherit;
   box-sizing: border-box;
   background-color: #ffffff;
@@ -194,9 +193,9 @@
 /* Search Obat Input */
 .search-obat-wrapper input.form-control {
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 13px;
-  padding: 9px 12px 9px 38px;
+  padding: 5px 12px 5px 38px;
   box-shadow: none;
 }
 
@@ -222,7 +221,7 @@
   border-radius: 4px;
   border: none;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.2s;
   display: inline-flex;
@@ -305,12 +304,19 @@
   margin-top: 4px;
 }
 
+/* Font nama obat & kolom lain di combobox hasil pencarian — 12px, override
+   .table-sm (13px) yg dipakai bareng tabel lain (Daftar Obat Dipilih, dst)
+   supaya perubahan ini cuma kena combobox, tidak melebar ke tabel lain. */
+.obat-dropdown .table-sm {
+  font-size: 12px;
+}
+
 .obat-dropdown thead th {
   position: sticky;
   top: 0;
   background: #f3f4f6;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   color: #374151;
   border-bottom: 1px solid #e5e7eb;
   z-index: 1;
@@ -334,7 +340,7 @@
 }
 
 .obat-name-cell {
-  font-weight: 500;
+  font-weight: 400;
   color: #111827;
 }
 
@@ -360,7 +366,7 @@
 .table thead th {
   padding: 10px;
   text-align: left;
-  font-weight: 600;
+  font-weight: 400;
   color: #374151;
   border-bottom: 2px solid #e5e7eb;
 }
@@ -529,7 +535,7 @@
 
 .obat-racikan-name {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 400;
   color: #111827;
   margin-bottom: 8px;
 }
@@ -558,11 +564,24 @@
   gap: 20px;
 }
 
+/* Tabel Riwayat Resep — padding 10px & font-size 13px bawaan .table/
+   .table-sm (dipakai bareng tabel lain di file ini) diperkecil KHUSUS di
+   sini (selector 2-kelas jadi lebih spesifik drpd .table-sm) supaya tabel
+   lain tidak ikut berubah. */
+.resep-history-container .table {
+  font-size: 12px;
+}
+
+.resep-history-container .table thead th,
+.resep-history-container .table tbody td {
+  padding: 4px 8px;
+}
+
 .badge {
   display: inline-block;
   padding: 4px 10px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 400;
   border-radius: 5px;
   color: #ffffff;
   letter-spacing: 0.3px;
