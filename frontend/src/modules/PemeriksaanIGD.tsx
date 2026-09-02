@@ -946,6 +946,49 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
             </div>
           </div>
         </div>
+
+        {/* Footer aksi — SENGAJA di luar div "Cards" di atas & dikasih
+            marginTop:'auto', supaya nempel di ujung bawah aside (100vh)
+            PERSIS spt footer sungguhan — ruang kosong ("putih") antara
+            card Kunjungan IGD & footer ini tetap ada sbg jarak fleksibel
+            (mengecil sendiri kalau card di atas makin panjang), TIDAK
+            hilang dipakai footer spt versi sebelumnya (footer dulu taruh
+            di dalam div Cards, jadi langsung nempel bawah Kunjungan IGD).
+            3 tombol, gaya PERSIS "Input Triase" (solid #1AB1E5, radius 0,
+            lebar ikut panjang teks — bukan full-width), belum interaktif
+            (onClick dikomen dulu, blm ada modal/form siap pakai). */}
+        <div style={{ marginTop: 'auto', padding: 16, paddingTop: 0, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+          <button
+            type="button"
+            // onClick={() => Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Fitur Transfer Antar Ruang sedang dikembangkan dan akan segera hadir.' })}
+            style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+            onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+            Transfer Antar Ruang
+          </button>
+          <button
+            type="button"
+            // onClick={() => Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Fitur Jadwal Operasi sedang dikembangkan dan akan segera hadir.' })}
+            style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+            onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+            Jadwal Operasi
+          </button>
+          <button
+            type="button"
+            // onClick={() => Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Fitur Permintaan Kamar Inap sedang dikembangkan dan akan segera hadir.' })}
+            style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+            onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" /></svg>
+            Permintaan Kamar Inap
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}
