@@ -18,26 +18,46 @@ import (
 
 // --- Diagnosa (ICD10) ---
 
+// PenyakitOption — field PERSIS kolom penyakit (DESCRIBE, dicek langsung
+// ke DB) + Kategori/CiriUmum di-JOIN dari kategori_penyakit (kd_ktg),
+// PERSIS grid pencarian ICD10 referensi Khanza Desktop (kolom Kode|Nama
+// Penyakit|Ciri-ciri Penyakit|Keterangan|Kategori|Ciri-ciri Umum|VC|AP|
+// Ast|IM yg dikasih user via screenshot).
 type PenyakitOption struct {
 	KdPenyakit string `json:"kd_penyakit"`
 	NmPenyakit string `json:"nm_penyakit"`
+	CiriCiri   string `json:"ciri_ciri"`
+	Keterangan string `json:"keterangan"`
+	Kategori   string `json:"kategori"`
+	CiriUmum   string `json:"ciri_umum"`
+	ValidCode  string `json:"validcode"`
+	Accpdx     string `json:"accpdx"`
+	Asterisk   string `json:"asterisk"`
+	Im         string `json:"im"`
 }
 
 func searchPenyakit(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		q := strings.TrimSpace(c.Query("q"))
+		baseQuery := `
+			SELECT
+				penyakit.kd_penyakit, COALESCE(penyakit.nm_penyakit, ''),
+				COALESCE(penyakit.ciri_ciri, ''), COALESCE(penyakit.keterangan, ''),
+				COALESCE(kategori_penyakit.nm_kategori, ''), COALESCE(kategori_penyakit.ciri_umum, ''),
+				penyakit.validcode, penyakit.accpdx, penyakit.asterisk, penyakit.im
+			FROM penyakit
+			LEFT JOIN kategori_penyakit ON kategori_penyakit.kd_ktg = penyakit.kd_ktg
+		`
 		var rows *sql.Rows
 		var err error
 		if q == "" {
 			// Kosong -> tampilkan daftar awal (dipakai saat modal baru
 			// dibuka, sebelum user mengetik apapun).
-			rows, err = db.Query(`SELECT kd_penyakit, COALESCE(nm_penyakit, '') FROM penyakit ORDER BY kd_penyakit LIMIT 50`)
+			rows, err = db.Query(baseQuery+` ORDER BY penyakit.kd_penyakit LIMIT 50`)
 		} else {
-			rows, err = db.Query(`
-				SELECT kd_penyakit, COALESCE(nm_penyakit, '')
-				FROM penyakit
-				WHERE kd_penyakit LIKE ? OR nm_penyakit LIKE ?
-				ORDER BY kd_penyakit
+			rows, err = db.Query(baseQuery+`
+				WHERE penyakit.kd_penyakit LIKE ? OR penyakit.nm_penyakit LIKE ?
+				ORDER BY penyakit.kd_penyakit
 				LIMIT 50
 			`, "%"+q+"%", "%"+q+"%")
 		}
@@ -50,7 +70,7 @@ func searchPenyakit(db *sql.DB) gin.HandlerFunc {
 		items := []PenyakitOption{}
 		for rows.Next() {
 			var p PenyakitOption
-			if err := rows.Scan(&p.KdPenyakit, &p.NmPenyakit); err != nil {
+			if err := rows.Scan(&p.KdPenyakit, &p.NmPenyakit, &p.CiriCiri, &p.Keterangan, &p.Kategori, &p.CiriUmum, &p.ValidCode, &p.Accpdx, &p.Asterisk, &p.Im); err != nil {
 				continue
 			}
 			items = append(items, p)
@@ -59,9 +79,13 @@ func searchPenyakit(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// DiagnosaPasienItem — Status/Kasus(status_penyakit)/Urut(prioritas)
+// PERSIS grid "Diagnosa Tersimpan" referensi Khanza Desktop (screenshot
+// user): Kode|Nama Penyakit|Status|Kasus|Urut.
 type DiagnosaPasienItem struct {
 	KdPenyakit     string `json:"kd_penyakit"`
 	NmPenyakit     string `json:"nm_penyakit"`
+	Status         string `json:"status"`
 	Prioritas      int    `json:"prioritas"`
 	StatusPenyakit string `json:"status_penyakit"`
 }
@@ -70,7 +94,7 @@ func getDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
 		rows, err := db.Query(`
-			SELECT dp.kd_penyakit, COALESCE(p.nm_penyakit, ''), dp.prioritas, dp.status_penyakit
+			SELECT dp.kd_penyakit, COALESCE(p.nm_penyakit, ''), dp.status, dp.prioritas, dp.status_penyakit
 			FROM diagnosa_pasien dp
 			LEFT JOIN penyakit p ON dp.kd_penyakit = p.kd_penyakit
 			WHERE dp.no_rawat = ? AND dp.status = 'Ralan'
@@ -86,7 +110,7 @@ func getDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 		for rows.Next() {
 			var d DiagnosaPasienItem
 			var statusPenyakit sql.NullString
-			if err := rows.Scan(&d.KdPenyakit, &d.NmPenyakit, &d.Prioritas, &statusPenyakit); err != nil {
+			if err := rows.Scan(&d.KdPenyakit, &d.NmPenyakit, &d.Status, &d.Prioritas, &statusPenyakit); err != nil {
 				continue
 			}
 			d.StatusPenyakit = statusPenyakit.String
@@ -164,22 +188,29 @@ func deleteDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 
 // --- Prosedur (ICD9) ---
 
+// Icd9Option — field PERSIS kolom icd9 (DESCRIBE, dicek langsung ke DB),
+// PERSIS grid pencarian ICD9 referensi Khanza Desktop (kolom Kode|
+// Deskripsi Panjang|Deskripsi Pendek|VC|AP|IM|Urut|Jml yg dikasih user
+// via screenshot).
 type Icd9Option struct {
 	Kode             string `json:"kode"`
 	DeskripsiPanjang string `json:"deskripsi_panjang"`
+	DeskripsiPendek  string `json:"deskripsi_pendek"`
+	ValidCode        string `json:"validcode"`
+	Accpdx           string `json:"accpdx"`
+	Im               string `json:"im"`
 }
 
 func searchIcd9(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		q := strings.TrimSpace(c.Query("q"))
+		baseQuery := `SELECT kode, COALESCE(deskripsi_panjang, ''), COALESCE(deskripsi_pendek, ''), validcode, accpdx, im FROM icd9`
 		var rows *sql.Rows
 		var err error
 		if q == "" {
-			rows, err = db.Query(`SELECT kode, COALESCE(deskripsi_panjang, '') FROM icd9 ORDER BY kode LIMIT 50`)
+			rows, err = db.Query(baseQuery + ` ORDER BY kode LIMIT 50`)
 		} else {
-			rows, err = db.Query(`
-				SELECT kode, COALESCE(deskripsi_panjang, '')
-				FROM icd9
+			rows, err = db.Query(baseQuery+`
 				WHERE kode LIKE ? OR deskripsi_panjang LIKE ?
 				ORDER BY kode
 				LIMIT 50
@@ -194,7 +225,7 @@ func searchIcd9(db *sql.DB) gin.HandlerFunc {
 		items := []Icd9Option{}
 		for rows.Next() {
 			var i Icd9Option
-			if err := rows.Scan(&i.Kode, &i.DeskripsiPanjang); err != nil {
+			if err := rows.Scan(&i.Kode, &i.DeskripsiPanjang, &i.DeskripsiPendek, &i.ValidCode, &i.Accpdx, &i.Im); err != nil {
 				continue
 			}
 			items = append(items, i)
@@ -203,9 +234,13 @@ func searchIcd9(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// ProsedurPasienItem — Status/Urut(prioritas)/Jml(jumlah) PERSIS grid
+// "Prosedur Tersimpan" referensi Khanza Desktop (screenshot user): Kode|
+// Nama Prosedur|Status|Urut|Jml.
 type ProsedurPasienItem struct {
 	Kode             string `json:"kode"`
 	DeskripsiPanjang string `json:"deskripsi_panjang"`
+	Status           string `json:"status"`
 	Prioritas        int    `json:"prioritas"`
 	Jumlah           string `json:"jumlah"`
 }
@@ -214,7 +249,7 @@ func getProsedurPasien(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
 		rows, err := db.Query(`
-			SELECT pp.kode, COALESCE(i.deskripsi_panjang, ''), pp.prioritas, pp.jumlah
+			SELECT pp.kode, COALESCE(i.deskripsi_panjang, ''), pp.status, pp.prioritas, pp.jumlah
 			FROM prosedur_pasien pp
 			LEFT JOIN icd9 i ON pp.kode = i.kode
 			WHERE pp.no_rawat = ? AND pp.status = 'Ralan'
@@ -229,7 +264,7 @@ func getProsedurPasien(db *sql.DB) gin.HandlerFunc {
 		items := []ProsedurPasienItem{}
 		for rows.Next() {
 			var p ProsedurPasienItem
-			if err := rows.Scan(&p.Kode, &p.DeskripsiPanjang, &p.Prioritas, &p.Jumlah); err != nil {
+			if err := rows.Scan(&p.Kode, &p.DeskripsiPanjang, &p.Status, &p.Prioritas, &p.Jumlah); err != nil {
 				continue
 			}
 			items = append(items, p)

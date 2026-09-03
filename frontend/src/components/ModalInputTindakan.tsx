@@ -24,6 +24,25 @@ type ModalInputTindakanProps = {
 type Penanganan = 'dokter' | 'petugas' | 'keduanya';
 
 export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient, onClose, onSaved, isRanap }) => {
+  // Redesain jadi panel slide-in dari kanan, PERSIS pola ModalInputLab.tsx/
+  // ModalInputRad.tsx/ModalInputTriase.tsx (overlay fixed + panel anchor
+  // kanan full-height, header breadcrumb pasien + tombol close bulat, body
+  // scrollable, footer sticky cuma Simpan full-width) — ganti dari versi
+  // lama (dialog card mengambang di tengah, radius 20/16). Komponen ini
+  // TIDAK menerima prop `isOpen` (parent langsung mount/unmount saat buka/
+  // tutup), jadi animasi masuk dipicu sendiri lewat effect on-mount, dan
+  // `handleClose` menunda pemanggilan `onClose` asli sampai animasi keluar
+  // selesai.
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 300);
+  };
+
   const [activePenanganan, setActivePenanganan] = React.useState<Penanganan>('dokter');
 
   const [searchTindakan, setSearchTindakan] = React.useState('');
@@ -32,6 +51,7 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
   const [selectedTindakanData, setSelectedTindakanData] = React.useState<any[]>([]);
   const [loadingTindakan, setLoadingTindakan] = React.useState(false);
   const [loadingSubmit, setLoadingSubmit] = React.useState(false);
+  const [showDropdown, setShowDropdown] = React.useState(false);
 
   // Petugas — cuma relevan utk tab Petugas/Dokter & Petugas. Prefill dari
   // NIP akun yang login (getCurrentUserNip, lihat utils/currentUser.ts),
@@ -52,11 +72,9 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
       .catch(() => { /* silent */ });
   }, []);
 
-  // Panel daftar tindakan inline, selalu terlihat — dimuat begitu modal
-  // dibuka (query kosong -> backend balikin 50 baris awal), lalu
-  // difilter ulang (debounce) tiap kali user mengetik, padanan
-  // ModalInputDiagnosa.tsx (bukan dropdown portal yang butuh min. 2
-  // karakter & fokus).
+  // Panel daftar tindakan — dimuat begitu modal dibuka (query kosong ->
+  // backend balikin 50 baris awal), lalu difilter ulang (debounce) tiap
+  // kali user mengetik, padanan ModalInputLab.tsx/ModalInputRad.tsx.
   const fetchJenisTindakan = React.useCallback((q: string) => {
     setLoadingTindakan(true);
     const params = new URLSearchParams({ search: q });
@@ -214,7 +232,7 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
           showConfirmButton: false,
         });
         onSaved();
-        onClose();
+        handleClose();
       } else {
         throw new Error('Gagal menyimpan semua tindakan');
       }
@@ -225,84 +243,96 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
     }
   };
 
-  const handleReset = () => {
-    setSelectedTindakan([]);
-    setSelectedTindakanData([]);
-    setSearchTindakan('');
+  // Tinggi 30px PERSIS .form-control di ResepModal.css (sama dgn
+  // ModalInputLab.tsx/ModalInputRad.tsx) — bukan lagi padding 10px 12px
+  // tanpa height eksplisit.
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    height: 30,
+    padding: '5px 10px',
+    border: '1px solid #d1d5db',
+    borderRadius: 4,
+    fontSize: 12,
+    boxSizing: 'border-box',
+    outline: 'none',
   };
 
   return (
     <>
-      {/* Overlay */}
+      {/* Redesain jadi panel slide-in dari kanan, PERSIS pola
+          ModalInputLab.tsx/ModalInputRad.tsx/ModalInputTriase.tsx/
+          ResepModal.tsx. */}
       <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20,
-        }}
-        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
+        onClick={handleClose}
       >
-        {/* Modal Container */}
         <div
           style={{
-            background: '#F3F4F6', borderRadius: 20,
-            padding: '35px 8px 8px 8px', position: 'relative',
-            maxWidth: 1000, width: '60%', maxHeight: '90vh',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+            background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Header — title + close button dalam satu baris flex, sejajar
-              vertikal (bukan dua elemen absolute yang saling menumpuk). */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            padding: '8px 16px 8px 20px', color: '#000000', fontSize: 13, fontWeight: 400,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {isRanap ? 'Input Tindakan Rawat Inap' : 'Input Tindakan Rawat Jalan'}
-            </span>
+          {/* Header — breadcrumb pasien + close button bulat, PERSIS pola
+              ModalInputTriase.tsx. */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: '#000000', display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 6, rowGap: 2 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+                .filter(Boolean)
+                .map((v, i, arr) => (
+                  <React.Fragment key={i}>
+                    <span>{v}</span>
+                    {i < arr.length - 1 && <span>|</span>}
+                  </React.Fragment>
+                ))}
+            </div>
             <button
-              type="button" onClick={onClose}
+              type="button"
+              onClick={handleClose}
               style={{
-                background: 'transparent', border: 'none',
-                fontSize: 20, cursor: 'pointer', color: '#6b7280',
-                padding: 0, lineHeight: 1,
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                flexShrink: 0,
               }}
-            >×</button>
+            >
+              &times;
+            </button>
           </div>
 
-          {/* White Card Content */}
-          <div style={{
-            background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '12px',
-            flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto',
-          }}>
-
-            {/* Tab Penanganan — sama pola pill-switch dgn ModalInputLab.tsx
-                (display:inline-flex + alignSelf:center supaya lebar
-                background cuma seukuran nama tab, bukan selebar card). */}
-            <div style={{ display: 'inline-flex', alignSelf: 'center', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4, marginBottom: 16, flexShrink: 0 }}>
+          {/* Body — scrollable, flat. */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {/* Tab Penanganan — button group flat (radius 0, tombol
+                nempel/berbagi border, aktif biru cyan #1AB1E5), PERSIS
+                pola ResepModal.tsx/ModalInputLab.tsx — ganti dari pill
+                segmented control lama. */}
+            <div style={{ display: 'inline-flex', marginBottom: 16, flexShrink: 0 }}>
               {([
                 { key: 'dokter', label: 'Penanganan Dokter' },
                 { key: 'petugas', label: 'Penanganan Petugas' },
-                { key: 'keduanya', label: 'Penanganan Dokter & Petugas' },
-              ] as const).map(t => (
+                { key: 'keduanya', label: 'Dokter & Petugas' },
+              ] as const).map((t, i) => (
                 <button
                   key={t.key}
                   type="button"
                   onClick={() => setActivePenanganan(t.key)}
                   style={{
                     padding: '6px 16px',
-                    borderRadius: 8,
-                    border: activePenanganan === t.key ? '1px solid #d1d5db' : 'none',
-                    background: activePenanganan === t.key ? '#ffffff' : 'transparent',
-                    color: activePenanganan === t.key ? '#111827' : '#6b7280',
+                    borderRadius: 0,
+                    border: '1px solid #1AB1E5',
+                    borderLeft: i === 0 ? '1px solid #1AB1E5' : 'none',
+                    background: activePenanganan === t.key ? '#1AB1E5' : '#ffffff',
+                    color: activePenanganan === t.key ? '#ffffff' : '#1AB1E5',
                     cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: activePenanganan === t.key ? 500 : 400,
+                    fontSize: 12,
+                    fontWeight: 400,
                     transition: 'all 0.2s ease',
-                    boxShadow: activePenanganan === t.key ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -317,31 +347,26 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
                 dropdown pencarian inline. */}
             {activePenanganan !== 'dokter' && (
               <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Petugas <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 {selectedPetugas ? (
                   <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 8,
-                    padding: '8px 12px', fontSize: 13,
+                    border: '1px solid #1AB1E5', background: '#f0f9ff', borderRadius: 4,
+                    padding: '5px 12px', fontSize: 12, height: 30, boxSizing: 'border-box',
                   }}>
-                    <span>{selectedPetugas.nip} - <strong>{selectedPetugas.nama}</strong></span>
+                    <span>{selectedPetugas.nip} - {selectedPetugas.nama}</span>
                     <button
                       type="button"
                       onClick={() => setShowCariPetugas(true)}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}
                     >Ganti</button>
                   </div>
                 ) : (
                   <div
                     onClick={() => setShowCariPetugas(true)}
-                    style={{
-                      width: '100%', padding: '10px 12px',
-                      border: '1px solid #d1d5db', borderRadius: 8,
-                      fontSize: 13, boxSizing: 'border-box', cursor: 'pointer',
-                      color: '#9ca3af', background: '#ffffff',
-                    }}
+                    style={{ ...inputStyle, display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#9ca3af' }}
                   >
                     Klik untuk pilih petugas...
                   </div>
@@ -349,130 +374,125 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
               </div>
             )}
 
-            {/* Search + Selected Items — panel inline selalu terlihat,
-                daftar dimuat begitu modal dibuka lalu difilter ulang
-                (debounce) tiap kali user mengetik; item terpilih
-                ditampilkan di bawah panel pencarian (bukan di samping),
-                padanan ModalInputDiagnosa.tsx / ModalInputRad.tsx. */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
-                Cari Tindakan <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <div style={{
-                  position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                  pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1,
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="m21 21-4.35-4.35"></path>
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={searchTindakan}
-                  onChange={(e) => setSearchTindakan(e.target.value)}
-                  placeholder="Cari nama/kode tindakan..."
+            {/* Search + Dropdown — full width sendirian, PERSIS
+                ModalInputLab.tsx/ModalInputRad.tsx. */}
+            <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
+              Cari Tindakan{selectedTindakan.length > 0 && ` (${selectedTindakan.length} dipilih)`} <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <div style={{ marginBottom: 12, position: 'relative' }}>
+              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.35-4.35"></path>
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchTindakan}
+                onChange={(e) => { setSearchTindakan(e.target.value); setShowDropdown(true); }}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                placeholder="Cari nama/kode tindakan..."
+                style={{ ...inputStyle, padding: '5px 12px 5px 38px' }}
+              />
+              {showDropdown && searchTindakan.length > 0 && (
+                <div
+                  onWheel={(e) => e.stopPropagation()}
                   style={{
-                    width: '100%', padding: '10px 12px 10px 38px',
-                    border: '1px solid #d1d5db', borderRadius: 8,
-                    fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                    position: 'absolute', top: '100%', left: 0, right: 0,
+                    marginTop: 4, maxHeight: 460, overflowY: 'auto',
+                    overscrollBehavior: 'contain',
+                    border: '1px solid #e5e7eb', borderRadius: 8,
+                    background: '#ffffff',
+                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                    zIndex: 20,
                   }}
-                  onFocusCapture={(e) => e.target.style.borderColor = '#1AB1E5'}
-                  onBlurCapture={(e) => e.target.style.borderColor = '#d1d5db'}
-                />
-              </div>
-
-              <div style={{
-                marginTop: 8, maxHeight: 220, overflowY: 'auto',
-                border: '1px solid #e5e7eb', borderRadius: 8, background: '#ffffff',
-              }}>
-                {loadingTindakan ? (
-                  <div style={{ textAlign: 'center', padding: 20, color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
-                ) : jenisTindakanList.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Tidak ada hasil</div>
-                ) : jenisTindakanList.map((item, idx) => (
-                  <label
-                    key={item.kd_jenis_prw}
-                    style={{
-                      padding: '2px 12px',
-                      background: selectedTindakan.includes(item.kd_jenis_prw) ? '#e0f2fe' : idx % 2 === 0 ? '#f9fafb' : '#ffffff',
-                      borderBottom: idx < jenisTindakanList.length - 1 ? '1px solid #f3f4f6' : 'none',
-                      cursor: 'pointer', display: 'flex', alignItems: 'flex-start',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#f3f4f6'; }}
-                    onMouseLeave={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : '#ffffff'; }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedTindakan.includes(item.kd_jenis_prw)}
-                      onChange={() => toggleTindakan(item.kd_jenis_prw)}
-                      style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16 }}
-                    />
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>{item.kd_jenis_prw} • {formatRupiah(getTarifTampil(item))}</span>
+                >
+                  {loadingTindakan ? (
+                    <div style={{ textAlign: 'center', padding: 20, color: '#6b7280' }}>
+                      <div style={{ display: 'inline-block', width: 20, height: 20, border: '2px solid #f3f4f6', borderTop: '2px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
                     </div>
-                  </label>
-                ))}
-              </div>
-
-              {/* Item Terpilih — kartu per item di bawah panel pencarian,
-                  padanan selectedDiagnosa/selectedProsedur di
-                  ModalInputDiagnosa.tsx (background biru muda, border
-                  #1AB1E5, tombol hapus ikon X). */}
-              {selectedTindakanData.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Item Terpilih ({selectedTindakan.length})</span>
-                    <button
-                      onClick={() => { setSelectedTindakan([]); setSelectedTindakanData([]); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500, padding: '2px 8px' }}
-                    >Hapus Semua</button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {selectedTindakanData.map((item) => (
-                      <div
-                        key={item.kd_jenis_prw}
-                        style={{ background: '#f0f9ff', border: '1px solid #1AB1E5', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</div>
-                          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{formatRupiah(getTarifTampil(item))}</div>
-                        </div>
-                        <button
-                          onClick={() => toggleTindakan(item.kd_jenis_prw)}
-                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-                          title="Hapus"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                          </svg>
-                        </button>
+                  ) : jenisTindakanList.length === 0 ? (
+                    <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Tidak ada hasil pencarian</div>
+                  ) : jenisTindakanList.map((item, idx) => (
+                    <label
+                      key={item.kd_jenis_prw}
+                      style={{
+                        padding: '2px 12px',
+                        background: selectedTindakan.includes(item.kd_jenis_prw) ? '#e0f2fe' : idx % 2 === 0 ? '#f9fafb' : '#ffffff',
+                        borderBottom: idx < jenisTindakanList.length - 1 ? '1px solid #f3f4f6' : 'none',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = '#f9fafb'; }}
+                      onMouseLeave={(e) => { if (!selectedTindakan.includes(item.kd_jenis_prw)) e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : '#ffffff'; }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTindakan.includes(item.kd_jenis_prw)}
+                        onChange={() => toggleTindakan(item.kd_jenis_prw)}
+                        style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</span>
+                        <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>{item.kd_jenis_prw} • {formatRupiah(getTarifTampil(item))}</span>
                       </div>
-                    ))}
-                  </div>
+                    </label>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Footer Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                type="button" onClick={handleReset}
-                style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-              >Reset</button>
-              <button
-                type="button" onClick={onClose}
-                style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-              >Tutup</button>
-              <button
-                type="button" onClick={handleSubmit} disabled={loadingSubmit}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-              >{loadingSubmit ? 'Menyimpan...' : 'Simpan Tindakan'}</button>
+            {/* Tabel item terpilih PERSIS di bawah kolom Cari Tindakan —
+                header "P|Kode|Nama Tindakan|Tarif", checkbox P selalu
+                tercentang (baris ini memang yg sudah dipilih); klik/uncek
+                P = hapus dari daftar terpilih. Pola sama dgn
+                ModalInputLab.tsx/ModalInputRad.tsx. */}
+            <div style={{ border: '1px solid #d1d5db', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', background: '#f3f4f6', borderBottom: '1px solid #d1d5db', fontSize: 12, color: '#374151' }}>
+                <div style={{ width: 28, padding: '0 8px', borderRight: '1px solid #d1d5db', textAlign: 'center', flexShrink: 0 }}>P</div>
+                <div style={{ width: 90, padding: '0 8px', borderRight: '1px solid #d1d5db', flexShrink: 0 }}>Kode</div>
+                <div style={{ flex: 1, padding: '0 8px', borderRight: '1px solid #d1d5db' }}>Nama Tindakan</div>
+                <div style={{ width: 110, padding: '0 8px', textAlign: 'right' }}>Tarif</div>
+              </div>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {selectedTindakanData.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>
+                    Belum ada tindakan dipilih
+                  </div>
+                ) : selectedTindakanData.map((item, idx) => (
+                  <div
+                    key={item.kd_jenis_prw}
+                    onClick={() => toggleTindakan(item.kd_jenis_prw)}
+                    style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', cursor: 'pointer', borderBottom: idx < selectedTindakanData.length - 1 ? '1px solid #f3f4f6' : 'none' }}
+                  >
+                    <div style={{ width: 28, padding: '0 8px', textAlign: 'center', flexShrink: 0, borderRight: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked onChange={() => toggleTindakan(item.kd_jenis_prw)} style={{ cursor: 'pointer', width: 14, height: 14 }} title="Hilangkan centang utk menghapus" />
+                    </div>
+                    <div style={{ width: 90, padding: '0 8px', fontSize: 12, color: '#111827', flexShrink: 0, borderRight: '1px solid #f3f4f6' }}>{item.kd_jenis_prw}</div>
+                    <div style={{ flex: 1, padding: '0 8px', fontSize: 12, color: '#111827', borderRight: '1px solid #f3f4f6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</div>
+                    <div style={{ width: 110, padding: '0 8px', fontSize: 12, color: '#111827', textAlign: 'right', flexShrink: 0 }}>{formatRupiah(getTarifTampil(item))}</div>
+                  </div>
+                ))}
+              </div>
             </div>
+          </div>
+
+          {/* Footer — sticky, PERSIS pola ModalInputTriase.tsx (tombol
+              Simpan full-width, radius 4, fontSize 14). Reset & Tutup
+              dihapus per konvensi ModalInputLab.tsx — Tutup masih bisa
+              lewat overlay/tombol close di header. */}
+          <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={loadingSubmit}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 4, border: 'none', background: loadingSubmit ? '#9ca3af' : '#1AB1E5', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              {loadingSubmit ? 'Menyimpan...' : 'Simpan Tindakan'}
+            </button>
           </div>
         </div>
       </div>
@@ -482,6 +502,8 @@ export const ModalInputTindakan: React.FC<ModalInputTindakanProps> = ({ patient,
         onClose={() => setShowCariPetugas(false)}
         onSelect={(nip, nama) => setSelectedPetugas({ nip, nama })}
       />
+
+      <style>{`@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }`}</style>
     </>
   );
 };

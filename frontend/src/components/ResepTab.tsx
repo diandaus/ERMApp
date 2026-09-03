@@ -177,8 +177,10 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
       )}
 
       {!loadingRiwayatResep && riwayatResep.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-          Belum ada permintaan resep hari ini untuk pasien ini
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Permintaan Resep</div>
+          <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada permintaan resep hari ini untuk pasien ini.</div>
         </div>
       )}
 
@@ -189,17 +191,17 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
             const nonRacikan = resep.non_racikan || [];
             const racikan = resep.racikan || [];
             return (
-              <div key={index} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${belum ? '#e5e7eb' : '#d1fae5'}`, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: belum ? '#f9fafb' : '#f0fdf4', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: 8 }}>
+              <div key={index} style={{ background: '#fff', borderRadius: 0, border: `1px solid ${belum ? '#e5e7eb' : '#d1fae5'}`, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#ffffff', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, color: '#374151' }}>{resep.no_resep || '-'}</span>
-                    <span style={{ fontSize: 13, color: '#6b7280' }}>{formatDateTime(resep.tgl_peresepan, resep.jam_peresepan || '')}</span>
-                    {resep.nm_dokter && <span style={{ fontSize: 13, color: '#7c3aed' }}>{resep.nm_dokter}</span>}
+                    <span style={{ fontSize: 12, color: '#374151' }}>{resep.no_resep || '-'}</span>
+                    <span style={{ fontSize: 12, color: '#6b7280' }}>{formatDateTime(resep.tgl_peresepan, resep.jam_peresepan || '')}</span>
+                    {resep.nm_dokter && <span style={{ fontSize: 12, color: '#7c3aed' }}>{resep.nm_dokter}</span>}
                     {resep.status === 'retur' && (
-                      <span style={{ fontSize: 13, fontWeight: 400, padding: '2px 8px', borderRadius: 12, background: '#fee2e2', color: '#991b1b' }}>Retur</span>
+                      <span style={{ fontSize: 12, fontWeight: 400, padding: '2px 8px', borderRadius: 0, background: '#fee2e2', color: '#991b1b' }}>Retur</span>
                     )}
                     <span style={{
-                      fontSize: 13, fontWeight: 400, padding: '2px 8px', borderRadius: 6,
+                      fontSize: 12, fontWeight: 400, padding: '2px 8px', borderRadius: 0,
                       background: belum ? '#fef3c7' : '#d1fae5',
                       color: belum ? '#92400e' : '#065f46'
                     }}>
@@ -207,7 +209,7 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
                     </span>
                   </div>
                   {belum && (
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 0 }}>
                       <button
                         onClick={() => {
                           setEditingResep({
@@ -217,15 +219,15 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
                           });
                           setShowResepModal(true);
                         }}
-                        style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #1AB1E5', background: '#e0f2fe', color: '#1AB1E5', cursor: 'pointer', fontSize: 13, fontWeight: 400 }}
+                        style={{ padding: '4px 10px', borderRadius: 0, border: 'none', background: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteResep(resep.no_resep)}
-                        style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', fontSize: 13, fontWeight: 400 }}
+                        style={{ padding: '4px 10px', borderRadius: 0, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}
                       >
-                        Hapus
+                        Batalkan
                       </button>
                     </div>
                   )}
@@ -234,8 +236,8 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
                 <div style={{ padding: '10px 16px' }}>
                   {nonRacikan.length > 0 && (
                     <div style={{ marginBottom: racikan.length > 0 ? 10 : 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 400, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <div style={{ fontSize: 12, fontWeight: 400, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <thead>
                           <tr style={{ background: '#f9fafb' }}>
                             <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
@@ -257,28 +259,36 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
                   )}
                   {racikan.length > 0 && racikan.map((rack: any, ri: number) => (
                     <div key={ri} style={{ marginTop: ri > 0 ? 8 : 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 400, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Racikan — {rack.nama_racik || `R${ri + 1}`}
-                        {rack.metode_racik && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.metode_racik}</span>}
-                        {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
-                        {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
-                      </div>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ background: '#f9fafb' }}>
-                            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
-                            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Jml</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(rack.detail || []).map((det: any, di: number) => (
-                            <tr key={di}>
-                              <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', fontWeight: 400, color: '#374151' }}>{det.nama_brng || '-'}</td>
-                              <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{det.jml || '-'}</td>
+                      {/* Garis pemisah selebar CARD (bukan cuma selebar
+                          konten) — margin negatif nutupin padding 16px
+                          kiri/kanan parent (".padding: '10px 16px'") biar
+                          border-top-nya nyampe ke tepi card. */}
+                      <div style={{ marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderTop: '1px solid #e5e7eb', paddingTop: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 400, color: '#7c3aed', marginBottom: 4, marginLeft: 20, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Racikan — {rack.nama_racik || `R${ri + 1}`}
+                          {rack.metode_racik && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.metode_racik}</span>}
+                          {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
+                          {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
+                        </div>
+                        <table style={{ width: 'calc(100% - 20px)', marginLeft: 20, borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ background: '#f9fafb' }}>
+                              <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
+                              <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Kps</th>
+                              <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Jml</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(rack.detail || []).map((det: any, di: number) => (
+                              <tr key={di}>
+                                <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', fontWeight: 400, color: '#374151' }}>{det.nama_brng || '-'}</td>
+                                <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{det.kapasitas || '-'}</td>
+                                <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{det.jml || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   ))}
                 </div>

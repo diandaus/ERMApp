@@ -83,20 +83,18 @@ export const DiagnosaTab: React.FC<DiagnosaTabProps> = ({ patient }) => {
 
   return (
     <div>
-      {/* Tombol Input Diagnosa/Prosedur */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Tombol Input Diagnosa/Prosedur — rata kiri, ukuran/gaya PERSIS
+          "Input Resep" di ResepTab.tsx (padding 8px 16px, radius 0,
+          fontSize 13) — per permintaan user, ganti dari versi lama (rata
+          kanan, radius 4, lebih besar). */}
+      <div style={{ marginBottom: 16 }}>
         <button
           onClick={() => setShowInputModal(true)}
-          style={{
-            padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-            border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-            transition: 'background 0.2s',
-          }}
+          style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
           onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
           onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
@@ -115,73 +113,104 @@ export const DiagnosaTab: React.FC<DiagnosaTabProps> = ({ patient }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* Diagnosa */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Diagnosa (ICD10)</div>
+            <div style={{ fontSize: 12, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Diagnosa (ICD10)</div>
             {diagnosaList.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
-                Belum ada diagnosa untuk kunjungan ini
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '32px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Diagnosa</div>
+                <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada diagnosa untuk kunjungan ini.</div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {diagnosaList.map((item, idx) => (
-                  <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', background: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1AB1E5' }}>{item.nm_penyakit}</div>
-                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                        {item.kd_penyakit} • {item.prioritas === 1 ? 'Diagnosa Utama' : `Diagnosa Sekunder ${item.prioritas - 1}`}
-                        {item.status_penyakit && ` • ${item.status_penyakit}`}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteDiagnosa(item)}
-                      style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-                      title="Hapus Diagnosa"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                      </svg>
-                      Hapus
-                    </button>
-                  </div>
-                ))}
+              // Tabel "Diagnosa Tersimpan" PERSIS referensi Khanza Desktop
+              // (screenshot user): Kode|Nama Penyakit|Status|Kasus|Urut —
+              // ganti dari kartu list lama, kolom Aksi ditambahkan di kanan
+              // utk tombol Hapus (tidak ada di referensi, tapi tetap perlu).
+              <div style={{ border: '1px solid #d1d5db', borderRadius: 0, overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: '#eee' }}>
+                        {(['Kode', 'Nama Penyakit', 'Status', 'Kasus', 'Urut', 'Aksi'] as const).map((h) => (
+                          <th key={h} style={{ padding: '8px 10px', fontWeight: 400, fontSize: 12, color: '#111827', whiteSpace: 'nowrap', width: h === 'Nama Penyakit' ? '100%' : h === 'Kode' ? undefined : '1%', textAlign: h === 'Urut' || h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {diagnosaList.map((item, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', whiteSpace: 'nowrap' }}>{item.kd_penyakit}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', width: '100%' }}>{item.nm_penyakit}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', whiteSpace: 'nowrap', width: '1%' }}>{item.status || 'Ralan'}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', whiteSpace: 'nowrap', width: '1%' }}>{item.status_penyakit || '-'}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', textAlign: 'center', whiteSpace: 'nowrap', width: '1%' }}>{item.prioritas}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap', width: '1%' }}>
+                            <button
+                              onClick={() => handleDeleteDiagnosa(item)}
+                              style={{ padding: '4px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 0, fontSize: 11, fontWeight: 400, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
+                              title="Hapus Diagnosa"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
 
           {/* Prosedur */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Prosedur (ICD9)</div>
+            <div style={{ fontSize: 12, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Prosedur (ICD9)</div>
             {prosedurList.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
-                Belum ada prosedur untuk kunjungan ini
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '32px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Prosedur</div>
+                <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada prosedur untuk kunjungan ini.</div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {prosedurList.map((item, idx) => (
-                  <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', background: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1AB1E5' }}>{item.deskripsi_panjang}</div>
-                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                        {item.kode} • Urutan {item.prioritas} • Jumlah {item.jumlah}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteProsedur(item)}
-                      style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-                      title="Hapus Prosedur"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                      </svg>
-                      Hapus
-                    </button>
-                  </div>
-                ))}
+              // Tabel "Prosedur Tersimpan" PERSIS referensi Khanza Desktop
+              // (screenshot user): Kode|Nama Prosedur|Status|Urut|Jml — ganti
+              // dari kartu list lama, kolom Aksi ditambahkan di kanan utk
+              // tombol Hapus (tidak ada di referensi, tapi tetap perlu).
+              <div style={{ border: '1px solid #d1d5db', borderRadius: 0, overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: '#eee' }}>
+                        {(['Kode', 'Nama Prosedur', 'Status', 'Urut', 'Jml', 'Aksi'] as const).map((h) => (
+                          <th key={h} style={{ padding: '8px 10px', fontWeight: 400, fontSize: 12, color: '#111827', whiteSpace: 'nowrap', width: h === 'Nama Prosedur' ? '100%' : h === 'Kode' ? undefined : '1%', textAlign: h === 'Urut' || h === 'Jml' || h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prosedurList.map((item, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', whiteSpace: 'nowrap' }}>{item.kode}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', width: '100%' }}>{item.deskripsi_panjang}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', whiteSpace: 'nowrap', width: '1%' }}>{item.status || 'Ralan'}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', textAlign: 'center', whiteSpace: 'nowrap', width: '1%' }}>{item.prioritas}</td>
+                          <td style={{ padding: '8px 10px', fontSize: 12, color: '#111827', textAlign: 'center', whiteSpace: 'nowrap', width: '1%' }}>{item.jumlah}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', whiteSpace: 'nowrap', width: '1%' }}>
+                            <button
+                              onClick={() => handleDeleteProsedur(item)}
+                              style={{ padding: '4px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 0, fontSize: 11, fontWeight: 400, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
+                              title="Hapus Prosedur"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>

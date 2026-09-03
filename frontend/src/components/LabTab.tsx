@@ -34,10 +34,6 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
   const [loadingRiwayatPK, setLoadingRiwayatPK] = React.useState(false);
   const [loadingRiwayatPA, setLoadingRiwayatPA] = React.useState(false);
 
-  const [showModalHasil, setShowModalHasil] = React.useState(false);
-  const [selectedOrder, setSelectedOrder] = React.useState<any>(null);
-  const [hasilLabData, setHasilLabData] = React.useState<any>(null);
-
   const [hasilPeriksa, setHasilPeriksa] = React.useState<any[]>([]);
   const [loadingHasilPeriksa, setLoadingHasilPeriksa] = React.useState(false);
 
@@ -146,24 +142,6 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
     }
   };
 
-  const handleLihatHasil = async (item: any, kategori: 'pk' | 'pa') => {
-    setSelectedOrder(item);
-    setHasilLabData({ detail_pemeriksaan: item.detail_pemeriksaan || [] });
-    setShowModalHasil(true);
-    try {
-      const res = await fetch(
-        `/api/lab/hasil-detail?noorder=${item.noorder}&kategori=${kategori.toUpperCase()}&no_rawat=${encodeURIComponent(patient.no_rawat)}`
-      );
-      if (res.ok) setHasilLabData(await res.json());
-    } catch {}
-  };
-
-  const closeModalHasil = () => {
-    setShowModalHasil(false);
-    setSelectedOrder(null);
-    setHasilLabData(null);
-  };
-
   const formatDateTime = (tgl: string, jam: string) => {
     if (!tgl || tgl === '0000-00-00') return '-';
     let date = '';
@@ -210,28 +188,18 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
           sticky nempel ke box ini sendiri, bukan ke container scroll
           sungguhan. */}
       <div ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 20, background: '#f9fafb', paddingBottom: 8 }}>
-        {/* Tombol Buat Permintaan */}
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Tombol Buat Permintaan — rata kiri, ukuran/gaya PERSIS "Input
+            Resep" di ResepTab.tsx (padding 8px 16px, radius 0, fontSize
+            13) — per permintaan user, ganti dari versi lama (rata kanan,
+            radius 4, lebih besar). */}
+        <div style={{ marginBottom: 8 }}>
           <button
             onClick={() => setShowInputModal(true)}
-            style={{
-              padding: '10px 20px',
-              background: '#1AB1E5',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 4,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'background 0.2s',
-            }}
+            style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
             onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
             onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
@@ -252,7 +220,6 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
                   item={item}
                   kategori={kategori}
                   onDelete={() => (kategori === 'pk' ? handleDeleteLabPK(item.noorder) : handleDeleteLabPA(item.noorder))}
-                  onLihatHasil={() => handleLihatHasil(item, kategori)}
                   formatDateTime={formatDateTime}
                 />
               ))}
@@ -260,12 +227,6 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
           </div>
         )}
 
-        {/* Judul Hasil Periksa Laboratorium */}
-        {!loadingHasilPeriksa && hasilPeriksa.length > 0 && (
-          <h4 style={{ margin: '24px 0 0 0', fontSize: 16, fontWeight: 400, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-            Hasil Periksa Laboratorium
-          </h4>
-        )}
       </div>
 
       {/* Loading state — non-sticky, cuma tampil saat fetch awal */}
@@ -276,21 +237,36 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
         </div>
       )}
 
-      {/* Hasil Periksa Laboratorium */}
+      {/* Belum ada permintaan Pending ATAUPUN hasil lab tersimpan sama
+          sekali — sebelumnya kalau kondisi ini kejadian tab-nya kosong
+          melompong tanpa keterangan apa2, sekarang dikasih empty-state. */}
+      {!loadingRiwayatPK && !loadingRiwayatPA && !loadingHasilPeriksa && riwayatPending.length === 0 && hasilPeriksa.length === 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Data Laboratorium</div>
+          <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada permintaan atau hasil laboratorium untuk pasien ini.</div>
+        </div>
+      )}
+
+      {/* Hasil Periksa Laboratorium — jarak ke tombol "Buat Permintaan Lab"
+          di atasnya dirapatkan (marginTop 16 -> 8), PERSIS gap:16 antara
+          tombol & konten di tab Triase/Awal Medis (di sana totalnya cuma
+          gap:16 dari flex column, di sini disebar 8+8 lewat marginBottom
+          tombol & marginTop tabel krn ada sticky wrapper terpisah). */}
       {!loadingHasilPeriksa && hasilPeriksa.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8 }}>
+        <div style={{ marginTop: 8 }}>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 0 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#1AB1E5', color: 'white' }}>
+                <tr style={{ background: '#eee', color: '#111827' }}>
                   {(['Tanggal', 'Nama Tindakan', 'Hasil', 'Nilai Rujukan', 'Keterangan'] as const).map((h, hi, arr) => (
                     <th
                       key={h}
                       style={{
-                        position: 'sticky', top: stickyOffset, zIndex: 19, background: '#1AB1E5',
-                        padding: '10px 12px', textAlign: h === 'Nama Tindakan' ? 'left' : 'center', fontSize: 12, fontWeight: 600,
-                        borderTopLeftRadius: hi === 0 ? 7 : undefined,
-                        borderTopRightRadius: hi === arr.length - 1 ? 7 : undefined,
+                        position: 'sticky', top: stickyOffset, zIndex: 19, background: '#eee',
+                        padding: '9px 12px', textAlign: h === 'Nama Tindakan' ? 'left' : 'center', fontSize: 12, fontWeight: 400,
+                        width: h === 'Tanggal' ? 90 : undefined,
+                        borderRight: hi < arr.length - 1 ? '1px solid #d1d5db' : undefined,
                       }}
                     >{h}</th>
                   ))}
@@ -299,13 +275,13 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
               <tbody>
                 {hasilPeriksa.map((item, idx) => (
                   <React.Fragment key={idx}>
-                    <tr style={{ background: '#f0f9ff' }}>
-                      <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                    <tr style={{ background: '#f9fafb' }}>
+                      <td style={{ padding: '5px 12px', fontSize: 12, color: '#374151', whiteSpace: 'nowrap', verticalAlign: 'top', borderRight: '1px solid #e5e7eb' }}>
                         {formatDateTime(item.tgl_periksa, item.jam)}
                       </td>
-                      <td colSpan={4} style={{ padding: '8px 12px', fontSize: 13, fontWeight: 600, color: '#1AB1E5' }}>
+                      <td colSpan={4} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 400, color: '#111827' }}>
                         <span style={{
-                          padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700, marginRight: 8,
+                          padding: '2px 8px', borderRadius: 0, fontSize: 10, fontWeight: 400, marginRight: 8,
                           background: item.kategori === 'pk' ? '#e0f2fe' : '#f3e8ff',
                           color: item.kategori === 'pk' ? '#0891B2' : '#7c3aed',
                         }}>
@@ -316,16 +292,16 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
                     </tr>
                     {item.detail?.length > 0 ? item.detail.map((d: any, di: number) => (
                       <tr key={di} style={{ background: '#ffffff', borderBottom: '1px solid #f3f4f6' }}>
-                        <td></td>
-                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151' }}>{d.pemeriksaan}</td>
-                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', textAlign: 'center', fontWeight: 500 }}>{d.nilai || '-'} {d.satuan}</td>
-                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.nilai_rujukan || '-'} {d.satuan}</td>
-                        <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.keterangan || '-'}</td>
+                        <td style={{ borderRight: '1px solid #e5e7eb' }}></td>
+                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#374151', borderRight: '1px solid #e5e7eb' }}>{d.pemeriksaan}</td>
+                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#374151', textAlign: 'center', fontWeight: 400, borderRight: '1px solid #e5e7eb' }}>{d.nilai || '-'} {d.satuan}</td>
+                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>{d.nilai_rujukan || '-'} {d.satuan}</td>
+                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.keterangan || '-'}</td>
                       </tr>
                     )) : (
                       <tr style={{ background: '#ffffff' }}>
                         <td></td>
-                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>Belum ada hasil detail</td>
+                        <td colSpan={4} style={{ padding: '5px 12px', fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>Belum ada hasil detail</td>
                       </tr>
                     )}
                   </React.Fragment>
@@ -345,132 +321,6 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
         />
       )}
 
-      {/* Modal Hasil Lab */}
-      {showModalHasil && selectedOrder && (
-        <div
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: 20,
-          }}
-          onClick={closeModalHasil}
-        >
-          <div
-            style={{
-              background: '#ffffff', borderRadius: 12, padding: 24,
-              maxWidth: 800, width: '100%', maxHeight: '80vh', overflowY: 'auto',
-              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#111827' }}>🔬 Hasil Pemeriksaan Lab</h3>
-              <button
-                onClick={closeModalHasil}
-                style={{ background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
-              >
-                ✕ Tutup
-              </button>
-            </div>
-
-            {hasilLabData?.header && (
-              <div style={{ background: '#f0f9ff', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  {[
-                    ['No. Rawat', hasilLabData.header.no_rawat],
-                    ['No. RM', hasilLabData.header.no_rkm_medis],
-                    ['Nama Pasien', hasilLabData.header.nm_pasien],
-                    ['Cara Bayar', hasilLabData.header.png_jawab],
-                    ['Tanggal Pemeriksaan', formatDateTime(hasilLabData.header.tgl_periksa, hasilLabData.header.jam)],
-                    ['Dokter', hasilLabData.header.nm_dokter],
-                    ['Petugas Lab', hasilLabData.header.nm_petugas || '-'],
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#374151' }}>Detail Pemeriksaan:</div>
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#1AB1E5', color: 'white' }}>
-                    {['Pemeriksaan', 'Hasil', 'Satuan', 'Nilai Rujukan', 'Keterangan'].map(h => (
-                      <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Pemeriksaan' ? 'left' : 'center', fontSize: 12, fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {!hasilLabData?.hasil || hasilLabData.hasil.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
-                        {hasilLabData?.detail_pemeriksaan?.length > 0
-                          ? 'Menampilkan daftar permintaan pemeriksaan. Hasil lab belum tersedia.'
-                          : 'Belum ada data pemeriksaan'}
-                      </td>
-                    </tr>
-                  ) : (
-                    <>
-                      {hasilLabData.hasil.map((item: any, idx: number) => (
-                        <React.Fragment key={idx}>
-                          <tr style={{ background: '#f0f9ff' }}>
-                            <td colSpan={5} style={{ padding: '8px 12px', fontSize: 13, fontWeight: 600, color: '#1AB1E5' }}>
-                              {item.nm_perawatan} (Rp {item.biaya?.toLocaleString() || 0})
-                            </td>
-                          </tr>
-                          {item.detail?.length > 0 ? item.detail.map((d: any, di: number) => (
-                            <tr key={di} style={{ background: '#ffffff', borderBottom: '1px solid #f3f4f6' }}>
-                              <td style={{ padding: '8px 12px 8px 24px', fontSize: 12, color: '#374151' }}>{d.pemeriksaan}</td>
-                              <td style={{ padding: '8px 12px', fontSize: 12, color: '#374151', textAlign: 'center', fontWeight: 500 }}>{d.nilai || '-'}</td>
-                              <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.satuan || '-'}</td>
-                              <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.nilai_rujukan || '-'}</td>
-                              <td style={{ padding: '8px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.keterangan || '-'}</td>
-                            </tr>
-                          )) : (
-                            <tr style={{ background: '#ffffff' }}>
-                              <td colSpan={5} style={{ padding: '8px 12px 8px 24px', fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>Belum ada hasil detail</td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                      {hasilLabData.total_biaya > 0 && (
-                        <tr style={{ background: '#f9fafb', fontWeight: 600 }}>
-                          <td colSpan={5} style={{ padding: 12, fontSize: 13, color: '#111827', textAlign: 'right' }}>
-                            Total Biaya: Rp {hasilLabData.total_biaya.toLocaleString()}
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {(hasilLabData?.kesan || hasilLabData?.saran) && (
-              <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                {hasilLabData.kesan && (
-                  <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12, border: '1px solid #86efac' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#15803d', marginBottom: 6 }}>Kesan:</div>
-                    <div style={{ fontSize: 12, color: '#166534' }}>{hasilLabData.kesan}</div>
-                  </div>
-                )}
-                {hasilLabData.saran && (
-                  <div style={{ background: '#fef3c7', borderRadius: 8, padding: 12, border: '1px solid #fbbf24' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>Saran:</div>
-                    <div style={{ fontSize: 12, color: '#92400e' }}>{hasilLabData.saran}</div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       <style>{`@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }`}</style>
     </div>
   );
@@ -480,17 +330,16 @@ type RiwayatCardProps = {
   item: any;
   kategori: 'pk' | 'pa';
   onDelete: () => void;
-  onLihatHasil: () => void;
   formatDateTime: (tgl: string, jam: string) => string;
 };
 
-const RiwayatCard: React.FC<RiwayatCardProps> = ({ item, kategori, onDelete, onLihatHasil, formatDateTime }) => (
-  <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
+const RiwayatCard: React.FC<RiwayatCardProps> = ({ item, kategori, onDelete, formatDateTime }) => (
+  <div style={{ border: '1px solid #e5e7eb', borderRadius: 0, padding: 16, background: '#ffffff' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
       <div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 400, color: '#1AB1E5', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700,
+            padding: '2px 8px', borderRadius: 0, fontSize: 12, fontWeight: 400,
             background: kategori === 'pk' ? '#e0f2fe' : '#f3e8ff',
             color: kategori === 'pk' ? '#0891B2' : '#7c3aed',
           }}>
@@ -503,50 +352,28 @@ const RiwayatCard: React.FC<RiwayatCardProps> = ({ item, kategori, onDelete, onL
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{
-            padding: '4px 12px',
-            background: item.status === 'ralan' ? '#10b981' : '#f59e0b',
-            color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600,
-          }}>
-            {item.status === 'ralan' ? 'Ralan' : 'Pending'}
-          </div>
           <button
             onClick={onDelete}
-            style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 0, fontSize: 12, fontWeight: 400, cursor: 'pointer' }}
             onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
             onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-            title="Hapus Permintaan"
+            title="Batalkan Permintaan"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
+            Batalkan
           </button>
         </div>
-        <button
-          onClick={onLihatHasil}
-          style={{ padding: '6px 12px', background: '#ffffff', color: '#1AB1E5', border: '1.5px solid #1AB1E5', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = '#e0f2fe'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = '#ffffff'; }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          Lihat Hasil
-        </button>
       </div>
     </div>
-    <div style={{ fontSize: 13, marginBottom: 8 }}><strong>Diagnosis:</strong> {item.diagnosa_klinis}</div>
+    <div style={{ fontSize: 12, marginBottom: 8 }}>Diagnosis: {item.diagnosa_klinis}</div>
     {item.informasi_tambahan && (
-      <div style={{ fontSize: 13, marginBottom: 8, color: '#6b7280' }}><strong>Info Tambahan:</strong> {item.informasi_tambahan}</div>
+      <div style={{ fontSize: 12, marginBottom: 8, color: '#6b7280' }}>Info Tambahan: {item.informasi_tambahan}</div>
     )}
     {item.detail_pemeriksaan?.length > 0 && (
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#374151' }}>Detail Pemeriksaan:</div>
+        <div style={{ fontSize: 12, fontWeight: 400, marginBottom: 8, color: '#374151' }}>Detail Pemeriksaan:</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {item.detail_pemeriksaan.map((d: any, i: number) => (
-            <div key={i} style={{ padding: '4px 10px', background: '#e0f2fe', border: '1px solid #1AB1E5', borderRadius: 6, fontSize: 11, color: '#0891B2' }}>
+            <div key={i} style={{ padding: '4px 10px', background: '#e0f2fe', border: '1px solid #1AB1E5', borderRadius: 0, fontSize: 12, color: '#0891B2' }}>
               {d.nm_perawatan || d.kd_jenis_prw}
             </div>
           ))}

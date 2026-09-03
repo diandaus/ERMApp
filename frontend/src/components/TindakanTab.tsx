@@ -16,8 +16,8 @@ type TindakanTabProps = {
 // tabModeDrPr) — sengaja TIDAK digabung jadi satu tabel supaya kolomnya
 // tetap sesuai sumbernya masing-masing (Dokter Yg Menangani vs Petugas Yg
 // Menangani + NIP).
-const TH_STYLE: React.CSSProperties = { padding: '8px 10px', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap' };
-const TD_STYLE: React.CSSProperties = { padding: '8px 10px', color: '#374151' };
+const TH_STYLE: React.CSSProperties = { padding: '8px 10px', fontWeight: 400, fontSize: 12, color: '#111827', whiteSpace: 'nowrap' };
+const TD_STYLE: React.CSSProperties = { padding: '8px 10px', fontSize: 12, color: '#374151' };
 
 export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) => {
   const [tindakanDokter, setTindakanDokter] = React.useState<any[]>([]);
@@ -188,20 +188,18 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
   return (
     <div>
 
-      {/* Tombol Input Tindakan */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Tombol Input Tindakan — rata kiri, ukuran/gaya PERSIS "Input
+          Resep" di ResepTab.tsx (padding 8px 16px, radius 0, fontSize 13)
+          — per permintaan user, ganti dari versi lama (rata kanan, radius
+          4, lebih besar). */}
+      <div style={{ marginBottom: 16 }}>
         <button
           onClick={() => setShowInputModal(true)}
-          style={{
-            padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-            border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-            transition: 'background 0.2s',
-          }}
+          style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
           onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
           onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
@@ -218,8 +216,10 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
       )}
 
       {!loading && !hasAny && (
-        <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-          Belum ada riwayat tindakan untuk pasien ini
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Riwayat Tindakan</div>
+          <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada riwayat tindakan untuk pasien ini.</div>
         </div>
       )}
 
@@ -229,13 +229,12 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
           {/* Tindakan Dokter — padanan tabModeDr */}
           {tindakanDokter.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Tindakan Dokter</div>
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ background: '#1AB1E5' }}>
-                        {['No.', 'No.Rawat', 'No.R.M.', 'Nama Pasien', 'Perawatan/Tindakan', 'Dokter Yg Menangani', 'Tgl.Rawat', 'Jam Rawat', 'Biaya', 'Aksi'].map((h) => (
+                      <tr style={{ background: '#eee' }}>
+                        {['No.', 'Perawatan/Tindakan', 'Biaya', 'Aksi'].map((h) => (
                           <th key={h} style={{ ...TH_STYLE, textAlign: h === 'Biaya' ? 'right' : h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
                         ))}
                       </tr>
@@ -244,20 +243,14 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
                       {tindakanDokter.map((item, idx) => (
                         <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
                           <td style={TD_STYLE}>{idx + 1}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rawat}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rkm_medis || '-'}</td>
-                          <td style={{ ...TD_STYLE, color: '#111827' }}>{patient.nm_pasien || '-'}</td>
-                          <td style={{ ...TD_STYLE, color: '#1AB1E5', fontWeight: 500 }}>{item.nm_perawatan}</td>
-                          <td style={TD_STYLE}>{item.nm_dokter || '-'}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{formatDateTime(item.tgl_perawatan, '')}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{item.jam_rawat || '-'}</td>
-                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#065f46', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
+                          <td style={{ ...TD_STYLE, color: '#111827', fontWeight: 400 }}>{item.nm_perawatan}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#111827', fontWeight: 400, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
                           <td style={{ ...TD_STYLE, textAlign: 'center' }}>
                             <button
                               onClick={() => handleDeleteTindakan(item)}
-                              style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                              style={{ padding: '4px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 0, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
                               title="Hapus Tindakan"
                             >
                               Hapus
@@ -276,12 +269,12 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
           {tindakanParamedis.length > 0 && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Tindakan Perawat</div>
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ background: '#1AB1E5' }}>
-                        {['No.', 'No.Rawat', 'No.R.M.', 'Nama Pasien', 'Perawatan/Tindakan', 'Petugas Yg Menangani', 'Tgl.Rawat', 'Jam Rawat', 'Biaya', 'Aksi'].map((h) => (
+                      <tr style={{ background: '#eee' }}>
+                        {['No.', 'Perawatan/Tindakan', 'Petugas Yg Menangani', 'Biaya', 'Aksi'].map((h) => (
                           <th key={h} style={{ ...TH_STYLE, textAlign: h === 'Biaya' ? 'right' : h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
                         ))}
                       </tr>
@@ -290,20 +283,15 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
                       {tindakanParamedis.map((item, idx) => (
                         <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
                           <td style={TD_STYLE}>{idx + 1}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rawat}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rkm_medis || '-'}</td>
-                          <td style={{ ...TD_STYLE, color: '#111827' }}>{patient.nm_pasien || '-'}</td>
-                          <td style={{ ...TD_STYLE, color: '#1AB1E5', fontWeight: 500 }}>{item.nm_perawatan}</td>
+                          <td style={{ ...TD_STYLE, color: '#111827', fontWeight: 400 }}>{item.nm_perawatan}</td>
                           <td style={TD_STYLE}>{item.nama_paramedis || '-'}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{formatDateTime(item.tgl_perawatan, '')}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{item.jam_rawat || '-'}</td>
-                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#065f46', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#111827', fontWeight: 400, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
                           <td style={{ ...TD_STYLE, textAlign: 'center' }}>
                             <button
                               onClick={() => handleDeleteTindakanPetugas(item)}
-                              style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                              style={{ padding: '4px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 0, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
                               title="Hapus Tindakan"
                             >
                               Hapus
@@ -322,12 +310,12 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
           {tindakanDokterParamedis.length > 0 && (
             <div>
               <div style={{ fontSize: 13, fontWeight: 400, color: '#374151', marginBottom: 8 }}>Tindakan Dokter &amp; Perawat</div>
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ background: '#1AB1E5' }}>
-                        {['No.', 'No.Rawat', 'No.R.M.', 'Nama Pasien', 'Perawatan/Tindakan', 'Dokter Yg Menangani', 'Petugas Yg Menangani', 'Tgl.Rawat', 'Jam Rawat', 'Biaya', 'Aksi'].map((h) => (
+                      <tr style={{ background: '#eee' }}>
+                        {['No.', 'Perawatan/Tindakan', 'Petugas Yg Menangani', 'Biaya', 'Aksi'].map((h) => (
                           <th key={h} style={{ ...TH_STYLE, textAlign: h === 'Biaya' ? 'right' : h === 'Aksi' ? 'center' : 'left' }}>{h}</th>
                         ))}
                       </tr>
@@ -336,21 +324,15 @@ export const TindakanTab: React.FC<TindakanTabProps> = ({ patient, isRanap }) =>
                       {tindakanDokterParamedis.map((item, idx) => (
                         <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
                           <td style={TD_STYLE}>{idx + 1}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rawat}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{patient.no_rkm_medis || '-'}</td>
-                          <td style={{ ...TD_STYLE, color: '#111827' }}>{patient.nm_pasien || '-'}</td>
-                          <td style={{ ...TD_STYLE, color: '#1AB1E5', fontWeight: 500 }}>{item.nm_perawatan}</td>
-                          <td style={TD_STYLE}>{item.nm_dokter || '-'}</td>
+                          <td style={{ ...TD_STYLE, color: '#111827', fontWeight: 400 }}>{item.nm_perawatan}</td>
                           <td style={TD_STYLE}>{item.nama_paramedis || '-'}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{formatDateTime(item.tgl_perawatan, '')}</td>
-                          <td style={{ ...TD_STYLE, whiteSpace: 'nowrap' }}>{item.jam_rawat || '-'}</td>
-                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#065f46', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
+                          <td style={{ ...TD_STYLE, textAlign: 'right', color: '#111827', fontWeight: 400, whiteSpace: 'nowrap' }}>{formatRupiah(item.biaya_rawat || 0)}</td>
                           <td style={{ ...TD_STYLE, textAlign: 'center' }}>
                             <button
                               onClick={() => handleDeleteTindakanDokterPetugas(item)}
-                              style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                              style={{ padding: '4px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 0, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
                               title="Hapus Tindakan"
                             >
                               Hapus

@@ -3434,6 +3434,8 @@ func main() {
 
 	// Asuhan Keperawatan IGD endpoint
 	r.GET("/api/asuhan-keperawatan-igd/*no_rawat", getAsuhanKeperawatanIGD(db))
+	r.POST("/api/asuhan-keperawatan-igd/simpan", saveAsuhanKeperawatanIGD(db))
+	r.GET("/api/master-masalah-rencana-keperawatan-igd", getMasterMasalahRencanaKeperawatanIGD(db))
 
 	// Laboratorium endpoint
 	r.GET("/api/laboratorium/*no_rawat", getLaboratorium(db))

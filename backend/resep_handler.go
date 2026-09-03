@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -370,11 +371,22 @@ func submitResep(db *sql.DB) gin.HandlerFunc {
 
 			// Insert racikan detail
 			for _, detail := range racikan.Detail {
+				// p1 kolom DOUBLE — Kandungan boleh dibiarkan kosong (lihat
+				// komentar di atas struct Detail), jadi string kosong HARUS
+				// dikonversi ke NULL dulu (bukan dikirim apa adanya),
+				// kalau tidak driver MySQL gagal parse "" jadi double
+				// (Error 1366: Incorrect double value: '' for column p1).
+				var p1 interface{}
+				if detail.Kandungan != "" {
+					if v, convErr := strconv.ParseFloat(detail.Kandungan, 64); convErr == nil {
+						p1 = v
+					}
+				}
 				// Use jml directly from payload
 				_, err = tx.Exec(`
 					INSERT INTO resep_dokter_racikan_detail (no_resep, no_racik, kode_brng, p1, jml)
 					VALUES (?, ?, ?, ?, ?)
-				`, noResep, noRacik, detail.KodeBrng, detail.Kandungan, detail.Jml)
+				`, noResep, noRacik, detail.KodeBrng, p1, detail.Jml)
 
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{
@@ -781,7 +793,8 @@ func getRiwayatResep(db *sql.DB) gin.HandlerFunc {
 							databarang.nama_brng,
 							resep_dokter_racikan_detail.p1 as kandungan,
 							resep_dokter_racikan_detail.jml,
-							databarang.kode_sat
+							databarang.kode_sat,
+							COALESCE(databarang.kapasitas, 0)
 						FROM resep_dokter_racikan_detail
 						INNER JOIN databarang ON resep_dokter_racikan_detail.kode_brng = databarang.kode_brng
 						WHERE resep_dokter_racikan_detail.no_resep = ?
@@ -803,6 +816,7 @@ func getRiwayatResep(db *sql.DB) gin.HandlerFunc {
 								&kandungan,
 								&jml,
 								&detail.KodeSat,
+								&detail.Kapasitas,
 							)
 							if err != nil {
 								continue

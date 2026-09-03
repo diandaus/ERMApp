@@ -6,6 +6,7 @@ import { TindakanTab } from '../components/TindakanTab';
 import { DiagnosaTab } from '../components/DiagnosaTab';
 import { ModalInputTriase } from '../components/ModalInputTriase';
 import { ModalInputAwalMedisIGD } from '../components/ModalInputAwalMedisIGD';
+import { ModalInputAwalKeperawatanIGD } from '../components/ModalInputAwalKeperawatanIGD';
 import { SoapCpptFormIGD } from '../components/SoapCpptFormIGD';
 import { ResepTab } from '../components/ResepTab';
 import { RiwayatModal } from '../components/RiwayatModal';
@@ -13,6 +14,7 @@ import { renderTriasePrimer, renderTriaseSekunder } from '../utils/triaseIgdDisp
 import { buildTriasePdfUntukTtd } from '../utils/triaseIgdPdf';
 import { buildAwalMedisPdfUntukTtd } from '../utils/awalMedisIgdPdf';
 import { renderAwalMedisRecord } from '../utils/awalMedisIgdDisplay';
+import { renderAwalKeperawatanRecord } from '../utils/awalKeperawatanIgdDisplay';
 import { renderSoapCpptTable } from '../utils/soapCpptIgdDisplay';
 import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
 import type { Patient as IGDPatient } from './IGDK';
@@ -105,13 +107,48 @@ const TAB_ORDER: TabKey[] = ['triase', 'medis', 'soap', 'resep', 'keperawatan', 
 
 type TabKey = 'triase' | 'medis' | 'soap' | 'resep' | 'keperawatan' | 'lab' | 'rad' | 'tindakan' | 'diagnosa';
 
-const ComingSoon: React.FC<{ title: string }> = ({ title }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-    <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{title}</div>
-    <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Fitur ini sedang dikembangkan dan akan segera hadir.</div>
-  </div>
-);
+// ── Tampilan data Awal Keperawatan IGD tersimpan (tab "Awal Keperawatan")
+// — konsumsi GET /api/asuhan-keperawatan-igd/{no_rawat} (backend/
+// asuhan_keperawatan_igd_handler.go). Endpoint ini SATU OBJEK (bukan
+// array) krn no_rawat PRIMARY KEY TUNGGAL di penilaian_awal_keperawatan_igd
+// (hanya satu asuhan keperawatan per kunjungan, mirip Triase) — beda dari
+// AwalMedisDisplay yg terima list. KOMPONEN SELF-CONTAINED (fetch sendiri,
+// BELUM ada hook TTE terpisah spt useAwalMedisTte/useTriaseTte — Preview/
+// OTP/Download/Tanda Tangan Peruri utk Awal Keperawatan MENYUSUL, belum
+// diimplementasikan di iterasi ini).
+const KeperawatanDisplay: React.FC<{ noRawat: string; refreshKey: number }> = ({ noRawat, refreshKey }) => {
+  const [data, setData] = React.useState<any | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetch(`/api/asuhan-keperawatan-igd/${encodeURIComponent(noRawat)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => setData(d))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [noRawat, refreshKey]);
+
+  if (loading) {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat data awal keperawatan...</div>;
+  }
+
+  if (!data) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Data Awal Keperawatan</div>
+        <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Penilaian awal keperawatan pasien ini belum tersimpan.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
+      {renderAwalKeperawatanRecord(data)}
+    </div>
+  );
+};
 
 // ── Tampilan data Awal Medis IGD tersimpan (tab "Awal Medis") — konsumsi
 // GET /api/asuhan-medis-igd/{no_rawat} (backend/asuhan_medis_handler.go).
@@ -1114,6 +1151,8 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
   const [triaseRefreshKey, setTriaseRefreshKey] = React.useState(0);
   const [showInputAwalMedis, setShowInputAwalMedis] = React.useState(false);
   const [awalMedisRefreshKey, setAwalMedisRefreshKey] = React.useState(0);
+  const [showInputAwalKeperawatan, setShowInputAwalKeperawatan] = React.useState(false);
+  const [awalKeperawatanRefreshKey, setAwalKeperawatanRefreshKey] = React.useState(0);
   const [soapCpptRefreshKey, setSoapCpptRefreshKey] = React.useState(0);
   // Dinaikkan tiap kali user klik "Lanjutkan Input Resep" di dialog sukses
   // simpan SOAP/CPPT — dipakai ResepTab utk auto-buka modal + pindah tab.
@@ -1424,11 +1463,45 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
                 />
               </div>
             )}
-            {activeTab === 'keperawatan' && <ComingSoon title="Awal Keperawatan" />}
-            {activeTab === 'lab' && <LabTab patient={patient} />}
-            {activeTab === 'rad' && <RadTab patient={patient} />}
-            {activeTab === 'tindakan' && <TindakanTab patient={patient} />}
-            {activeTab === 'diagnosa' && <DiagnosaTab patient={patient} />}
+            {activeTab === 'keperawatan' && (
+              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInputAwalKeperawatan(true)}
+                    style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+                    onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Input Awal Keperawatan
+                  </button>
+                </div>
+                <KeperawatanDisplay noRawat={patient.no_rawat} refreshKey={awalKeperawatanRefreshKey} />
+              </div>
+            )}
+            {activeTab === 'lab' && (
+              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <LabTab patient={patient} />
+              </div>
+            )}
+            {activeTab === 'rad' && (
+              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <RadTab patient={patient} />
+              </div>
+            )}
+            {activeTab === 'tindakan' && (
+              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <TindakanTab patient={patient} />
+              </div>
+            )}
+            {activeTab === 'diagnosa' && (
+              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <DiagnosaTab patient={patient} />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1447,6 +1520,14 @@ export const PemeriksaanIGDView: React.FC<PemeriksaanIGDProps> = ({ patient, onB
         patient={patient}
         user={user}
         onSuccess={() => setAwalMedisRefreshKey((k) => k + 1)}
+      />
+
+      <ModalInputAwalKeperawatanIGD
+        isOpen={showInputAwalKeperawatan}
+        onClose={() => setShowInputAwalKeperawatan(false)}
+        patient={patient}
+        user={user}
+        onSuccess={() => setAwalKeperawatanRefreshKey((k) => k + 1)}
       />
 
       {showRiwayatModal && (

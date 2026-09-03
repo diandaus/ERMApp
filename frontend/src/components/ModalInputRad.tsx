@@ -15,6 +15,25 @@ type ModalInputRadProps = {
 };
 
 export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, onSaved }) => {
+  // Redesain jadi panel slide-in dari kanan, PERSIS pola ModalInputLab.tsx/
+  // ModalInputTriase.tsx/ResepModal.tsx (overlay fixed + panel anchor kanan
+  // full-height, header breadcrumb pasien + tombol close bulat, body
+  // scrollable, footer sticky cuma Simpan full-width) — ganti dari versi
+  // lama (dialog card mengambang di tengah, radius 20/16). Komponen ini
+  // TIDAK menerima prop `isOpen` (parent langsung mount/unmount saat buka/
+  // tutup), jadi animasi masuk dipicu sendiri lewat effect on-mount, dan
+  // `handleClose` menunda pemanggilan `onClose` asli sampai animasi keluar
+  // selesai.
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 300);
+  };
+
   const [infoRawat, setInfoRawat] = React.useState<InfoRawat>({ status: 'ralan', kelas: '', kamar: 'Poli', nama_kamar: '' });
 
   const [radForm, setRadForm] = React.useState({ diagnosa_klinis: '', informasi_tambahan: '' });
@@ -30,6 +49,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
   const [selectedPemeriksaanRad, setSelectedPemeriksaanRad] = React.useState<any[]>([]);
   const [loadingRad, setLoadingRad] = React.useState(false);
   const [loadingSubmit, setLoadingSubmit] = React.useState(false);
+  const [showDropdown, setShowDropdown] = React.useState(false);
 
   const [diagnosaKlinisHistory, setDiagnosaKlinisHistory] = React.useState<string[]>([]);
   const [informasiTambahanHistory, setInformasiTambahanHistory] = React.useState<string[]>([]);
@@ -173,10 +193,10 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
         title: 'Berhasil!',
         text: `Permintaan Radiologi berhasil disimpan!\nNo. Permintaan: ${result.noorder}`,
         timer: 3000,
-        showConfirmButton: true,
+        showConfirmButton: false,
       });
       onSaved();
-      onClose();
+      handleClose();
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message || 'Terjadi kesalahan' });
     } finally {
@@ -184,73 +204,80 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
     }
   };
 
+  // Tinggi 30px PERSIS .form-control di ResepModal.css (sama dgn
+  // ModalInputLab.tsx) — bukan lagi padding 9px 12px tanpa height eksplisit.
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px',
-    border: '1px solid #d1d5db', borderRadius: 6,
-    fontSize: 13, boxSizing: 'border-box', outline: 'none',
+    width: '100%',
+    height: 30,
+    padding: '5px 10px',
+    border: '1px solid #d1d5db',
+    borderRadius: 4,
+    fontSize: 12,
+    boxSizing: 'border-box',
+    outline: 'none',
   };
 
   const dropdownStyle: React.CSSProperties = {
     position: 'absolute', top: '100%', left: 0, right: 0,
     background: '#ffffff', border: '1px solid #d1d5db',
-    borderRadius: 6, boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    borderRadius: 4, boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
     maxHeight: 200, overflowY: 'auto', zIndex: 1100, marginTop: 4,
   };
 
   return (
     <>
-      {/* Overlay */}
+      {/* Redesain jadi panel slide-in dari kanan, PERSIS pola
+          ModalInputLab.tsx/ModalInputTriase.tsx/ResepModal.tsx. */}
       <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20,
-        }}
-        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
+        onClick={handleClose}
       >
-        {/* Modal Container */}
         <div
           style={{
-            background: '#F3F4F6', borderRadius: 20,
-            padding: '35px 8px 8px 8px', position: 'relative',
-            maxWidth: 1200, width: '52%', maxHeight: '94vh',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+            background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Header — title + close button dalam satu baris flex, sejajar
-              vertikal (bukan dua elemen absolute yang saling menumpuk). */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            padding: '8px 16px 8px 20px', color: '#000000', fontSize: 13, fontWeight: 400,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              Form Permintaan Radiologi
+          {/* Header — breadcrumb pasien + close button bulat, PERSIS pola
+              ModalInputTriase.tsx. */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: '#000000', display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 6, rowGap: 2 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+                .filter(Boolean)
+                .map((v, i, arr) => (
+                  <React.Fragment key={i}>
+                    <span>{v}</span>
+                    {i < arr.length - 1 && <span>|</span>}
+                  </React.Fragment>
+                ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                type="button" onClick={onClose}
-                style={{
-                  background: 'transparent', border: 'none',
-                  fontSize: 20, cursor: 'pointer', color: '#6b7280',
-                  padding: 0, lineHeight: 1,
-                }}
-              >×</button>
-            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              style={{
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                flexShrink: 0,
+              }}
+            >
+              &times;
+            </button>
           </div>
 
-          {/* White Card Content */}
-          <div style={{
-            background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: '12px',
-            flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          }}>
-
+          {/* Body — scrollable, flat. */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {/* Diagnosa Klinis & Informasi Tambahan */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, flexShrink: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16, flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Indikasi/Diagnosis Klinis <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
@@ -268,7 +295,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                       <div
                         key={i}
                         onClick={() => { setRadForm({ ...radForm, diagnosa_klinis: item }); setShowDiagnosaKlinisDropdown(false); }}
-                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: i < filteredDiagnosaKlinis.length - 1 ? '1px solid #e5e7eb' : 'none' }}
+                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: i < filteredDiagnosaKlinis.length - 1 ? '1px solid #e5e7eb' : 'none' }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
                       >{item}</div>
@@ -277,7 +304,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                 )}
               </div>
               <div style={{ position: 'relative' }}>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Informasi Tambahan
                 </label>
                 <input
@@ -295,7 +322,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                       <div
                         key={i}
                         onClick={() => { setRadForm({ ...radForm, informasi_tambahan: item }); setShowInformasiTambahanDropdown(false); }}
-                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: i < filteredInformasiTambahan.length - 1 ? '1px solid #e5e7eb' : 'none' }}
+                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: i < filteredInformasiTambahan.length - 1 ? '1px solid #e5e7eb' : 'none' }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
                       >{item}</div>
@@ -305,115 +332,123 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
               </div>
             </div>
 
-            {/* Search + Selected Items — panel inline selalu terlihat,
-                daftar dimuat begitu modal dibuka lalu difilter ulang
-                (debounce) tiap kali user mengetik; item terpilih
-                ditampilkan di bawah panel pencarian (bukan di samping),
-                padanan ModalInputDiagnosa.tsx. */}
-            <div style={{ marginBottom: 16, flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="m21 21-4.35-4.35"></path>
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={searchRad}
-                  onChange={(e) => setSearchRad(e.target.value)}
-                  placeholder="Cari pemeriksaan radiologi..."
-                  style={{ ...inputStyle, padding: '10px 12px 10px 38px' }}
-                />
+            {/* Search + Dropdown — full width sendirian (bukan grid 2
+                kolom lagi, PERSIS ModalInputLab.tsx). */}
+            <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
+              Nama Pemeriksaan{selectedPemeriksaanRad.length > 0 && ` (${selectedPemeriksaanRad.length} dipilih)`}
+            </label>
+            <div style={{ marginBottom: 12, position: 'relative' }}>
+              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex', alignItems: 'center', zIndex: 1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <path d="m21 21-4.35-4.35"></path>
+                </svg>
               </div>
-              <div style={{
-                marginTop: 8, maxHeight: 220, overflowY: 'auto',
-                border: '1px solid #e5e7eb', borderRadius: 8, background: '#ffffff',
-              }}>
-                {loadingRad ? (
-                  <div style={{ textAlign: 'center', padding: 20, color: '#6b7280' }}>
-                    <div style={{ display: 'inline-block', width: 20, height: 20, border: '2px solid #f3f4f6', borderTop: '2px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                  </div>
-                ) : pemeriksaanRadList.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Tidak ada hasil pencarian</div>
-                ) : pemeriksaanRadList.map((item, idx) => {
-                  const isSelected = selectedPemeriksaanRad.some(p => p.kd_jenis_prw === item.kd_jenis_prw);
-                  return (
-                    <label
-                      key={item.kd_jenis_prw}
-                      style={{
-                        display: 'flex', alignItems: 'center', padding: '2px 12px',
-                        background: isSelected ? '#e0f2fe' : idx % 2 === 0 ? '#f9fafb' : '#ffffff',
-                        borderBottom: idx < pemeriksaanRadList.length - 1 ? '1px solid #f3f4f6' : 'none',
-                        cursor: 'pointer', transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f9fafb'; }}
-                      onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : '#ffffff'; }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => togglePemeriksaan(item)}
-                        style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
-                      />
-                      <div style={{ width: 90, flexShrink: 0, fontSize: 13, fontWeight: 500, color: '#111827' }}>{item.kd_jenis_prw}</div>
-                      <div style={{ flex: 1, fontSize: 13, color: '#111827' }}>{item.nm_perawatan}</div>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {/* Item Dipilih — kartu per item di bawah panel pencarian,
-                  padanan selectedDiagnosa/selectedProsedur di
-                  ModalInputDiagnosa.tsx (background biru muda, border
-                  #1AB1E5, tombol hapus ikon X). */}
-              {selectedPemeriksaanRad.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  {selectedPemeriksaanRad.map((item) => (
-                    <div key={item.kd_jenis_prw} style={{ background: '#f0f9ff', border: '1px solid #1AB1E5', borderRadius: 6, padding: '8px 10px', fontSize: 12, color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nm_perawatan}</div>
-                        <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{item.kd_jenis_prw}</div>
-                      </div>
-                      <button
-                        onClick={() => togglePemeriksaan(item)}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-                        title="Hapus"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
+              <input
+                type="text"
+                value={searchRad}
+                onChange={(e) => { setSearchRad(e.target.value); setShowDropdown(true); }}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                placeholder="Cari pemeriksaan radiologi..."
+                style={{ ...inputStyle, padding: '5px 12px 5px 38px' }}
+              />
+              {showDropdown && searchRad.length > 0 && (
+                <div
+                  onWheel={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0,
+                    marginTop: 4, maxHeight: 460, overflowY: 'auto',
+                    overscrollBehavior: 'contain',
+                    border: '1px solid #e5e7eb', borderRadius: 8,
+                    background: '#ffffff',
+                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                    zIndex: 20,
+                  }}
+                >
+                  {loadingRad ? (
+                    <div style={{ textAlign: 'center', padding: 20, color: '#6b7280' }}>
+                      <div style={{ display: 'inline-block', width: 20, height: 20, border: '2px solid #f3f4f6', borderTop: '2px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
                     </div>
-                  ))}
+                  ) : pemeriksaanRadList.length === 0 ? (
+                    <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Tidak ada hasil pencarian</div>
+                  ) : pemeriksaanRadList.map((item, idx) => {
+                    const isSelected = selectedPemeriksaanRad.some(p => p.kd_jenis_prw === item.kd_jenis_prw);
+                    return (
+                      <label
+                        key={item.kd_jenis_prw}
+                        style={{
+                          display: 'flex', alignItems: 'center', padding: '2px 12px',
+                          background: isSelected ? '#e0f2fe' : idx % 2 === 0 ? '#f9fafb' : '#ffffff',
+                          borderBottom: idx < pemeriksaanRadList.length - 1 ? '1px solid #f3f4f6' : 'none',
+                          cursor: 'pointer', transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f9fafb'; }}
+                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = idx % 2 === 0 ? '#f9fafb' : '#ffffff'; }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => togglePemeriksaan(item)}
+                          style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
+                        />
+                        <div style={{ width: 90, flexShrink: 0, fontSize: 12, color: '#111827' }}>{item.kd_jenis_prw}</div>
+                        <div style={{ flex: 1, fontSize: 12, color: '#111827' }}>{item.nm_perawatan}</div>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            {/* Footer Buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', flexShrink: 0 }}>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => { setSelectedPemeriksaanRad([]); setRadForm({ diagnosa_klinis: '', informasi_tambahan: '' }); setSearchRad(''); }}
-                  style={{ padding: '8px 16px', borderRadius: 4, border: 'none', background: '#6b7280', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-                >Reset</button>
+            {/* Tabel item terpilih PERSIS di bawah kolom Nama Pemeriksaan
+                — header "P|Kode Periksa|Nama Pemeriksaan", checkbox P
+                selalu tercentang (baris ini memang yg sudah dipilih);
+                klik/uncek P = hapus dari daftar terpilih. Pola sama dgn
+                ModalInputLab.tsx/ModalInputAwalKeperawatanIGD.tsx. */}
+            <div style={{ border: '1px solid #d1d5db', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', background: '#f3f4f6', borderBottom: '1px solid #d1d5db', fontSize: 12, color: '#374151' }}>
+                <div style={{ width: 28, padding: '0 8px', borderRight: '1px solid #d1d5db', textAlign: 'center', flexShrink: 0 }}>P</div>
+                <div style={{ width: 90, padding: '0 8px', borderRight: '1px solid #d1d5db', flexShrink: 0 }}>Kode Periksa</div>
+                <div style={{ flex: 1, padding: '0 8px' }}>Nama Pemeriksaan</div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-                >Tutup</button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={loadingSubmit}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-                >{loadingSubmit ? 'Menyimpan...' : 'Simpan'}</button>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {selectedPemeriksaanRad.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>
+                    Belum ada pemeriksaan dipilih
+                  </div>
+                ) : selectedPemeriksaanRad.map((item, idx) => (
+                  <div
+                    key={item.kd_jenis_prw}
+                    onClick={() => togglePemeriksaan(item)}
+                    style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', cursor: 'pointer', borderBottom: idx < selectedPemeriksaanRad.length - 1 ? '1px solid #f3f4f6' : 'none' }}
+                  >
+                    <div style={{ width: 28, padding: '0 8px', textAlign: 'center', flexShrink: 0, borderRight: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked onChange={() => togglePemeriksaan(item)} style={{ cursor: 'pointer', width: 14, height: 14 }} title="Hilangkan centang utk menghapus" />
+                    </div>
+                    <div style={{ width: 90, padding: '0 8px', fontSize: 12, color: '#111827', flexShrink: 0, borderRight: '1px solid #f3f4f6' }}>{item.kd_jenis_prw}</div>
+                    <div style={{ flex: 1, padding: '0 8px', fontSize: 12, color: '#111827' }}>{item.nm_perawatan}</div>
+                  </div>
+                ))}
               </div>
             </div>
+          </div>
+
+          {/* Footer — sticky, PERSIS pola ModalInputTriase.tsx (tombol
+              Simpan full-width, radius 4, fontSize 14). Reset & Tutup
+              dihapus per konvensi ModalInputLab.tsx — Tutup masih bisa
+              lewat overlay/tombol close di header. */}
+          <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={loadingSubmit}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 4, border: 'none', background: loadingSubmit ? '#9ca3af' : '#1AB1E5', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              {loadingSubmit ? 'Menyimpan...' : 'Simpan Radiologi'}
+            </button>
           </div>
         </div>
       </div>

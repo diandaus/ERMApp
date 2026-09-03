@@ -955,8 +955,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         icon: 'success',
         title: 'Berhasil!',
         text: `Resep berhasil disimpan!\nNo: ${result.no_permintaan || result.no_resep || '-'}`,
-        timer: 3000,
-        showConfirmButton: true
+        timer: 2000,
+        showConfirmButton: false
       });
 
     } catch (error: any) {

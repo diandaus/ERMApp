@@ -105,20 +105,18 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
   return (
     <div>
 
-      {/* Tombol Buat Permintaan */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Tombol Buat Permintaan — rata kiri, ukuran/gaya PERSIS "Input
+          Resep" di ResepTab.tsx (padding 8px 16px, radius 0, fontSize 13)
+          — per permintaan user, ganti dari versi lama (rata kanan, radius
+          4, lebih besar). */}
+      <div style={{ marginBottom: 16 }}>
         <button
           onClick={() => setShowInputModal(true)}
-          style={{
-            padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-            border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-            transition: 'background 0.2s',
-          }}
+          style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
           onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
           onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
@@ -134,6 +132,17 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
         </div>
       )}
 
+      {/* Belum ada permintaan Pending ATAUPUN data radiologi tersimpan sama
+          sekali — sebelumnya kalau kondisi ini kejadian tab-nya kosong
+          melompong tanpa keterangan apa2, sekarang dikasih empty-state. */}
+      {!loadingRiwayat && !loadingRadiologi && riwayatPending.length === 0 && !hasRadiologiData && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Data Radiologi</div>
+          <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada permintaan atau hasil radiologi untuk pasien ini.</div>
+        </div>
+      )}
+
       {/* Riwayat Permintaan Radiologi — cuma yang belum ada hasilnya
           (masih "Pending"); begitu hasil sudah keluar, card-nya hilang
           dari sini (tetap bisa dilihat lewat tabel "Bacaan/Hasil
@@ -142,45 +151,35 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {riwayatPending.map((item, idx) => (
-              <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff' }}>
+              <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 0, padding: 16, background: '#ffffff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1AB1E5', marginBottom: 4 }}>No. Permintaan: {item.noorder}</div>
+                    <div style={{ fontSize: 12, fontWeight: 400, color: '#1AB1E5', marginBottom: 4 }}>No. Permintaan: {item.noorder}</div>
                     <div style={{ fontSize: 12, color: '#6b7280' }}>{formatDateTime(item.tgl_permintaan, item.jam_permintaan)}</div>
                     <div style={{ fontSize: 12, color: '#6b7280' }}>{item.nm_dokter || '-'}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <div style={{
-                      padding: '4px 12px',
-                      background: item.status === 'ralan' ? '#10b981' : '#f59e0b',
-                      color: 'white', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                    }}>
-                      {item.status === 'ralan' ? 'Ralan' : 'Pending'}
-                    </div>
                     <button
                       onClick={() => handleDeleteRadiologi(item.noorder)}
-                      style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                      style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 0, fontSize: 12, fontWeight: 400, cursor: 'pointer' }}
                       onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
                       onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
-                      title="Hapus Permintaan"
+                      title="Batalkan Permintaan"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                      </svg>
+                      Batalkan
                     </button>
                   </div>
                 </div>
-                <div style={{ fontSize: 13, marginBottom: 8 }}><strong>Diagnosis:</strong> {item.diagnosa_klinis}</div>
+                <div style={{ fontSize: 12, marginBottom: 8 }}>Diagnosis: {item.diagnosa_klinis}</div>
                 {item.informasi_tambahan && (
-                  <div style={{ fontSize: 13, marginBottom: 8, color: '#6b7280' }}><strong>Info Tambahan:</strong> {item.informasi_tambahan}</div>
+                  <div style={{ fontSize: 12, marginBottom: 8, color: '#6b7280' }}>Info Tambahan: {item.informasi_tambahan}</div>
                 )}
                 {item.detail_pemeriksaan?.length > 0 && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#374151' }}>Detail Pemeriksaan:</div>
+                    <div style={{ fontSize: 12, fontWeight: 400, marginBottom: 8, color: '#374151' }}>Detail Pemeriksaan:</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {item.detail_pemeriksaan.map((d: any, i: number) => (
-                        <div key={i} style={{ padding: '4px 10px', background: '#e0f2fe', border: '1px solid #1AB1E5', borderRadius: 6, fontSize: 11, color: '#0891B2' }}>
+                        <div key={i} style={{ padding: '4px 10px', background: '#e0f2fe', border: '1px solid #1AB1E5', borderRadius: 0, fontSize: 12, color: '#0891B2' }}>
                           {d.nm_perawatan || d.kd_jenis_prw}
                         </div>
                       ))}
@@ -193,19 +192,14 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
         </div>
       )}
 
-      {/* Data Pemeriksaan Radiologi */}
       {!loadingRadiologi && hasRadiologiData && (
         <div style={{ marginTop: 24 }}>
-          <h4 style={{ margin: '0 0 20px 0', fontSize: 16, fontWeight: 400, color: '#111827', display: 'flex', alignItems: 'center', gap: 8 }}>
-           Data Pemeriksaan Radiologi
-          </h4>
-
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <tbody>
                 {/* SEKSI 1 — Pemeriksaan Radiologi */}
                 <tr>
-                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', background: '#dbeafe', padding: '8px 14px', borderBottom: '1px solid #bfdbfe' }}>
+                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 400, color: '#1e40af', background: '#dbeafe', padding: '8px 14px', borderBottom: '1px solid #bfdbfe' }}>
                     Pemeriksaan Radiologi
                   </td>
                 </tr>
@@ -219,7 +213,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
                   <>
                     <tr style={{ background: '#f3f4f6' }}>
                       {['No.', 'Tanggal/Jam', 'Kode', 'Nama Pemeriksaan', 'Dokter PJ', 'Petugas', 'Biaya'].map((h, i) => (
-                        <th key={i} style={{ padding: '8px 10px', textAlign: i === 6 ? 'right' : 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={i} style={{ padding: '8px 10px', textAlign: i === 6 ? 'right' : 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                     {radiolojiData.pemeriksaan.map((p, idx) => (
@@ -231,12 +225,12 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.tgl_periksa}{p.jam ? ' ' + p.jam : ''}</td>
                         <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#1AB1E5' }}>{p.kd_jenis_prw}</td>
                         <td style={{ padding: '8px 10px' }}>
-                          <div style={{ fontWeight: 500, color: '#111827' }}>{p.nm_perawatan}</div>
+                          <div style={{ fontWeight: 400, color: '#111827' }}>{p.nm_perawatan}</div>
                           {p.proyeksi && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{p.proyeksi}</div>}
                         </td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.nm_dokter || '-'}</td>
                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{p.nama_petugas || '-'}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 400 }}>
                           {p.biaya > 0 ? 'Rp ' + Number(p.biaya).toLocaleString('id-ID') : '-'}
                         </td>
                       </tr>
@@ -246,7 +240,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
 
                 {/* SEKSI 2 — Bacaan/Hasil Radiologi */}
                 <tr>
-                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 700, color: '#065f46', background: '#d1fae5', padding: '8px 14px', borderBottom: '1px solid #a7f3d0' }}>
+                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 400, color: '#065f46', background: '#d1fae5', padding: '8px 14px', borderBottom: '1px solid #a7f3d0' }}>
                     Bacaan / Hasil Radiologi
                   </td>
                 </tr>
@@ -259,9 +253,9 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
                 ) : (
                   <>
                     <tr style={{ background: '#f3f4f6' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>No.</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Tanggal/Jam</th>
-                      <th colSpan={5} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Hasil</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>No.</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Tanggal/Jam</th>
+                      <th colSpan={5} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Hasil</th>
                     </tr>
                     {radiolojiData.hasil.map((h, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}
@@ -282,7 +276,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
 
                 {/* SEKSI 3 — Gambar Radiologi */}
                 <tr>
-                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '8px 14px', borderBottom: '1px solid #fed7aa' }}>
+                  <td colSpan={7} style={{ fontSize: 13, fontWeight: 400, color: '#7c2d12', background: '#ffedd5', padding: '8px 14px', borderBottom: '1px solid #fed7aa' }}>
                     Gambar Radiologi
                   </td>
                 </tr>
@@ -295,9 +289,9 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
                 ) : (
                   <>
                     <tr style={{ background: '#f3f4f6' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>No.</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Tanggal/Jam</th>
-                      <th colSpan={5} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Gambar</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>No.</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Tanggal/Jam</th>
+                      <th colSpan={5} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 400, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>Gambar</th>
                     </tr>
                     {radiolojiData.gambar.map((g, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}

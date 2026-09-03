@@ -1,6 +1,5 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { ModalCariPegawai } from './ModalCariPegawai';
 
 type AppUser = {
   username: string;
@@ -67,6 +66,33 @@ const TriaseStepperIcon: React.FC = () => (
       <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
       <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
     </svg>
+  </div>
+);
+
+// PetugasDropdownList — daftar hasil combobox Dokter/Petugas IGD, dibuka
+// KE ATAS field-nya (lihat pemanggil). Komponen kecil dipakai bareng utk
+// primer & sekunder supaya markup-nya tidak dobel-tulis.
+const PetugasDropdownList: React.FC<{
+  results: { nik: string; nama: string; jbtn: string }[];
+  onPick: (p: { nik: string; nama: string; jbtn: string }) => void;
+}> = ({ results, onPick }) => (
+  <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 4, background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 4, boxShadow: '0 -10px 15px -3px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto', zIndex: 50 }}>
+    {results.length === 0 ? (
+      <div style={{ padding: '10px 12px', fontSize: 12, color: '#9ca3af' }}>Tidak ada pegawai ditemukan</div>
+    ) : (
+      results.map((p) => (
+        <div
+          key={p.nik}
+          onMouseDown={() => onPick(p)}
+          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f9ff'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <div style={{ fontSize: 13, color: '#374151' }}>{p.nama}</div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>{p.nik}{p.jbtn ? ` · ${p.jbtn}` : ''}</div>
+        </div>
+      ))
+    )}
   </div>
 );
 
@@ -279,20 +305,95 @@ export const ModalInputTriase: React.FC<ModalInputTriaseProps> = ({ isOpen, onCl
   const [checkedSkala4, setCheckedSkala4] = React.useState<Set<string>>(new Set());
   const [checkedSkala5, setCheckedSkala5] = React.useState<Set<string>>(new Set());
 
-  const [petugasPickerFor, setPetugasPickerFor] = React.useState<'primer' | 'sekunder' | null>(null);
   const [saving, setSaving] = React.useState(false);
 
   // Dokter/Petugas IGD default = user yang login (konvensi AddUserModal:
   // username akun = nik/kd_dokter) — tetap bisa diganti manual lewat
-  // ModalCariPegawai kalau perlu.
+  // combobox Dokter/Petugas IGD kalau perlu. Role "admin" DIKECUALIKAN
+  // eksplisit (sama pola dgn ModalInputAwalMedisIGD.tsx) — admin yg login
+  // TIDAK ikut auto-fill, field dibiarkan kosong wajib dicari manual.
   React.useEffect(() => {
-    if (isOpen && user?.username) {
+    if (isOpen && user?.username && user.role !== 'admin') {
       setPrimerPetugasNik(user.username);
       setPrimerPetugasNama(user.full_name || '');
       setSekunderPetugasNik(user.username);
       setSekunderPetugasNama(user.full_name || '');
     }
   }, [isOpen, user]);
+
+  // Combobox pencarian Dokter/Petugas IGD (ganti ModalCariPegawai) — PERSIS
+  // pola combobox Dokter di ModalInputAwalMedisIGD.tsx, TAPI dropdown-nya
+  // dibuka KE ATAS (bottom:'100%', bukan top:'100%') krn field ini ada di
+  // baris paling bawah tiap jalur (primer/sekunder), jadi kalau dibuka ke
+  // bawah bisa kepotong/di luar area scroll panel. Primer & sekunder dpt
+  // state search terpisah krn dua field independen.
+  type PegawaiResult = { nik: string; nama: string; jbtn: string };
+  const [primerPetugasResults, setPrimerPetugasResults] = React.useState<PegawaiResult[]>([]);
+  const [showPrimerPetugasDropdown, setShowPrimerPetugasDropdown] = React.useState(false);
+  const primerPetugasFieldRef = React.useRef<HTMLDivElement>(null);
+  const [sekunderPetugasResults, setSekunderPetugasResults] = React.useState<PegawaiResult[]>([]);
+  const [showSekunderPetugasDropdown, setShowSekunderPetugasDropdown] = React.useState(false);
+  const sekunderPetugasFieldRef = React.useRef<HTMLDivElement>(null);
+
+  const searchPegawaiList = async (q: string, setResults: (r: PegawaiResult[]) => void) => {
+    try {
+      const url = q ? `/api/pegawai?search=${encodeURIComponent(q)}` : '/api/pegawai';
+      const res = await fetch(url);
+      const data = res.ok ? await res.json() : [];
+      setResults(Array.isArray(data) ? data : []);
+    } catch {
+      setResults([]);
+    }
+  };
+
+  // Dependency SENGAJA cuma nama (bukan ikut show...Dropdown) — lihat
+  // komentar panjang di effect serupa ModalInputAwalMedisIGD.tsx: supaya
+  // effect ini murni reaksi ketikan, tidak ketimpa ulang oleh onFocus yg
+  // sudah langsung panggil searchPegawaiList('', ...) sendiri.
+  React.useEffect(() => {
+    if (!showPrimerPetugasDropdown) return;
+    const t = setTimeout(() => { searchPegawaiList(primerPetugasNama.trim(), setPrimerPetugasResults); }, 250);
+    return () => clearTimeout(t);
+  }, [primerPetugasNama]);
+
+  React.useEffect(() => {
+    if (!showSekunderPetugasDropdown) return;
+    const t = setTimeout(() => { searchPegawaiList(sekunderPetugasNama.trim(), setSekunderPetugasResults); }, 250);
+    return () => clearTimeout(t);
+  }, [sekunderPetugasNama]);
+
+  React.useEffect(() => {
+    if (!showPrimerPetugasDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (primerPetugasFieldRef.current && !primerPetugasFieldRef.current.contains(e.target as Node)) {
+        setShowPrimerPetugasDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPrimerPetugasDropdown]);
+
+  React.useEffect(() => {
+    if (!showSekunderPetugasDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sekunderPetugasFieldRef.current && !sekunderPetugasFieldRef.current.contains(e.target as Node)) {
+        setShowSekunderPetugasDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSekunderPetugasDropdown]);
+
+  const pilihPrimerPetugas = (p: PegawaiResult) => {
+    setPrimerPetugasNik(p.nik);
+    setPrimerPetugasNama(p.nama);
+    setShowPrimerPetugasDropdown(false);
+  };
+  const pilihSekunderPetugas = (p: PegawaiResult) => {
+    setSekunderPetugasNik(p.nik);
+    setSekunderPetugasNama(p.nama);
+    setShowSekunderPetugasDropdown(false);
+  };
 
   React.useEffect(() => {
     if (isOpen) {
@@ -679,14 +780,21 @@ export const ModalInputTriase: React.FC<ModalInputTriaseProps> = ({ isOpen, onCl
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, marginLeft: 40 }}>
                   <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Dokter/Petugas IGD :</label>
-                  <div style={{ display: 'flex', gap: 2, position: 'relative', flex: 1 }}>
-                    <input type="text" value={primerPetugasNama} readOnly placeholder="Cari dokter/petugas..." style={{ ...inputStyle, flex: 1, background: '#f9fafb' }} />
-                    <button type="button" onClick={() => setPetugasPickerFor('primer')} title="Cari petugas"
-                      style={{ padding: '2px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                      </svg>
-                    </button>
+                  <div ref={primerPetugasFieldRef} style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      type="text"
+                      value={primerPetugasNama}
+                      onChange={(e) => { setPrimerPetugasNik(''); setPrimerPetugasNama(e.target.value); setShowPrimerPetugasDropdown(true); }}
+                      onFocus={(e) => { handleFieldFocus(e); setShowPrimerPetugasDropdown(true); searchPegawaiList('', setPrimerPetugasResults); }}
+                      onBlur={handleFieldBlur}
+                      placeholder="Cari dokter/petugas..."
+                      autoComplete="off"
+                      style={{ ...inputStyle, width: '100%', paddingRight: 32 }}
+                    />
+                    <TriaseStepperIcon />
+                    {showPrimerPetugasDropdown && (
+                      <PetugasDropdownList results={primerPetugasResults} onPick={pilihPrimerPetugas} />
+                    )}
                   </div>
                 </div>
               </div>
@@ -791,14 +899,21 @@ export const ModalInputTriase: React.FC<ModalInputTriaseProps> = ({ isOpen, onCl
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, marginLeft: 40 }}>
                   <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Dokter/Petugas IGD :</label>
-                  <div style={{ display: 'flex', gap: 2, position: 'relative', flex: 1 }}>
-                    <input type="text" value={sekunderPetugasNama} readOnly placeholder="Cari dokter/petugas..." style={{ ...inputStyle, flex: 1, background: '#f9fafb' }} />
-                    <button type="button" onClick={() => setPetugasPickerFor('sekunder')} title="Cari petugas"
-                      style={{ padding: '2px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                      </svg>
-                    </button>
+                  <div ref={sekunderPetugasFieldRef} style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      type="text"
+                      value={sekunderPetugasNama}
+                      onChange={(e) => { setSekunderPetugasNik(''); setSekunderPetugasNama(e.target.value); setShowSekunderPetugasDropdown(true); }}
+                      onFocus={(e) => { handleFieldFocus(e); setShowSekunderPetugasDropdown(true); searchPegawaiList('', setSekunderPetugasResults); }}
+                      onBlur={handleFieldBlur}
+                      placeholder="Cari dokter/petugas..."
+                      autoComplete="off"
+                      style={{ ...inputStyle, width: '100%', paddingRight: 32 }}
+                    />
+                    <TriaseStepperIcon />
+                    {showSekunderPetugasDropdown && (
+                      <PetugasDropdownList results={sekunderPetugasResults} onPick={pilihSekunderPetugas} />
+                    )}
                   </div>
                 </div>
               </div>
@@ -819,25 +934,6 @@ export const ModalInputTriase: React.FC<ModalInputTriaseProps> = ({ isOpen, onCl
             {saving ? 'Menyimpan...' : 'Simpan Triase'}
           </button>
         </div>
-      </div>
-
-      {/* stopPropagation — ModalCariPegawai tidak pakai portal, jadi
-          nested di dalam overlay panel ini; tanpa ini klik di backdrop-nya
-          akan ikut bubble & memicu onClose panel Triase juga. */}
-      <div onClick={(e) => e.stopPropagation()}>
-        <ModalCariPegawai
-          isOpen={petugasPickerFor !== null}
-          onClose={() => setPetugasPickerFor(null)}
-          onSelect={(nik, nama) => {
-            if (petugasPickerFor === 'primer') {
-              setPrimerPetugasNik(nik);
-              setPrimerPetugasNama(nama);
-            } else if (petugasPickerFor === 'sekunder') {
-              setSekunderPetugasNik(nik);
-              setSekunderPetugasNama(nama);
-            }
-          }}
-        />
       </div>
     </div>
   );

@@ -1,6 +1,5 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { ModalCariDokter } from './ModalCariDokter';
 
 type AppUser = {
   username: string;
@@ -88,7 +87,15 @@ export const ModalInputAwalMedisIGD: React.FC<ModalInputAwalMedisIGDProps> = ({ 
 
   const [dokterKode, setDokterKode] = React.useState('');
   const [dokterNama, setDokterNama] = React.useState('');
-  const [showCariDokter, setShowCariDokter] = React.useState(false);
+  // Combobox pencarian dokter (ganti ModalCariDokter) — PERSIS pola "Cari
+  // Obat" di ResepModal.tsx: ketik -> auto-search (min 2 karakter) ->
+  // dropdown hasil -> klik utk pilih. dokterNama dobel-fungsi sbg teks
+  // input yg diketik SEKALIGUS nama tersimpan setelah dipilih (dokterKode
+  // dikosongkan tiap kali user mengetik, supaya validasi "Dokter wajib
+  // dipilih" tetap ketat sampai user benar2 klik salah satu hasil).
+  const [dokterResults, setDokterResults] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
+  const [showDokterDropdown, setShowDokterDropdown] = React.useState(false);
+  const dokterFieldRef = React.useRef<HTMLDivElement>(null);
 
   const [anamnesis, setAnamnesis] = React.useState(ANAMNESIS_OPTIONS[0]);
   const [hubungan, setHubungan] = React.useState('');
@@ -135,9 +142,12 @@ export const ModalInputAwalMedisIGD: React.FC<ModalInputAwalMedisIGDProps> = ({ 
   // PERSIS isCek() di Java: cek dulu ke tabel dokter (kd_dokter=?), BUKAN
   // asal percaya user.full_name, krn user yg login belum tentu dokter
   // (mis. perawat/admin) — kalau kodenya tidak ketemu di tabel dokter,
-  // dibiarkan kosong supaya wajib dicari manual lewat ModalCariDokter.
+  // dibiarkan kosong supaya wajib dicari manual lewat combobox Dokter.
+  // Role "admin" DIKECUALIKAN eksplisit (bukan cuma andalkan username tidak
+  // match kd_dokter) — per permintaan user, admin yg login TIDAK ikut
+  // auto-fill sekalipun usernamenya kebetulan sama dgn kd_dokter tertentu.
   React.useEffect(() => {
-    if (!isOpen || !user?.username) return;
+    if (!isOpen || !user?.username || user.role === 'admin') return;
     (async () => {
       const res = await fetch(`/api/dokter?search=${encodeURIComponent(user.username)}`);
       if (!res.ok) return;
@@ -149,6 +159,53 @@ export const ModalInputAwalMedisIGD: React.FC<ModalInputAwalMedisIGDProps> = ({ 
       }
     })();
   }, [isOpen, user]);
+
+  // searchDokterList — query kosong = backend kembalikan SEMUA dokter aktif
+  // (LIMIT 100, urut nama), dipakai onFocus supaya begitu kursor masuk
+  // kolom Dokter langsung tampil semua dokter (bukan nunggu ketikan).
+  const searchDokterList = async (q: string) => {
+    try {
+      const res = await fetch(`/api/dokter?search=${encodeURIComponent(q)}`);
+      const data = res.ok ? await res.json() : [];
+      setDokterResults(Array.isArray(data) ? data : []);
+    } catch {
+      setDokterResults([]);
+    }
+  };
+
+  // Auto-search combobox Dokter saat mengetik — debounce 250ms, PERSIS pola
+  // auto-search "Cari Obat" di ResepModal.tsx. Dependency SENGAJA cuma
+  // dokterNama (bukan ikut showDokterDropdown) supaya effect ini HANYA
+  // jalan krn ketikan, TIDAK ikut ke-trigger ulang oleh onFocus (yg sudah
+  // langsung panggil searchDokterList('') sendiri di bawah — kalau effect
+  // ini ikut dengar showDokterDropdown, hasil "semua dokter" dari onFocus
+  // bisa langsung ketiban hasil filter nama lama krn dokterNama belum
+  // berubah). Guard showDokterDropdown di dalam body tetap dipertahankan
+  // supaya tidak ikut nge-fetch gara2 setDokterNama() programatik
+  // (auto-detect dokter login) sebelum dropdown pernah dibuka user.
+  React.useEffect(() => {
+    if (!showDokterDropdown) return;
+    const t = setTimeout(() => { searchDokterList(dokterNama.trim()); }, 250);
+    return () => clearTimeout(t);
+  }, [dokterNama]);
+
+  // Tutup dropdown Dokter saat klik di luar field-nya.
+  React.useEffect(() => {
+    if (!showDokterDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dokterFieldRef.current && !dokterFieldRef.current.contains(e.target as Node)) {
+        setShowDokterDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDokterDropdown]);
+
+  const pilihDokter = (d: { kd_dokter: string; nm_dokter: string }) => {
+    setDokterKode(d.kd_dokter);
+    setDokterNama(d.nm_dokter);
+    setShowDokterDropdown(false);
+  };
 
   React.useEffect(() => {
     if (isOpen) {
@@ -295,16 +352,37 @@ export const ModalInputAwalMedisIGD: React.FC<ModalInputAwalMedisIGDProps> = ({ 
           <div style={{ display: 'flex', gap: 16 }}>
             <div style={{ flex: 1.4 }}>
               <label style={labelStyle}>Dokter</label>
-              <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
-                <input type="text" value={dokterNama} readOnly placeholder="Cari dokter..." style={{ ...inputStyle, flex: 1, background: '#f9fafb' }} />
-                <button
-                  type="button" onClick={() => setShowCariDokter(true)} title="Cari dokter"
-                  style={{ padding: '2px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                </button>
+              <div ref={dokterFieldRef} style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={dokterNama}
+                  onChange={(e) => { setDokterNama(e.target.value); setDokterKode(''); setShowDokterDropdown(true); }}
+                  onFocus={(e) => { handleFieldFocus(e); setShowDokterDropdown(true); searchDokterList(''); }}
+                  onBlur={handleFieldBlur}
+                  placeholder="Cari dokter..."
+                  autoComplete="off"
+                  style={{ ...inputStyle, width: '100%', paddingRight: 32 }}
+                />
+                <StepperIcon />
+                {showDokterDropdown && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 4, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto', zIndex: 50 }}>
+                    {dokterResults.length === 0 ? (
+                      <div style={{ padding: '10px 12px', fontSize: 12, color: '#9ca3af' }}>Tidak ada dokter ditemukan</div>
+                    ) : (
+                      dokterResults.map((d) => (
+                        <div
+                          key={d.kd_dokter}
+                          onMouseDown={() => pilihDokter(d)}
+                          style={{ padding: '8px 12px', fontSize: 13, color: '#374151', cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f9ff'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          {d.nm_dokter}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div style={{ flex: 1 }}>
@@ -541,20 +619,6 @@ export const ModalInputAwalMedisIGD: React.FC<ModalInputAwalMedisIGDProps> = ({ 
             {saving ? 'Menyimpan...' : 'Simpan Awal Medis'}
           </button>
         </div>
-      </div>
-
-      {/* stopPropagation — ModalCariDokter tidak pakai portal, jadi nested
-          di dalam overlay panel ini; tanpa ini klik di backdrop-nya akan
-          ikut bubble & memicu onClose panel Awal Medis juga. */}
-      <div onClick={(e) => e.stopPropagation()}>
-        <ModalCariDokter
-          isOpen={showCariDokter}
-          onClose={() => setShowCariDokter(false)}
-          onSelect={(kode, nama) => {
-            setDokterKode(kode);
-            setDokterNama(nama);
-          }}
-        />
       </div>
     </div>
   );

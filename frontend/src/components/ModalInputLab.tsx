@@ -8,6 +8,24 @@ type ModalInputLabProps = {
 };
 
 export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, onSaved }) => {
+  // Redesain jadi panel slide-in dari kanan, PERSIS pola ModalInputTriase.tsx/
+  // ResepModal.tsx (overlay fixed + panel anchor kanan full-height, header
+  // breadcrumb pasien + tombol close bulat, body scrollable, footer sticky) —
+  // ganti dari versi lama (dialog card mengambang di tengah, radius 20/16).
+  // Komponen ini TIDAK menerima prop `isOpen` (parent langsung mount/unmount
+  // <ModalInputLab/> saat buka/tutup), jadi animasi masuk dipicu sendiri lewat
+  // effect on-mount, dan `handleClose` menunda pemanggilan `onClose` asli
+  // sampai animasi keluar (translateX/opacity) selesai.
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 300);
+  };
+
   const [activeLabTab, setActiveLabTab] = React.useState<'pk' | 'pa'>('pk');
 
   const [labForm, setLabForm] = React.useState({
@@ -275,11 +293,11 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
         icon: 'success',
         title: 'Berhasil!',
         text: `Permintaan Lab PK berhasil disimpan!\nNo. Permintaan: ${result.noorder}`,
-        timer: 3000,
-        showConfirmButton: true,
+        timer: 2000,
+        showConfirmButton: false,
       });
       onSaved();
-      onClose();
+      handleClose();
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message || 'Terjadi kesalahan' });
     } finally {
@@ -333,11 +351,11 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
         icon: 'success',
         title: 'Berhasil!',
         text: `Permintaan Lab PA berhasil disimpan!\nNo. Permintaan: ${result.noorder}`,
-        timer: 3000,
-        showConfirmButton: true,
+        timer: 2000,
+        showConfirmButton: false,
       });
       onSaved();
-      onClose();
+      handleClose();
     } catch (err: any) {
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message || 'Terjadi kesalahan' });
     } finally {
@@ -345,12 +363,15 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
     }
   };
 
+  // Tinggi 30px PERSIS .form-control di ResepModal.css (bukan 26px spt
+  // ModalInputAwalKeperawatanIGD.tsx lagi) — per permintaan user terbaru.
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    padding: '9px 12px',
+    height: 30,
+    padding: '5px 10px',
     border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontSize: 13,
+    borderRadius: 4,
+    fontSize: 12,
     boxSizing: 'border-box',
     outline: 'none',
   };
@@ -362,7 +383,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
     right: 0,
     background: '#ffffff',
     border: '1px solid #d1d5db',
-    borderRadius: 6,
+    borderRadius: 4,
     boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
     maxHeight: 200,
     overflowY: 'auto',
@@ -379,9 +400,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
     list: any[],
     loading: boolean,
     selected: string[],
-    toggle: (kd: string) => void,
-    setSelected: (v: string[]) => void,
-    onSubmit: () => void
+    toggle: (kd: string) => void
   ) => (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* onScroll menutup dropdown pencarian — dulu kalau container ini
@@ -393,11 +412,13 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
           scroll menghindari kondisi visual rusak itu; user tinggal fokus
           lagi ke input utk membuka dropdown & lanjut cari. */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }} onScroll={() => setShowDropdown(false)}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Kolom Kiri - Search + Dropdown */}
+      <div>
+        {/* Search + Dropdown — kolom "Item Dipilih" di sebelahnya sudah
+            dihapus per permintaan user, jadi search ini sekarang full
+            width sendirian (bukan grid 2 kolom lagi). */}
         <div>
-        <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
-            Nama Pemeriksaan{selectedDetailPK.length > 0 && ` (${selectedDetailPK.length} dipilih)`}
+        <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
+            Nama Pemeriksaan{selected.length > 0 && ` (${selected.length} dipilih)`}
           </label>
           <div style={{ marginBottom: 12, position: 'relative' }}>
             <div style={{
@@ -417,19 +438,13 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
               onFocus={() => setShowDropdown(true)}
               onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
               placeholder={`Cari pemeriksaan ${type.toUpperCase()}...`}
-              style={{ ...inputStyle, padding: '10px 12px 10px 38px' }}
+              style={{ ...inputStyle, padding: '5px 12px 5px 38px' }}
             />
             {showDropdown && search.length > 0 && (
               <div
                 onWheel={(e) => e.stopPropagation()}
                 style={{
-                  // right pakai calc supaya dropdown melebar mencakup kolom
-                  // kanan (Item Dipilih) juga, bukan cuma kolom kiri —
-                  // dulu lebarnya kepotong di batas kolom, jadi box
-                  // "Pilih pemeriksaan di atas dulu..." di section Detail
-                  // Pemeriksaan (yang full width, di bawah grid ini)
-                  // keliatan "mengintip" di sisi kanan dropdown.
-                  position: 'absolute', top: '100%', left: 0, right: 'calc(-100% - 16px)',
+                  position: 'absolute', top: '100%', left: 0, right: 0,
                   marginTop: 4, maxHeight: 460, overflowY: 'auto',
                   overscrollBehavior: 'contain',
                   border: '1px solid #e5e7eb', borderRadius: 8,
@@ -447,7 +462,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
                     }}></div>
                   </div>
                 ) : list.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                  <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>
                     Tidak ada hasil pencarian
                   </div>
                 ) : list.map((item, idx) => (
@@ -468,52 +483,48 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
                       onChange={() => toggle(item.kd_jenis_prw)}
                       style={{ marginRight: 12, cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
                     />
-                    <div style={{ width: 90, flexShrink: 0, fontSize: 13, fontWeight: 500, color: '#111827' }}>{item.kd_jenis_prw}</div>
-                    <div style={{ flex: 1, fontSize: 13, color: '#111827' }}>{item.nm_perawatan}</div>
+                    <div style={{ width: 90, flexShrink: 0, fontSize: 12, fontWeight: 400, color: '#111827' }}>{item.kd_jenis_prw}</div>
+                    <div style={{ flex: 1, fontSize: 12, color: '#111827' }}>{item.nm_perawatan}</div>
                   </label>
                 ))}
               </div>
             )}
           </div>
-        </div>
 
-        {/* Kolom Kanan - Item Dipilih */}
-        <div>
-          <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
-            Item Dipilih{selected.length > 0 && ` (${selected.length} dipilih)`}
-          </label>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, background: '#ffffff', maxHeight: 460, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-            {selected.length === 0 ? (
-              <div style={{ padding: '9px 12px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                Belum ada pemeriksaan dipilih
-              </div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <tbody>
-                  {selected.map((kd, idx) => {
-                    const item = list.find(p => p.kd_jenis_prw === kd);
-                    return (
-                      <tr key={kd} style={{ borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: 500, color: '#111827' }}>{kd}</td>
-                        <td style={{ padding: '8px 10px', color: '#111827' }}>{item?.nm_perawatan || kd}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => toggle(kd)}
-                            title="Hapus"
-                            style={{ background: 'transparent', border: 'none', color: '#000000', borderRadius: 4, padding: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"></polyline>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+          {/* Tabel item terpilih PERSIS di bawah kolom Nama Pemeriksaan
+              (gantinya "Item Dipilih" yg dulu jadi kolom terpisah di
+              samping) — header "P|Kode Periksa|Nama Pemeriksaan", checkbox
+              P selalu tercentang (karena baris ini memang yg sudah
+              dipilih); klik/uncek P = hapus dari daftar terpilih. Pola
+              sama dgn ChecklistBox di ModalInputAwalKeperawatanIGD.tsx. */}
+          <div style={{ border: '1px solid #d1d5db', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', background: '#f3f4f6', borderBottom: '1px solid #d1d5db', fontSize: 12, color: '#374151' }}>
+              <div style={{ width: 28, padding: '0 8px', borderRight: '1px solid #d1d5db', textAlign: 'center', flexShrink: 0 }}>P</div>
+              <div style={{ width: 90, padding: '0 8px', borderRight: '1px solid #d1d5db', flexShrink: 0 }}>Kode Periksa</div>
+              <div style={{ flex: 1, padding: '0 8px' }}>Nama Pemeriksaan</div>
+            </div>
+            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+              {selected.length === 0 ? (
+                <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>
+                  Belum ada pemeriksaan dipilih
+                </div>
+              ) : selected.map((kd, idx) => {
+                const item = list.find((p) => p.kd_jenis_prw === kd);
+                return (
+                  <div
+                    key={kd}
+                    onClick={() => toggle(kd)}
+                    style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', cursor: 'pointer', borderBottom: idx < selected.length - 1 ? '1px solid #f3f4f6' : 'none' }}
+                  >
+                    <div style={{ width: 28, padding: '0 8px', textAlign: 'center', flexShrink: 0, borderRight: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked onChange={() => toggle(kd)} style={{ cursor: 'pointer', width: 14, height: 14 }} title="Hilangkan centang utk menghapus" />
+                    </div>
+                    <div style={{ width: 90, padding: '0 8px', fontSize: 12, color: '#111827', flexShrink: 0, borderRight: '1px solid #f3f4f6' }}>{kd}</div>
+                    <div style={{ flex: 1, padding: '0 8px', fontSize: 12, color: '#111827' }}>{item?.nm_perawatan || kd}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -527,7 +538,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
           saat submit (padanan permintaan_detail_permintaan_lab). */}
       {type === 'pk' && (
         <div style={{ marginTop: 20 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+          <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
             Detail Pemeriksaan{selectedDetailPK.length > 0 && ` (${selectedDetailPK.length} dipilih)`}
           </label>
           <div style={{ marginBottom: 12, position: 'relative' }}>
@@ -547,12 +558,12 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
               onChange={(e) => setSearchDetailPK(e.target.value)}
               placeholder="Cari detail pemeriksaan..."
               disabled={selectedPemeriksaanPK.length === 0}
-              style={{ ...inputStyle, padding: '10px 12px 10px 38px', background: selectedPemeriksaanPK.length === 0 ? '#f9fafb' : '#ffffff' }}
+              style={{ ...inputStyle, padding: '5px 12px 5px 38px', background: selectedPemeriksaanPK.length === 0 ? '#f9fafb' : '#ffffff' }}
             />
           </div>
 
           {selectedPemeriksaanPK.length === 0 ? (
-            <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12.5, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
+            <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
               Pilih pemeriksaan di atas dulu untuk melihat detail parameternya
             </div>
           ) : loadingDetailPK ? (
@@ -564,196 +575,151 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
               }}></div>
             </div>
           ) : filteredDetailPK.length === 0 ? (
-            <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12.5, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
+            <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 12, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
               Tidak ada detail parameter untuk pemeriksaan yang dipilih
             </div>
           ) : (
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 380, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                <thead>
-                  <tr style={{ background: '#f9fafb', color: '#374151' }}>
-                    <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'center', width: 36 }}>P</th>
-                    <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left' }}>Pemeriksaan</th>
-                    <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 100 }}>Satuan</th>
-                    <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 500 }}>Nilai Rujukan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groupedDetailPK.map((g) => {
-                    const groupIds = g.items.map((t) => t.id_template);
-                    const allSelected = groupIds.every((id) => selectedDetailPK.includes(id));
-                    const namaPemeriksaan = list.find((p) => p.kd_jenis_prw === g.kd_jenis_prw)?.nm_perawatan || g.kd_jenis_prw;
-                    return (
-                      <React.Fragment key={g.kd_jenis_prw}>
-                        <tr
-                          onClick={() => toggleGroupDetailPK(g.items)}
-                          style={{ borderTop: '1px solid #f3f4f6', background: '#f9fafb', cursor: 'pointer' }}
+            // Desain tabel PERSIS tabel "item terpilih" di atas (flex-div
+            // per baris, header bg #f3f4f6, garis pemisah antar kolom
+            // borderRight, tinggi header & baris seragam) — ganti dari
+            // <table> HTML lama, per permintaan user.
+            <div style={{ border: '1px solid #d1d5db', borderRadius: 4, maxHeight: 380, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+              <div style={{ display: 'flex', alignItems: 'center', height: 28, boxSizing: 'border-box', background: '#f3f4f6', borderBottom: '1px solid #d1d5db', fontSize: 12, color: '#374151', position: 'sticky', top: 0, zIndex: 1 }}>
+                <div style={{ width: 28, padding: '0 8px', borderRight: '1px solid #d1d5db', textAlign: 'center', flexShrink: 0 }}>P</div>
+                <div style={{ flex: 1, padding: '0 8px', borderRight: '1px solid #d1d5db' }}>Pemeriksaan</div>
+                <div style={{ width: 90, padding: '0 8px', borderRight: '1px solid #d1d5db', flexShrink: 0 }}>Satuan</div>
+                <div style={{ flex: 1, padding: '0 8px' }}>Nilai Rujukan</div>
+              </div>
+              <div>
+                {groupedDetailPK.map((g) => {
+                  const groupIds = g.items.map((t) => t.id_template);
+                  const allSelected = groupIds.every((id) => selectedDetailPK.includes(id));
+                  const namaPemeriksaan = list.find((p) => p.kd_jenis_prw === g.kd_jenis_prw)?.nm_perawatan || g.kd_jenis_prw;
+                  return (
+                    <React.Fragment key={g.kd_jenis_prw}>
+                      <div
+                        onClick={() => toggleGroupDetailPK(g.items)}
+                        style={{ display: 'flex', alignItems: 'center', minHeight: 28, boxSizing: 'border-box', background: '#f9fafb', borderTop: '1px solid #f3f4f6', cursor: 'pointer' }}
+                      >
+                        <div style={{ width: 28, padding: '4px 8px', textAlign: 'center', flexShrink: 0, borderRight: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' }} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={() => toggleGroupDetailPK(g.items)}
+                            style={{ cursor: 'pointer', width: 14, height: 14 }}
+                            title="Centang semua detail pemeriksaan ini"
+                          />
+                        </div>
+                        <div style={{ flex: 1, padding: '4px 8px', fontSize: 12, color: '#111827' }}>{namaPemeriksaan}</div>
+                      </div>
+                      {g.items.map((t) => (
+                        <div
+                          key={t.id_template}
+                          onClick={() => toggleDetailPK(t.id_template)}
+                          style={{ display: 'flex', alignItems: 'center', minHeight: 28, boxSizing: 'border-box', borderTop: '1px solid #f3f4f6', cursor: 'pointer' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                         >
-                          <td style={{ padding: '6px 10px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ width: 28, padding: '4px 8px', textAlign: 'center', flexShrink: 0, borderRight: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' }} onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
-                              checked={allSelected}
-                              onChange={() => toggleGroupDetailPK(g.items)}
-                              style={{ cursor: 'pointer', width: 15, height: 15 }}
-                              title="Centang semua detail pemeriksaan ini"
+                              checked={selectedDetailPK.includes(t.id_template)}
+                              onChange={() => toggleDetailPK(t.id_template)}
+                              style={{ cursor: 'pointer', width: 14, height: 14 }}
                             />
-                          </td>
-                          <td colSpan={3} style={{ padding: '6px 10px', color: '#111827', fontWeight: 700 }}>{namaPemeriksaan}</td>
-                        </tr>
-                        {g.items.map((t) => (
-                          <tr
-                            key={t.id_template}
-                            onClick={() => toggleDetailPK(t.id_template)}
-                            style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                          >
-                            <td style={{ padding: '6px 10px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={selectedDetailPK.includes(t.id_template)}
-                                onChange={() => toggleDetailPK(t.id_template)}
-                                style={{ cursor: 'pointer', width: 15, height: 15 }}
-                              />
-                            </td>
-                            <td style={{ padding: '6px 10px 6px 26px', color: '#111827' }}>{t.pemeriksaan}</td>
-                            <td style={{ padding: '6px 10px', color: '#374151' }}>{t.satuan || '-'}</td>
-                            <td style={{ padding: '6px 10px', color: '#6b7280' }}>{formatNilaiRujukan(t)}</td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </div>
+                          <div style={{ flex: 1, padding: '4px 8px 4px 26px', fontSize: 12, color: '#111827', borderRight: '1px solid #f3f4f6' }}>{t.pemeriksaan}</div>
+                          <div style={{ width: 90, padding: '4px 8px', fontSize: 12, color: '#374151', flexShrink: 0, borderRight: '1px solid #f3f4f6' }}>{t.satuan || '-'}</div>
+                          <div style={{ flex: 1, padding: '4px 8px', fontSize: 12, color: '#6b7280' }}>{formatNilaiRujukan(t)}</div>
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
       )}
-      </div>
-
-      {/* Footer buttons */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', flexShrink: 0 }}>
-        <div>
-          <button
-            type="button"
-            onClick={() => {
-              setSelected([]);
-              setLabForm({ diagnosa_klinis: '', informasi_tambahan: '' });
-              if (type === 'pk') { setSelectedDetailPK([]); setSearchDetailPK(''); }
-            }}
-            style={{
-              padding: '8px 16px', borderRadius: 4, border: 'none',
-              background: '#6b7280', color: '#fff', cursor: 'pointer',
-              fontSize: 12, fontWeight: 500,
-            }}
-          >
-            Reset
-          </button>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ padding: '8px 16px', borderRadius: 4, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-          >
-            Tutup
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={loadingSubmit}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 4, border: 'none', background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
-            {loadingSubmit ? 'Menyimpan...' : `Simpan Lab ${type.toUpperCase()}`}
-          </button>
-        </div>
       </div>
     </div>
   );
 
   return (
     <>
-      {/* Overlay */}
+      {/* Redesain jadi panel slide-in dari kanan, PERSIS pola
+          ModalInputTriase.tsx/ResepModal.tsx (overlay fixed + panel anchor
+          kanan full-height, header breadcrumb pasien + tombol close bulat,
+          body scrollable, footer sticky) — ganti dari versi lama (dialog
+          card mengambang di tengah, radius 20/16). */}
       <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20,
-        }}
-        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
+        onClick={handleClose}
       >
-        {/* Modal Container */}
         <div
           style={{
-            background: '#F3F4F6',
-            borderRadius: 20,
-            padding: '35px 8px 8px 8px',
-            position: 'relative',
-            maxWidth: 1200,
-            width: '62%',
-            maxHeight: '94vh',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+            background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Header — title + close button dalam satu baris flex, sejajar
-              vertikal (bukan dua elemen absolute yang saling menumpuk). */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            padding: '8px 16px 8px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span style={{ color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
-              Form Permintaan Laboratorium
-            </span>
+          {/* Header — breadcrumb pasien + close button bulat, PERSIS pola
+              ModalInputTriase.tsx. */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: '#000000', display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 6, rowGap: 2 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+                .filter(Boolean)
+                .map((v, i, arr) => (
+                  <React.Fragment key={i}>
+                    <span>{v}</span>
+                    {i < arr.length - 1 && <span>|</span>}
+                  </React.Fragment>
+                ))}
+            </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               style={{
-                background: 'transparent', border: 'none',
-                fontSize: 20, cursor: 'pointer', color: '#6b7280',
-                padding: 0, lineHeight: 1,
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                flexShrink: 0,
               }}
-            >×</button>
+            >
+              &times;
+            </button>
           </div>
 
-          {/* White Card Content */}
-          <div style={{
-            background: '#ffffff',
-            borderRadius: 16,
-            border: '1px solid #d1d5db',
-            padding: '12px',
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
-            {/* Tab PK / PA — display:inline-flex supaya background cuma
-                seukuran kolom nama tab (bukan selebar card), alignSelf:
-                center supaya switch-nya di tengah (parent flex-column).
-                Ditaruh paling atas card supaya langsung kelihatan sebelum
-                field lain. */}
-            <div style={{ display: 'inline-flex', alignSelf: 'center', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4, marginBottom: 20, flexShrink: 0 }}>
-              {(['pk', 'pa'] as const).map(tab => (
+          {/* Body — scrollable, flat (tanpa nested white-card-dlm-card spt
+              versi lama). */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {/* Tab PK/PA — button group flat (radius 0, tombol nempel/
+                berbagi border, aktif biru cyan #1AB1E5), PERSIS pola
+                ResepModal.tsx (Non Racikan/Racikan) — ganti dari pill
+                segmented control lama. */}
+            <div style={{ display: 'inline-flex', marginBottom: 16, flexShrink: 0 }}>
+              {(['pk', 'pa'] as const).map((tab, i) => (
                 <button
                   key={tab}
                   type="button"
                   onClick={() => setActiveLabTab(tab)}
                   style={{
-                    padding: '6px 24px',
-                    borderRadius: 8,
-                    border: activeLabTab === tab ? '1px solid #d1d5db' : 'none',
-                    background: activeLabTab === tab ? '#ffffff' : 'transparent',
-                    color: activeLabTab === tab ? '#111827' : '#6b7280',
+                    padding: '6px 20px',
+                    borderRadius: 0,
+                    border: '1px solid #1AB1E5',
+                    borderLeft: i === 0 ? '1px solid #1AB1E5' : 'none',
+                    background: activeLabTab === tab ? '#1AB1E5' : '#ffffff',
+                    color: activeLabTab === tab ? '#ffffff' : '#1AB1E5',
                     cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: activeLabTab === tab ? 500 : 400,
+                    fontSize: 12,
+                    fontWeight: 400,
                     transition: 'all 0.2s ease',
-                    boxShadow: activeLabTab === tab ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -763,9 +729,9 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
             </div>
 
             {/* Diagnosa Klinis & Informasi Tambahan */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, flexShrink: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16, flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Indikasi/Diagnosis Klinis <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
@@ -784,7 +750,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
                         key={i}
                         onClick={() => { setLabForm({ ...labForm, diagnosa_klinis: item }); setShowDiagnosaKlinisDropdown(false); }}
                         style={{
-                          padding: '8px 12px', cursor: 'pointer', fontSize: 13,
+                          padding: '8px 12px', cursor: 'pointer', fontSize: 12,
                           borderBottom: i < filteredDiagnosaKlinis.length - 1 ? '1px solid #e5e7eb' : 'none',
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
@@ -795,7 +761,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
                 )}
               </div>
               <div style={{ position: 'relative' }}>
-                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'block', color: '#374151' }}>
+                <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
                   Informasi Tambahan
                 </label>
                 <input
@@ -814,7 +780,7 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
                         key={i}
                         onClick={() => { setLabForm({ ...labForm, informasi_tambahan: item }); setShowInformasiTambahanDropdown(false); }}
                         style={{
-                          padding: '8px 12px', cursor: 'pointer', fontSize: 13,
+                          padding: '8px 12px', cursor: 'pointer', fontSize: 12,
                           borderBottom: i < filteredInformasiTambahan.length - 1 ? '1px solid #e5e7eb' : 'none',
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
@@ -829,14 +795,30 @@ export const ModalInputLab: React.FC<ModalInputLabProps> = ({ patient, onClose, 
             {/* Konten Tab */}
             {activeLabTab === 'pk' && renderPemeriksaanDropdown(
               'pk', searchPK, setSearchPK, showDropdownPK, setShowDropdownPK,
-              pemeriksaanPKList, loadingPK, selectedPemeriksaanPK,
-              togglePK, setSelectedPemeriksaanPK, handleSubmitPK
+              pemeriksaanPKList, loadingPK, selectedPemeriksaanPK, togglePK
             )}
             {activeLabTab === 'pa' && renderPemeriksaanDropdown(
               'pa', searchPA, setSearchPA, showDropdownPA, setShowDropdownPA,
-              pemeriksaanPAList, loadingPA, selectedPemeriksaanPA,
-              togglePA, setSelectedPemeriksaanPA, handleSubmitPA
+              pemeriksaanPAList, loadingPA, selectedPemeriksaanPA, togglePA
             )}
+          </div>
+
+          {/* Footer — sticky, PERSIS pola ModalInputTriase.tsx (tombol
+              Simpan full-width, radius 4, fontSize 14). Reset & Tutup
+              dihapus per permintaan user — Simpan mengikuti tab aktif
+              (PK/PA masing2 punya state/handler submit sendiri), Tutup
+              masih bisa lewat overlay/tombol close di header. */}
+          <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={activeLabTab === 'pk' ? handleSubmitPK : handleSubmitPA}
+              disabled={loadingSubmit}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 2, border: 'none', background: loadingSubmit ? '#9ca3af' : '#1AB1E5', color: '#fff', cursor: loadingSubmit ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              {loadingSubmit ? 'Menyimpan...' : `Simpan Permintaan Lab ${activeLabTab.toUpperCase()}`}
+            </button>
           </div>
         </div>
       </div>
