@@ -38,6 +38,15 @@
   }
 }
 
+/* blink-red-field — dipakai saat user coba isi field lain padahal ada
+   field wajib yg masih kosong (mis. Nama Racikan sebelum Detail Obat
+   Racikan), sama pola dgn ApotekStokOpname.tsx. */
+@keyframes blinkRedField {
+  0%, 100% { background-color: transparent; box-shadow: none; }
+  50% { background-color: #fee2e2; box-shadow: 0 0 0 2px #dc2626; }
+}
+.blink-red-field { animation: blinkRedField 0.4s ease-in-out 3; border-radius: 4px; }
+
 .modal-header-resep {
   display: flex;
   justify-content: space-between;

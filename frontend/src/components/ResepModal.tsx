@@ -105,6 +105,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [showObatDropdownRacikan, setShowObatDropdownRacikan] = React.useState(false);
   const [selectedObatRacikan, setSelectedObatRacikan] = React.useState<ObatItem | null>(null);
   const [showModalInputObatRacikan, setShowModalInputObatRacikan] = React.useState(false);
+  // emptyRacikanWarnIdx — index racikan yg kolom Nama Racikan-nya disorot
+  // merah krn user coba klik langsung ke Detail Obat Racikan padahal nama
+  // racikan masih kosong. Direset begitu user mulai mengetik nama racikan.
+  const [emptyRacikanWarnIdx, setEmptyRacikanWarnIdx] = React.useState<number | null>(null);
 
   const [racikanList, setRacikanList] = React.useState<Racikan[]>([
     { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }
@@ -1125,7 +1129,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       boxShadow: 'none'
                     }}
                   >
-                    {tab === 'non-racikan' ? `Non Racikan (${resepNonRacikan.length})` : `Racikan (${racikanList.length})`}
+                    {tab === 'non-racikan' ? `Non Racikan (${resepNonRacikan.length})` : `Racikan (${racikanList.filter(r => r.nama_racikan && r.detail.length > 0).length})`}
                   </button>
                 ))}
               </div>
@@ -1353,16 +1357,18 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                         >
                           <td style={{ padding: '4px 6px', verticalAlign: 'middle', color: '#374151' }}>{idx + 1}</td>
                           <td style={{ padding: '4px 6px', verticalAlign: 'middle' }}>
-                            <input
-                              ref={(el) => { namaRacikanRefs.current[idx] = el; }}
-                              type="text"
-                              style={racikanInputStyle}
-                              value={rac.nama_racikan}
-                              onFocus={() => setActiveRacikanIdx(idx)}
-                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value }))}
-                              placeholder="Contoh: Pulvis / Racikan Batuk"
-                              autoComplete="off"
-                            />
+                            <div className={emptyRacikanWarnIdx === idx ? 'blink-red-field' : ''}>
+                              <input
+                                ref={(el) => { namaRacikanRefs.current[idx] = el; }}
+                                type="text"
+                                style={racikanInputStyle}
+                                value={rac.nama_racikan}
+                                onFocus={() => { setActiveRacikanIdx(idx); setEmptyRacikanWarnIdx(null); }}
+                                onChange={(e) => { updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value })); setEmptyRacikanWarnIdx(null); }}
+                                placeholder="Contoh: Pulvis / Racikan Batuk"
+                                autoComplete="off"
+                              />
+                            </div>
                           </td>
                           <td style={{ padding: '4px 4px', verticalAlign: 'middle' }}>
                             <select
@@ -1447,6 +1453,13 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       placeholder="Ketik nama obat untuk mencari otomatis..."
                       value={searchObatRacikan}
                       onChange={(e) => setSearchObatRacikan(e.target.value)}
+                      onFocus={() => {
+                        if (!activeRacikan?.nama_racikan.trim()) {
+                          setEmptyRacikanWarnIdx(activeRacikanIdx);
+                          namaRacikanRefs.current[activeRacikanIdx]?.focus();
+                          window.setTimeout(() => setEmptyRacikanWarnIdx(null), 1500);
+                        }
+                      }}
                       autoComplete="off"
                     />
 
@@ -1565,8 +1578,14 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
           {/* Footer — sticky, di luar area scroll body, PERSIS pola
               ModalInputTriase.tsx (padding 16, borderTop). */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
-            <button type="button" onClick={openModalRiwayatResep} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={openModalRiwayatResep}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 16px', borderRadius: 2, border: 'none', background: '#4b5563', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { e.currentTarget.style.background = '#374151'; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = '#4b5563'; }}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
@@ -1575,19 +1594,20 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               </svg>
               Riwayat Resep
             </button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 0, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
-                Tutup
-              </button>
-              <button type="button" onClick={submitResepUnified} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                  <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                Simpan
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={submitResepUnified}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 16px', borderRadius: 2, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              Simpan
+            </button>
           </div>
         </div>
       </div>

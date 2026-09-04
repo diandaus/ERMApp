@@ -90,29 +90,26 @@ export const CatatanDokterTab: React.FC<CatatanDokterTabProps> = ({ patient }) =
   return (
     <div>
       {/* Form Tambah Catatan */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#ffffff', marginBottom: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
-          Dokter: <span style={{ color: '#1AB1E5' }}>{patient.nm_dokter || patient.kd_dokter || '-'}</span>
-        </div>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 0, padding: 16, background: '#ffffff', marginBottom: 20 }}>
         <textarea
           value={catatan}
           onChange={(e) => setCatatan(e.target.value)}
           placeholder="Tulis catatan dokter untuk kunjungan ini..."
           rows={4}
           style={{
-            width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 6,
+            width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 0,
             fontSize: 13, boxSizing: 'border-box', outline: 'none', resize: 'vertical', fontFamily: 'inherit',
           }}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 10 }}>
           <button
             onClick={handleSimpan}
             disabled={saving}
             style={{
-              padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-              border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
+              padding: '8px 16px', background: '#1AB1E5', color: '#ffffff',
+              border: 'none', borderRadius: 0, fontSize: 13, fontWeight: 400,
               cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
-              display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.2s',
+              display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.2s',
             }}
             onMouseEnter={(e) => { if (!saving) e.currentTarget.style.background = '#0891B2'; }}
             onMouseLeave={(e) => { if (!saving) e.currentTarget.style.background = '#1AB1E5'; }}
@@ -135,7 +132,7 @@ export const CatatanDokterTab: React.FC<CatatanDokterTabProps> = ({ patient }) =
       )}
 
       {!loading && list.length === 0 && (
-        <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
+        <div style={{ padding: 16, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 0 }}>
           Belum ada catatan dokter untuk kunjungan ini
         </div>
       )}
@@ -143,7 +140,7 @@ export const CatatanDokterTab: React.FC<CatatanDokterTabProps> = ({ patient }) =
       {!loading && list.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {list.map((item, idx) => (
-            <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', background: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: 0, padding: '10px 14px', background: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>
                   {item.tanggal} {item.jam} &middot; {item.nm_dokter || item.kd_dokter}
@@ -152,15 +149,11 @@ export const CatatanDokterTab: React.FC<CatatanDokterTabProps> = ({ patient }) =
               </div>
               <button
                 onClick={() => handleHapus(item)}
-                style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
+                style={{ padding: '6px 10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 0, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
                 onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
                 title="Hapus Catatan"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
                 Hapus
               </button>
             </div>
