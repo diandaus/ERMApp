@@ -204,27 +204,23 @@ export const DashboardView: React.FC<{ user: DashboardUser }> = ({ user }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#111827' }}>Dashboard</h2>
-        {isDokter && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Menampilkan kunjungan pasien Anda saja</div>}
-      </div>
 
       {/* Kunjungan Pasien */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <StatCard
-          label="Kunjungan Hari Ini"
+          label="Kunjungan Pasien Hari Ini"
           value={stats?.kunjungan_hari_ini || 0}
           color="#1AB1E5"
           icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>}
         />
         <StatCard
-          label="Kunjungan Bulan Ini"
+          label="Kunjungan Pasien Bulan Ini"
           value={stats?.kunjungan_bulan_ini || 0}
           color="#f59e0b"
           icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>}
         />
         <StatCard
-          label="Kunjungan Tahun Ini"
+          label="Kunjungan Pasien Tahun Ini"
           value={stats?.kunjungan_tahun_ini || 0}
           color="#10b981"
           icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>}

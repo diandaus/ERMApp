@@ -894,32 +894,41 @@ export const App: React.FC = () => {
             gap: 12
           }}
         >
-          {/* Hamburger — dulu di sini ada kolom "Cari menu" yang tidak
-              tersambung ke apa-apa (tidak ada onChange/filter), diganti
-              tombol untuk buka/tutup sidebar. Di layar compact toggle
-              drawer overlay (sidebarOpen), di desktop toggle collapse
-              sidebar sticky (desktopSidebarCollapsed). */}
-          <button
-            type="button"
-            onClick={() => (isCompact ? setSidebarOpen((v) => !v) : setDesktopSidebarCollapsed((v) => !v))}
-            aria-label={isCompact ? (sidebarOpen ? 'Tutup menu' : 'Buka menu') : (desktopSidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar')}
-            title={isCompact ? (sidebarOpen ? 'Tutup menu' : 'Buka menu') : (desktopSidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar')}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 4,
-              display: 'flex',
-              alignItems: 'center',
-              flexShrink: 0
-            }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="4" y1="7" x2="20" y2="7"></line>
-              <line x1="4" y1="12" x2="20" y2="12"></line>
-              <line x1="4" y1="17" x2="20" y2="17"></line>
-            </svg>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {/* Hamburger — dulu di sini ada kolom "Cari menu" yang tidak
+                tersambung ke apa-apa (tidak ada onChange/filter), diganti
+                tombol untuk buka/tutup sidebar. Di layar compact toggle
+                drawer overlay (sidebarOpen), di desktop toggle collapse
+                sidebar sticky (desktopSidebarCollapsed). */}
+            <button
+              type="button"
+              onClick={() => (isCompact ? setSidebarOpen((v) => !v) : setDesktopSidebarCollapsed((v) => !v))}
+              aria-label={isCompact ? (sidebarOpen ? 'Tutup menu' : 'Buka menu') : (desktopSidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar')}
+              title={isCompact ? (sidebarOpen ? 'Tutup menu' : 'Buka menu') : (desktopSidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="7" x2="20" y2="7"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="4" y1="17" x2="20" y2="17"></line>
+              </svg>
+            </button>
+
+            {/* Judul halaman aktif — nama menu yg lagi dibuka (mis.
+                "Dashboard", "Menu Utama", "IGD"), biar user tahu lagi di
+                halaman mana tanpa harus lihat sidebar. */}
+            <div style={{ fontSize: 15, fontWeight: 400, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {menuItems.find((m) => m.key === activeMenu)?.label || ''}
+            </div>
+          </div>
 
           <div
             style={{
