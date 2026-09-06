@@ -1868,7 +1868,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
             </div>
             <form onSubmit={confirmTambahObatRacikan}>
               <div className="row g-2 align-items-end">
-                <div className="col-auto" style={{ width: 150 }}>
+                <div className="col-auto" style={{ width: 115 }}>
                   <label className="form-label mb-1">Kandungan</label>
                   <input
                     type="text"
@@ -1882,7 +1882,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     autoFocus
                   />
                 </div>
-                <div className="col-auto" style={{ width: 150 }}>
+                <div className="col-auto" style={{ width: 120 }}>
                   <label className="form-label mb-1">Jumlah <span className="text-muted">(TAB, dst)</span></label>
                   <input
                     type="number"
@@ -1890,7 +1890,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     value={inputObatRacikanForm.jml === 0 ? '' : inputObatRacikanForm.jml}
                     min="0.1"
                     step="0.1"
-                    placeholder="4"
+                    placeholder="4 / 5 dst"
                     onChange={(e) => {
                       const raw = e.target.value;
                       const jml = raw === '' ? 0 : parseFloat(raw);
@@ -1899,14 +1899,12 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     }}
                   />
                 </div>
-                <div className="col-auto">
+                <div className="col-auto" style={{ display: 'flex', gap: 4 }}>
                   <button type="submit" className="btn btn-primary">
-                    ✅ Tambah
+                   Tambah
                   </button>
-                </div>
-                <div className="col-auto">
                   <button type="button" onClick={closeModalInputObatRacikan} className="btn btn-secondary">
-                    ❌ Batal
+                    Batal
                   </button>
                 </div>
               </div>

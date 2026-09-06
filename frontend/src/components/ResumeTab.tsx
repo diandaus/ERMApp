@@ -143,22 +143,18 @@ export const ResumeTab: React.FC<ResumeTabProps> = ({ patient }) => {
       {/* Riwayat Resume */}
       {exists && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#1AB1E5', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Resume Tersimpan
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, overflow: 'hidden' }}>
+
+            {/* Tombol Hapus — dipindah ke dalam card, pojok kanan atas */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 16px', borderBottom: '1px solid #f3f4f6' }}>
+              <button
+                type="button"
+                onClick={handleDelete}
+                style={{ padding: '6px 14px', borderRadius: 0, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}
+              >
+                Hapus
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleDelete}
-              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #dc2626', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-              </svg>
-              Hapus
-            </button>
-          </div>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
 
             {/* Dokter */}
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

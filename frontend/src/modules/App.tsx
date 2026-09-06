@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { MenuUtamaView } from './MenuUtama';
+import { DashboardView } from './Dashboard';
 import { RawatJalanView } from './RawatJalan';
 import { PemeriksaanView } from './Pemeriksaan';
 import { RawatInapView } from './RawatInap';
@@ -30,6 +31,7 @@ import { AppUser, LoginView, RegisterView, BATAS_TIDAK_AKTIF_MS, catatAktivitas 
 import { safeStorage } from '../utils/safeStorage';
 
 type MenuKey =
+  | 'dashboard'
   | 'menu-utama'
   | 'pendaftaran'
   | 'igd'
@@ -109,6 +111,7 @@ export const App: React.FC = () => {
 
   // Sidebar menu keys (modul yang ditampilkan di sidebar)
   const sidebarMenuKeys: MenuKey[] = [
+    'dashboard',
     'menu-utama',
     'igd',
     'rawat-jalan',
@@ -124,6 +127,17 @@ export const App: React.FC = () => {
   ];
 
   const menuItems: { key: MenuKey; label: string; icon: string | React.ReactNode }[] = [
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"></line>
+          <line x1="12" y1="20" x2="12" y2="4"></line>
+          <line x1="6" y1="20" x2="6" y2="14"></line>
+        </svg>
+      )
+    },
     {
       key: 'menu-utama',
       label: 'Menu Utama',
@@ -414,13 +428,13 @@ export const App: React.FC = () => {
     // Fallback to role-based access (for backward compatibility)
     switch (role) {
       case 'pendaftaran':
-        return menu === 'menu-utama' || menu === 'pendaftaran';
+        return menu === 'dashboard' || menu === 'menu-utama' || menu === 'pendaftaran';
       case 'dokter':
-        return menu === 'menu-utama' || menu === 'rawat-jalan' || menu === 'rawat-inap' || menu === 'laporan';
+        return menu === 'dashboard' || menu === 'menu-utama' || menu === 'rawat-jalan' || menu === 'rawat-inap' || menu === 'laporan';
       case 'farmasi':
-        return menu === 'menu-utama' || menu === 'farmasi' || menu === 'laporan';
+        return menu === 'dashboard' || menu === 'menu-utama' || menu === 'farmasi' || menu === 'laporan';
       case 'kasir':
-        return menu === 'menu-utama' || menu === 'kasir' || menu === 'casemix' || menu === 'laporan';
+        return menu === 'dashboard' || menu === 'menu-utama' || menu === 'kasir' || menu === 'casemix' || menu === 'laporan';
       case 'admin':
       default:
         return true;
@@ -479,6 +493,8 @@ export const App: React.FC = () => {
 
   const renderContent = () => {
     switch (activeMenu) {
+      case 'dashboard':
+        return <DashboardView user={user} />;
       case 'menu-utama':
         return <MenuUtamaView user={user} setActiveMenu={setActiveMenu} canAccessMenu={canAccessMenu} />;
       case 'pendaftaran':

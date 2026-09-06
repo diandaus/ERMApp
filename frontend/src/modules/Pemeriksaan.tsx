@@ -182,6 +182,9 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
   const [showIcareModal, setShowIcareModal] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null); // Ref untuk form input
   const [patientData, setPatientData] = React.useState<any>(patient); // State untuk data pasien lengkap
+  // showIdCard — modal Kartu Identitas Pasien, dibuka lewat klik avatar
+  // svg user di sidebar.
+  const [showIdCard, setShowIdCard] = React.useState(false);
 
   // History State untuk dropdown
   const [subjectiveHistory, setSubjectiveHistory] = React.useState<string[]>([]);
@@ -1431,18 +1434,25 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
           
           {/* Patient Avatar & Basic Info */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              background: 'rgba(255, 255, 255, 0.2)',
-              backdropFilter: 'blur(10px)',
-              borderRadius: 14,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '2px solid rgba(255, 255, 255, 0.3)',
-              flexShrink: 0
-            }}>
+            <button
+              type="button"
+              onClick={() => setShowIdCard(true)}
+              title="Lihat Kartu Identitas Pasien"
+              style={{
+                width: 56,
+                height: 56,
+                background: 'rgba(255, 255, 255, 0.2)',
+                backdropFilter: 'blur(10px)',
+                borderRadius: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid rgba(255, 255, 255, 0.3)',
+                flexShrink: 0,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
               <svg
                 width="32"
                 height="32"
@@ -1459,7 +1469,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                   fill="white"
                 />
               </svg>
-            </div>
+            </button>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {patientData.nm_pasien || '-'}
@@ -1527,11 +1537,6 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>}
               />
               <InfoItem
-                label="Pekerjaan"
-                value={patientData.pekerjaan || '-'}
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>}
-              />
-              <InfoItem
                 label="Nama Ibu Kandung"
                 value={patientData.nm_ibu || '-'}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>}
@@ -1576,18 +1581,13 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               />
               <InfoItem 
                 label="Tanggal & Jam" 
-                value={`${patient.tgl_registrasi} • ${patient.jam_reg}`}
+                value={`${patient.tgl_registrasi} | ${patient.jam_reg}`}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>}
               />
               <InfoItem 
                 label="Poliklinik" 
                 value={patient.nm_poli}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>}
-              />
-              <InfoItem 
-                label="Dokter" 
-                value={patient.nm_dokter}
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>}
               />
               <div style={{
                 padding: '10px 12px',
@@ -1659,31 +1659,39 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             </button>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151', lineHeight: '20px' }}>Pemeriksaan Rawat Jalan</h3>
           </div>
-          <button
-            onClick={handleKeluar}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 4,
-              border: '1px solid #1AB1E5',
-              background: '#1AB1E5',
-              color: '#ffffff',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transition: 'all 0.2s'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = '#0891B2';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = '#1AB1E5';
-            }}
-          >
-            Kembali
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+            {/* Dokter — dipindah dari sidebar ke navbar, sebelum tombol Kembali. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>Dokter:</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{patient.nm_dokter || '-'}</span>
+            </div>
+            <button
+              onClick={handleKeluar}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 4,
+                border: '1px solid #1AB1E5',
+                background: '#1AB1E5',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#0891B2';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = '#1AB1E5';
+              }}
+            >
+              Kembali
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -2137,6 +2145,78 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
           </div>
         </div>
       </div>
+
+      {/* Modal Kartu Identitas Pasien — dibuka lewat klik avatar svg user
+          di sidebar, tampilan ringkas identitas pasien (bukan cetak). */}
+      {showIdCard && (
+        <div
+          onClick={() => setShowIdCard(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 360, maxWidth: '100%', background: '#fff', borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 48px rgba(0,0,0,0.25)' }}
+          >
+            {/* Header cyan — identik gradient sidebar */}
+            <div style={{ background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)', padding: '20px 20px 16px', position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowIdCard(false)}
+                style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                ×
+              </button>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>Kartu Identitas Pasien</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 52, height: 52, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid rgba(255,255,255,0.3)', flexShrink: 0 }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 12C14.7614 12 17 9.76142 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76142 9.23858 12 12 12Z" fill="white" />
+                    <path d="M12 14C6.47715 14 2 17.134 2 21C2 21.5523 2.44772 22 3 22H21C21.5523 22 22 21.5523 22 21C22 17.134 17.5228 14 12 14Z" fill="white" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', wordBreak: 'break-word', lineHeight: 1.3 }}>{patientData.nm_pasien || '-'}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>No. RM: {patientData.no_rkm_medis || '-'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Body — daftar identitas */}
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+              {[
+                ['Jenis Kelamin', patientData.jk === 'L' ? 'Laki-laki' : patientData.jk === 'P' ? 'Perempuan' : patientData.jk || '-'],
+                ['Tempat, Tanggal Lahir', `${patientData.tmp_lahir ? `${patientData.tmp_lahir}, ` : ''}${patientData.tgl_lahir ? new Date(patientData.tgl_lahir).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}`],
+                ['Umur', patientData.umur || '-'],
+                ['Golongan Darah', patientData.gol_darah || '-'],
+                ['Alamat', patientData.alamat || '-'],
+                ['Pendidikan', patientData.pnd || '-'],
+                ['Nama Ibu Kandung', patientData.nm_ibu || '-'],
+                // Field tambahan (skip yg sudah ada di atas: alamat, TTL,
+                // umur, gol darah, pendidikan, nama ibu, penjamin) — ref.
+                // tampil() DlgPasien.java, via /api/pendaftaran/pasien/:no_rkm_medis.
+                ['Agama', patientData.agama || '-'],
+                ['Status Nikah', patientData.stts_nikah || '-'],
+                ['Suku Bangsa', patientData.suku_bangsa_nama || '-'],
+                ['Bahasa', patientData.bahasa || '-'],
+                ['Cacat Fisik', patientData.cacat_fisik || '-'],
+                ['No. KTP', patientData.no_ktp || '-'],
+                ['No. Telepon', patientData.no_tlp || '-'],
+                ['Email', patientData.email || '-'],
+                ['No. Peserta (BPJS)', patientData.no_peserta || '-'],
+                ['Tanggal Daftar', patientData.tgl_daftar ? new Date(patientData.tgl_daftar).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'],
+                ['Hubungan Keluarga', patientData.keluarga || '-'],
+                ['Nama Penanggung Jawab', patientData.namakeluarga || '-'],
+                ['NIP', patientData.nip || '-'],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 13, color: '#111827', wordBreak: 'break-word' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Riwayat Perawatan */}
       {showRiwayatModal && (

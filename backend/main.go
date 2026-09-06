@@ -89,6 +89,16 @@ type PatientBrief struct {
 	Pekerjaan  string `json:"pekerjaan"`
 	Umur       string `json:"umur"`
 	NoTlp      string `json:"no_tlp"`
+	// Field tambahan Kartu Identitas Pasien (ref. tampil() DlgPasien.java) —
+	// verified langsung ke DESCRIBE pasien/suku_bangsa.
+	NoKtp        string `json:"no_ktp"`
+	TglDaftar    string `json:"tgl_daftar"`
+	Keluarga     string `json:"keluarga"`
+	NamaKeluarga string `json:"namakeluarga"`
+	NoPeserta    string `json:"no_peserta"`
+	SukuBangsa   string `json:"suku_bangsa_nama"`
+	Nip          string `json:"nip"`
+	Email        string `json:"email"`
 }
 
 type RawatInapPatient struct {
@@ -2124,13 +2134,22 @@ func main() {
 				) as alamat,
 				pasien.pekerjaan,
 				COALESCE(pasien.umur, '') as umur,
-				COALESCE(pasien.no_tlp, '') as no_tlp
+				COALESCE(pasien.no_tlp, '') as no_tlp,
+				COALESCE(pasien.no_ktp, '') as no_ktp,
+				COALESCE(CAST(pasien.tgl_daftar AS CHAR), '') as tgl_daftar,
+				COALESCE(pasien.keluarga, '') as keluarga,
+				COALESCE(pasien.namakeluarga, '') as namakeluarga,
+				COALESCE(pasien.no_peserta, '') as no_peserta,
+				COALESCE(suku_bangsa.nama_suku_bangsa, '') as suku_bangsa_nama,
+				COALESCE(pasien.nip, '') as nip,
+				COALESCE(pasien.email, '') as email
 			FROM pasien
 			LEFT JOIN bahasa_pasien ON bahasa_pasien.id = pasien.bahasa_pasien
 			LEFT JOIN cacat_fisik ON cacat_fisik.id = pasien.cacat_fisik
 			LEFT JOIN kelurahan ON pasien.kd_kel = kelurahan.kd_kel
 			LEFT JOIN kecamatan ON pasien.kd_kec = kecamatan.kd_kec
 			LEFT JOIN kabupaten ON pasien.kd_kab = kabupaten.kd_kab
+			LEFT JOIN suku_bangsa ON suku_bangsa.id = pasien.suku_bangsa
 			WHERE pasien.no_rkm_medis = ?
 			LIMIT 1
 		`
@@ -2153,6 +2172,14 @@ func main() {
 			&p.Pekerjaan,
 			&p.Umur,
 			&p.NoTlp,
+			&p.NoKtp,
+			&p.TglDaftar,
+			&p.Keluarga,
+			&p.NamaKeluarga,
+			&p.NoPeserta,
+			&p.SukuBangsa,
+			&p.Nip,
+			&p.Email,
 		); err != nil {
 			if err == sql.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Pasien tidak ditemukan"})
@@ -4150,6 +4177,9 @@ func main() {
 	// === Kamar Operasi (OK) — Jadwal Operasi ===
 	r.GET("/api/booking-operasi/list", getBookingOperasiList(db))
 	r.PUT("/api/booking-operasi/update", updateBookingOperasi(db))
+
+	// === Dashboard ===
+	r.GET("/api/dashboard/stats", getDashboardStats(db))
 
 	// === Permintaan Ranap ===
 	r.GET("/api/permintaan-ranap/list", getPermintaanRanapList(db))
