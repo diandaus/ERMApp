@@ -76,6 +76,14 @@ const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: nu
   let cumulativeAngle = -90; // mulai dari jam 12
   const slices = data.map((d, i) => {
     const fraction = d.total / total;
+
+    // Cara bayar tunggal (100%) — arc SVG start===end tidak bisa gambar
+    // lingkaran penuh (cuma keluar titik krn strokeLinecap round di 1
+    // koordinat yg sama), gambar sbg <circle> stroke biasa.
+    if (fraction >= 0.999) {
+      return <circle key={i} cx={cx} cy={cy} r={ringR} fill="none" stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={strokeWidth} />;
+    }
+
     const sliceAngle = fraction * 360;
     const rawStart = cumulativeAngle;
     const rawEnd = cumulativeAngle + sliceAngle;
