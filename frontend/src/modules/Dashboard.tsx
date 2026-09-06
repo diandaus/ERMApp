@@ -146,16 +146,16 @@ const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { labe
           <div key={p.key} style={{ flex: '1 1 240px', minWidth: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{p.label}</div>
             <DonutChart data={data} total={totalData} size={170} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 16px', width: '100%' }}>
               {data.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>{PERIODE_KOSONG[p.key]}</div>
               ) : (
                 data.map((d, i) => {
                   const pct = totalData > 0 ? Math.round((d.total / totalData) * 100) : 0;
                   return (
-                    <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
                       <span style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: '#374151', flex: 1 }}>{d.label}</span>
+                      <span style={{ fontSize: 13, color: '#374151' }}>{d.label}</span>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{pct}%</span>
                       <span style={{ fontSize: 12, color: '#9ca3af' }}>({d.total})</span>
                     </div>
