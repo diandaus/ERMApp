@@ -339,6 +339,7 @@ export const App: React.FC = () => {
           safeStorage.remove('session', 'ermapp_last_activity');
         } else {
           setUser(parsed);
+          setActiveMenu(initialMenuFor(parsed));
           catatAktivitas();
         }
       } catch {
@@ -404,8 +405,20 @@ export const App: React.FC = () => {
   // dipakai gantian oleh beberapa dokter). "Ingat saya" cuma memengaruhi
   // ermapp_remembered_username (auto-isi username di form login), TIDAK
   // lagi bikin sesi login bertahan lintas restart.
+  // Landing page setelah login: Dashboard, KECUALI akun ini punya
+  // allowed_modules eksplisit (diatur admin lewat AddUserModal) yg TIDAK
+  // menyertakan 'dashboard' — hak akses dashboard sengaja bisa
+  // dinyala/matikan per-akun (lihat availableModules di AddUserModal.tsx).
+  const initialMenuFor = (u: AppUser): MenuKey => {
+    if (u.allowed_modules) {
+      return u.allowed_modules.split(',').filter(Boolean).includes('dashboard') ? 'dashboard' : 'menu-utama';
+    }
+    return 'dashboard';
+  };
+
   const handleLogin = (u: AppUser, _remember: boolean) => {
     setUser(u);
+    setActiveMenu(initialMenuFor(u));
     safeStorage.set('session', 'ermapp_user', JSON.stringify(u));
     safeStorage.remove('local', 'ermapp_user');
     catatAktivitas();

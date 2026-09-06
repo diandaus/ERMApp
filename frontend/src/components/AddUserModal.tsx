@@ -73,6 +73,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
 
   // Define available modules
   const availableModules = [
+    { key: 'dashboard', label: 'Dashboard' },
     { key: 'menu-utama', label: 'Menu Utama' },
     { key: 'pendaftaran', label: 'Pendaftaran' },
     { key: 'igd', label: 'IGD' },

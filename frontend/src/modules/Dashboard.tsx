@@ -2,8 +2,9 @@ import React from 'react';
 
 // Dashboard.tsx — menu baru di sidebar (App.tsx), di atas "Menu Utama".
 // Nampilin ringkasan kunjungan pasien (hari ini/bulan ini/tahun ini) +
-// diagram lingkaran perbandingan cara bayar bulan berjalan. Data dari
-// GET /api/dashboard/stats (backend/dashboard_handler.go). Pie chart
+// 2 card perbandingan cara bayar per periode yg sama, dipecah per jenis
+// kunjungan: Pasien Poliklinik/Rawat Jalan & Pasien Rawat Inap. Data dari
+// GET /api/dashboard/stats (backend/dashboard_handler.go). Donut chart
 // dibikin manual pakai SVG (tanpa library tambahan), sama pola dgn mini
 // line chart Grafik TTV di PemeriksaanRanap.tsx.
 
@@ -11,7 +12,26 @@ type DashboardStats = {
   kunjungan_hari_ini: number;
   kunjungan_bulan_ini: number;
   kunjungan_tahun_ini: number;
-  cara_bayar: { label: string; total: number }[];
+  cara_bayar_poli_hari_ini: { label: string; total: number }[];
+  cara_bayar_poli_bulan_ini: { label: string; total: number }[];
+  cara_bayar_poli_tahun_ini: { label: string; total: number }[];
+  cara_bayar_ranap_hari_ini: { label: string; total: number }[];
+  cara_bayar_ranap_bulan_ini: { label: string; total: number }[];
+  cara_bayar_ranap_tahun_ini: { label: string; total: number }[];
+};
+
+type Periode = 'hari' | 'bulan' | 'tahun';
+
+const PERIODE_OPTIONS: { key: Periode; label: string }[] = [
+  { key: 'hari', label: 'Hari Ini' },
+  { key: 'bulan', label: 'Bulan Ini' },
+  { key: 'tahun', label: 'Tahun Ini' },
+];
+
+const PERIODE_KOSONG: Record<Periode, string> = {
+  hari: 'Belum ada kunjungan hari ini.',
+  bulan: 'Belum ada kunjungan bulan ini.',
+  tahun: 'Belum ada kunjungan tahun ini.',
 };
 
 const PIE_COLORS = ['#3b82f6', '#6366f1', '#f59e0b', '#ec4899', '#10b981', '#6b7280'];
@@ -33,14 +53,14 @@ const StatCard: React.FC<{ label: string; value: number; icon: React.ReactNode; 
 // total di tengah. Tiap slice dihitung dari sudut kumulatif (mulai dari
 // jam 12 / -90deg, searah jarum jam). Kalau cuma 1 kategori (mis. cuma
 // BPJS), cincin digambar penuh tanpa celah.
-const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: number }> = ({ data, total }) => {
-  const size = 220;
+const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: number; size?: number }> = ({ data, total, size = 220 }) => {
+  const scale = size / 220;
   const cx = size / 2;
   const cy = size / 2;
-  const strokeWidth = 26;
+  const strokeWidth = 26 * scale;
   const tickOuterR = size / 2 - 2;
-  const tickInnerR = tickOuterR - 5;
-  const ringR = tickInnerR - 6 - strokeWidth / 2;
+  const tickInnerR = tickOuterR - 5 * scale;
+  const ringR = tickInnerR - 6 * scale - strokeWidth / 2;
 
   if (total === 0) {
     return (
@@ -96,12 +116,51 @@ const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: nu
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       {ticks}
       {slices}
-      <text x={cx} y={cy - 14} textAnchor="middle" fontSize={12} fill="#9ca3af">Total</text>
-      <text x={cx} y={cy + 12} textAnchor="middle" fontSize={28} fontWeight={700} fill="#111827">{total.toLocaleString('id-ID')}</text>
-      <text x={cx} y={cy + 30} textAnchor="middle" fontSize={12} fill="#9ca3af">Pasien</text>
+      <text x={cx} y={cy - 14 * scale} textAnchor="middle" fontSize={12 * scale} fill="#9ca3af">Total</text>
+      <text x={cx} y={cy + 12 * scale} textAnchor="middle" fontSize={28 * scale} fontWeight={700} fill="#111827">{total.toLocaleString('id-ID')}</text>
+      <text x={cx} y={cy + 30 * scale} textAnchor="middle" fontSize={12 * scale} fill="#9ca3af">Pasien</text>
     </svg>
   );
 };
+
+// CaraBayarCard — card "Pasien Poliklinik/Rawat Jalan" atau "Pasien Rawat
+// Inap", isinya 3 donut chart perbandingan cara bayar bersebelahan
+// (hari ini/bulan ini/tahun ini), dipakai 2x di DashboardView dgn data yg
+// sudah difilter status_lanjut ('Ralan'/'Ranap') dari backend.
+const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { label: string; total: number }[]> }> = ({ title, byPeriode }) => (
+  <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20 }}>
+    <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 16 }}>{title}</div>
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+      {PERIODE_OPTIONS.map((p) => {
+        const data = byPeriode[p.key];
+        const totalData = data.reduce((sum, d) => sum + d.total, 0);
+        return (
+          <div key={p.key} style={{ flex: '1 1 240px', minWidth: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{p.label}</div>
+            <DonutChart data={data} total={totalData} size={170} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+              {data.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>{PERIODE_KOSONG[p.key]}</div>
+              ) : (
+                data.map((d, i) => {
+                  const pct = totalData > 0 ? Math.round((d.total / totalData) * 100) : 0;
+                  return (
+                    <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: '#374151', flex: 1 }}>{d.label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{pct}%</span>
+                      <span style={{ fontSize: 12, color: '#9ca3af' }}>({d.total})</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
 
 type DashboardUser = {
   username: string;
@@ -128,8 +187,16 @@ export const DashboardView: React.FC<{ user: DashboardUser }> = ({ user }) => {
     return () => { cancelled = true; };
   }, [url]);
 
-  const caraBayar = stats?.cara_bayar || [];
-  const totalCaraBayar = caraBayar.reduce((sum, d) => sum + d.total, 0);
+  const caraBayarPoli: Record<Periode, { label: string; total: number }[]> = {
+    hari: stats?.cara_bayar_poli_hari_ini || [],
+    bulan: stats?.cara_bayar_poli_bulan_ini || [],
+    tahun: stats?.cara_bayar_poli_tahun_ini || [],
+  };
+  const caraBayarRanap: Record<Periode, { label: string; total: number }[]> = {
+    hari: stats?.cara_bayar_ranap_hari_ini || [],
+    bulan: stats?.cara_bayar_ranap_bulan_ini || [],
+    tahun: stats?.cara_bayar_ranap_tahun_ini || [],
+  };
 
   if (loading) {
     return <div style={{ padding: 60, textAlign: 'center', color: '#6b7280' }}>Memuat data dashboard...</div>;
@@ -164,31 +231,8 @@ export const DashboardView: React.FC<{ user: DashboardUser }> = ({ user }) => {
         />
       </div>
 
-      {/* Perbandingan Cara Bayar */}
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 2 }}>Perbandingan Cara Bayar</div>
-        <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>Bulan berjalan</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
-          <DonutChart data={caraBayar} total={totalCaraBayar} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 220 }}>
-            {caraBayar.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Belum ada kunjungan bulan ini.</div>
-            ) : (
-              caraBayar.map((d, i) => {
-                const pct = totalCaraBayar > 0 ? Math.round((d.total / totalCaraBayar) * 100) : 0;
-                return (
-                  <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
-                    <span style={{ fontSize: 14, color: '#374151', flex: 1 }}>{d.label}</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{pct}%</span>
-                    <span style={{ fontSize: 13, color: '#9ca3af' }}>({d.total})</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
+      <CaraBayarCard title="Poliklinik/Rawat Jalan" byPeriode={caraBayarPoli} />
+      <CaraBayarCard title="Rawat Inap" byPeriode={caraBayarRanap} />
     </div>
   );
 };
