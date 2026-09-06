@@ -7,16 +7,28 @@ import { ResepModal } from './ResepModal';
 // fetch & render sendiri) supaya bisa dipakai ulang di modul IGD tanpa
 // menduplikasi/menyentuh kode Resep yg sudah teruji di Pemeriksaan.tsx
 // (Rawat Jalan) — endpoint SAMA (/api/resep/*) krn kunjungan IGD sudah
-// diperlakukan flavor Ralan di seluruh backend.
+// diperlakukan flavor Ralan di seluruh backend. Skrg jg dipakai
+// PemeriksaanRanap.tsx lewat prop `isRanap` (endpoint beda,
+// /api/resep-ranap/*, tapi bentuk respons sudah disamakan di backend —
+// getResepRanap ikut kirim field `status`/`metode_racik`/`kapasitas` spy
+// tampilannya PERSIS sama tanpa ResepTab.tsx perlu tau beda flavor).
 type ResepTabProps = {
   patient: any;
+  isRanap?: boolean;
   // Increment nilai ini dari parent utk otomatis membuka modal "+ Input
   // Resep" (dipakai alur "Lanjutkan Input Resep" stlh simpan SOAP/CPPT).
-  // Perubahan pertama saat mount TIDAK memicu modal (lihat prevSignalRef).
+  // Baseline per no_rawat disimpan di lastHandledSignalByPatient (persist
+  // lintas mount/unmount tab), jadi tab-switch manual tanpa signal baru
+  // tidak ikut memicu modal terbuka lagi.
   openInputSignal?: number;
   // Dipanggil setiap riwayat resep berubah (simpan/hapus) supaya parent
   // bisa refresh data lain yg terkait (mis. history SOAP/CPPT IGD).
   onResepChanged?: () => void;
+  // extraActions — tombol tambahan yg dirender SEJAJAR "+ Input Resep"
+  // (mis. "+ Resep Pulang" khusus Ranap di PemeriksaanRanap.tsx), per
+  // permintaan user. Opsional — kalau tidak dikasih, cuma "+ Input Resep"
+  // sendirian spt biasa (Poli/IGD).
+  extraActions?: React.ReactNode;
 };
 
 const formatDateTime = (date: string, time: string) => {
@@ -67,7 +79,17 @@ const formatDateTime = (date: string, time: string) => {
   return `${formattedDate} ${formattedTime}`;
 };
 
-export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, onResepChanged }) => {
+// lastHandledSignalByPatient — baseline openInputSignal per no_rawat,
+// disimpan DI LUAR komponen supaya tetap "ingat" walau ResepTab
+// unmount/remount tiap kali user ganti tab (tab "resep" dirender
+// conditional `{activeTab==='resep' && <ResepTab/>}`, jadi ref biasa di
+// dalam komponen selalu reset ke nilai prop terbaru tiap kali tab
+// Resep dibuka kembali — bikin baseline useRef di bawah TIDAK BISA
+// bedakan "baru pertama kali dibuka manual" vs "baru saja di-trigger
+// bareng tab-switch dari alur Lanjutkan Input Resep").
+const lastHandledSignalByPatient: Record<string, number> = {};
+
+export const ResepTab: React.FC<ResepTabProps> = ({ patient, isRanap, openInputSignal, onResepChanged, extraActions }) => {
   const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [showResepModal, setShowResepModal] = React.useState(false);
@@ -76,31 +98,40 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
   const fetchRiwayatResep = React.useCallback(async () => {
     setLoadingRiwayatResep(true);
     try {
-      const response = await fetch(`/api/resep/history/${encodeURIComponent(patient.no_rkm_medis)}`);
+      const url = isRanap
+        ? `/api/resep-ranap/list?no_rawat=${encodeURIComponent(patient.no_rawat)}`
+        : `/api/resep/history/${encodeURIComponent(patient.no_rkm_medis)}`;
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch riwayat resep');
       const data = await response.json();
       const list = Array.isArray(data) ? data : [];
-      setRiwayatResep(list.filter((r: any) => r.no_rawat === patient.no_rawat));
+      setRiwayatResep(isRanap ? list : list.filter((r: any) => r.no_rawat === patient.no_rawat));
     } catch (err) {
       console.error('Error fetching riwayat resep:', err);
       setRiwayatResep([]);
     } finally {
       setLoadingRiwayatResep(false);
     }
-  }, [patient.no_rkm_medis, patient.no_rawat]);
+  }, [patient.no_rkm_medis, patient.no_rawat, isRanap]);
 
   React.useEffect(() => { fetchRiwayatResep(); }, [fetchRiwayatResep]);
 
-  // Buka modal input resep saat parent menaikkan openInputSignal — dilewati
-  // pada render pertama supaya tidak auto-buka begitu tab dimount.
-  const prevSignalRef = React.useRef(openInputSignal);
+  // Buka modal input resep saat parent menaikkan openInputSignal — baseline
+  // dibaca dari lastHandledSignalByPatient (persist lintas mount/unmount,
+  // lihat komentar di atas), bukan dari useRef biasa, supaya kombinasi
+  // "pindah tab + naikkan signal" yg terjadi di render yg sama (alur
+  // Lanjutkan Input Resep) tetap kedetek sbg perubahan begitu ResepTab
+  // baru mount, tapi tab-switch manual belakangan (signal tdk berubah)
+  // tidak memicu modal kebuka lagi.
   React.useEffect(() => {
-    if (openInputSignal !== undefined && openInputSignal !== prevSignalRef.current) {
-      prevSignalRef.current = openInputSignal;
+    const key = patient?.no_rawat || '';
+    const prev = lastHandledSignalByPatient[key] ?? 0;
+    if (openInputSignal !== undefined && openInputSignal !== prev) {
+      lastHandledSignalByPatient[key] = openInputSignal;
       setEditingResep(null);
       setShowResepModal(true);
     }
-  }, [openInputSignal]);
+  }, [openInputSignal, patient?.no_rawat]);
 
   const handleDeleteResep = async (noResep: string) => {
     const resepToDelete = riwayatResep.find(r => r.no_resep === noResep);
@@ -131,7 +162,10 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
 
     if (result.isConfirmed) {
       try {
-        const response = await fetch(`/api/resep/${encodeURIComponent(noResep)}`, { method: 'DELETE' });
+        const url = isRanap
+          ? `/api/resep-ranap?no_resep=${encodeURIComponent(noResep)}`
+          : `/api/resep/${encodeURIComponent(noResep)}`;
+        const response = await fetch(url, { method: 'DELETE' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || data.error || 'Gagal menghapus resep');
 
@@ -156,8 +190,9 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
     <>
       {/* Tombol rata kiri, ukuran/gaya PERSIS "Input Awal Medis" (padding
           8px 16px, radius 0, ikon +) — per permintaan user, ganti dari
-          versi lama (rata kanan sebaris judul, radius 4). */}
-      <div>
+          versi lama (rata kanan sebaris judul, radius 4). extraActions
+          (mis. "+ Resep Pulang" Ranap) dirender sejajar di sebelahnya. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button
           type="button"
           onClick={() => { setEditingResep(null); setShowResepModal(true); }}
@@ -170,6 +205,7 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
           </svg>
           Input Resep
         </button>
+        {extraActions}
       </div>
 
       {loadingRiwayatResep && (
@@ -301,6 +337,7 @@ export const ResepTab: React.FC<ResepTabProps> = ({ patient, openInputSignal, on
       {showResepModal && (
         <ResepModal
           patient={patient}
+          isRanap={isRanap}
           editResep={editingResep || undefined}
           onClose={() => { setShowResepModal(false); setEditingResep(null); }}
           onResepSaved={async () => {

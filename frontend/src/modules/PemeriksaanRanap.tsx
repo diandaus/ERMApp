@@ -1,6 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
-import { ResepModal } from '../components/ResepModal';
+import { ResepTab } from '../components/ResepTab';
 import { ResepPulangModal } from '../components/ResepPulangModal';
 import { RiwayatModal } from '../components/RiwayatModal';
 import { LabTab } from '../components/LabTab';
@@ -10,7 +10,7 @@ import { TindakanTab } from '../components/TindakanTab';
 import { ModalCariPetugas } from '../components/ModalCariPetugas';
 import { ModalCariPegawai } from '../components/ModalCariPegawai';
 import { ResumeTab } from '../components/ResumeTab';
-import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
+import { useMediaQuery } from '../hooks/useBreakpoint';
 import { getCurrentUserNip } from '../utils/currentUser';
 
 type RanapPatient = {
@@ -83,6 +83,52 @@ const InfoItem: React.FC<{
   </div>
 );
 
+// ── Tab SOAP/CPPT — style & komponen PERSIS SoapCpptFormIGD.tsx/
+// soapCpptIgdDisplay.tsx (PemeriksaanIGD.tsx), per permintaan user
+// "redesign tab SOAP/CPPT seperti tab SOAP di PemeriksaanIGD, 70%/30%
+// (30% utk Grafik TTV yg sudah ada)": panel flat putih, label 12px,
+// kolom 30px, tanpa card/shadow/gradient.
+const soapLabelStyle: React.CSSProperties = { display: 'block', fontSize: 12, marginBottom: 4, color: '#374151', fontWeight: 400 };
+const soapInputStyle: React.CSSProperties = { width: '100%', height: 30, padding: '5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: '#fff' };
+const soapSelectStyle: React.CSSProperties = { ...soapInputStyle, paddingRight: 32, appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' };
+const soapTextareaStyle: React.CSSProperties = { ...soapInputStyle, height: 'auto', resize: 'vertical', minHeight: 64, fontFamily: 'inherit' };
+
+const handleSoapFieldFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  e.currentTarget.style.borderColor = '#1AB1E5';
+  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26,177,229,0.15)';
+};
+const handleSoapFieldBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  e.currentTarget.style.borderColor = '#d1d5db';
+  e.currentTarget.style.boxShadow = 'none';
+};
+
+const SoapStepperIcon: React.FC = () => (
+  <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, background: '#1AB1E5', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
+const soapActionBtn = (bg: string, disabled?: boolean): React.CSSProperties => ({
+  padding: '8px 16px', borderRadius: 0, border: 'none', background: disabled ? '#9ca3af' : bg,
+  color: '#fff', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 400,
+  display: 'flex', alignItems: 'center', gap: 6,
+});
+
+// soapHistoryActionBtn — tombol Edit/Copy/Hapus di tabel Rincian Riwayat
+// dijadikan satu strip (segmented, solid fill + font putih), PERSIS
+// actionBtnStyle di utils/soapCpptIgdDisplay.tsx: border kanan dihapus
+// kecuali tombol terakhir, marginLeft:-1 (kecuali tombol pertama) utk
+// kolaps border ganda supaya benar-benar "tempel rapat".
+const soapHistoryActionBtn = (bg: string, isFirst: boolean, isLast: boolean): React.CSSProperties => ({
+  padding: '4px 8px', borderRadius: 0, border: `1px solid ${bg}`,
+  borderRight: isLast ? `1px solid ${bg}` : 'none',
+  marginLeft: isFirst ? 0 : -1,
+  background: bg, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap',
+});
+
 export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient, onBack, user }) => {
   const localDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'tindakan' | 'adime' | 'resume' | 'upload'>('soap');
@@ -100,30 +146,24 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   const [editingItem, setEditingItem] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
-  const [showSoapInAdime, setShowSoapInAdime] = React.useState(false);
   const [soapHistory, setSoapHistory] = React.useState<any[]>([]);
-  const [showResepModal, setShowResepModal] = React.useState(false);
-  const [editingResep, setEditingResep] = React.useState<{ no_resep: string; items: any[]; racikan?: any[] } | null>(null);
-  const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
+  // Tab Resep sekarang pakai komponen ResepTab.tsx (self-contained, SAMA
+  // persis dipakai Pemeriksaan.tsx/PemeriksaanIGD.tsx) — resepOpenSignal
+  // dinaikkan dari sini saat user klik "Lanjutkan Input Resep" di dialog
+  // sukses simpan SOAP, ResepTab otomatis buka modal input begitu signal
+  // berubah.
+  const [resepOpenSignal, setResepOpenSignal] = React.useState(0);
   const [showResepPulangModal, setShowResepPulangModal] = React.useState(false);
   const [editingResepPulang, setEditingResepPulang] = React.useState<{ no_permintaan: string; items: any[]; racikan?: any[] } | null>(null);
   const [riwayatResepPulang, setRiwayatResepPulang] = React.useState<any[]>([]);
   const [loadingResepPulang, setLoadingResepPulang] = React.useState(false);
-  const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
   const [showRiwayatModal, setShowRiwayatModal] = React.useState(false);
-  const { isCompact } = useBreakpoint();
   // Grid form (S/O/A/P, ADIME) boleh tetap 2 kolom sampai lebih sempit dari breakpoint
   // shell/drawer di atas — sidebar sekarang selalu drawer jadi tidak makan lebar konten.
   const isNarrow = useMediaQuery(640);
   // Di layar 1366px ke atas (laptop/desktop umum), Panel Info Pasien tetap permanen
   // seperti semula — drawer hanya dipakai di bawah itu (tablet, dsb).
   const isPermanentSidebar = !useMediaQuery(1365);
-  // Kartu Grafik TTV di sisa ruang kanan tab SOAP/CPPT cuma muat kalau ada
-  // ruang ekstra di luar sidebar(~300) + form(900) + gap. Breakpoint
-  // 1300px dipilih supaya kebagian juga di MacBook (13" ~1440px, 14"/16"
-  // Retina ~1512-1728px CSS width) yang sebelumnya kepotong oleh ambang
-  // 1600px — di bawah 1300px disembunyikan drpd overflow horizontal.
-  const showVitalChart = !useMediaQuery(1300);
   const [showPatientInfo, setShowPatientInfo] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -185,6 +225,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
     gcs: '',
     kesadaran: 'Compos Mentis',
     alergi: '',
+    // spo2/lingkarPerut — BARU (dulu selalu dikirim '' krn belum ada
+    // input-nya), ditambahkan supaya field-nya PERSIS SoapCpptFormIGD.tsx.
+    spo2: '',
+    lingkarPerut: '',
   });
   const [soapTgl, setSoapTgl] = React.useState(() => localDateStr());
   const [soapJam, setSoapJam] = React.useState(() => new Date().toTimeString().slice(0, 8));
@@ -298,20 +342,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
     }
   };
 
-  const fetchRiwayatResep = async () => {
-    setLoadingRiwayatResep(true);
-    try {
-      const res = await fetch(`/api/resep-ranap/list?no_rawat=${encodeURIComponent(patient.no_rawat)}`);
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      setRiwayatResep(Array.isArray(data) ? data : []);
-    } catch {
-      setRiwayatResep([]);
-    } finally {
-      setLoadingRiwayatResep(false);
-    }
-  };
-
   const fetchRiwayatResepPulang = async () => {
     setLoadingResepPulang(true);
     try {
@@ -345,26 +375,8 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   };
 
   React.useEffect(() => {
-    if (activeTab === 'resep') { fetchRiwayatResep(); fetchRiwayatResepPulang(); }
+    if (activeTab === 'resep') { fetchRiwayatResepPulang(); }
   }, [activeTab, patient.no_rkm_medis]);
-
-  const handleDeleteResep = async (noResep: string) => {
-    const result = await Swal.fire({
-      title: 'Hapus Resep?', text: `Hapus resep ${noResep}?`, icon: 'warning',
-      showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal',
-    });
-    if (!result.isConfirmed) return;
-    try {
-      const res = await fetch(`/api/resep-ranap?no_resep=${encodeURIComponent(noResep)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'Gagal menghapus resep');
-      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: data.message || 'Resep berhasil dihapus', timer: 2000, showConfirmButton: false });
-      await fetchRiwayatResep();
-    } catch (err: any) {
-      Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message || 'Gagal menghapus resep' });
-    }
-  };
 
   // ── History save helpers ──────────────────────────────────────────────────────
 
@@ -455,13 +467,13 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
         respirasi: form.respirasi,
         tinggi: form.tinggi,
         berat: form.berat,
-        spo2: '',
+        spo2: form.spo2,
         gcs: form.gcs,
         kesadaran: form.kesadaran,
         keluhan: form.subjective,
         pemeriksaan: form.objective,
         alergi: form.alergi,
-        lingkar_perut: '',
+        lingkar_perut: form.lingkarPerut,
         rtl: form.planning,
         penilaian: form.assessment,
         instruksi: form.instruksi,
@@ -524,7 +536,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
 
       clearForm();
       fetchSoapHistory();
-      if (result.isConfirmed) setShowResepModal(true);
+      if (result.isConfirmed) {
+        setActiveTab('resep');
+        setResepOpenSignal((s) => s + 1);
+      }
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan saat menyimpan SOAP');
     } finally {
@@ -533,7 +548,7 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   };
 
   const clearForm = () => {
-    setForm({ subjective: '', objective: '', assessment: '', planning: '', evaluasi: '', instruksi: '', tensi: '', suhu: '', nadi: '', respirasi: '', tinggi: '', berat: '', gcs: '', kesadaran: 'Compos Mentis', alergi: '' });
+    setForm({ subjective: '', objective: '', assessment: '', planning: '', evaluasi: '', instruksi: '', tensi: '', suhu: '', nadi: '', respirasi: '', tinggi: '', berat: '', gcs: '', kesadaran: 'Compos Mentis', alergi: '', spo2: '', lingkarPerut: '' });
     setIsEditMode(false);
     setEditingItem(null);
     setError('');
@@ -548,11 +563,34 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
       nadi: item.nadi || '', respirasi: item.respirasi || '',
       tinggi: item.tinggi || '', berat: item.berat || '',
       gcs: item.gcs || '', kesadaran: item.kesadaran || 'Compos Mentis',
-      alergi: item.alergi || '',
+      alergi: item.alergi || '', spo2: item.spo2 || '', lingkarPerut: item.lingkar_perut || '',
     });
     setSoapNip(item.nip || ''); setSoapPetugasNama(item.nama || '');
     setIsEditMode(true);
     setEditingItem(item);
+    setActiveTab('soap');
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  };
+
+  // copySOAP — "Copy" dari SoapCpptTableActions (renderSoapCpptTable):
+  // salin isi baris riwayat ke form sbg ENTRI BARU (POST, bukan PUT) dgn
+  // tanggal/jam SEKARANG (auto-time aktif lagi), beda dgn editSOAP yg
+  // mengunci tanggal/jam record lama krn itu primary key. Sama pola dgn
+  // copySoapieToForm di Pemeriksaan.tsx (Poli)/PemeriksaanIGD.tsx.
+  const copySOAP = (item: any) => {
+    setForm({
+      subjective: item.keluhan || '', objective: item.pemeriksaan || '',
+      assessment: item.penilaian || '', planning: item.rtl || '',
+      evaluasi: item.evaluasi || '', instruksi: item.instruksi || '',
+      tensi: item.tensi || '', suhu: item.suhu_tubuh || '',
+      nadi: item.nadi || '', respirasi: item.respirasi || '',
+      tinggi: item.tinggi || '', berat: item.berat || '',
+      gcs: item.gcs || '', kesadaran: item.kesadaran || 'Compos Mentis',
+      alergi: item.alergi || '', spo2: item.spo2 || '', lingkarPerut: item.lingkar_perut || '',
+    });
+    setIsEditMode(false);
+    setEditingItem(null);
+    setSoapUseAutoTime(true);
     setActiveTab('soap');
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
@@ -722,9 +760,9 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
   // ── Reusable dropdown renderer ────────────────────────────────────────────────
 
   const Dropdown = ({ items, onSelect, maxH = 200 }: { items: string[]; onSelect: (v: string) => void; maxH?: number }) => (
-    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #d1d5db', borderRadius: 6, boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: maxH, overflowY: 'auto', zIndex: 1000, marginTop: 4 }}>
+    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #d1d5db', borderRadius: 4, boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: maxH, overflowY: 'auto', zIndex: 1000, marginTop: 4 }}>
       {items.map((item, i) => (
-        <div key={i} onClick={() => onSelect(item)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: i < items.length - 1 ? '1px solid #e5e7eb' : 'none' }}
+        <div key={i} onMouseDown={() => onSelect(item)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: i < items.length - 1 ? '1px solid #e5e7eb' : 'none' }}
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f3f4f6'; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}
         >{item}</div>
@@ -845,8 +883,6 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} />
               <InfoItem label="Lama Rawat" value={patient.lama || '-'}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} />
-              <InfoItem label="DPJP" value={patient.nm_dokter || '-'}
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>} />
               {patient.diagnosa_awal && (
                 <InfoItem label="Diagnosa Awal" value={patient.diagnosa_awal} multiline
                   icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>} />
@@ -897,14 +933,23 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
             )}
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Pemeriksaan Rawat Inap</h3>
           </div>
-          <button
-            onClick={onBack}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #1AB1E5', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
-            onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
-            onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
-          >
-            Kembali
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+            {/* DPJP — dipindah dari card sidebar "Rawat Inap" ke navbar,
+                sebelum tombol Kembali, per permintaan user. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>DPJP:</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{patient.nm_dokter || '-'}</span>
+            </div>
+            <button
+              onClick={onBack}
+              style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #1AB1E5', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+              onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              Kembali
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -920,124 +965,112 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
         <div style={{ flex: 1, overflow: 'auto', background: '#f9fafb', overscrollBehavior: 'none' }}>
           <div style={{ padding: '24px 20px' }}>
 
-            {/* ── SOAP Tab ── */}
+            {/* ── SOAP Tab — redesain flat PERSIS SoapCpptFormIGD.tsx
+                (PemeriksaanIGD.tsx): panel putih tanpa shadow/gradient,
+                label 12px, input tinggi 30px, tombol aksi flat radius 0.
+                Layout 70% (form + Rincian Riwayat, tabelnya DIPERTAHANKAN
+                apa adanya per permintaan user) / 30% (Grafik TTV yg sudah
+                ada, dipindah dari position:fixed ke kolom sticky biasa
+                krn sekarang sudah kebagian ruang tetap 30%). ── */}
             {activeTab === 'soap' && (
-              <div style={{ display: 'flex', gap: 20, minWidth: 0 }}>
-
-                {/* Form area — maxWidth 900 disamakan dengan tab ADIME GIZI,
-                    supaya ukuran input/textarea-nya tidak melebar
-                    berlebihan di layar besar (dulu cuma flex:1 tanpa batas). */}
-                <div style={{ flex: 1, minWidth: 0, maxWidth: 900 }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div style={{ width: '70%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {isEditMode && (
-                    <div style={{ background: '#cffafe', border: '1px solid #1AB1E5', borderRadius: 8, padding: 12, marginBottom: 16, color: '#0e7490' }}>
-                      <strong>✏️ Mode Edit</strong> — Anda sedang mengedit SOAP yang sudah ada.
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 12px', background: '#e0f2fe', border: '1px solid #1AB1E5', color: '#0369a1', fontSize: 12, fontWeight: 400 }}>
+                      <span>Mode Edit — mengubah data SOAP/CPPT tanggal {soapTgl} {soapJam}. Tanggal/Jam dikunci karena jadi kunci data.</span>
+                      <button
+                        type="button"
+                        onClick={clearForm}
+                        style={{ padding: '4px 10px', borderRadius: 0, border: '1px solid #0369a1', background: '#fff', color: '#0369a1', cursor: 'pointer', fontSize: 12, fontWeight: 400, whiteSpace: 'nowrap' }}
+                      >
+                        Batal Edit
+                      </button>
                     </div>
                   )}
 
-                  <form ref={formRef} onSubmit={handleSubmit}>
-                    {/* Tgl/Jam + Pegawai + Alergi — satu baris di >=1366px, wrap ke baris berikutnya di layar lebih sempit */}
-                    {!isEditMode && (
-                      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: isPermanentSidebar ? 'nowrap' : 'wrap' }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Tgl :</span>
-                          <input type="date" value={soapTgl} onChange={(e) => { setSoapTgl(e.target.value); setSoapUseAutoTime(false); }}
-                            style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }} />
-                          <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Jam :</span>
-                          <input type="time" value={soapJam} onChange={(e) => { setSoapJam(e.target.value); setSoapUseAutoTime(false); }} step="1"
-                            style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }} />
-                          <input type="checkbox" checked={soapUseAutoTime} onChange={(e) => setSoapUseAutoTime(e.target.checked)}
-                            style={{ width: 16, height: 16, cursor: 'pointer' }} title="Gunakan waktu saat ini" />
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 220 }}>
-                          <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Pegawai :</span>
-                          <div style={{ display: 'flex', gap: 2, flex: 1, position: 'relative' }}>
-                            <input type="text" value={soapPetugasNama} readOnly placeholder="Nama pegawai"
-                              style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb' }} />
-                            <button type="button" onClick={() => setSoapPetugasOpen(true)}
-                              style={{ padding: '2px 2px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                              title="Cari pegawai">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <form ref={formRef} onSubmit={handleSubmit}>
+                      {/* Petugas + Tanggal + Jam — SELALU tampil (PERSIS pola
+                          SoapCpptFormIGD.tsx), Tanggal/Jam dikunci saat edit
+                          krn jadi bagian kunci data. */}
+                      <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 16, flexWrap: isPermanentSidebar ? 'nowrap' : 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1.4, minWidth: 220 }}>
+                          <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Pegawai :</label>
+                          <div style={{ display: 'flex', gap: 2, position: 'relative', flex: 1 }}>
+                            <input type="text" value={soapPetugasNama} readOnly placeholder="Cari pegawai..." style={{ ...soapInputStyle, flex: 1, background: '#f9fafb' }} />
+                            <button
+                              type="button" onClick={() => setSoapPetugasOpen(true)} title="Cari pegawai"
+                              style={{ padding: '2px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                               </svg>
                             </button>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Alergi :</span>
-                          <input
-                            type="text"
-                            value={form.alergi}
-                            onChange={(e) => handleInputChange('alergi', e.target.value)}
-                            style={{ width: 140, padding: '7px 10px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: 13, outline: 'none', background: form.alergi ? '#fef2f2' : '#fff', color: '#dc2626' }}
-                            placeholder="Alergi..."
-                          />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Tanggal :</label>
+                          <input type="date" value={soapTgl} onChange={(e) => { setSoapTgl(e.target.value); setSoapUseAutoTime(false); }} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} readOnly={isEditMode} style={{ ...soapInputStyle, width: 130, background: isEditMode ? '#f3f4f6' : '#fff', cursor: isEditMode ? 'not-allowed' : 'text' }} />
                         </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Jam :</label>
+                          <input type="time" value={soapJam} onChange={(e) => { setSoapJam(e.target.value); setSoapUseAutoTime(false); }} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} step="1" readOnly={isEditMode} style={{ ...soapInputStyle, width: 110, background: isEditMode ? '#f3f4f6' : '#fff', cursor: isEditMode ? 'not-allowed' : 'text' }} />
+                        </div>
+                        {!isEditMode && (
+                          <input type="checkbox" checked={soapUseAutoTime} onChange={(e) => setSoapUseAutoTime(e.target.checked)}
+                            style={{ width: 16, height: 16, cursor: 'pointer' }} title="Gunakan waktu saat ini" />
+                        )}
                       </div>
-                    )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'minmax(0,1fr)' : 'minmax(0,1fr) minmax(0,1fr)', gap: 20, marginBottom: 20 }}>
-
-                      {/* Left column */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                        {/* Subjective */}
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <span style={{ background: '#1AB1E5', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>S</span>
-                            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Subjective (Keluhan)</label>
+                      <div style={{ display: 'flex', flexDirection: isNarrow ? 'column' : 'row', gap: 24 }}>
+                        {/* Kiri — Keluhan (S), Pemeriksaan+Vital Sign (O) */}
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <div style={{ position: 'relative' }}>
+                            <label style={soapLabelStyle}>Keluhan</label>
+                            <textarea
+                              value={form.subjective} required
+                              onChange={(e) => handleInputChange('subjective', e.target.value)}
+                              onFocus={(e) => { filterSubjective(form.subjective); setShowSubjectiveDropdown(true); handleSoapFieldFocus(e); }}
+                              onBlur={(e) => { setTimeout(() => setShowSubjectiveDropdown(false), 200); handleSoapFieldBlur(e); }}
+                              placeholder="Keluhan yang disampaikan pasien..."
+                              style={soapTextareaStyle}
+                            />
+                            {showSubjectiveDropdown && filteredSubjective.length > 0 && (
+                              <Dropdown items={filteredSubjective} onSelect={(v) => { handleInputChange('subjective', v); setShowSubjectiveDropdown(false); }} />
+                            )}
                           </div>
-                          <textarea
-                            value={form.subjective} rows={4} required
-                            onChange={(e) => handleInputChange('subjective', e.target.value)}
-                            onFocus={() => { filterSubjective(form.subjective); setShowSubjectiveDropdown(true); }}
-                            onBlur={() => setTimeout(() => setShowSubjectiveDropdown(false), 200)}
-                            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                            placeholder="Keluhan yang disampaikan pasien..."
-                          />
-                          {showSubjectiveDropdown && filteredSubjective.length > 0 && (
-                            <Dropdown items={filteredSubjective} onSelect={(v) => { handleInputChange('subjective', v); setShowSubjectiveDropdown(false); }} />
-                          )}
-                        </div>
 
-                        {/* Objective */}
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <span style={{ background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>O</span>
-                            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Objective (Pemeriksaan)</label>
+                          <div style={{ position: 'relative' }}>
+                            <label style={soapLabelStyle}>Pemeriksaan</label>
+                            <textarea
+                              value={form.objective} required
+                              onChange={(e) => handleInputChange('objective', e.target.value)}
+                              onFocus={(e) => { filterObjective(form.objective); setShowObjectiveDropdown(true); handleSoapFieldFocus(e); }}
+                              onBlur={(e) => { setTimeout(() => setShowObjectiveDropdown(false), 200); handleSoapFieldBlur(e); }}
+                              placeholder="Hasil pemeriksaan fisik..."
+                              style={soapTextareaStyle}
+                            />
+                            {showObjectiveDropdown && filteredObjective.length > 0 && (
+                              <Dropdown items={filteredObjective} onSelect={(v) => { handleInputChange('objective', v); setShowObjectiveDropdown(false); }} />
+                            )}
                           </div>
-                          <textarea
-                            value={form.objective} rows={4} required
-                            onChange={(e) => handleInputChange('objective', e.target.value)}
-                            onFocus={() => { filterObjective(form.objective); setShowObjectiveDropdown(true); }}
-                            onBlur={() => setTimeout(() => setShowObjectiveDropdown(false), 200)}
-                            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                            placeholder="Hasil pemeriksaan fisik..."
-                          />
-                          {showObjectiveDropdown && filteredObjective.length > 0 && (
-                            <Dropdown items={filteredObjective} onSelect={(v) => { handleInputChange('objective', v); setShowObjectiveDropdown(false); }} />
-                          )}
-                        </div>
 
-                        {/* Vital Signs */}
-                        <div style={{ background: '#f9fafb', padding: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                             {([
-                              ['tensi',     form.tensi,     filterTensi,     setShowTensiDropdown,     showTensiDropdown,     filteredTensi,     'TD',       'mmHg'],
-                              ['suhu',      form.suhu,      filterSuhu,      setShowSuhuDropdown,      showSuhuDropdown,      filteredSuhu,      'Suhu',     '°C'],
-                              ['nadi',      form.nadi,      filterNadi,      setShowNadiDropdown,      showNadiDropdown,      filteredNadi,      'Nadi',     '/mnt'],
-                              ['respirasi', form.respirasi, filterRespirasi, setShowRespirasiDropdown, showRespirasiDropdown, filteredRespirasi, 'RR',       '/mnt'],
-                              ['tinggi',    form.tinggi,    filterTinggi,    setShowTinggiDropdown,    showTinggiDropdown,    filteredTinggi,    'Tinggi',   'cm'],
-                              ['berat',     form.berat,     filterBerat,     setShowBeratDropdown,     showBeratDropdown,     filteredBerat,     'Berat',    'kg'],
+                              ['tensi', form.tensi, filterTensi, setShowTensiDropdown, showTensiDropdown, filteredTensi, 'Tensi', '120/80'],
+                              ['nadi', form.nadi, filterNadi, setShowNadiDropdown, showNadiDropdown, filteredNadi, 'Nadi', ''],
+                              ['suhu', form.suhu, filterSuhu, setShowSuhuDropdown, showSuhuDropdown, filteredSuhu, 'Suhu', ''],
+                              ['respirasi', form.respirasi, filterRespirasi, setShowRespirasiDropdown, showRespirasiDropdown, filteredRespirasi, 'Respirasi', ''],
                             ] as const).map(([field, val, filter, setShow, show, filtered, label, placeholder]) => (
                               <div key={field} style={{ position: 'relative' }}>
-                                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 4 }}>{label}</label>
+                                <label style={soapLabelStyle}>{label}</label>
                                 <input
                                   type="text" value={val}
                                   onChange={(e) => handleInputChange(field, e.target.value)}
-                                  onFocus={() => { filter(val); setShow(true); }}
-                                  onBlur={() => setTimeout(() => setShow(false), 200)}
-                                  style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box' }}
+                                  onFocus={(e) => { filter(val); setShow(true); handleSoapFieldFocus(e); }}
+                                  onBlur={(e) => { setTimeout(() => setShow(false), 200); handleSoapFieldBlur(e); }}
                                   placeholder={placeholder}
+                                  style={soapInputStyle}
                                 />
                                 {show && filtered.length > 0 && (
                                   <SmallDropdown items={filtered} onSelect={(v) => { handleInputChange(field, v); setShow(false); }} />
@@ -1046,183 +1079,171 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                             ))}
                           </div>
 
-                          {/* GCS & Kesadaran */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginTop: 10 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
                             <div>
-                              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 4 }}>GCS</label>
-                              <input
-                                type="text" value={form.gcs}
-                                onChange={(e) => handleInputChange('gcs', e.target.value)}
-                                style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box' }}
-                                placeholder="E,V,M"
-                              />
+                              <label style={soapLabelStyle}>SpO2</label>
+                              <input type="text" value={form.spo2} onChange={(e) => handleInputChange('spo2', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={3} style={soapInputStyle} />
                             </div>
                             <div>
-                              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 4 }}>Kesadaran</label>
-                              <select
-                                value={form.kesadaran}
-                                onChange={(e) => handleInputChange('kesadaran', e.target.value)}
-                                style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box', background: '#fff' }}
-                              >
-                                {['Compos Mentis','Apatis','Delirium','Somnolen','Sopor','Coma'].map((k) => (
-                                  <option key={k} value={k}>{k}</option>
-                                ))}
-                              </select>
+                              <label style={soapLabelStyle}>L.P. (cm)</label>
+                              <input type="text" value={form.lingkarPerut} onChange={(e) => handleInputChange('lingkarPerut', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={5} style={soapInputStyle} />
+                            </div>
+                            <div>
+                              <label style={soapLabelStyle}>GCS</label>
+                              <input type="text" value={form.gcs} onChange={(e) => handleInputChange('gcs', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} placeholder="E,V,M" style={soapInputStyle} />
+                            </div>
+                            {([
+                              ['tinggi', form.tinggi, filterTinggi, setShowTinggiDropdown, showTinggiDropdown, filteredTinggi, 'TB (cm)'],
+                              ['berat', form.berat, filterBerat, setShowBeratDropdown, showBeratDropdown, filteredBerat, 'BB (Kg)'],
+                            ] as const).map(([field, val, filter, setShow, show, filtered, label]) => (
+                              <div key={field} style={{ position: 'relative' }}>
+                                <label style={soapLabelStyle}>{label}</label>
+                                <input
+                                  type="text" value={val}
+                                  onChange={(e) => handleInputChange(field, e.target.value)}
+                                  onFocus={(e) => { filter(val); setShow(true); handleSoapFieldFocus(e); }}
+                                  onBlur={(e) => { setTimeout(() => setShow(false), 200); handleSoapFieldBlur(e); }}
+                                  style={soapInputStyle}
+                                />
+                                {show && filtered.length > 0 && (
+                                  <SmallDropdown items={filtered} onSelect={(v) => { handleInputChange(field, v); setShow(false); }} />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                            <div>
+                              <label style={soapLabelStyle}>Kesadaran</label>
+                              <div style={{ position: 'relative' }}>
+                                <select value={form.kesadaran} onChange={(e) => handleInputChange('kesadaran', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} style={soapSelectStyle}>
+                                  {['Compos Mentis', 'Apatis', 'Delirium', 'Somnolen', 'Sopor', 'Coma'].map((k) => <option key={k} value={k}>{k}</option>)}
+                                </select>
+                                <SoapStepperIcon />
+                              </div>
+                            </div>
+                            <div>
+                              <label style={soapLabelStyle}>Alergi</label>
+                              <input type="text" value={form.alergi} onChange={(e) => handleInputChange('alergi', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={80} style={soapInputStyle} />
                             </div>
                           </div>
+                        </div>
 
+                        {/* Kanan — Asesmen (A), Planning (P), Instruksi/Implementasi (I), Evaluasi (E) */}
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <div style={{ position: 'relative' }}>
+                            <label style={soapLabelStyle}>Asesmen</label>
+                            <textarea
+                              value={form.assessment} required
+                              onChange={(e) => handleInputChange('assessment', e.target.value)}
+                              onFocus={(e) => { filterAssessment(form.assessment); setShowAssessmentDropdown(true); handleSoapFieldFocus(e); }}
+                              onBlur={(e) => { setTimeout(() => setShowAssessmentDropdown(false), 200); handleSoapFieldBlur(e); }}
+                              placeholder="Diagnosis atau assessment..."
+                              style={soapTextareaStyle}
+                            />
+                            {showAssessmentDropdown && filteredAssessment.length > 0 && (
+                              <Dropdown items={filteredAssessment} onSelect={(v) => { handleInputChange('assessment', v); setShowAssessmentDropdown(false); }} />
+                            )}
+                          </div>
+
+                          <div style={{ position: 'relative' }}>
+                            <label style={soapLabelStyle}>Planning</label>
+                            <textarea
+                              value={form.planning}
+                              onChange={(e) => handleInputChange('planning', e.target.value)}
+                              onFocus={(e) => { filterPlanning(form.planning); setShowPlanningDropdown(true); handleSoapFieldFocus(e); }}
+                              onBlur={(e) => { setTimeout(() => setShowPlanningDropdown(false), 200); handleSoapFieldBlur(e); }}
+                              placeholder="Rencana tindakan atau terapi..."
+                              style={soapTextareaStyle}
+                            />
+                            {showPlanningDropdown && filteredPlanning.length > 0 && (
+                              <Dropdown items={filteredPlanning} onSelect={(v) => { handleInputChange('planning', v); setShowPlanningDropdown(false); }} />
+                            )}
+                          </div>
+
+                          <div style={{ position: 'relative' }}>
+                            <label style={soapLabelStyle}>Instruksi/Implementasi</label>
+                            <textarea
+                              value={form.instruksi}
+                              onChange={(e) => handleInputChange('instruksi', e.target.value)}
+                              onFocus={(e) => { filterInstruksi(form.instruksi); setShowInstruksiDropdown(true); handleSoapFieldFocus(e); }}
+                              onBlur={(e) => { setTimeout(() => setShowInstruksiDropdown(false), 200); handleSoapFieldBlur(e); }}
+                              placeholder="Instruksi perawatan..."
+                              style={soapTextareaStyle}
+                            />
+                            {showInstruksiDropdown && filteredInstruksi.length > 0 && (
+                              <Dropdown items={filteredInstruksi} onSelect={(v) => { handleInputChange('instruksi', v); setShowInstruksiDropdown(false); }} />
+                            )}
+                          </div>
+
+                          <div style={{ position: 'relative' }}>
+                            <label style={soapLabelStyle}>Evaluasi</label>
+                            <textarea
+                              value={form.evaluasi}
+                              onChange={(e) => handleInputChange('evaluasi', e.target.value)}
+                              onFocus={(e) => { filterEvaluasi(form.evaluasi); setShowEvaluasiDropdown(true); handleSoapFieldFocus(e); }}
+                              onBlur={(e) => { setTimeout(() => setShowEvaluasiDropdown(false), 200); handleSoapFieldBlur(e); }}
+                              placeholder="Evaluasi dan catatan lanjutan..."
+                              style={{ ...soapTextareaStyle, minHeight: 50 }}
+                            />
+                            {showEvaluasiDropdown && filteredEvaluasi.length > 0 && (
+                              <Dropdown items={filteredEvaluasi} onSelect={(v) => { handleInputChange('evaluasi', v); setShowEvaluasiDropdown(false); }} />
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Right column */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                        {/* Assessment */}
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <span style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>A</span>
-                            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Assessment (Diagnosis)</label>
-                          </div>
-                          <textarea
-                            value={form.assessment} rows={3} required
-                            onChange={(e) => handleInputChange('assessment', e.target.value)}
-                            onFocus={() => { filterAssessment(form.assessment); setShowAssessmentDropdown(true); }}
-                            onBlur={() => setTimeout(() => setShowAssessmentDropdown(false), 200)}
-                            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                            placeholder="Diagnosis atau assessment..."
-                          />
-                          {showAssessmentDropdown && filteredAssessment.length > 0 && (
-                            <Dropdown items={filteredAssessment} onSelect={(v) => { handleInputChange('assessment', v); setShowAssessmentDropdown(false); }} />
-                          )}
-                        </div>
-
-                        {/* Planning */}
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <span style={{ background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>P</span>
-                            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Planning (Rencana)</label>
-                          </div>
-                          <textarea
-                            value={form.planning} rows={4}
-                            onChange={(e) => handleInputChange('planning', e.target.value)}
-                            onFocus={() => { filterPlanning(form.planning); setShowPlanningDropdown(true); }}
-                            onBlur={() => setTimeout(() => setShowPlanningDropdown(false), 200)}
-                            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                            placeholder="Rencana tindakan atau terapi..."
-                          />
-                          {showPlanningDropdown && filteredPlanning.length > 0 && (
-                            <Dropdown items={filteredPlanning} onSelect={(v) => { handleInputChange('planning', v); setShowPlanningDropdown(false); }} />
-                          )}
-                        </div>
-
-                        {/* Evaluasi */}
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <span style={{ background: '#14b8a6', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>E</span>
-                            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Evaluasi</label>
-                          </div>
-                          <textarea
-                            value={form.evaluasi} rows={2}
-                            onChange={(e) => handleInputChange('evaluasi', e.target.value)}
-                            onFocus={() => { filterEvaluasi(form.evaluasi); setShowEvaluasiDropdown(true); }}
-                            onBlur={() => setTimeout(() => setShowEvaluasiDropdown(false), 200)}
-                            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                            placeholder="Evaluasi dan catatan lanjutan..."
-                          />
-                          {showEvaluasiDropdown && filteredEvaluasi.length > 0 && (
-                            <Dropdown items={filteredEvaluasi} onSelect={(v) => { handleInputChange('evaluasi', v); setShowEvaluasiDropdown(false); }} />
-                          )}
-                        </div>
-
-                        {/* Instruksi */}
-                        <div style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <span style={{ background: '#6b7280', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>I</span>
-                            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Instruksi</label>
-                          </div>
-                          <textarea
-                            value={form.instruksi} rows={2}
-                            onChange={(e) => handleInputChange('instruksi', e.target.value)}
-                            onFocus={() => { filterInstruksi(form.instruksi); setShowInstruksiDropdown(true); }}
-                            onBlur={() => setTimeout(() => setShowInstruksiDropdown(false), 200)}
-                            style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                            placeholder="Instruksi perawatan..."
-                          />
-                          {showInstruksiDropdown && filteredInstruksi.length > 0 && (
-                            <Dropdown items={filteredInstruksi} onSelect={(v) => { handleInputChange('instruksi', v); setShowInstruksiDropdown(false); }} />
-                          )}
-                        </div>
+                      {/* Action buttons — flat radius 0, PERSIS pola tombol
+                          aksi tab SOAP Pemeriksaan.tsx (Poli)/PemeriksaanIGD.tsx,
+                          3 tombol Ranap yg sudah ada dipertahankan semua. */}
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingTop: 16 }}>
+                        <button type="submit" disabled={loading} style={soapActionBtn('#1AB1E5', loading)}>
+                          {loading ? 'Menyimpan...' : isEditMode ? 'Update SOAP' : 'Simpan SOAP'}
+                        </button>
+                        <button type="button" onClick={clearForm} style={soapActionBtn('#f59e0b')}>
+                          Clear
+                        </button>
+                        <button type="button" onClick={() => setShowRiwayatModal(true)} style={soapActionBtn('#6b7280')}>
+                          Riwayat Perawatan
+                        </button>
                       </div>
-                    </div>
 
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingTop: 12, justifyContent: 'center' }}>
-                      <button type="submit" disabled={loading}
-                        style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: loading ? '#9ca3af' : '#10b981', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
-                      >
-                        {loading ? <>⏳ Menyimpan...</> : (
-                          <>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                            </svg>
-                            {isEditMode ? 'Update SOAP' : 'Simpan SOAP'}
-                          </>
-                        )}
-                      </button>
-                      <button type="button" onClick={clearForm}
-                        style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-                        </svg>
-                        Clear
-                      </button>
-                      <button type="button" onClick={() => setShowRiwayatModal(true)}
-                        style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-                        </svg>
-                        Riwayat Perawatan
-                      </button>
-                    </div>
+                      {error && (
+                        <div style={{ marginTop: 16, padding: 12, background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: 12 }}>
+                          {error}
+                        </div>
+                      )}
+                    </form>
+                  </div>
 
-                    {error && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>
-                        {error}
-                      </div>
-                    )}
-                  </form>
-
-                  {/* SOAP History table */}
+                  {/* SOAP History table — DIPERTAHANKAN APA ADANYA (tabel
+                      "Rincian Riwayat" sudah ada sebelumnya) per permintaan
+                      user, cuma dipindah ke kolom 70% ini. */}
                   {soapHistory.length > 0 && (
-                    <div style={{ marginTop: 24 }}>
-                      <h5 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: '#374151' }}>Rincian Riwayat</h5>
-                      <div style={{ background: '#fff', borderRadius: 8, overflow: 'auto', border: '1px solid #e5e7eb' }}>
+                    <div>
+                      <div style={{ background: '#fff', borderRadius: 0, overflow: 'auto', border: '1px solid #e5e7eb' }}>
                         <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                           <thead>
-                            <tr style={{ background: '#f9fafb' }}>
-                              <th rowSpan={2} style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', verticalAlign: 'middle' }}>No</th>
-                              <th rowSpan={2} style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', verticalAlign: 'middle' }}>Tanggal</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>Suhu(C)</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>Tensi(mmHg)</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>Nadi(/mnt)</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>RR(/mnt)</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>Tinggi(cm)</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>Berat(kg)</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>GCS</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>SPO2</th>
-                              <th style={{ padding: 10, textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>Alergi</th>
+                            <tr style={{ background: '#f9fafb', fontWeight: 400 }}>
+                              <th rowSpan={2} style={{ width: 36, padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', verticalAlign: 'middle', fontWeight: 400 }}>No</th>
+                              <th rowSpan={2} style={{ width: 150, padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', verticalAlign: 'middle', fontWeight: 400 }}>Tanggal</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>Suhu(C)</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>Tensi(mmHg)</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>Nadi(/mnt)</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>RR(/mnt)</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>Tinggi(cm)</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>Berat(kg)</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>GCS</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>SPO2</th>
+                              <th style={{ padding: 10, textAlign: 'center', borderBottom: '1px solid #e5e7eb', fontWeight: 400 }}>Alergi</th>
                             </tr>
                           </thead>
                           <tbody>
                             {soapHistory.map((item, index) => (
                               <React.Fragment key={`${item.no_rawat}-${item.tgl_perawatan}-${item.jam_rawat}-${index}`}>
                                 <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                  <td rowSpan={8} style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', verticalAlign: 'top' }}>{index + 1}</td>
-                                  <td rowSpan={8} style={{ padding: 10, borderRight: '1px solid #e5e7eb' }}>
+                                  <td rowSpan={8} style={{ width: 36, padding: 10, textAlign: 'center', borderRight: '1px solid #e5e7eb', verticalAlign: 'top' }}>{index + 1}</td>
+                                  <td rowSpan={8} style={{ width: 150, padding: 10, borderRight: '1px solid #e5e7eb', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                       <div style={{ fontSize: 11 }}>
                                         <strong style={{ display: 'block' }}>{item.no_rawat}</strong>
@@ -1234,9 +1255,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                                           {item.jbtn && <span style={{ color: '#7c3aed', fontSize: 10 }}>{item.jbtn}</span>}
                                         </div>
                                       )}
-                                      <div style={{ display: 'flex', gap: 4 }}>
-                                        <button onClick={() => editSOAP(item)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid #1AB1E5', background: '#e0f2fe', color: '#1AB1E5', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
-                                        <button onClick={() => deleteSOAP(item)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Hapus</button>
+                                      <div style={{ display: 'flex' }}>
+                                        <button onClick={() => editSOAP(item)} style={soapHistoryActionBtn('#f59e0b', true, false)}>Edit</button>
+                                        <button onClick={() => copySOAP(item)} style={soapHistoryActionBtn('#2563eb', false, false)}>Copy</button>
+                                        <button onClick={() => deleteSOAP(item)} style={soapHistoryActionBtn('#ef4444', false, true)}>Hapus</button>
                                       </div>
                                     </div>
                                   </td>
@@ -1253,11 +1275,11 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                                 {[
                                   ['Kesadaran', item.kesadaran || 'Compos Mentis'],
                                   ['Subjective', item.keluhan || '-'],
-                                  ['Objective',  item.pemeriksaan || '-'],
+                                  ['Objective', item.pemeriksaan || '-'],
                                   ['Assessment', item.penilaian || '-'],
-                                  ['Plan',       item.rtl || '-'],
-                                  ['Instruksi',  item.instruksi || '-'],
-                                  ['Evaluasi',   item.evaluasi || '-'],
+                                  ['Plan', item.rtl || '-'],
+                                  ['Instruksi', item.instruksi || '-'],
+                                  ['Evaluasi', item.evaluasi || '-'],
                                 ].map(([label, val], ri) => (
                                   <tr key={ri} style={{ borderBottom: ri === 6 && index < soapHistory.length - 1 ? '2px solid #9ca3af' : '1px solid #e5e7eb' }}>
                                     <td style={{ padding: 8, background: '#f9fafb', fontWeight: 500, borderRight: '1px solid #e5e7eb', width: 120 }}>{label}</td>
@@ -1273,209 +1295,117 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                   )}
                 </div>
 
-                {/* Grafik TTV — mengisi sisa ruang kanan setelah form
-                    dibatasi maxWidth 900, cuma tampil di layar cukup lebar
-                    (>1300px) supaya tidak bikin overflow horizontal di
-                    layar sedang. Lebar responsif (clamp, sama pola dgn
-                    SIDEBAR_WIDTH di Pemeriksaan.tsx). position:sticky
-                    sebelumnya masih ikut lepas begitu parent row (form+
-                    history table yg panjang) selesai di-scroll — diganti
-                    position:fixed persis pola card "Kunjungan Terakhir" di
-                    Pemeriksaan.tsx: div placeholder di sini cuma menjaga
-                    ruang kosong di layout flex, card sungguhannya
-                    dipaku ke viewport (top:120 = tinggi header+tab+padding
-                    konten, right:20) sehingga benar-benar diam walau
-                    halaman di-scroll sejauh apa pun. */}
-                {showVitalChart && (
-                  <div style={{ width: 'clamp(300px, 20vw, 460px)', flexShrink: 0 }}>
-                    <div style={{
-                      background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      position: 'fixed', top: 120, right: 20, width: 'clamp(300px, 20vw, 460px)',
-                      maxHeight: 'calc(100vh - 140px)', overflowY: 'auto', zIndex: 10,
-                    }}>
-                      <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Grafik TTV</span>
-                      </div>
-                      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {vitalTrend.length === 0 ? (
-                          <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>
-                            Belum ada riwayat SOAP untuk digrafikkan
+                {/* Grafik TTV — sisi 30%, sumber data & grafik SVG-nya
+                    (renderVitalChart/vitalTrend) DIPERTAHANKAN apa adanya,
+                    cuma dipindah dari position:fixed ke kolom sticky biasa
+                    krn sekarang sudah kebagian ruang tetap 30% (dulu perlu
+                    fixed krn cuma "numpang" di sisa ruang kanan form yg
+                    dibatasi maxWidth 900 tanpa kolom sendiri). Restyle flat
+                    (radius 0, header polos) samakan dgn card sidebar
+                    "Kunjungan Terakhir" Pemeriksaan.tsx. */}
+                <div style={{ width: '30%', flexShrink: 0 }}>
+                  <div style={{ position: 'sticky', top: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0 }}>
+                    <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Grafik TTV</span>
+                    </div>
+                    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {vitalTrend.length === 0 ? (
+                        <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>
+                          Belum ada riwayat SOAP untuk digrafikkan
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Tekanan Darah</span>
+                              <span style={{ fontSize: 10, color: '#9ca3af' }}>mmHg</span>
+                            </div>
+                            {renderVitalChart([
+                              { color: '#2563eb', values: vitalTrend.map((p) => p.sistol) },
+                              { color: '#06b6d4', values: vitalTrend.map((p) => p.diastol) },
+                            ])}
+                            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                              <span style={{ fontSize: 10, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', display: 'inline-block' }} />Sistol
+                              </span>
+                              <span style={{ fontSize: 10, color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#06b6d4', display: 'inline-block' }} />Diastol
+                              </span>
+                            </div>
                           </div>
-                        ) : (
-                          <>
-                            <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Tekanan Darah</span>
-                                <span style={{ fontSize: 10, color: '#9ca3af' }}>mmHg</span>
-                              </div>
-                              {renderVitalChart([
-                                { color: '#2563eb', values: vitalTrend.map((p) => p.sistol) },
-                                { color: '#06b6d4', values: vitalTrend.map((p) => p.diastol) },
-                              ])}
-                              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                                <span style={{ fontSize: 10, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', display: 'inline-block' }} />Sistol
-                                </span>
-                                <span style={{ fontSize: 10, color: '#06b6d4', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#06b6d4', display: 'inline-block' }} />Diastol
-                                </span>
-                              </div>
-                            </div>
 
-                            <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Suhu</span>
-                                <span style={{ fontSize: 10, color: '#9ca3af' }}>°C</span>
-                              </div>
-                              {renderVitalChart([{ color: '#f59e0b', values: vitalTrend.map((p) => p.suhu) }])}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Suhu</span>
+                              <span style={{ fontSize: 10, color: '#9ca3af' }}>°C</span>
                             </div>
+                            {renderVitalChart([{ color: '#f59e0b', values: vitalTrend.map((p) => p.suhu) }])}
+                          </div>
 
-                            <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Nadi</span>
-                                <span style={{ fontSize: 10, color: '#9ca3af' }}>/mnt</span>
-                              </div>
-                              {renderVitalChart([{ color: '#ef4444', values: vitalTrend.map((p) => p.nadi) }])}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Nadi</span>
+                              <span style={{ fontSize: 10, color: '#9ca3af' }}>/mnt</span>
                             </div>
+                            {renderVitalChart([{ color: '#ef4444', values: vitalTrend.map((p) => p.nadi) }])}
+                          </div>
 
-                            <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Respirasi</span>
-                                <span style={{ fontSize: 10, color: '#9ca3af' }}>/mnt</span>
-                              </div>
-                              {renderVitalChart([{ color: '#8b5cf6', values: vitalTrend.map((p) => p.respirasi) }])}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Respirasi</span>
+                              <span style={{ fontSize: 10, color: '#9ca3af' }}>/mnt</span>
                             </div>
+                            {renderVitalChart([{ color: '#8b5cf6', values: vitalTrend.map((p) => p.respirasi) }])}
+                          </div>
 
-                            <div style={{ fontSize: 9, color: '#9ca3af', textAlign: 'center', borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
-                              {vitalTrend.length} data terakhir &middot; {vitalTrend[0]?.label} &ndash; {vitalTrend[vitalTrend.length - 1]?.label}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                          <div style={{ fontSize: 9, color: '#9ca3af', textAlign: 'center', borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
+                            {vitalTrend.length} data terakhir &middot; {vitalTrend[0]?.label} &ndash; {vitalTrend[vitalTrend.length - 1]?.label}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                )}
-
+                </div>
               </div>
             )}
 
+
             {/* ── Other Tabs ── */}
             {activeTab === 'resep' && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 400, color: '#374151' }}>Riwayat Resep Rawat Inap</h4>
-                  <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ width: '70%' }}>
+                {/* Riwayat Resep Rawat Inap — pakai komponen ResepTab.tsx
+                    (SAMA PERSIS dgn tab Resep Pemeriksaan.tsx/PemeriksaanIGD.tsx),
+                    isRanap switch endpoint ke /api/resep-ranap/* di dalamnya.
+                    Tombol "+ Resep Pulang" (khusus Ranap) dirender sejajar
+                    "+ Input Resep" bawaan ResepTab lewat extraActions. */}
+                <ResepTab
+                  patient={patient}
+                  isRanap
+                  openInputSignal={resepOpenSignal}
+                  onResepChanged={fetchSoapHistory}
+                  extraActions={
                     <button onClick={() => { setEditingResepPulang(null); setShowResepPulangModal(true); }}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                      style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400 }}>
                       + Resep Pulang
                     </button>
-                    <button onClick={() => setShowResepModal(true)}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
-                      + Tambah Resep
-                    </button>
-                  </div>
-                </div>
-                {loadingRiwayatResep ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Memuat...</div>
-                ) : riwayatResep.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>Belum ada resep rawat inap</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {riwayatResep.map((resep: any, i: number) => {
-                      const tglFmt = resep.tgl_peresepan
-                        ? (() => { const d = resep.tgl_peresepan.split('T')[0]; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; })()
-                        : '-';
-                      // tgl_perawatan='0000-00-00' = belum divalidasi apotek
-                      const sudahValidasi = resep.tgl_perawatan && resep.tgl_perawatan !== '0000-00-00';
-                      const nonRacikan: any[] = resep.non_racikan || [];
-                      const racikan: any[] = resep.racikan || [];
+                  }
+                />
 
-                      const renderNonRacikanRow = (item: any, j: number, total: number) => (
-                        <div key={j} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: j < total - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4 }}>
-                          <span style={{ flex: 1, fontWeight: 500 }}>{item.nama_brng}</span>
-                          <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{item.jml} {item.kode_sat}</span>
-                          {item.aturan_pakai && <span style={{ color: '#7c3aed', whiteSpace: 'nowrap' }}>{item.aturan_pakai}</span>}
-                        </div>
-                      );
-
-                      return (
-                        <div key={i} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sudahValidasi ? '#d1fae5' : '#e5e7eb'}`, overflow: 'hidden' }}>
-                          {/* Header card */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: sudahValidasi ? '#f0fdf4' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{resep.no_resep}</span>
-                              <span style={{ fontSize: 12, color: '#6b7280' }}>{tglFmt} • {resep.jam_peresepan?.slice(0, 5)}</span>
-                              {resep.nm_dokter && <span style={{ fontSize: 12, color: '#7c3aed' }}>{resep.nm_dokter}</span>}
-                              <span style={{
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                                background: sudahValidasi ? '#d1fae5' : '#fef3c7',
-                                color: sudahValidasi ? '#065f46' : '#92400e'
-                              }}>
-                                {sudahValidasi ? 'Sudah Tervalidasi' : 'Belum Tervalidasi'}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              <button
-                                onClick={() => {
-                                  // pre-fill non_racikan + racikan untuk edit
-                                  setEditingResep({
-                                    no_resep: resep.no_resep,
-                                    items: nonRacikan.map((it: any) => ({ ...it, aturan: it.aturan_pakai })),
-                                    racikan,
-                                  });
-                                  setShowResepModal(true);
-                                }}
-                                disabled={sudahValidasi}
-                                style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${sudahValidasi ? '#d1d5db' : '#1AB1E5'}`, background: sudahValidasi ? '#f3f4f6' : '#e0f2fe', color: sudahValidasi ? '#9ca3af' : '#1AB1E5', cursor: sudahValidasi ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 500 }}>
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteResep(resep.no_resep)}
-                                disabled={sudahValidasi}
-                                style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${sudahValidasi ? '#d1d5db' : '#ef4444'}`, background: sudahValidasi ? '#f3f4f6' : '#fef2f2', color: sudahValidasi ? '#9ca3af' : '#ef4444', cursor: sudahValidasi ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 500 }}>
-                                Hapus
-                              </button>
-                            </div>
-                          </div>
-                          {/* Items */}
-                          <div style={{ padding: '10px 16px' }}>
-                            {nonRacikan.length > 0 && (
-                              <div style={{ marginBottom: racikan.length > 0 ? 10 : 0 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
-                                {nonRacikan.map((item: any, j: number) => renderNonRacikanRow(item, j, nonRacikan.length))}
-                              </div>
-                            )}
-                            {racikan.length > 0 && racikan.map((rack: any, ri: number) => (
-                              <div key={ri} style={{ marginTop: ri > 0 ? 8 : 0 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                  Racikan — {rack.nama_racik || `R${ri+1}`}
-                                  {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
-                                  {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
-                                </div>
-                                {(rack.detail || []).map((det: any, di: number) => (
-                                  <div key={di} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: di < rack.detail.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4, paddingLeft: 8 }}>
-                                    <span style={{ flex: 1, fontWeight: 500 }}>{det.nama_brng}</span>
-                                    <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{det.jml} {det.kode_sat}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* ── Riwayat Resep Pulang ── */}
+                {/* ── Riwayat Resep Pulang — gaya/desain card & tabel item
+                    disamakan dgn "Riwayat Resep" (ResepTab.tsx): card
+                    flat radius 0, header polos (bg putih, no_permintaan
+                    tidak bold), badge status radius 0, item non-racikan/
+                    racikan dirender pakai tabel (bukan baris flex),
+                    tombol Edit/Batalkan solid-fill radius 0. */}
                 <div style={{ marginTop: 28 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 400, color: '#374151' }}>Riwayat Resep Pulang</h4>
-                  </div>
                   {loadingResepPulang ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Memuat...</div>
+                    <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Memuat data resep...</div>
                   ) : riwayatResepPulang.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>Belum ada resep pulang</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Resep Pulang</div>
+                      <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada permintaan resep pulang untuk pasien ini.</div>
+                    </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {riwayatResepPulang.map((rp: any, i: number) => {
@@ -1483,67 +1413,101 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                           ? (() => { const d = rp.tgl_permintaan.split('T')[0]; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; })()
                           : '-';
                         const sudah = rp.status === 'Sudah';
+                        const belum = !sudah;
                         const nonRacikan: any[] = rp.items || [];
                         const racikan: any[] = rp.racikan || [];
                         return (
-                          <div key={i} style={{ background: '#fff', borderRadius: 10, border: `1px solid ${sudah ? '#d1fae5' : '#e5e7eb'}`, overflow: 'hidden' }}>
+                          <div key={i} style={{ background: '#fff', borderRadius: 0, border: `1px solid ${belum ? '#e5e7eb' : '#d1fae5'}`, overflow: 'hidden' }}>
                             {/* Header card */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: sudah ? '#f0fdf4' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#ffffff', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: 8 }}>
                               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{rp.no_permintaan}</span>
+                                <span style={{ fontSize: 12, color: '#374151' }}>{rp.no_permintaan}</span>
                                 <span style={{ fontSize: 12, color: '#6b7280' }}>{tglFmt} • {rp.jam?.slice(0, 5)}</span>
                                 {rp.nm_dokter && <span style={{ fontSize: 12, color: '#7c3aed' }}>{rp.nm_dokter}</span>}
                                 <span style={{
-                                  fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                                  background: sudah ? '#d1fae5' : '#fef3c7',
-                                  color: sudah ? '#065f46' : '#92400e'
+                                  fontSize: 12, fontWeight: 400, padding: '2px 8px', borderRadius: 0,
+                                  background: belum ? '#fef3c7' : '#d1fae5',
+                                  color: belum ? '#92400e' : '#065f46'
                                 }}>
-                                  {sudah ? 'Sudah Tervalidasi' : 'Belum Tervalidasi'}
+                                  {belum ? 'Belum Tervalidasi' : 'Sudah Tervalidasi'}
                                 </span>
                               </div>
-                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                <button
-                                  onClick={() => { setEditingResepPulang({ no_permintaan: rp.no_permintaan, items: rp.items, racikan: rp.racikan }); setShowResepPulangModal(true); }}
-                                  disabled={sudah}
-                                  style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${sudah ? '#d1d5db' : '#16a34a'}`, background: sudah ? '#f3f4f6' : '#dcfce7', color: sudah ? '#9ca3af' : '#16a34a', cursor: sudah ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 500 }}>
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteResepPulang(rp.no_permintaan)}
-                                  disabled={sudah}
-                                  style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${sudah ? '#d1d5db' : '#ef4444'}`, background: sudah ? '#f3f4f6' : '#fef2f2', color: sudah ? '#9ca3af' : '#ef4444', cursor: sudah ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 500 }}>
-                                  Hapus
-                                </button>
-                              </div>
+                              {belum && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <button
+                                    type="button"
+                                    style={{ padding: '4px 10px', borderRadius: 0, border: 'none', background: '#16a34a', color: '#fff', cursor: 'default', fontSize: 12, fontWeight: 400 }}>
+                                    Resep Pulang
+                                  </button>
+                                  <div style={{ display: 'flex', gap: 0 }}>
+                                    <button
+                                      onClick={() => { setEditingResepPulang({ no_permintaan: rp.no_permintaan, items: rp.items, racikan: rp.racikan }); setShowResepPulangModal(true); }}
+                                      style={{ padding: '4px 10px', borderRadius: 0, border: 'none', background: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteResepPulang(rp.no_permintaan)}
+                                      style={{ padding: '4px 10px', borderRadius: 0, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 400 }}>
+                                      Batalkan
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
+
                             {/* Items */}
                             <div style={{ padding: '10px 16px' }}>
                               {nonRacikan.length > 0 && (
                                 <div style={{ marginBottom: racikan.length > 0 ? 10 : 0 }}>
-                                  <div style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
-                                  {nonRacikan.map((it: any, j: number) => (
-                                    <div key={j} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: j < nonRacikan.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4 }}>
-                                      <span style={{ flex: 1, fontWeight: 500 }}>{it.nama_brng}</span>
-                                      <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{it.jml} {it.kode_sat}</span>
-                                      {it.dosis && <span style={{ color: '#7c3aed', whiteSpace: 'nowrap' }}>{it.dosis}</span>}
-                                    </div>
-                                  ))}
+                                  <div style={{ fontSize: 12, fontWeight: 400, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Non Racikan</div>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                    <thead>
+                                      <tr style={{ background: '#f9fafb' }}>
+                                        <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
+                                        <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Jml</th>
+                                        <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 160 }}>Aturan Pakai</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {nonRacikan.map((it: any, j: number) => (
+                                        <tr key={j}>
+                                          <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', fontWeight: 400, color: '#374151' }}>{it.nama_brng || '-'}</td>
+                                          <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{it.jml || '-'} {it.kode_sat}</td>
+                                          <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#7c3aed' }}>{it.dosis || '-'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
                                 </div>
                               )}
                               {racikan.length > 0 && racikan.map((rack: any, ri: number) => (
                                 <div key={ri} style={{ marginTop: ri > 0 ? 8 : 0 }}>
-                                  <div style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    Racikan — {rack.nama_racik || `R${ri + 1}`}
-                                    {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
-                                    {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
-                                  </div>
-                                  {(rack.detail || []).map((det: any, di: number) => (
-                                    <div key={di} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', paddingBottom: 4, borderBottom: di < rack.detail.length - 1 ? '1px solid #f3f4f6' : 'none', marginBottom: 4, paddingLeft: 8 }}>
-                                      <span style={{ flex: 1, fontWeight: 500 }}>{det.nama_brng}</span>
-                                      <span style={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{det.jml} {det.kode_sat}</span>
-                                      {det.kandungan && <span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>{det.kandungan}</span>}
+                                  <div style={{ marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16, borderTop: ri > 0 ? '1px solid #e5e7eb' : 'none', paddingTop: ri > 0 ? 8 : 0 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 400, color: '#7c3aed', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      Racikan — {rack.nama_racik || `R${ri + 1}`}
+                                      {rack.kd_racik && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.kd_racik}</span>}
+                                      {rack.aturan_pakai && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.aturan_pakai}</span>}
+                                      {rack.jml_dr > 0 && <span style={{ fontWeight: 400, marginLeft: 6 }}>{rack.jml_dr} bungkus</span>}
                                     </div>
-                                  ))}
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                      <thead>
+                                        <tr style={{ background: '#f9fafb' }}>
+                                          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb' }}>Nama Obat</th>
+                                          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Kps</th>
+                                          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 400, color: '#6b7280', border: '1px solid #e5e7eb', width: 60 }}>Jml</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {(rack.detail || []).map((det: any, di: number) => (
+                                          <tr key={di}>
+                                            <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', fontWeight: 400, color: '#374151' }}>{det.nama_brng || '-'}</td>
+                                            <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{det.kapasitas || '-'}</td>
+                                            <td style={{ padding: '4px 8px', border: '1px solid #e5e7eb', color: '#6b7280' }}>{det.jml || '-'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -1556,34 +1520,72 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
               </div>
             )}
 
-            {activeTab === 'lab'      && <LabTab      patient={patient} />}
-            {activeTab === 'rad'      && <RadTab      patient={patient} />}
-            {activeTab === 'tindakan' && <TindakanTab patient={patient} isRanap />}
+            {activeTab === 'lab' && (
+              <div style={{ width: '70%' }}>
+                <LabTab patient={patient} />
+              </div>
+            )}
+            {activeTab === 'rad' && (
+              <div style={{ width: '70%' }}>
+                <RadTab patient={patient} />
+              </div>
+            )}
+            {activeTab === 'tindakan' && (
+              <div style={{ width: '70%' }}>
+                <TindakanTab patient={patient} isRanap />
+              </div>
+            )}
             {activeTab === 'upload'   && <UploadTab   patient={patient} />}
 
-            {/* ── ADIME GIZI Tab ── */}
+            {/* ── ADIME GIZI Tab — desain input flat disamakan dgn tab
+                SOAP/CPPT (panel putih tanpa shadow, label 12px, input
+                tinggi 30px, tombol aksi radius 0), per permintaan user
+                "ubah juga desain inputnya seperti tab soap". Riwayat ADIME
+                Gizi di bawahnya TIDAK diubah. Layout 70%/30% (30% = card
+                SOAP/CPPT yg dulu position:fixed floating, sekarang jadi
+                kolom sticky inline, SELALU tampil per permintaan user —
+                tombol toggle "Tampilkan/Sembunyikan SOAP/CPPT" dihapus). ── */}
             {activeTab === 'adime' && (
-              <div style={{ maxWidth: 900 }}>
-                {/* Row: Tanggal/Jam + Petugas */}
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+              <div style={{ width: '70%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {editingAdime && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 12px', background: '#e0f2fe', border: '1px solid #1AB1E5', color: '#0369a1', fontSize: 12, fontWeight: 400 }}>
+                    <span>Mode Edit — mengubah data ADIME Gizi tanggal {editingAdime}.</span>
+                    <button
+                      type="button"
+                      onClick={() => { setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' }); setAdimeNip(''); setAdimePetugasNama(''); setEditingAdime(null); }}
+                      style={{ padding: '4px 10px', borderRadius: 0, border: '1px solid #0369a1', background: '#fff', color: '#0369a1', cursor: 'pointer', fontSize: 12, fontWeight: 400, whiteSpace: 'nowrap' }}
+                    >
+                      Batal Edit
+                    </button>
+                  </div>
+                )}
 
-                  {/* Tanggal & Jam */}
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Tgl :</span>
-                    <input
-                      type="date"
-                      value={adimeTgl}
-                      onChange={(e) => { setAdimeTgl(e.target.value); setAdimeUseAutoTime(false); }}
-                      style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
-                    />
-                    <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Jam :</span>
-                    <input
-                      type="time"
-                      value={adimeJam}
-                      onChange={(e) => { setAdimeJam(e.target.value); setAdimeUseAutoTime(false); }}
-                      step="1"
-                      style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
-                    />
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* Petugas + Tanggal + Jam */}
+                  <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: isPermanentSidebar ? 'nowrap' : 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1.4, minWidth: 220 }}>
+                      <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Petugas :</label>
+                      <div style={{ display: 'flex', gap: 2, position: 'relative', flex: 1 }}>
+                        <input type="text" value={adimePetugasNama} readOnly placeholder="Cari petugas..." style={{ ...soapInputStyle, flex: 1, background: '#f9fafb' }} />
+                        <button
+                          type="button" onClick={() => setAdimePetugasOpen(true)} title="Cari petugas"
+                          style={{ padding: '2px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Tanggal :</label>
+                      <input type="date" value={adimeTgl} onChange={(e) => { setAdimeTgl(e.target.value); setAdimeUseAutoTime(false); }} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} style={{ ...soapInputStyle, width: 130 }} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Jam :</label>
+                      <input type="time" value={adimeJam} onChange={(e) => { setAdimeJam(e.target.value); setAdimeUseAutoTime(false); }} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} step="1" style={{ ...soapInputStyle, width: 110 }} />
+                    </div>
                     <input
                       type="checkbox"
                       checked={adimeUseAutoTime}
@@ -1593,329 +1595,276 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                     />
                   </div>
 
-                  {/* Petugas Gizi */}
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, position: 'relative' }}>
-                    <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Petugas :</span>
-                    <div style={{ display: 'flex', gap: 6, flex: 1, position: 'relative' }}>
-                      <input
-                        type="text"
-                        value={adimePetugasNama}
-                        readOnly
-                        placeholder="Nama petugas"
-                        style={{ flex: 1, padding: '8px 10px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb', color: '#374151' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setAdimePetugasOpen(true)}
-                        style={{ padding: '2px 2px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        title="Cari petugas"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  <ModalCariPetugas
+                    isOpen={adimePetugasOpen}
+                    onClose={() => setAdimePetugasOpen(false)}
+                    onSelect={(nip, nama) => { setAdimeNip(nip); setAdimePetugasNama(nama); }}
+                  />
 
-                <ModalCariPetugas
-                  isOpen={adimePetugasOpen}
-                  onClose={() => setAdimePetugasOpen(false)}
-                  onSelect={(nip, nama) => { setAdimeNip(nip); setAdimePetugasNama(nama); }}
-                />
-
-                <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 12 }}>
-
-                  {[
-                    { key: 'asesmen',    label: 'Asesmen Gizi',   badge: 'A', color: '#2563eb', placeholder: 'Antropometri, biokimia, klinis, riwayat diet...' },
-                    { key: 'diagnosis',  label: 'Diagnosis Gizi', badge: 'D', color: '#dc2626', placeholder: 'Problem (P) berkaitan dengan (BE) ditandai dengan (S)...' },
-                    { key: 'intervensi', label: 'Intervensi Gizi',badge: 'I', color: '#10b981', placeholder: 'Preskripsi diet, edukasi, koordinasi asuhan gizi...' },
-                    { key: 'monitoring', label: 'Monitoring',     badge: 'M', color: '#f59e0b', placeholder: 'Indikator yang dipantau...' },
-                    { key: 'evaluasi',   label: 'Evaluasi',       badge: 'E', color: '#8b5cf6', placeholder: 'Hasil evaluasi intervensi gizi...' },
-                    { key: 'instruksi',  label: 'Instruksi',      badge: 'I', color: '#ec4899', placeholder: 'Instruksi lanjutan...' },
-                  ].map(({ key, label, badge, color, placeholder }) => (
-                    <div key={key}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ background: color, color: '#fff', padding: '1px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{badge}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{label}</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 1fr', gap: 16 }}>
+                    {[
+                      { key: 'asesmen', label: 'Asesmen Gizi', placeholder: 'Antropometri, biokimia, klinis, riwayat diet...' },
+                      { key: 'diagnosis', label: 'Diagnosis Gizi', placeholder: 'Problem (P) berkaitan dengan (BE) ditandai dengan (S)...' },
+                      { key: 'intervensi', label: 'Intervensi Gizi', placeholder: 'Preskripsi diet, edukasi, koordinasi asuhan gizi...' },
+                      { key: 'monitoring', label: 'Monitoring', placeholder: 'Indikator yang dipantau...' },
+                      { key: 'evaluasi', label: 'Evaluasi', placeholder: 'Hasil evaluasi intervensi gizi...' },
+                      { key: 'instruksi', label: 'Instruksi', placeholder: 'Instruksi lanjutan...' },
+                    ].map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label style={soapLabelStyle}>{label}</label>
+                        <textarea
+                          value={(adime as any)[key]}
+                          onChange={(e) => setAdime((prev) => ({ ...prev, [key]: e.target.value }))}
+                          onFocus={handleSoapFieldFocus}
+                          onBlur={handleSoapFieldBlur}
+                          placeholder={placeholder}
+                          style={soapTextareaStyle}
+                        />
                       </div>
-                      <textarea
-                        rows={4}
-                        value={(adime as any)[key]}
-                        onChange={(e) => setAdime((prev) => ({ ...prev, [key]: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }}
-                        placeholder={placeholder}
-                      />
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                {/* Action buttons */}
-                <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
-                  <button
-                    disabled={savingAdime}
-                    onClick={async () => {
-                      setSavingAdime(true);
-                      try {
-                        const url = editingAdime ? '/api/adime' : '/api/adime';
-                        const method = editingAdime ? 'PUT' : 'POST';
-                        const payload = {
-                          no_rawat: patient.no_rawat,
-                          asesmen: adime.asesmen,
-                          diagnosis: adime.diagnosis,
-                          intervensi: adime.intervensi,
-                          monitoring: adime.monitoring,
-                          evaluasi: adime.evaluasi,
-                          instruksi: adime.instruksi,
-                          nip: adimeNip,
-                          ...(editingAdime
-                            ? { tanggal: editingAdime }
-                            : !adimeUseAutoTime ? { tanggal: `${adimeTgl} ${adimeJam}` } : {}),
-                        };
-                        const res = await fetch(url, {
-                          method,
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(payload),
-                        });
-                        if (!res.ok) throw new Error((await res.json()).error || 'Gagal menyimpan');
-                        Swal.fire({ icon: 'success', title: 'Berhasil!', text: editingAdime ? 'ADIME Gizi berhasil diupdate' : 'ADIME Gizi berhasil disimpan', timer: 2000, showConfirmButton: false });
-                        setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' });
-                        setAdimeNip(''); setAdimePetugasNama(''); 
-                        setEditingAdime(null);
-                        fetchAdimeHistory();
-                      } catch (err: any) {
-                        Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
-                      } finally {
-                        setSavingAdime(false);
-                      }
-                    }}
-                    style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: savingAdime ? '#9ca3af' : '#10b981', color: '#fff', fontSize: 13, fontWeight: 600, cursor: savingAdime ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                      <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                    </svg>
-                    {savingAdime ? 'Menyimpan...' : editingAdime ? 'Update ADIME' : 'Simpan ADIME'}
-                  </button>
-                  {editingAdime && (
+                  {/* Action buttons — flat radius 0, PERSIS pola soapActionBtn tab SOAP/CPPT */}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button
-                      onClick={() => { setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' }); setAdimeNip(''); setAdimePetugasNama('');  setEditingAdime(null); }}
-                      style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                      disabled={savingAdime}
+                      onClick={async () => {
+                        setSavingAdime(true);
+                        try {
+                          const url = editingAdime ? '/api/adime' : '/api/adime';
+                          const method = editingAdime ? 'PUT' : 'POST';
+                          const payload = {
+                            no_rawat: patient.no_rawat,
+                            asesmen: adime.asesmen,
+                            diagnosis: adime.diagnosis,
+                            intervensi: adime.intervensi,
+                            monitoring: adime.monitoring,
+                            evaluasi: adime.evaluasi,
+                            instruksi: adime.instruksi,
+                            nip: adimeNip,
+                            ...(editingAdime
+                              ? { tanggal: editingAdime }
+                              : !adimeUseAutoTime ? { tanggal: `${adimeTgl} ${adimeJam}` } : {}),
+                          };
+                          const res = await fetch(url, {
+                            method,
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload),
+                          });
+                          if (!res.ok) throw new Error((await res.json()).error || 'Gagal menyimpan');
+                          Swal.fire({ icon: 'success', title: 'Berhasil!', text: editingAdime ? 'ADIME Gizi berhasil diupdate' : 'ADIME Gizi berhasil disimpan', timer: 2000, showConfirmButton: false });
+                          setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' });
+                          setAdimeNip(''); setAdimePetugasNama('');
+                          setEditingAdime(null);
+                          fetchAdimeHistory();
+                        } catch (err: any) {
+                          Swal.fire({ icon: 'error', title: 'Gagal!', text: err.message });
+                        } finally {
+                          setSavingAdime(false);
+                        }
+                      }}
+                      style={soapActionBtn('#1AB1E5', savingAdime)}
                     >
-                      Batal Edit
+                      {savingAdime ? 'Menyimpan...' : editingAdime ? 'Update ADIME' : 'Simpan ADIME'}
                     </button>
-                  )}
-                  <button
-                    onClick={() => { setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' }); setAdimeNip(''); setAdimePetugasNama('');  }}
-                    style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#6b7280', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-                    </svg>
-                    Clear
-                  </button>
-                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => { setAdime({ asesmen: '', diagnosis: '', intervensi: '', monitoring: '', evaluasi: '', instruksi: '' }); setAdimeNip(''); setAdimePetugasNama(''); }}
+                      style={soapActionBtn('#f59e0b')}
+                    >
+                      Clear
+                    </button>
                     <button
                       onClick={() => setShowRiwayatModal(true)}
-                      style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #10b981', background: '#fff', color: '#10b981', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                      style={soapActionBtn('#6b7280')}
                     >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-                      </svg>
                       Riwayat Perawatan
-                    </button>
-                    <button
-                      onClick={() => setShowSoapInAdime((v) => !v)}
-                      style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1AB1E5', background: showSoapInAdime ? '#1AB1E5' : '#fff', color: showSoapInAdime ? '#fff' : '#1AB1E5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-                      </svg>
-                      {showSoapInAdime ? 'Sembunyikan SOAP/CPPT' : 'Tampilkan SOAP/CPPT'}
                     </button>
                   </div>
                 </div>
 
-                {/* Riwayat ADIME */}
+                {/* Riwayat ADIME — tabel No/Tanggal/Catatan/Petugas, PERSIS
+                    pola tabel Rincian Riwayat SOAP (No & Tanggal & Petugas
+                    rowSpan, satu baris per field di kolom Catatan). */}
                 {adimeHistory.length > 0 && (
-                  <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 12 }}>Riwayat ADIME Gizi</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {adimeHistory.map((item, idx) => (
-                        <div key={idx} style={{ borderRadius: 8, border: '1px solid #e5e7eb', padding: 14, background: '#f9fafb' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{item.tanggal}</span>
-                              {item.nama_petugas && (
-                                <span style={{ fontSize: 11, background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{item.nama_petugas}</span>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button
-                                onClick={() => {
-                                  setAdime({ asesmen: item.asesmen, diagnosis: item.diagnosis, intervensi: item.intervensi, monitoring: item.monitoring, evaluasi: item.evaluasi, instruksi: item.instruksi });
-                                  setAdimeNip(item.nip || ''); setAdimePetugasNama(item.nama_petugas || '');
-                                  setEditingAdime(item.tanggal);
-                                }}
-                                style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  const conf = await Swal.fire({ icon: 'warning', title: 'Hapus?', text: 'Data ADIME ini akan dihapus', showCancelButton: true, confirmButtonText: 'Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626' });
-                                  if (!conf.isConfirmed) return;
-                                  await fetch(`/api/adime?no_rawat=${encodeURIComponent(patient.no_rawat)}&tanggal=${encodeURIComponent(item.tanggal)}`, { method: 'DELETE' });
-                                  fetchAdimeHistory();
-                                }}
-                                style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                              >
-                                Hapus
-                              </button>
-                            </div>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 1fr', gap: 8 }}>
-                            {[['A — Asesmen', item.asesmen, '#2563eb'], ['D — Diagnosis', item.diagnosis, '#dc2626'], ['I — Intervensi', item.intervensi, '#10b981'], ['M — Monitoring', item.monitoring, '#f59e0b'], ['E — Evaluasi', item.evaluasi, '#8b5cf6'], ['I — Instruksi', item.instruksi, '#ec4899']].filter(([, v]) => v).map(([label, val, color]) => (
-                              <div key={label as string}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: color as string, marginBottom: 2 }}>{label as string}</div>
-                                <div style={{ fontSize: 12, color: '#374151', whiteSpace: 'pre-wrap' }}>{val as string}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                  <div style={{ background: '#fff', borderRadius: 0, overflow: 'auto', border: '1px solid #e5e7eb' }}>
+                    <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#1AB1E5' }}>
+                          <th style={{ width: 28, padding: '4px 8px', textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400, fontSize: 12, color: '#fff' }}>No.</th>
+                          <th style={{ width: 150, padding: '4px 8px', textAlign: 'center', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', fontWeight: 400, fontSize: 12, color: '#fff' }}>Tanggal</th>
+                          <th style={{ padding: '4px 8px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', fontWeight: 400, fontSize: 12, color: '#fff' }}>Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adimeHistory.map((item, idx) => {
+                          const fields: [string, string][] = [
+                            ['Asesmen', item.asesmen],
+                            ['Diagnosis', item.diagnosis],
+                            ['Intervensi', item.intervensi],
+                            ['Monitoring', item.monitoring],
+                            ['Evaluasi', item.evaluasi],
+                            ['Instruksi', item.instruksi],
+                          ];
+                          return (
+                            <React.Fragment key={idx}>
+                              {fields.map(([label, val], ri) => (
+                                <tr key={ri} style={{ borderBottom: ri === fields.length - 1 && idx < adimeHistory.length - 1 ? '2px solid #9ca3af' : '1px solid #e5e7eb' }}>
+                                  {ri === 0 && (
+                                    <td rowSpan={fields.length} style={{ width: 28, padding: '4px 8px', textAlign: 'center', borderRight: '1px solid #e5e7eb', verticalAlign: 'top' }}>{idx + 1}</td>
+                                  )}
+                                  {ri === 0 && (
+                                    <td rowSpan={fields.length} style={{ width: 150, padding: 10, borderRight: '1px solid #e5e7eb', verticalAlign: 'top', wordBreak: 'break-word' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div>
+                                          {item.tanggal}
+                                          {item.nama_petugas && <div style={{ color: '#000000', fontWeight: 700 }}>{item.nama_petugas}</div>}
+                                        </div>
+                                        <div style={{ display: 'flex' }}>
+                                          <button
+                                            onClick={() => {
+                                              setAdime({ asesmen: item.asesmen, diagnosis: item.diagnosis, intervensi: item.intervensi, monitoring: item.monitoring, evaluasi: item.evaluasi, instruksi: item.instruksi });
+                                              setAdimeNip(item.nip || ''); setAdimePetugasNama(item.nama_petugas || '');
+                                              setEditingAdime(item.tanggal);
+                                            }}
+                                            style={soapHistoryActionBtn('#f59e0b', true, false)}
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            onClick={async () => {
+                                              const conf = await Swal.fire({ icon: 'warning', title: 'Hapus?', text: 'Data ADIME ini akan dihapus', showCancelButton: true, confirmButtonText: 'Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626' });
+                                              if (!conf.isConfirmed) return;
+                                              await fetch(`/api/adime?no_rawat=${encodeURIComponent(patient.no_rawat)}&tanggal=${encodeURIComponent(item.tanggal)}`, { method: 'DELETE' });
+                                              fetchAdimeHistory();
+                                            }}
+                                            style={soapHistoryActionBtn('#ef4444', false, true)}
+                                          >
+                                            Hapus
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  )}
+                                  <td style={{ padding: '4px 8px' }}>{label} : {val || '-'}</td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
               </div>
+
+              {/* Card SOAP/CPPT — kolom 30%, dulu position:fixed floating
+                  panel, sekarang inline sticky sama pola card Grafik TTV
+                  di tab SOAP/CPPT. SELALU tampil (tombol toggle dihapus
+                  per permintaan user). */}
+              <div style={{ width: '30%', flexShrink: 0 }}>
+                  <div style={{ position: 'sticky', top: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0 }}>
+                    <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                      <span style={{ fontSize: 13, fontWeight: 400, color: '#374151' }}>SOAP / CPPT</span>
+                    </div>
+                    <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', padding: 12 }}>
+                      {soapHistory.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, paddingTop: 40 }}>Belum ada data SOAP/CPPT.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {soapHistory.map((item, idx) => (
+                            <div key={idx} style={{ border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                              {/* Entry header */}
+                              <div style={{ background: '#f9fafb', padding: '6px 10px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 11, fontWeight: 400, color: '#374151' }}>
+                                  {formatDateTime(item.tgl_perawatan || '', item.jam_rawat || '')}
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  {item.nama && <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 400 }}>{item.nama}</span>}
+                                  <button
+                                    title="Copy Subjective + Vital Signs ke Asesmen Gizi"
+                                    onClick={() => {
+                                      const vitals: string[] = [];
+                                      if (item.tensi)       vitals.push(`TD: ${item.tensi}`);
+                                      if (item.suhu_tubuh)  vitals.push(`Suhu: ${item.suhu_tubuh}°C`);
+                                      if (item.nadi)        vitals.push(`Nadi: ${item.nadi}/mnt`);
+                                      if (item.respirasi)   vitals.push(`RR: ${item.respirasi}/mnt`);
+                                      if (item.berat)       vitals.push(`BB: ${item.berat} kg`);
+                                      if (item.tinggi)      vitals.push(`TB: ${item.tinggi} cm`);
+                                      if (item.gcs)         vitals.push(`GCS: ${item.gcs}`);
+                                      if (item.spo2)        vitals.push(`SpO2: ${item.spo2}`);
+                                      if (item.alergi)      vitals.push(`Alergi: ${item.alergi}`);
+                                      const parts: string[] = [];
+                                      if (item.keluhan)     parts.push(`Keluhan: ${item.keluhan}`);
+                                      if (vitals.length)    parts.push(`Vital Signs:\n${vitals.map(v => `- ${v}`).join('\n')}`);
+                                      setAdime((prev) => ({ ...prev, asesmen: parts.join('\n\n') }));
+                                    }}
+                                    style={{ background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 0, cursor: 'pointer', padding: '3px 6px', display: 'flex', alignItems: 'center', color: '#0369a1' }}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Vital signs */}
+                              <div style={{ padding: '6px 10px', background: '#f0f9ff', borderBottom: '1px solid #e5e7eb', fontSize: 10 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px', marginBottom: item.alergi ? 6 : 0 }}>
+                                  {[['TD', item.tensi], ['Suhu', item.suhu_tubuh ? item.suhu_tubuh + '°C' : ''], ['Nadi', item.nadi ? item.nadi + '/mnt' : ''], ['RR', item.respirasi ? item.respirasi + '/mnt' : ''], ['BB', item.berat ? item.berat + ' kg' : ''], ['GCS', item.gcs]].map(([lbl, val]) => val ? (
+                                    <div key={lbl as string}><span style={{ color: '#9ca3af' }}>{lbl}:</span> <span style={{ fontWeight: 400, color: '#374151' }}>{val}</span></div>
+                                  ) : null)}
+                                </div>
+                                {item.alergi && (
+                                  <div style={{ marginTop: 4, padding: '3px 6px', background: '#fef2f2', borderRadius: 0, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <span style={{ fontSize: 9, fontWeight: 400, color: '#dc2626', background: '#fecaca', padding: '1px 4px', borderRadius: 3 }}>ALERGI</span>
+                                    <span style={{ color: '#dc2626', fontWeight: 400 }}>{item.alergi}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* SOAP fields */}
+                              <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8, fontSize: 11 }}>
+                                {[
+                                  ['S', 'Subjective',  item.keluhan,     '#1AB1E5'],
+                                  ['O', 'Objective',   item.pemeriksaan, '#f59e0b'],
+                                  ['A', 'Assessment',  item.penilaian,   '#ef4444'],
+                                  ['P', 'Plan',        item.rtl,         '#10b981'],
+                                  ['E', 'Evaluasi',    item.evaluasi,    '#14b8a6'],
+                                  ['I', 'Instruksi',   item.instruksi,   '#6b7280'],
+                                ].filter(([,, val]) => val).map(([badge, label, val, color]) => (
+                                  <div key={badge as string}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                                      <span style={{ background: color as string, color: '#fff', padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 400 }}>{badge}</span>
+                                      <span style={{ fontSize: 10, fontWeight: 400, color: color as string }}>{label}</span>
+                                    </div>
+                                    <p style={{ margin: 0, color: '#374151', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{val as string}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* ── Resume Tab ── */}
-            {activeTab === 'resume' && <ResumeTab patient={patient} />}
+            {activeTab === 'resume' && (
+              <div style={{ width: '70%' }}>
+                <ResumeTab patient={patient} />
+              </div>
+            )}
 
           </div>
         </div>
       </div>
 
-      {/* SOAP/CPPT fixed right panel — visible on ADIME tab */}
-      {activeTab === 'adime' && showSoapInAdime && (
-        <div style={{
-          position: 'fixed', top: 120,
-          right: isCompact ? 12 : 20,
-          left: isCompact ? 12 : undefined,
-          width: isCompact ? 'auto' : 300, height: 'calc(100vh - 160px)',
-          background: '#ffffff', borderRadius: 12,
-          border: '1px solid #e5e7eb', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          display: 'flex', flexDirection: 'column', zIndex: 100, overflow: 'hidden'
-        }}>
-          {/* Header */}
-          <div style={{
-            background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)',
-            padding: '10px 16px', borderRadius: '12px 12px 0 0',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>SOAP / CPPT</span>
-            <button onClick={() => setShowSoapInAdime(false)}
-              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', padding: '2px 8px', fontSize: 16, lineHeight: 1 }}>
-              ×
-            </button>
-          </div>
-
-          {/* Scrollable content */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-            {soapHistory.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, paddingTop: 40 }}>Belum ada data SOAP/CPPT.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {soapHistory.map((item, idx) => (
-                  <div key={idx} style={{ borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-                    {/* Entry header */}
-                    <div style={{ background: '#f9fafb', padding: '6px 10px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>
-                        {formatDateTime(item.tgl_perawatan || '', item.jam_rawat || '')}
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {item.nama && <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 600 }}>{item.nama}</span>}
-                        <button
-                          title="Copy Subjective + Vital Signs ke Asesmen Gizi"
-                          onClick={() => {
-                            const vitals: string[] = [];
-                            if (item.tensi)       vitals.push(`TD: ${item.tensi}`);
-                            if (item.suhu_tubuh)  vitals.push(`Suhu: ${item.suhu_tubuh}°C`);
-                            if (item.nadi)        vitals.push(`Nadi: ${item.nadi}/mnt`);
-                            if (item.respirasi)   vitals.push(`RR: ${item.respirasi}/mnt`);
-                            if (item.berat)       vitals.push(`BB: ${item.berat} kg`);
-                            if (item.tinggi)      vitals.push(`TB: ${item.tinggi} cm`);
-                            if (item.gcs)         vitals.push(`GCS: ${item.gcs}`);
-                            if (item.spo2)        vitals.push(`SpO2: ${item.spo2}`);
-                            if (item.alergi)      vitals.push(`Alergi: ${item.alergi}`);
-                            const parts: string[] = [];
-                            if (item.keluhan)     parts.push(`Keluhan: ${item.keluhan}`);
-                            if (vitals.length)    parts.push(`Vital Signs:\n${vitals.map(v => `- ${v}`).join('\n')}`);
-                            setAdime((prev) => ({ ...prev, asesmen: parts.join('\n\n') }));
-                          }}
-                          style={{ background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 5, cursor: 'pointer', padding: '3px 6px', display: 'flex', alignItems: 'center', color: '#0369a1' }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Vital signs */}
-                    <div style={{ padding: '6px 10px', background: '#f0f9ff', borderBottom: '1px solid #e5e7eb', fontSize: 10 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px', marginBottom: item.alergi ? 6 : 0 }}>
-                        {[['TD', item.tensi], ['Suhu', item.suhu_tubuh ? item.suhu_tubuh + '°C' : ''], ['Nadi', item.nadi ? item.nadi + '/mnt' : ''], ['RR', item.respirasi ? item.respirasi + '/mnt' : ''], ['BB', item.berat ? item.berat + ' kg' : ''], ['GCS', item.gcs]].map(([lbl, val]) => val ? (
-                          <div key={lbl as string}><span style={{ color: '#9ca3af' }}>{lbl}:</span> <span style={{ fontWeight: 600, color: '#374151' }}>{val}</span></div>
-                        ) : null)}
-                      </div>
-                      {item.alergi && (
-                        <div style={{ marginTop: 4, padding: '3px 6px', background: '#fef2f2', borderRadius: 4, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: '#dc2626', background: '#fecaca', padding: '1px 4px', borderRadius: 3 }}>ALERGI</span>
-                          <span style={{ color: '#dc2626', fontWeight: 600 }}>{item.alergi}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* SOAP fields */}
-                    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8, fontSize: 11 }}>
-                      {[
-                        ['S', 'Subjective',  item.keluhan,     '#1AB1E5'],
-                        ['O', 'Objective',   item.pemeriksaan, '#f59e0b'],
-                        ['A', 'Assessment',  item.penilaian,   '#ef4444'],
-                        ['P', 'Plan',        item.rtl,         '#10b981'],
-                        ['E', 'Evaluasi',    item.evaluasi,    '#14b8a6'],
-                        ['I', 'Instruksi',   item.instruksi,   '#6b7280'],
-                      ].filter(([,, val]) => val).map(([badge, label, val, color]) => (
-                        <div key={badge as string}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                            <span style={{ background: color as string, color: '#fff', padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700 }}>{badge}</span>
-                            <span style={{ fontSize: 10, fontWeight: 600, color: color as string }}>{label}</span>
-                          </div>
-                          <p style={{ margin: 0, color: '#374151', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{val as string}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Modals */}
-      {showResepModal && (
-        <ResepModal
-          patient={patient}
-          onClose={() => { setShowResepModal(false); setEditingResep(null); }}
-          onResepSaved={() => { fetchRiwayatResep(); }}
-          isRanap={true}
-          editResep={editingResep || undefined}
-        />
-      )}
       {showResepPulangModal && (
         <ResepPulangModal
           patient={patient}

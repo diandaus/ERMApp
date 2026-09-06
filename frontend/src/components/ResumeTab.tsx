@@ -123,22 +123,18 @@ export const ResumeTab: React.FC<ResumeTabProps> = ({ patient }) => {
   return (
     <div>
 
-      {/* Tombol Buat/Edit Resume */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Tombol Buat/Edit Resume — flat radius 0, PERSIS gaya "+ Input
+          Resep" di ResepTab.tsx, per permintaan user. */}
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-start' }}>
         <button
+          type="button"
           onClick={() => setShowModal(true)}
-          style={{
-            padding: '10px 20px', background: '#1AB1E5', color: '#ffffff',
-            border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-            transition: 'background 0.2s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
+          style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
+          onMouseOver={(e) => { e.currentTarget.style.background = '#0891B2'; }}
+          onMouseOut={(e) => { e.currentTarget.style.background = '#1AB1E5'; }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           {exists ? 'Edit Resume' : 'Buat Resume'}
         </button>

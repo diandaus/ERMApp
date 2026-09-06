@@ -145,7 +145,7 @@ const SoapAutoField: React.FC<{
       />
     )}
     {show && filtered.length > 0 && (
-      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 4, boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: 200, overflowY: 'auto', zIndex: 1000 }}>
+      <div style={{ position: 'absolute', top: '100%', right: 0, width: '80%', marginTop: 4, background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 4, boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: 200, overflowY: 'auto', zIndex: 1000 }}>
         {filtered.map((item, i) => (
           <div
             key={i}
@@ -1860,30 +1860,18 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                       {/* Kiri — Keluhan (S), Pemeriksaan+Vital Sign (O) */}
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <SoapAutoField
-                          label="Keluhan" value={form.subjective} onChange={(v) => handleInputChange('subjective', v)}
+                          label="Subjective" value={form.subjective} onChange={(v) => handleInputChange('subjective', v)}
                           onFocusFilter={() => filterSubjective(form.subjective)} show={showSubjectiveDropdown} setShow={setShowSubjectiveDropdown}
                           filtered={filteredSubjective} onPick={(v) => { handleInputChange('subjective', v); setShowSubjectiveDropdown(false); }}
                           multiline required maxLength={2000} placeholder="Keluhan yang disampaikan pasien..."
                         />
                         <SoapAutoField
-                          label="Pemeriksaan" value={form.objective} onChange={(v) => handleInputChange('objective', v)}
+                          label="Objective" value={form.objective} onChange={(v) => handleInputChange('objective', v)}
                           onFocusFilter={() => filterObjective(form.objective)} show={showObjectiveDropdown} setShow={setShowObjectiveDropdown}
                           filtered={filteredObjective} onPick={(v) => { handleInputChange('objective', v); setShowObjectiveDropdown(false); }}
                           multiline required maxLength={2000} placeholder="Hasil pemeriksaan fisik..."
                         />
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                          <SoapAutoField
-                            label="Tensi" value={form.tensi} onChange={(v) => handleInputChange('tensi', v)}
-                            onFocusFilter={() => filterTensi(form.tensi)} show={showTensiDropdown} setShow={setShowTensiDropdown}
-                            filtered={filteredTensi} onPick={(v) => { handleInputChange('tensi', v); setShowTensiDropdown(false); }}
-                            placeholder="120/80" maxLength={8}
-                          />
-                          <SoapAutoField
-                            label="Nadi" value={form.nadi} onChange={(v) => handleInputChange('nadi', v)}
-                            onFocusFilter={() => filterNadi(form.nadi)} show={showNadiDropdown} setShow={setShowNadiDropdown}
-                            filtered={filteredNadi} onPick={(v) => { handleInputChange('nadi', v); setShowNadiDropdown(false); }}
-                            maxLength={3}
-                          />
                           <SoapAutoField
                             label="Suhu" value={form.suhu} onChange={(v) => handleInputChange('suhu', v)}
                             onFocusFilter={() => filterSuhu(form.suhu)} show={showSuhuDropdown} setShow={setShowSuhuDropdown}
@@ -1891,25 +1879,11 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                             maxLength={5}
                           />
                           <SoapAutoField
-                            label="Respirasi" value={form.respirasi} onChange={(v) => handleInputChange('respirasi', v)}
-                            onFocusFilter={() => filterRespirasi(form.respirasi)} show={showRespirasiDropdown} setShow={setShowRespirasiDropdown}
-                            filtered={filteredRespirasi} onPick={(v) => { handleInputChange('respirasi', v); setShowRespirasiDropdown(false); }}
-                            maxLength={3}
+                            label="Tensi" value={form.tensi} onChange={(v) => handleInputChange('tensi', v)}
+                            onFocusFilter={() => filterTensi(form.tensi)} show={showTensiDropdown} setShow={setShowTensiDropdown}
+                            filtered={filteredTensi} onPick={(v) => { handleInputChange('tensi', v); setShowTensiDropdown(false); }}
+                            placeholder="120/80" maxLength={8}
                           />
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-                          <div>
-                            <label style={soapLabelStyle}>SpO2</label>
-                            <input type="text" value={form.spo2} onChange={(e) => handleInputChange('spo2', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={3} style={soapInputStyle} />
-                          </div>
-                          <div>
-                            <label style={soapLabelStyle}>L.P. (cm)</label>
-                            <input type="text" value={form.lingkarPerut} onChange={(e) => handleInputChange('lingkarPerut', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={5} style={soapInputStyle} />
-                          </div>
-                          <div>
-                            <label style={soapLabelStyle}>GCS</label>
-                            <input type="text" value={form.gcs} onChange={(e) => handleInputChange('gcs', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={10} style={soapInputStyle} />
-                          </div>
                           <SoapAutoField
                             label="BB (Kg)" value={form.berat} onChange={(v) => handleInputChange('berat', v)}
                             onFocusFilter={() => filterBerat(form.berat)} show={showBeratDropdown} setShow={setShowBeratDropdown}
@@ -1922,6 +1896,32 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                             filtered={filteredTinggi} onPick={(v) => { handleInputChange('tinggi', v); setShowTinggiDropdown(false); }}
                             maxLength={5}
                           />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                          <SoapAutoField
+                            label="Nadi" value={form.nadi} onChange={(v) => handleInputChange('nadi', v)}
+                            onFocusFilter={() => filterNadi(form.nadi)} show={showNadiDropdown} setShow={setShowNadiDropdown}
+                            filtered={filteredNadi} onPick={(v) => { handleInputChange('nadi', v); setShowNadiDropdown(false); }}
+                            maxLength={3}
+                          />
+                          <SoapAutoField
+                            label="Respirasi" value={form.respirasi} onChange={(v) => handleInputChange('respirasi', v)}
+                            onFocusFilter={() => filterRespirasi(form.respirasi)} show={showRespirasiDropdown} setShow={setShowRespirasiDropdown}
+                            filtered={filteredRespirasi} onPick={(v) => { handleInputChange('respirasi', v); setShowRespirasiDropdown(false); }}
+                            maxLength={3}
+                          />
+                          <div>
+                            <label style={soapLabelStyle}>SpO2</label>
+                            <input type="text" value={form.spo2} onChange={(e) => handleInputChange('spo2', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={3} style={soapInputStyle} />
+                          </div>
+                          <div>
+                            <label style={soapLabelStyle}>L.P. (cm)</label>
+                            <input type="text" value={form.lingkarPerut} onChange={(e) => handleInputChange('lingkarPerut', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={5} style={soapInputStyle} />
+                          </div>
+                          <div>
+                            <label style={soapLabelStyle}>GCS (E,V,M)</label>
+                            <input type="text" value={form.gcs} onChange={(e) => handleInputChange('gcs', e.target.value)} onFocus={handleSoapFieldFocus} onBlur={handleSoapFieldBlur} maxLength={10} style={soapInputStyle} />
+                          </div>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                           <div>
@@ -1952,7 +1952,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                           label="Planning" value={form.planning} onChange={(v) => handleInputChange('planning', v)}
                           onFocusFilter={() => filterPlanning(form.planning)} show={showPlanningDropdown} setShow={setShowPlanningDropdown}
                           filtered={filteredPlanning} onPick={(v) => { handleInputChange('planning', v); setShowPlanningDropdown(false); }}
-                          multiline maxLength={2000}
+                          multiline maxLength={2000} placeholder="Terisi otomatis dari input resep..."
                         />
                         <SoapAutoField
                           label="Instruksi/Implementasi" value={form.instruksi} onChange={(v) => handleInputChange('instruksi', v)}
@@ -2028,7 +2028,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                   ) : lastSoapie ? (
                     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 48px)', overflow: 'auto' }}>
                       <div style={{ padding: '10px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, position: 'sticky', top: 0, background: '#fff' }}>
-                        <span style={{ fontSize: 12, fontWeight: 400, color: '#111827' }}>Kunjungan Terakhir</span>
+                        <span style={{ fontSize: 12, fontWeight: 400, color: '#111827' }}>Riwayat Kunjungan Terakhir</span>
                         <button
                           type="button"
                           onClick={() => copySoapieToForm(lastSoapie)}

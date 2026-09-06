@@ -38,6 +38,10 @@ type ResepRacikanItem struct {
 	NamaRacik  string                    `json:"nama_racik"`
 	KdRacik    string                    `json:"kd_racik"`
 	NmRacik    string                    `json:"nm_racik"`
+	// MetodeRacik — alias NmRacik, field ini dibaca ResepTab.tsx (dipakai
+	// bareng jg oleh Ralan/IGD) supaya tampilan "Racikan — nama metode"
+	// konsisten lintas flavor tanpa ResepTab.tsx perlu tau nama field DB.
+	MetodeRacik string                   `json:"metode_racik"`
 	JmlDr      int                       `json:"jml_dr"`
 	AturanPakai string                   `json:"aturan_pakai"`
 	Keterangan string                    `json:"keterangan"`
@@ -51,6 +55,7 @@ type ResepRacikanDetailItem struct {
 	KodeSat   string  `json:"kode_sat"`
 	Jml       float64 `json:"jml"`
 	Kandungan string  `json:"kandungan"`
+	Kapasitas float64 `json:"kapasitas"`
 }
 
 type ResepRanapResult struct {
@@ -61,6 +66,10 @@ type ResepRanapResult struct {
 	KdDokter     string                `json:"kd_dokter"`
 	NmDokter     string                `json:"nm_dokter"`
 	TglPerawatan string                `json:"tgl_perawatan"` // '0000-00-00' = belum tervalidasi
+	// Status — "belum"/"sudah", diturunkan dari TglPerawatan di Go (bukan
+	// kolom asli), supaya ResepTab.tsx (yg dipakai bareng Ralan/IGD, cek
+	// resep.status==='belum') bisa dipakai apa adanya utk Ranap juga.
+	Status       string                `json:"status"`
 	NonRacikan   []ResepNonRacikanItem `json:"non_racikan"`
 	Racikan      []ResepRacikanItem    `json:"racikan"`
 }
@@ -90,6 +99,16 @@ type NonRacikanPayload struct {
 type SaveResepRanapPayload struct {
 	NoRawat    string              `json:"no_rawat"`
 	KdDokter   string              `json:"kd_dokter"`
+	// TglPeresepan/JamPeresepan — opsional, dikirim dari header modal Resep
+	// Ranap (Tgl.Resep/jam yg bisa diedit user, PERSIS Java) sesuai
+	// permintaan user. Kosong = fallback ke waktu sekarang (perilaku lama).
+	TglPeresepan string             `json:"tgl_peresepan"`
+	JamPeresepan string             `json:"jam_peresepan"`
+	// NoResep — opsional, dikirim HANYA saat checkbox "No.Resep otomatis"
+	// (ChkRM di Java) dimatikan user & diisi manual. Kosong (default) =
+	// backend tetap generate otomatis lewat generateNoResepRanap seperti
+	// biasa (perilaku lama, aman dari race dgn preview yg mungkin basi).
+	NoResep    string              `json:"no_resep"`
 	NonRacikan []NonRacikanPayload `json:"non_racikan"`
 	Racikan    []RacikanPayload    `json:"racikan"`
 }
@@ -237,6 +256,11 @@ func getResepRanap(db *sql.DB) gin.HandlerFunc {
 			if err := rows.Scan(&r.NoResep, &r.TglPeresepan, &r.JamPeresepan, &r.NoRawat, &r.KdDokter, &r.NmDokter, &r.TglPerawatan); err != nil {
 				continue
 			}
+			if r.TglPerawatan == "" || r.TglPerawatan == "0000-00-00" {
+				r.Status = "belum"
+			} else {
+				r.Status = "sudah"
+			}
 			r.NonRacikan = []ResepNonRacikanItem{}
 			r.Racikan = []ResepRacikanItem{}
 			resepMap[r.NoResep] = &r
@@ -300,6 +324,7 @@ func getResepRanap(db *sql.DB) gin.HandlerFunc {
 				if err := rackRows.Scan(&noResep, &item.NoRacik, &item.NamaRacik, &item.KdRacik, &item.NmRacik, &item.JmlDr, &item.AturanPakai, &item.Keterangan); err != nil {
 					continue
 				}
+				item.MetodeRacik = item.NmRacik
 				item.Detail = []ResepRacikanDetailItem{}
 				if r, ok := resepMap[noResep]; ok {
 					r.Racikan = append(r.Racikan, item)
@@ -313,7 +338,8 @@ func getResepRanap(db *sql.DB) gin.HandlerFunc {
 				COALESCE(db.nama_brng, rdrd.kode_brng) as nama_brng,
 				COALESCE(db.kode_sat, '') as kode_sat,
 				COALESCE(rdrd.jml, 0) as jml,
-				COALESCE(rdrd.kandungan, '') as kandungan
+				COALESCE(rdrd.kandungan, '') as kandungan,
+				COALESCE(db.kapasitas, 0) as kapasitas
 			FROM resep_dokter_racikan_detail rdrd
 			LEFT JOIN databarang db ON rdrd.kode_brng = db.kode_brng
 			WHERE rdrd.no_resep IN (%s)`, placeholders), args...)
@@ -324,7 +350,7 @@ func getResepRanap(db *sql.DB) gin.HandlerFunc {
 			for rackDetRows.Next() {
 				var noResep, noRacik string
 				var det ResepRacikanDetailItem
-				if err := rackDetRows.Scan(&noResep, &noRacik, &det.KodeBrng, &det.NamaBrng, &det.KodeSat, &det.Jml, &det.Kandungan); err != nil {
+				if err := rackDetRows.Scan(&noResep, &noRacik, &det.KodeBrng, &det.NamaBrng, &det.KodeSat, &det.Jml, &det.Kandungan, &det.Kapasitas); err != nil {
 					continue
 				}
 				if r, ok := resepMap[noResep]; ok {
@@ -366,6 +392,28 @@ func generateNoResepRanap(db *sql.DB, tgl string) (string, error) {
 	return fmt.Sprintf("%s%04d", prefix, seq+1), nil
 }
 
+// getNextNoResepRanap — preview No.Resep berikutnya (tanpa insert), dipakai
+// header modal Resep Ranap ("No.Resep : ...") supaya user lihat nomornya
+// SEBELUM simpan, PERSIS Java. Reuse generateNoResepRanap yg cuma SELECT,
+// jadi aman dipanggil berkali-kali (mis. tiap kali Tgl.Resep diganti) tanpa
+// efek samping — nomor final ttp di-generate ulang saat submit (race
+// antara preview & submit ditoleransi, sama seperti Java).
+func getNextNoResepRanap(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tgl := c.Query("tanggal")
+		if tgl == "" {
+			loc, _ := time.LoadLocation("Asia/Jakarta")
+			tgl = time.Now().In(loc).Format("2006-01-02")
+		}
+		noResep, err := generateNoResepRanap(db, tgl)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal generate no_resep"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"no_resep": noResep})
+	}
+}
+
 func saveResepRanap(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var payload SaveResepRanapPayload
@@ -386,11 +434,26 @@ func saveResepRanap(db *sql.DB) gin.HandlerFunc {
 		now := time.Now().In(loc)
 		tgl := now.Format("2006-01-02")
 		jam := now.Format("15:04:05")
+		// Tgl.Resep/jam bisa diedit manual dari header modal (PERSIS Java) —
+		// pakai kiriman client kalau ada, fallback ke waktu sekarang.
+		if payload.TglPeresepan != "" {
+			tgl = payload.TglPeresepan
+		}
+		if payload.JamPeresepan != "" {
+			jam = payload.JamPeresepan
+		}
 
-		noResep, err := generateNoResepRanap(db, tgl)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal generate no_resep"})
-			return
+		// No.Resep manual (checkbox ChkRM dimatikan di Java) — pakai apa
+		// adanya, skip auto-generate. Kosong (default) tetap auto-generate
+		// spt biasa.
+		noResep := payload.NoResep
+		if noResep == "" {
+			var err error
+			noResep, err = generateNoResepRanap(db, tgl)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal generate no_resep"})
+				return
+			}
 		}
 
 		tx, err := db.Begin()
@@ -493,9 +556,17 @@ func deleteResepRanap(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Cek status — jangan hapus yang sudah divalidasi apotek
+		// Cek status — jangan hapus yang sudah divalidasi apotek.
+		// CAST(...AS CHAR) WAJIB dipakai (bukan scan langsung kolom DATE ke
+		// string) — koneksi DB pakai parseTime=true, jadi tgl_perawatan
+		// bertipe DATE otomatis dikonversi driver ke time.Time dulu sblm
+		// di-scan ke string, dan utk tanggal nol ('0000-00-00') hasilnya
+		// TIDAK SAMA PERSIS dgn literal "0000-00-00" yg dibandingkan di
+		// bawah — bikin resep yg SEBENARNYA belum divalidasi selalu
+		// kedetek "sudah" & gagal dihapus (bug nyata, ditemukan lewat
+		// laporan user + verifikasi curl+query DB langsung).
 		var tglPerawatan string
-		err := db.QueryRow(`SELECT tgl_perawatan FROM resep_obat WHERE no_resep = ? AND status = 'ranap'`, noResep).Scan(&tglPerawatan)
+		err := db.QueryRow(`SELECT COALESCE(CAST(tgl_perawatan AS CHAR), '0000-00-00') FROM resep_obat WHERE no_resep = ? AND status = 'ranap'`, noResep).Scan(&tglPerawatan)
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Resep tidak ditemukan"})
 			return

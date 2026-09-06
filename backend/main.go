@@ -857,13 +857,26 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				kamar_inap.ttl_biaya,
 				kamar_inap.stts_pulang,
 				kamar_inap.lama,
-				COALESCE((SELECT GROUP_CONCAT(DISTINCT d_dpjp.nm_dokter SEPARATOR ', ')
-					FROM dpjp_ranap dr
-					INNER JOIN dokter d_dpjp ON dr.kd_dokter = d_dpjp.kd_dokter
-					WHERE dr.no_rawat = kamar_inap.no_rawat), '') AS nm_dokter,
-				COALESCE((SELECT GROUP_CONCAT(DISTINCT dr.kd_dokter SEPARATOR ', ')
-					FROM dpjp_ranap dr
-					WHERE dr.no_rawat = kamar_inap.no_rawat), '') AS kd_dokter,
+				COALESCE(
+					NULLIF((SELECT GROUP_CONCAT(DISTINCT d_dpjp.nm_dokter SEPARATOR ', ')
+						FROM dpjp_ranap dr
+						INNER JOIN dokter d_dpjp ON dr.kd_dokter = d_dpjp.kd_dokter
+						WHERE dr.no_rawat = kamar_inap.no_rawat), ''),
+					(SELECT d_igd.nm_dokter FROM dokter d_igd WHERE d_igd.kd_dokter = reg_periksa.kd_dokter),
+					''
+				) AS nm_dokter,
+				-- DPJP belum diset (dpjp_ranap kosong) → fallback dokter IGD
+				-- (reg_periksa.kd_dokter, dokter yg mendaftarkan/menangani
+				-- pasien ini di IGD) — PERSIS chain dpjp_ranap→reg_periksa
+				-- di DlgPeresepanDokter.java (setNoRm()), dipakai auto-isi
+				-- Peresep di modal Resep Ranap.
+				COALESCE(
+					NULLIF((SELECT GROUP_CONCAT(DISTINCT dr.kd_dokter SEPARATOR ', ')
+						FROM dpjp_ranap dr
+						WHERE dr.no_rawat = kamar_inap.no_rawat), ''),
+					reg_periksa.kd_dokter,
+					''
+				) AS kd_dokter,
 				kamar_inap.kd_kamar,
 				kamar.kd_bangsal,
 				reg_periksa.status_bayar,
@@ -4094,6 +4107,7 @@ func main() {
 	r.GET("/api/resep-ranap/obat", searchObatRanap(db))
 	r.GET("/api/resep-ranap/aturan-pakai", getAturanPakai(db))
 	r.GET("/api/resep-ranap/list", getResepRanap(db))
+	r.GET("/api/resep-ranap/next-no", getNextNoResepRanap(db))
 	r.POST("/api/resep-ranap", saveResepRanap(db))
 	r.DELETE("/api/resep-ranap", deleteResepRanap(db))
 

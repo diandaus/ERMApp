@@ -515,23 +515,37 @@
 /* Modal Input Obat Simple */
 .modal-input-obat-simple {
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 0;
   padding: 24px;
-  max-width: 650px;
-  width: 90%;
+  max-width: 500px;
+  width: 80%;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
   animation: modalSlideIn 0.3s ease-out;
+}
+
+/* Tombol Tambah/Batal di modal ini radius 2 (bukan default 4px .btn),
+   override .btn generik di atas yg dipakai bareng modal lain jg. */
+.modal-input-obat-simple .btn {
+  padding: 8px 16px;
+  border-radius: 2px;
 }
 
 /* Modal Input Obat Racikan */
 .modal-input-obat-racikan {
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 0;
   padding: 24px;
-  max-width: 550px;
-  width: 90%;
+  max-width: 500px;
+  width: 80%;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
   animation: modalSlideIn 0.3s ease-out;
+}
+
+/* Tombol Tambah/Batal di modal ini radius 2, sama spt
+   .modal-input-obat-simple di atas. */
+.modal-input-obat-racikan .btn {
+  padding: 8px 16px;
+  border-radius: 2px;
 }
 
 .obat-racikan-info {

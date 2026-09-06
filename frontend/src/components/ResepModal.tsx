@@ -1,7 +1,11 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
+import { ModalCariDokter } from './ModalCariDokter';
 import './ResepModal.css';
+
+const localDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const localTimeStr = (d = new Date()) => d.toTimeString().slice(0, 8);
 
 type ResepModalProps = {
   patient: any;
@@ -76,6 +80,55 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   }, []);
 
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
+
+  // Header Tgl.Resep/Jam/Peresep/No.Resep — KHUSUS isRanap, fully editable
+  // PERSIS Java (per permintaan user): user boleh ganti tanggal/jam resep
+  // & dokter peresep (beda dari DPJP kunjungan), No.Resep di-preview LIVE
+  // dari backend (GET /api/resep-ranap/next-no) tiap Tgl.Resep berubah.
+  const [resepTgl, setResepTgl] = React.useState(() => localDateStr());
+  const [resepJam, setResepJam] = React.useState(() => localTimeStr());
+  const [resepUseAutoTime, setResepUseAutoTime] = React.useState(true);
+  const [resepDokterKode, setResepDokterKode] = React.useState('');
+  const [resepDokterNama, setResepDokterNama] = React.useState('');
+  const [showCariDokterResep, setShowCariDokterResep] = React.useState(false);
+  const [previewNoResep, setPreviewNoResep] = React.useState('');
+  // noResepAuto — checkbox ChkRM di DlgPeresepanDokter.java (dicek langsung
+  // dari source Java, /Users/firdaus/SIMRS-Khanza): default TRUE (checked)
+  // = No.Resep auto-generate & read-only, di-refresh tiap Tgl.Resep ganti
+  // (ChkRMItemStateChanged + emptTeksobat()). Dimatikan = No.Resep
+  // dikosongkan & jadi editable manual (NoResep.setEditable(true) di Java).
+  // Peresep TIDAK terikat checkbox ini — di Java selalu auto-isi dari
+  // dpjp_ranap→reg_periksa.kd_dokter tanpa syarat (setNoRm()), field-nya
+  // memang selalu read-only, cuma bisa diganti lewat tombol cari dokter.
+  const [noResepAuto, setNoResepAuto] = React.useState(true);
+  const [manualNoResep, setManualNoResep] = React.useState('');
+
+  React.useEffect(() => {
+    if (!isRanap) return;
+    setResepDokterKode(patient.kd_dokter || '');
+    setResepDokterNama(patient.nm_dokter || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRanap]);
+
+  // Auto-time tick — sama pola dgn Tgl/Jam SOAP di PemeriksaanRanap.tsx.
+  React.useEffect(() => {
+    if (!isRanap || !resepUseAutoTime) return;
+    const tick = setInterval(() => {
+      const now = new Date();
+      setResepTgl(localDateStr(now));
+      setResepJam(localTimeStr(now));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [isRanap, resepUseAutoTime]);
+
+  // Preview No.Resep berikutnya, refetch tiap Tgl.Resep berganti.
+  React.useEffect(() => {
+    if (!isRanap) return;
+    fetch(`/api/resep-ranap/next-no?tanggal=${encodeURIComponent(resepTgl)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setPreviewNoResep(data?.no_resep || ''))
+      .catch(() => setPreviewNoResep(''));
+  }, [isRanap, resepTgl]);
 
   // Non Racikan State
   const searchObatNonRacikanRef = React.useRef<HTMLInputElement>(null);
@@ -828,6 +881,13 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         return;
       }
 
+      // Mode manual No.Resep (checkbox ChkRM dimatikan) wajib diisi —
+      // PERSIS validasi Valid.textKosong(NoResep,"No.Resep") di Java.
+      if (isRanap && !noResepAuto && !manualNoResep.trim()) {
+        Swal.fire({ icon: 'warning', title: 'Peringatan!', text: 'No.Resep wajib diisi' });
+        return;
+      }
+
       let result: any;
 
       if (isRanap) {
@@ -857,7 +917,13 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
         const payload = {
           no_rawat: patient.no_rawat,
-          kd_dokter: patient.kd_dokter || '',
+          kd_dokter: resepDokterKode || patient.kd_dokter || '',
+          tgl_peresepan: resepTgl,
+          jam_peresepan: resepJam,
+          // no_resep cuma dikirim kalau mode manual (ChkRM dimatikan) —
+          // mode auto (default) biarkan backend generate sendiri spy tidak
+          // race dgn preview yg mungkin sudah basi.
+          ...(!noResepAuto ? { no_resep: manualNoResep.trim() } : {}),
           non_racikan: nonRacikanPayload,
           racikan: racikanPayload,
         };
@@ -1102,6 +1168,79 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
           {/* Body — scrollable, flat (tanpa nested white-card-dlm-card
               spt versi lama). */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {/* Header Tgl.Resep/Jam/Peresep/No.Resep — KHUSUS Ranap, fully
+                editable PERSIS Java (referensi screenshot user): Tgl.Resep
+                & Jam bisa diganti manual (auto-time checkbox spt SOAP/ADIME
+                Ranap), Peresep bisa dicari dokter lain (beda dari DPJP
+                kunjungan), No.Resep di-preview LIVE dari backend. */}
+            {isRanap && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>Tgl.Resep :</label>
+                  <input
+                    type="date" value={resepTgl}
+                    onChange={(e) => { setResepTgl(e.target.value); setResepUseAutoTime(false); }}
+                    style={{ padding: '5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
+                  />
+                  <label style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>Jam :</label>
+                  <input
+                    type="time" value={resepJam.slice(0, 5)} step="1"
+                    onChange={(e) => { setResepJam(`${e.target.value}:00`); setResepUseAutoTime(false); }}
+                    style={{ padding: '5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
+                  />
+                  <input
+                    type="checkbox" checked={resepUseAutoTime}
+                    onChange={(e) => setResepUseAutoTime(e.target.checked)}
+                    style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#1AB1E5' }}
+                    title="Gunakan waktu saat ini"
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 380 }}>
+                    <label style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>Peresep :</label>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input type="text" value={resepDokterNama} readOnly placeholder="Cari dokter peresep..." style={{ width: '100%', padding: '5px 34px 5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', background: '#f9fafb', boxSizing: 'border-box' }} />
+                      <button
+                        type="button" onClick={() => setShowCariDokterResep(true)} title="Cari dokter peresep"
+                        style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, padding: 0, border: 'none', borderRadius: 4, background: '#1AB1E5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+                          <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>No.Resep :</label>
+                    {noResepAuto ? (
+                      <input type="text" value={editResep?.no_resep || previewNoResep} readOnly style={{ width: 110, padding: '5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', background: '#f9fafb', color: '#374151' }} />
+                    ) : (
+                      <input
+                        type="text" value={manualNoResep}
+                        onChange={(e) => setManualNoResep(e.target.value)}
+                        placeholder="Isi No.Resep manual..."
+                        style={{ width: 110, padding: '5px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', background: '#ffffff' }}
+                      />
+                    )}
+                    <input
+                      type="checkbox" checked={noResepAuto}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setNoResepAuto(checked);
+                        // Dimatikan — isi dulu dgn nomor preview yg lagi
+                        // tampil (bukan dikosongkan paksa) spy user tinggal
+                        // hapus/ubah manual, bukan mulai dari kosong.
+                        setManualNoResep(checked ? '' : (editResep?.no_resep || previewNoResep));
+                      }}
+                      style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#1AB1E5' }}
+                      title="No.Resep otomatis (matikan utk isi manual)"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Tab Navigation — rata kiri + "+ Tambah Racikan" di kanan
                 (cuma tab Racikan), per permintaan user (sebelumnya di
                 tengah, pola grid 3-kolom ModalValidasiObat.tsx). */}
@@ -1612,9 +1751,12 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         </div>
       </div>
 
-      {/* Modal Input Obat Non Racikan */}
+      {/* Modal Input Obat Non Racikan — overlay dibatasi ke lebar panel Resep
+          (kanan, 50vw) supaya form Jumlah/Aturan Pakai kecentring DI DALAM
+          panel, bukan di tengah layar penuh (dulu pakai .modal-overlay apa
+          adanya yg full-viewport). */}
       {showModalInputObat && selectedObatNonRacikan && (
-        <div className="modal-overlay" onClick={closeModalInputObat}>
+        <div className="modal-overlay" style={{ left: 'auto', right: 0, width: '50vw', maxWidth: '90vw' }} onClick={closeModalInputObat}>
           <div className="modal-input-obat-simple" onClick={(e) => e.stopPropagation()}>
             <form onSubmit={confirmTambahObat}>
               <div className="row g-2 align-items-end">
@@ -1709,9 +1851,11 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         </div>
       )}
 
-      {/* Modal Input Obat Racikan */}
+      {/* Modal Input Obat Racikan — overlay dibatasi ke lebar panel Resep
+          (kanan, 50vw), sama alasan spt Modal Input Obat Non Racikan
+          di atas. */}
       {showModalInputObatRacikan && selectedObatRacikan && (
-        <div className="modal-overlay" onClick={closeModalInputObatRacikan}>
+        <div className="modal-overlay" style={{ left: 'auto', right: 0, width: '50vw', maxWidth: '90vw' }} onClick={closeModalInputObatRacikan}>
           <div className="modal-input-obat-racikan" onClick={(e) => e.stopPropagation()}>
             <div className="obat-racikan-info">
               <div className="obat-racikan-name">{selectedObatRacikan.nama_brng}</div>
@@ -1931,6 +2075,14 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
             </div>
           </div>
         </div>
+      )}
+
+      {isRanap && (
+        <ModalCariDokter
+          isOpen={showCariDokterResep}
+          onClose={() => setShowCariDokterResep(false)}
+          onSelect={(kode, nama) => { setResepDokterKode(kode); setResepDokterNama(nama); }}
+        />
       )}
     </>
   );

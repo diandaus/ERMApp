@@ -41,6 +41,7 @@ type ObatItem = {
   kode_sat: string;
   stok: number;
   kapasitas: string;
+  harga: number;
 };
 
 type ResepItem = {
@@ -79,7 +80,12 @@ const searchObatApi = async (q: string): Promise<ObatItem[]> => {
     kode_sat: o.kode_sat,
     stok: o.stok,
     kapasitas: String(o.kapasitas ?? ''),
+    harga: o.harga_jual ?? 0,
   }));
+};
+
+const formatRupiah = (value: number): string => {
+  return new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value || 0);
 };
 
 const useHistory = (storageKey: string) => {
@@ -104,6 +110,14 @@ const useHistory = (storageKey: string) => {
 };
 
 export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, editData }) => {
+  // visible — animasi slide-in dari kanan, PERSIS pola ResepModal.tsx
+  // (ganti dari dialog card mengambang di tengah, radius 20/16).
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
   const [activeResepTab, setActiveResepTab] = React.useState<'non-racikan' | 'racikan'>('non-racikan');
 
   // ── Non-Racikan ──────────────────────────────────────────────
@@ -363,94 +377,81 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
 
   return (
     <>
-      {/* ── Main Modal ─────────────────────────────────────────── */}
+      {/* ── Main Modal — panel slide-in dari kanan, PERSIS gaya/desain
+          ResepModal.tsx (overlay fixed + panel anchor kanan 50vw, header
+          breadcrumb pasien + tombol close bulat), ganti dari versi lama
+          (dialog card mengambang di tengah, radius 20/16). */}
       <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', zIndex: 1000, padding: 20,
-        }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
         onClick={onClose}
       >
         <div
           style={{
-            background: '#F3F4F6', borderRadius: 20, padding: '35px 8px 8px 8px',
-            position: 'relative', maxWidth: 850, width: '85%', maxHeight: '90vh',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+            background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
           }}
           onClick={e => e.stopPropagation()}
         >
-          <div
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0,
-              padding: '8px 16px 8px 20px', display: 'flex',
-              alignItems: 'center', justifyContent: 'space-between',
-            }}
-          >
-            <span style={{ color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 8 }}>
-              Resep Pulang
-              <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>RANAP</span>
-              — {patient.nm_pasien} ({patient.no_rkm_medis})
-            </span>
+          {/* Header — breadcrumb pasien + close button bulat, PERSIS pola ResepModal.tsx. */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: '#000000', display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 6, rowGap: 2 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+                .filter(Boolean)
+                .map((v, i, arr) => (
+                  <React.Fragment key={i}>
+                    <span>{v}</span>
+                    {i < arr.length - 1 && <span>|</span>}
+                  </React.Fragment>
+                ))}
+              <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', borderRadius: 6, padding: '2px 8px', fontWeight: 400 }}>Resep Pulang</span>
+              {editData && <span style={{ fontSize: 12, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontWeight: 400 }}>Edit {editData.no_permintaan}</span>}
+            </div>
             <button
               type="button"
               onClick={onClose}
-              style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280', padding: 0, lineHeight: 1 }}
+              style={{
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                flexShrink: 0,
+              }}
             >
               &times;
             </button>
           </div>
 
-          <div
-            style={{
-              background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db',
-              padding: 12, overflowY: 'auto', flex: 1, minHeight: 0,
-            }}
-          >
-            {/* Tab Navigation */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: 12, padding: 4, gap: 4 }}>
-              <button
-                type="button"
-                onClick={() => setActiveResepTab('non-racikan')}
-                style={{
-                  padding: '6px 24px',
-                  borderRadius: 8,
-                  border: activeResepTab === 'non-racikan' ? '1px solid #2563eb' : '1px solid transparent',
-                  background: activeResepTab === 'non-racikan' ? '#ffffff' : 'transparent',
-                  color: activeResepTab === 'non-racikan' ? '#2563eb' : '#6b7280',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: activeResepTab === 'non-racikan' ? 600 : 400,
-                  transition: 'all 0.2s ease',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                Non Racikan {resepNonRacikan.length > 0 && (
-                  <span style={{ fontSize: 11, background: '#2563eb', color: '#fff', borderRadius: 999, padding: '1px 7px', fontWeight: 600 }}>{resepNonRacikan.length}</span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveResepTab('racikan')}
-                style={{
-                  padding: '6px 24px',
-                  borderRadius: 8,
-                  border: activeResepTab === 'racikan' ? '1px solid #2563eb' : '1px solid transparent',
-                  background: activeResepTab === 'racikan' ? '#ffffff' : 'transparent',
-                  color: activeResepTab === 'racikan' ? '#2563eb' : '#6b7280',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: activeResepTab === 'racikan' ? 600 : 400,
-                  transition: 'all 0.2s ease',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                Racikan {racikanList.length > 0 && (
-                  <span style={{ fontSize: 11, background: '#16a34a', color: '#fff', borderRadius: 999, padding: '1px 7px', fontWeight: 600 }}>{racikanList.length}</span>
-                )}
-              </button>
-            </div>
+          {/* Body — scrollable, flat (tanpa nested white-card-dlm-card spt versi lama). */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {/* Tab Navigation — button group flat (radius 0, aktif biru cyan #1AB1E5), PERSIS ResepModal.tsx. */}
+            <div style={{ display: 'inline-flex', marginBottom: 16 }}>
+              {(['non-racikan', 'racikan'] as const).map((tab, i) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveResepTab(tab)}
+                  style={{
+                    padding: '6px 24px',
+                    borderRadius: 0,
+                    border: '1px solid #1AB1E5',
+                    borderLeft: i === 0 ? '1px solid #1AB1E5' : 'none',
+                    background: activeResepTab === tab ? '#1AB1E5' : '#ffffff',
+                    color: activeResepTab === tab ? '#ffffff' : '#1AB1E5',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: 400,
+                    transition: 'all 0.2s ease',
+                    boxShadow: 'none',
+                  }}
+                >
+                  {tab === 'non-racikan' ? `Non Racikan (${resepNonRacikan.length})` : `Racikan (${racikanList.length})`}
+                </button>
+              ))}
             </div>
 
             {/* ── Tab: Non-Racikan ─────────────────────────────── */}
@@ -459,6 +460,12 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                 <div className="mb-3">
                   <label className="form-label fw-bold">Cari Obat</label>
                   <div className="search-obat-wrapper" ref={obatWrapRef}>
+                    <span className="search-obat-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                      </svg>
+                    </span>
                     <input type="text" className="form-control"
                       placeholder="Ketik nama obat untuk mencari otomatis..."
                       value={searchNonRacikan}
@@ -475,7 +482,9 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                               <th style={{ width: '15%' }}>Kode</th>
                               <th>Nama Obat</th>
                               <th style={{ width: '10%' }}>Satuan</th>
+                              <th style={{ width: '8%' }}>Kps</th>
                               <th style={{ width: '10%' }}>Stok</th>
+                              <th style={{ width: '15%' }}>Harga (Rp)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -484,9 +493,11 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                                 <td><small>{o.kode_brng}</small></td>
                                 <td><div className="obat-name-cell">{o.nama_brng}</div></td>
                                 <td className="text-center">{o.kode_sat}</td>
+                                <td className="text-center">{o.kapasitas || '-'}</td>
                                 <td className="text-center">
                                   <span className={o.stok > 0 ? 'text-success' : 'text-danger'}>{o.stok}</span>
                                 </td>
+                                <td className="text-end">{formatRupiah(o.harga)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -505,7 +516,11 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                 <div className="mb-3">
                   <label className="form-label fw-bold">Daftar Obat yang Dipilih</label>
                   {resepNonRacikan.length === 0 ? (
-                    <div className="alert alert-warning">Belum ada obat yang dipilih</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                      <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Obat Dipilih</div>
+                      <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Cari &amp; pilih obat non-racikan di atas untuk ditambahkan ke resep.</div>
+                    </div>
                   ) : (
                     <div className="table-responsive" style={{ maxHeight: 300, overflowY: 'auto' }}>
                       <table className="table table-bordered table-sm">
@@ -620,6 +635,12 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                 <div className="mb-3">
                   <label className="form-label fw-bold">Detail Obat Racikan</label>
                   <div className="search-obat-wrapper" ref={obatRacWrapRef}>
+                    <span className="search-obat-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                      </svg>
+                    </span>
                     <input type="text" className="form-control mb-2"
                       placeholder="Ketik nama obat/bahan untuk mencari..."
                       value={searchRacikan}
@@ -636,8 +657,9 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                               <th style={{ width: '15%' }}>Kode</th>
                               <th>Nama Obat</th>
                               <th style={{ width: '10%' }}>Satuan</th>
+                              <th style={{ width: '8%' }}>Kps</th>
                               <th style={{ width: '10%' }}>Stok</th>
-                              <th style={{ width: '15%' }}>Kapasitas</th>
+                              <th style={{ width: '15%' }}>Harga (Rp)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -646,10 +668,11 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                                 <td><small>{o.kode_brng}</small></td>
                                 <td><div className="obat-name-cell">{o.nama_brng}</div></td>
                                 <td className="text-center">{o.kode_sat}</td>
+                                <td className="text-center">{o.kapasitas || '-'}</td>
                                 <td className="text-center">
                                   <span className={o.stok > 0 ? 'text-success' : 'text-danger'}>{o.stok}</span>
                                 </td>
-                                <td className="text-center">{o.kapasitas || '-'}</td>
+                                <td className="text-end">{formatRupiah(o.harga)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -669,7 +692,11 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
                 <div className="mb-3">
                   <label className="form-label fw-bold">Daftar Obat dalam Racikan</label>
                   {racikanDraft.detail.length === 0 ? (
-                    <div className="alert alert-warning" style={{ fontSize: 13 }}>Belum ada obat dalam racikan</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                      <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Obat dalam Racikan</div>
+                      <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Cari &amp; pilih bahan racikan di atas untuk ditambahkan.</div>
+                    </div>
                   ) : (
                     <div className="table-responsive" style={{ maxHeight: 220, overflowY: 'auto' }}>
                       <table className="table table-bordered table-sm">
@@ -771,31 +798,30 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
               </div>
             )}
 
-            {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button
-                type="button"
-                onClick={onClose}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-              >
-                Tutup
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: submitting ? '#9ca3af' : '#2563eb', color: '#fff', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500 }}
-              >
-                {submitting ? 'Menyimpan...' : editData ? 'Update Resep Pulang' : 'Simpan Resep Pulang'}
-              </button>
-            </div>
+          </div>
+
+          {/* Footer — sticky, di luar area scroll body, tombol Simpan
+              full-width flat radius 2, PERSIS pola ModalInputLab.tsx/
+              ModalInputTriase.tsx. Tutup dihapus, masih bisa lewat
+              overlay/tombol close di header. */}
+          <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 2, border: 'none', background: submitting ? '#9ca3af' : '#1AB1E5', color: '#fff', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { if (!submitting) e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { if (!submitting) e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              {submitting ? 'Menyimpan...' : editData ? 'Update Resep Pulang' : 'Simpan Resep Pulang'}
+            </button>
           </div>
         </div>
       </div>
 
       {/* ── Sub-modal: Input Obat Non-Racikan ──────────────────── */}
       {showModalInputObat && selectedObat && (
-        <div className="modal-overlay" onClick={closeModalInputObat}>
+        <div className="modal-overlay" style={{ left: 'auto', right: 0, width: '50vw', maxWidth: '90vw' }} onClick={closeModalInputObat}>
           <div className="modal-input-obat-simple" onClick={e => e.stopPropagation()}>
             <form onSubmit={confirmTambahObat}>
               <div className="row g-2 align-items-end">
@@ -831,7 +857,7 @@ export const ResepPulangModal: React.FC<Props> = ({ patient, onClose, onSaved, e
 
       {/* ── Sub-modal: Input Bahan Racikan ─────────────────────── */}
       {showModalInputObatRacikan && selectedObatRacikan && (
-        <div className="modal-overlay" onClick={closeModalInputObatRacikan}>
+        <div className="modal-overlay" style={{ left: 'auto', right: 0, width: '50vw', maxWidth: '90vw' }} onClick={closeModalInputObatRacikan}>
           <div className="modal-input-obat-racikan" onClick={e => e.stopPropagation()}>
             <div className="obat-racikan-info">
               <div className="obat-racikan-name">{selectedObatRacikan.nama_brng}</div>

@@ -48,26 +48,23 @@ export type ResumeRanap = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: 8,
+  width: '100%', height: 30, padding: '5px 10px', borderRadius: 4,
   border: '1px solid #d1d5db', fontSize: 13, outline: 'none',
   boxSizing: 'border-box', background: '#fff', color: '#111827',
 };
 
 const textareaStyle: React.CSSProperties = {
-  ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5,
+  ...inputStyle, height: 'auto', resize: 'vertical', minHeight: 70, lineHeight: 1.5,
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: '#6b7280',
-  textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4, display: 'block',
+  display: 'block', fontSize: 12, marginBottom: 4, color: '#374151', fontWeight: 400,
 };
 
 const RefBtn: React.FC<{ onClick: () => void; title?: string }> = ({ onClick, title }) => (
   <button type="button" onClick={onClick} title={title}
-    style={{ padding: '2px 2px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, alignSelf: 'flex-start' }}>
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-    </svg>
+    style={{ padding: '4px 10px', border: '1px solid #1AB1E5', borderRadius: 2, background: '#fff', color: '#1AB1E5', cursor: 'pointer', fontSize: 12, fontWeight: 400, flexShrink: 0, alignSelf: 'flex-start' }}>
+    Lihat
   </button>
 );
 
@@ -137,6 +134,16 @@ type ModalInputResumeProps = {
 };
 
 export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, initialData, exists, onClose, onSaved }) => {
+  // visible — animasi slide-in dari kanan, PERSIS pola ResepModal.tsx/
+  // ResepPulangModal.tsx (ganti dari dialog card mengambang di tengah,
+  // radius 20/16), per permintaan user "modifikasi modal resume
+  // mengikuti gaya/desain modal tab lainnya".
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
   const [form, setForm] = React.useState<ResumeRanap>(initialData);
   const [saving, setSaving] = React.useState(false);
   const [dokterOpen, setDokterOpen] = React.useState(false);
@@ -346,47 +353,61 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
 
   return (
     <>
-      {/* Overlay */}
+      {/* Main Modal — panel slide-in dari kanan, PERSIS gaya/desain
+          ResepModal.tsx/ResepPulangModal.tsx (overlay fixed + panel anchor
+          kanan 90vw krn form resume banyak kolom, header breadcrumb pasien
+          + tombol close bulat), ganti dari versi lama (dialog card
+          mengambang di tengah, radius 20/16). modalBoxRef tetap dipasang
+          di panel ini — posisi/ukuran kartu "Cari Riwayat ..." di bawah
+          diukur dinamis dari sini via getBoundingClientRect, jadi otomatis
+          ikut bentuk panel baru tanpa perlu ubah logicnya. */}
       <div
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20,
-        }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
         onClick={onClose}
       >
-        {/* Modal Container */}
         <div
           ref={modalBoxRef}
           style={{
-            background: '#F3F4F6', borderRadius: 20,
-            padding: '35px 8px 8px 8px', position: 'relative',
-            maxWidth: 1000, width: '90%', maxHeight: '90vh',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '1100px',
+            background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Header */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            padding: '8px 16px 8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span style={{ color: '#000000', fontSize: 13, fontWeight: 400 }}>
-              {exists ? 'Edit Resume Pasien Pulang' : 'Input Resume Pasien Pulang'}
-            </span>
+          {/* Header — breadcrumb pasien + close button bulat, PERSIS pola ResepModal.tsx. */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: '#000000', display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 6, rowGap: 2 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+                .filter(Boolean)
+                .map((v, i, arr) => (
+                  <React.Fragment key={i}>
+                    <span>{v}</span>
+                    {i < arr.length - 1 && <span>|</span>}
+                  </React.Fragment>
+                ))}
+              <span style={{ fontSize: 12, background: exists ? '#fef3c7' : '#dcfce7', color: exists ? '#92400e' : '#166534', borderRadius: 6, padding: '2px 8px', fontWeight: 400 }}>
+                {exists ? 'Edit Resume' : 'Resume Baru'}
+              </span>
+            </div>
             <button
-              type="button" onClick={onClose}
+              type="button"
+              onClick={onClose}
               style={{
-                background: 'transparent', border: 'none',
-                fontSize: 20, cursor: 'pointer', color: '#6b7280',
-                padding: 0, lineHeight: 1,
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                flexShrink: 0,
               }}
             >×</button>
           </div>
 
-          {/* White Card Content */}
-          <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: 16, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {/* Body — scrollable, flat (tanpa nested white-card-dlm-card spt versi lama). */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20, minHeight: 0 }}>
 
             {/* Dokter */}
             <div style={{ marginBottom: 20 }}>
@@ -394,33 +415,27 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 {/* Dokter Pengirim — auto-fill dari reg_periksa */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                  <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: '#374151', fontWeight: 400 }}>
                     Dokter IGD :
                   </label>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <input type="text" value={form.kd_dokter_pengirim} readOnly placeholder="Kode"
-                      style={{ width: '28%', padding: '8px 10px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb', color: '#374151' }} />
                     <input type="text" value={form.nm_dokter_pengirim} readOnly placeholder="Nama dokter pengirim"
-                      style={{ flex: 1, padding: '8px 10px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb', color: '#374151' }} />
+                      style={{ flex: 1, height: 30, padding: '5px 10px', boxSizing: 'border-box', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb', color: '#374151' }} />
                   </div>
                 </div>
                 {/* Dokter PJ */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                  <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: '#374151', fontWeight: 400 }}>
                     DPJP :
                   </label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input type="text" value={form.kd_dokter}
-                      onChange={e => setForm(f => ({ ...f, kd_dokter: e.target.value }))}
-                      placeholder="Kode"
-                      style={{ width: '28%', padding: '8px 10px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }} />
+                  <div style={{ position: 'relative' }}>
                     <input type="text" value={form.nm_dokter} readOnly placeholder="Nama dokter"
-                      style={{ flex: 1, padding: '8px 10px', borderRadius: 12, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb', color: '#374151' }} />
-                    <button type="button" onClick={() => setDokterOpen(true)}
-                      style={{ padding: '2px 2px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="Pilih dokter PJ">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      style={{ width: '100%', height: 30, padding: '5px 34px 5px 10px', boxSizing: 'border-box', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#f9fafb', color: '#374151' }} />
+                    <button type="button" onClick={() => setDokterOpen(true)} title="Pilih dokter PJ"
+                      style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, padding: 0, border: 'none', borderRadius: 4, background: '#1AB1E5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+                        <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
                       </svg>
                     </button>
                   </div>
@@ -543,14 +558,14 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={labelStyle}>Cara Keluar</label>
-                  <div style={{ position: 'relative', border: `1px solid ${caraKeluarFocused ? '#2563eb' : '#d1d5db'}`, borderRadius: 8, background: '#fff', transition: 'border-color 0.15s' }}>
+                  <div style={{ position: 'relative', border: `1px solid ${caraKeluarFocused ? '#2563eb' : '#d1d5db'}`, borderRadius: 4, background: '#fff', transition: 'border-color 0.15s', height: 30, boxSizing: 'border-box' }}>
                     <select
                       ref={caraKeluarRef}
                       value={form.cara_keluar}
                       onChange={e => set('cara_keluar', e.target.value)}
                       onFocus={() => setCaraKeluarFocused(true)}
                       onBlur={() => setCaraKeluarFocused(false)}
-                      style={{ width: '100%', padding: '8px 36px 8px 10px', border: 'none', borderRadius: 8, fontSize: 13, outline: 'none', background: 'transparent', color: '#111827', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                      style={{ width: '100%', height: '100%', padding: '0 36px 0 10px', border: 'none', borderRadius: 4, fontSize: 13, outline: 'none', background: 'transparent', color: '#111827', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
                     >
                       <option value="">-- Pilih --</option>
                       <option value="Sembuh">Sembuh</option>
@@ -559,13 +574,11 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                       <option value="Meninggal">Meninggal</option>
                       <option value="Lain-lain">Lain-lain</option>
                     </select>
-                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                      <div style={{ width: 1, alignSelf: 'stretch', background: caraKeluarFocused ? '#2563eb' : '#d1d5db', transition: 'background 0.15s' }} />
-                      <div style={{ padding: '0 10px' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={caraKeluarFocused ? '#2563eb' : '#9ca3af'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'stroke 0.15s', display: 'block' }}>
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                      </div>
+                    <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, background: '#1AB1E5', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+                        <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+                      </svg>
                     </div>
                   </div>
                 </div>
@@ -576,27 +589,25 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 </div>
                 <div>
                   <label style={labelStyle}>Keadaan Pulang</label>
-                  <div style={{ position: 'relative', border: `1px solid ${keadaanFocused ? '#2563eb' : '#d1d5db'}`, borderRadius: 8, background: '#fff', transition: 'border-color 0.15s' }}>
+                  <div style={{ position: 'relative', border: `1px solid ${keadaanFocused ? '#2563eb' : '#d1d5db'}`, borderRadius: 4, background: '#fff', transition: 'border-color 0.15s', height: 30, boxSizing: 'border-box' }}>
                     <select
                       ref={keadaanRef}
                       value={form.keadaan}
                       onChange={e => set('keadaan', e.target.value)}
                       onFocus={() => setKeadaanFocused(true)}
                       onBlur={() => setKeadaanFocused(false)}
-                      style={{ width: '100%', padding: '8px 36px 8px 10px', border: 'none', borderRadius: 8, fontSize: 13, outline: 'none', background: 'transparent', color: '#111827', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                      style={{ width: '100%', height: '100%', padding: '0 36px 0 10px', border: 'none', borderRadius: 4, fontSize: 13, outline: 'none', background: 'transparent', color: '#111827', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
                     >
                       <option value="">-- Pilih --</option>
                       <option value="Baik">Baik</option>
                       <option value="Sedang">Sedang</option>
                       <option value="Buruk">Buruk</option>
                     </select>
-                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                      <div style={{ width: 1, alignSelf: 'stretch', background: keadaanFocused ? '#2563eb' : '#d1d5db', transition: 'background 0.15s' }} />
-                      <div style={{ padding: '0 10px' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={keadaanFocused ? '#2563eb' : '#9ca3af'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'stroke 0.15s', display: 'block' }}>
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                      </div>
+                    <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, background: '#1AB1E5', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+                        <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+                      </svg>
                     </div>
                   </div>
                 </div>
@@ -613,24 +624,23 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               </div>
             </div>
 
-            {/* Footer Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" onClick={onClose} style={{
-                padding: '8px 16px', borderRadius: 8, border: 'none',
-                background: '#dc2626', color: '#fff', cursor: 'pointer',
-                fontSize: 12, fontWeight: 500,
-              }}>Tutup</button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                style={{
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
-                  background: saving ? '#9ca3af' : '#2563eb', color: '#fff',
-                  cursor: saving ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500,
-                }}
-              >{saving ? 'Menyimpan...' : exists ? 'Update Resume' : 'Simpan Resume'}</button>
-            </div>
+          </div>
+
+          {/* Footer — sticky, di luar area scroll body, tombol Simpan
+              full-width flat radius 2, PERSIS pola ModalInputLab.tsx/
+              ResepPulangModal.tsx. Tutup dihapus, masih bisa lewat
+              overlay/tombol close di header. */}
+          <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 2, border: 'none', background: saving ? '#9ca3af' : '#1AB1E5', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 400 }}
+              onMouseOver={(e) => { if (!saving) e.currentTarget.style.background = '#0891B2'; }}
+              onMouseOut={(e) => { if (!saving) e.currentTarget.style.background = '#1AB1E5'; }}
+            >
+              {saving ? 'Menyimpan...' : exists ? 'Update Resume' : 'Simpan Resume'}
+            </button>
           </div>
         </div>
       </div>
@@ -650,15 +660,15 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 position: 'fixed',
                 top: modalBoxRect.top,
                 left: modalBoxRect.left,
-                width: modalBoxRect.width / 2,
+                width: modalBoxRect.width * 0.6,
                 height: modalBoxRect.height,
-                background: '#ffffff', borderRadius: 16, padding: 20,
+                background: '#ffffff', borderRadius: 0, padding: 20,
                 display: 'flex', flexDirection: 'column', gap: 12,
                 boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
               }}
             >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Keluhan</div>
+              <div style={{ fontSize: 14, fontWeight: 400, color: '#111827' }}>Cari Riwayat Keluhan</div>
               <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
             </div>
             <input
@@ -667,9 +677,9 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               onChange={(e) => setKeluhanSearch(e.target.value)}
               placeholder="Cari tanggal atau keluhan..."
               autoFocus
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={{ padding: '8px 12px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
             />
-            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
@@ -731,15 +741,15 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 position: 'fixed',
                 top: modalBoxRect.top,
                 left: modalBoxRect.left,
-                width: modalBoxRect.width / 2,
+                width: modalBoxRect.width * 0.6,
                 height: modalBoxRect.height,
-                background: '#ffffff', borderRadius: 16, padding: 20,
+                background: '#ffffff', borderRadius: 0, padding: 20,
                 display: 'flex', flexDirection: 'column', gap: 12,
                 boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
               }}
             >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Pemeriksaan Fisik</div>
+              <div style={{ fontSize: 14, fontWeight: 400, color: '#111827' }}>Cari Riwayat Pemeriksaan Fisik</div>
               <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
             </div>
             <input
@@ -748,9 +758,9 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               onChange={(e) => setPemeriksaanFisikSearch(e.target.value)}
               placeholder="Cari tanggal atau pemeriksaan..."
               autoFocus
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={{ padding: '8px 12px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
             />
-            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
@@ -810,15 +820,15 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 position: 'fixed',
                 top: modalBoxRect.top,
                 left: modalBoxRect.left,
-                width: modalBoxRect.width / 2,
+                width: modalBoxRect.width * 0.6,
                 height: modalBoxRect.height,
-                background: '#ffffff', borderRadius: 16, padding: 20,
+                background: '#ffffff', borderRadius: 0, padding: 20,
                 display: 'flex', flexDirection: 'column', gap: 12,
                 boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
               }}
             >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Radiologi</div>
+              <div style={{ fontSize: 14, fontWeight: 400, color: '#111827' }}>Cari Riwayat Radiologi</div>
               <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
             </div>
             <input
@@ -827,9 +837,9 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               onChange={(e) => setRadiologiSearch(e.target.value)}
               placeholder="Cari tanggal atau hasil pemeriksaan..."
               autoFocus
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={{ padding: '8px 12px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
             />
-            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
@@ -889,15 +899,15 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 position: 'fixed',
                 top: modalBoxRect.top,
                 left: modalBoxRect.left,
-                width: modalBoxRect.width / 2,
+                width: modalBoxRect.width * 0.6,
                 height: modalBoxRect.height,
-                background: '#ffffff', borderRadius: 16, padding: 20,
+                background: '#ffffff', borderRadius: 0, padding: 20,
                 display: 'flex', flexDirection: 'column', gap: 12,
                 boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
               }}
             >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Laboratorium</div>
+              <div style={{ fontSize: 14, fontWeight: 400, color: '#111827' }}>Cari Riwayat Laboratorium</div>
               <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
             </div>
             <input
@@ -906,9 +916,9 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               onChange={(e) => setLaboratSearch(e.target.value)}
               placeholder="Cari tanggal atau nama pemeriksaan..."
               autoFocus
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={{ padding: '8px 12px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
             />
-            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
@@ -975,7 +985,7 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 setRefField(null);
               }}
               style={{
-                padding: '8px 16px', borderRadius: 8, border: 'none', alignSelf: 'flex-end',
+                padding: '8px 16px', borderRadius: 0, border: 'none', alignSelf: 'flex-end',
                 background: laboratChecked.size === 0 ? '#9ca3af' : '#2563eb', color: '#fff',
                 cursor: laboratChecked.size === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500,
               }}
@@ -998,15 +1008,15 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 position: 'fixed',
                 top: modalBoxRect.top,
                 left: modalBoxRect.left,
-                width: modalBoxRect.width / 2,
+                width: modalBoxRect.width * 0.6,
                 height: modalBoxRect.height,
-                background: '#ffffff', borderRadius: 16, padding: 20,
+                background: '#ffffff', borderRadius: 0, padding: 20,
                 display: 'flex', flexDirection: 'column', gap: 12,
                 boxShadow: '0 20px 48px rgba(0,0,0,0.2)', boxSizing: 'border-box',
               }}
             >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>Cari Riwayat Obat Selama Rawatan</div>
+              <div style={{ fontSize: 14, fontWeight: 400, color: '#111827' }}>Cari Riwayat Obat Selama Rawatan</div>
               <button type="button" onClick={() => setRefField(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af', lineHeight: 1 }}>×</button>
             </div>
             <input
@@ -1015,9 +1025,9 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
               onChange={(e) => setObatSearch(e.target.value)}
               placeholder="Cari tanggal atau nama obat..."
               autoFocus
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={{ padding: '8px 12px', borderRadius: 0, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
             />
-            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 8 }}>
+            <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, border: '1px solid #e5e7eb', borderRadius: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
@@ -1082,7 +1092,7 @@ export const ModalInputResume: React.FC<ModalInputResumeProps> = ({ patient, ini
                 setRefField(null);
               }}
               style={{
-                padding: '8px 16px', borderRadius: 8, border: 'none', alignSelf: 'flex-end',
+                padding: '8px 16px', borderRadius: 0, border: 'none', alignSelf: 'flex-end',
                 background: obatChecked.size === 0 ? '#9ca3af' : '#2563eb', color: '#fff',
                 cursor: obatChecked.size === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 500,
               }}

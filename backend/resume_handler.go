@@ -561,19 +561,26 @@ func getDpjpRanap(db *sql.DB) gin.HandlerFunc {
 			noRawat = noRawat[1:]
 		}
 
-		var kdDokter, nmDokter string
+		// DPJP belum tentu sudah diset eksplisit (dpjp_ranap kosong) —
+		// fallback ke reg_periksa.kd_dokter, PERSIS chain dpjp_ranap→
+		// reg_periksa yg sudah dipakai getRawatInapList (main.go) &
+		// setNoRm() Java (DlgPeresepanDokter.java), supaya DPJP yg
+		// "sudah keliatan" di halaman lain (list rawat inap, header
+		// modal Resep Ranap) ikut konsisten muncul di sini juga.
+		var kdDokter sql.NullString
 		err := db.QueryRow(`
-			SELECT dr.kd_dokter, COALESCE(d.nm_dokter,'')
-			FROM dpjp_ranap dr
-			LEFT JOIN dokter d ON dr.kd_dokter = d.kd_dokter
-			WHERE dr.no_rawat = ?
-			LIMIT 1
-		`, noRawat).Scan(&kdDokter, &nmDokter)
-		if err != nil {
+			SELECT COALESCE(
+				(SELECT dr.kd_dokter FROM dpjp_ranap dr WHERE dr.no_rawat = ? LIMIT 1),
+				(SELECT rp.kd_dokter FROM reg_periksa rp WHERE rp.no_rawat = ?)
+			) AS kd_dokter
+		`, noRawat, noRawat).Scan(&kdDokter)
+		if err != nil || !kdDokter.Valid || kdDokter.String == "" {
 			c.JSON(http.StatusOK, gin.H{"kd_dokter": "", "nm_dokter": ""})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"kd_dokter": kdDokter, "nm_dokter": nmDokter})
+		var nmDokter string
+		db.QueryRow(`SELECT COALESCE(nm_dokter,'') FROM dokter WHERE kd_dokter = ?`, kdDokter.String).Scan(&nmDokter)
+		c.JSON(http.StatusOK, gin.H{"kd_dokter": kdDokter.String, "nm_dokter": nmDokter})
 	}
 }
 
