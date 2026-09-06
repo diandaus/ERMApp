@@ -173,17 +173,22 @@ const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { labe
 type DashboardUser = {
   username: string;
   role: string;
+  kd_dokter?: string;
 };
 
 export const DashboardView: React.FC<{ user: DashboardUser }> = ({ user }) => {
   const [stats, setStats] = React.useState<DashboardStats | null>(null);
   const [loading, setLoading] = React.useState(true);
 
-  // Role dokter — username = kd_dokter (konvensi login), dashboard di-scope
-  // hanya ke kunjungan dokter yg login saja. Role lain (admin/pendaftaran/
-  // farmasi/kasir dst) tetap lihat dashboard rumah sakit secara keseluruhan.
+  // Role dokter — pakai user.kd_dokter (field eksplisit app_users, di-link
+  // admin lewat Pengaturan > User), BUKAN username. Sama persis dgn
+  // lockedKdDokter di RawatJalan.tsx: username KADANG kebetulan sama dgn
+  // kd_dokter saat akun dibuat, tapi itu cuma konvensi penamaan, bukan
+  // link eksplisit yg bisa diandalkan. Kalau kd_dokter belum di-link,
+  // param tetap dikirim (walau kosong) supaya hasilnya konsisten kosong
+  // dgn RawatJalan.tsx — bukan malah nampilin data dokter lain.
   const isDokter = user?.role === 'dokter';
-  const url = isDokter ? `/api/dashboard/stats?kd_dokter=${encodeURIComponent(user.username)}` : '/api/dashboard/stats';
+  const url = isDokter ? `/api/dashboard/stats?kd_dokter=${encodeURIComponent(user.kd_dokter || '')}` : '/api/dashboard/stats';
 
   React.useEffect(() => {
     let cancelled = false;

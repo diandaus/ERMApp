@@ -67,11 +67,14 @@ func queryCaraBayar(db *sql.DB, whereClause string, args []interface{}) ([]CaraB
 }
 
 // buildCaraBayarWhere — gabungkan filter periode + status_lanjut ('Ralan'
-// utk poliklinik/rawat jalan, 'Ranap' utk rawat inap) + kd_dokter opsional.
-func buildCaraBayarWhere(periodeCond string, statusLanjut string, kdDokter string) (string, []interface{}) {
+// utk poliklinik/rawat jalan, 'Ranap' utk rawat inap) + kd_dokter (dipakai
+// kalau dokterPresent true — TERMASUK saat kdDokter == "", supaya akun
+// dokter yg belum di-link ke kd_dokter tetap konsisten dgn RawatJalan.tsx:
+// hasil sengaja kosong, bukan malah nampilin data semua dokter).
+func buildCaraBayarWhere(periodeCond string, statusLanjut string, dokterPresent bool, kdDokter string) (string, []interface{}) {
 	where := periodeCond + " AND reg_periksa.status_lanjut = ?"
 	args := []interface{}{statusLanjut}
-	if kdDokter != "" {
+	if dokterPresent {
 		where += " AND reg_periksa.kd_dokter = ?"
 		args = append(args, kdDokter)
 	}
@@ -82,17 +85,23 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var stats DashboardStats
 
-		// kd_dokter — jika diisi (user login role dokter, username = kd_dokter),
-		// dashboard di-scope hanya ke kunjungan dokter tsb saja.
-		kdDokter := c.Query("kd_dokter")
+		// kd_dokter — dikirim frontend HANYA saat user login role dokter,
+		// isinya user.kd_dokter (field eksplisit app_users, BUKAN username —
+		// sama seperti lockedKdDokter di RawatJalan.tsx). Dipakai GetQuery
+		// (bukan Query biasa) supaya bisa bedakan "param tidak dikirim sama
+		// sekali" (role selain dokter, jangan difilter) vs "param dikirim
+		// tapi kosong" (dokter blm di-link ke kd_dokter, HARUS tetap
+		// difilter spy hasilnya konsisten kosong, bukan malah nampilin
+		// data semua dokter).
+		kdDokter, dokterPresent := c.GetQuery("kd_dokter")
 		dokterFilter := ""
-		if kdDokter != "" {
+		if dokterPresent {
 			dokterFilter = " AND reg_periksa.kd_dokter = ?"
 		}
 
 		hariArgs := []interface{}{}
 		hariQuery := "SELECT COUNT(*) FROM reg_periksa WHERE tgl_registrasi = CURDATE()"
-		if kdDokter != "" {
+		if dokterPresent {
 			hariQuery += dokterFilter
 			hariArgs = append(hariArgs, kdDokter)
 		}
@@ -103,7 +112,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 
 		bulanArgs := []interface{}{}
 		bulanQuery := "SELECT COUNT(*) FROM reg_periksa WHERE YEAR(tgl_registrasi) = YEAR(CURDATE()) AND MONTH(tgl_registrasi) = MONTH(CURDATE())"
-		if kdDokter != "" {
+		if dokterPresent {
 			bulanQuery += dokterFilter
 			bulanArgs = append(bulanArgs, kdDokter)
 		}
@@ -114,7 +123,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 
 		tahunArgs := []interface{}{}
 		tahunQuery := "SELECT COUNT(*) FROM reg_periksa WHERE YEAR(tgl_registrasi) = YEAR(CURDATE())"
-		if kdDokter != "" {
+		if dokterPresent {
 			tahunQuery += dokterFilter
 			tahunArgs = append(tahunArgs, kdDokter)
 		}
@@ -132,7 +141,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 			"tahun": "YEAR(reg_periksa.tgl_registrasi) = YEAR(CURDATE())",
 		}
 
-		where, args := buildCaraBayarWhere(periodeConds["hari"], "Ralan", kdDokter)
+		where, args := buildCaraBayarWhere(periodeConds["hari"], "Ralan", dokterPresent, kdDokter)
 		poliHariIni, err := queryCaraBayar(db, where, args)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hitung cara bayar poliklinik hari ini: " + err.Error()})
@@ -140,7 +149,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 		}
 		stats.CaraBayarPoliHariIni = poliHariIni
 
-		where, args = buildCaraBayarWhere(periodeConds["bulan"], "Ralan", kdDokter)
+		where, args = buildCaraBayarWhere(periodeConds["bulan"], "Ralan", dokterPresent, kdDokter)
 		poliBulanIni, err := queryCaraBayar(db, where, args)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hitung cara bayar poliklinik bulan ini: " + err.Error()})
@@ -148,7 +157,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 		}
 		stats.CaraBayarPoliBulanIni = poliBulanIni
 
-		where, args = buildCaraBayarWhere(periodeConds["tahun"], "Ralan", kdDokter)
+		where, args = buildCaraBayarWhere(periodeConds["tahun"], "Ralan", dokterPresent, kdDokter)
 		poliTahunIni, err := queryCaraBayar(db, where, args)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hitung cara bayar poliklinik tahun ini: " + err.Error()})
@@ -156,7 +165,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 		}
 		stats.CaraBayarPoliTahunIni = poliTahunIni
 
-		where, args = buildCaraBayarWhere(periodeConds["hari"], "Ranap", kdDokter)
+		where, args = buildCaraBayarWhere(periodeConds["hari"], "Ranap", dokterPresent, kdDokter)
 		ranapHariIni, err := queryCaraBayar(db, where, args)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hitung cara bayar rawat inap hari ini: " + err.Error()})
@@ -164,7 +173,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 		}
 		stats.CaraBayarRanapHariIni = ranapHariIni
 
-		where, args = buildCaraBayarWhere(periodeConds["bulan"], "Ranap", kdDokter)
+		where, args = buildCaraBayarWhere(periodeConds["bulan"], "Ranap", dokterPresent, kdDokter)
 		ranapBulanIni, err := queryCaraBayar(db, where, args)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hitung cara bayar rawat inap bulan ini: " + err.Error()})
@@ -172,7 +181,7 @@ func getDashboardStats(db *sql.DB) gin.HandlerFunc {
 		}
 		stats.CaraBayarRanapBulanIni = ranapBulanIni
 
-		where, args = buildCaraBayarWhere(periodeConds["tahun"], "Ranap", kdDokter)
+		where, args = buildCaraBayarWhere(periodeConds["tahun"], "Ranap", dokterPresent, kdDokter)
 		ranapTahunIni, err := queryCaraBayar(db, where, args)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hitung cara bayar rawat inap tahun ini: " + err.Error()})
