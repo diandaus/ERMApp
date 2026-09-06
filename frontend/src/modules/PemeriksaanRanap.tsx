@@ -1293,6 +1293,13 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                       </div>
                     </div>
                   )}
+                  {soapHistory.length === 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Data SOAP/CPPT</div>
+                      <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada riwayat SOAP/CPPT untuk pasien ini.</div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Grafik TTV — sisi 30%, sumber data & grafik SVG-nya
@@ -1753,6 +1760,13 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                         })}
                       </tbody>
                     </table>
+                  </div>
+                )}
+                {adimeHistory.length === 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Data ADIME Gizi</div>
+                    <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada riwayat ADIME Gizi untuk pasien ini.</div>
                   </div>
                 )}
 
