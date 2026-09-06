@@ -2472,7 +2472,24 @@ func main() {
 		tglDari := c.DefaultQuery("tgl_dari", time.Now().Format("2006-01-02"))
 		tglSampai := c.DefaultQuery("tgl_sampai", time.Now().Format("2006-01-02"))
 
-		const q = `
+		// kd_dokter — dikirim RawatJalan.tsx HANYA saat user login role
+		// dokter (isDokterLocked), isinya user.kd_dokter. Difilter di SQL
+		// (bukan cuma di client spt sebelumnya) supaya server tidak perlu
+		// join+kirim SELURUH pasien poli se-RS padahal ujungnya cuma
+		// dipakai 1-2 baris. GetQuery (bukan Query biasa) supaya bisa
+		// bedakan "param tidak dikirim" (petugas/role lain, jangan
+		// difilter) vs "dikirim tapi kosong" (dokter blm di-link ke
+		// kd_dokter, tetap HARUS difilter spy hasil konsisten kosong,
+		// sama seperti filter client-side isDokterLocked di RawatJalan.tsx).
+		kdDokter, dokterPresent := c.GetQuery("kd_dokter")
+		dokterFilter := ""
+		args := []interface{}{tglDari, tglSampai}
+		if dokterPresent {
+			dokterFilter = " AND reg_periksa.kd_dokter = ?"
+			args = append(args, kdDokter)
+		}
+
+		q := `
 			SELECT
 				reg_periksa.no_reg,
 				reg_periksa.no_rawat,
@@ -2505,11 +2522,11 @@ func main() {
 			LEFT JOIN bridging_sep ON bridging_sep.no_rawat = reg_periksa.no_rawat
 			WHERE reg_periksa.tgl_registrasi BETWEEN ? AND ?
 			  AND reg_periksa.status_lanjut='Ralan'
-			  AND poliklinik.kd_poli <> 'IGDK'
+			  AND poliklinik.kd_poli <> 'IGDK'` + dokterFilter + `
 			ORDER BY reg_periksa.tgl_registrasi DESC, reg_periksa.jam_reg DESC
 		`
 
-		rows, err := db.Query(q, tglDari, tglSampai)
+		rows, err := db.Query(q, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -2573,7 +2590,18 @@ func main() {
 		tglDari := c.DefaultQuery("tgl_dari", time.Now().Format("2006-01-02"))
 		tglSampai := c.DefaultQuery("tgl_sampai", time.Now().Format("2006-01-02"))
 
-		const q = `
+		// kd_dokter — sama pola dgn poli-today di atas: filter server-side
+		// pakai kd_dokter dari rujukan_internal_poli (bukan reg_periksa,
+		// krn dokter yg relevan di tab ini adalah dokter tujuan rujukan).
+		kdDokter, dokterPresent := c.GetQuery("kd_dokter")
+		dokterFilter := ""
+		args := []interface{}{tglDari, tglSampai}
+		if dokterPresent {
+			dokterFilter = " AND rujukan_internal_poli.kd_dokter = ?"
+			args = append(args, kdDokter)
+		}
+
+		q := `
 			SELECT
 				reg_periksa.no_rawat,
 				DATE_FORMAT(reg_periksa.tgl_registrasi, '%d/%m/%Y') AS tgl_registrasi,
@@ -2603,11 +2631,11 @@ func main() {
 			INNER JOIN penjab ON reg_periksa.kd_pj=penjab.kd_pj
 			WHERE reg_periksa.status_lanjut='Ralan'
 			  AND reg_periksa.tgl_registrasi BETWEEN ? AND ?
-			  AND poliklinik.kd_poli <> 'IGDK'
+			  AND poliklinik.kd_poli <> 'IGDK'` + dokterFilter + `
 			ORDER BY reg_periksa.tgl_registrasi DESC, reg_periksa.jam_reg DESC
 		`
 
-		rows, err := db.Query(q, tglDari, tglSampai)
+		rows, err := db.Query(q, args...)
 		if err != nil {
 			// Jika tabel rujukan_internal_poli tidak ada, return empty array
 			c.JSON(http.StatusOK, []map[string]interface{}{})

@@ -184,9 +184,16 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient,
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/rawat-jalan/poli-today?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`
-      );
+      // kd_dokter — dikirim HANYA saat role dokter (isDokterLocked), walau
+      // lockedKdDokter kosong (akun blm di-link), supaya server yg filter
+      // (lebih cepat drpd download semua pasien poli se-RS lalu disaring
+      // di sini kayak sebelumnya — lihat filteredPoliToday di bawah, yg
+      // tetap dipertahankan sbg lapisan aman kedua).
+      let url = `/api/rawat-jalan/poli-today?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
+      if (isDokterLocked) {
+        url += `&kd_dokter=${encodeURIComponent(lockedKdDokter)}`;
+      }
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Gagal mengambil data poli hari ini');
@@ -203,9 +210,11 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient,
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/rawat-jalan/rujukan-internal?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`
-      );
+      let url = `/api/rawat-jalan/rujukan-internal?tgl_dari=${tglDari}&tgl_sampai=${tglSampai}`;
+      if (isDokterLocked) {
+        url += `&kd_dokter=${encodeURIComponent(lockedKdDokter)}`;
+      }
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Gagal mengambil data rujukan internal');
@@ -362,6 +371,22 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient,
     } else {
       void loadRujukanInternal();
     }
+  }, [activeTab, tglDari, tglSampai]);
+
+  // Auto-refresh tiap 30 detik — supaya pasien baru yang mendaftar
+  // sementara layar ini terbuka langsung kelihatan tanpa perlu ganti
+  // filter/reload manual. Interval di-reset tiap activeTab/tglDari/
+  // tglSampai berubah (deps sama dgn efek load awal di atas) spy selalu
+  // refresh tab & rentang tanggal yg sedang aktif, bukan closure basi.
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTab === 'poli-today') {
+        void loadPoliToday();
+      } else {
+        void loadRujukanInternal();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
   }, [activeTab, tglDari, tglSampai]);
 
   // Close filter dropdown when clicking outside — card poliklinik
