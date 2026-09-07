@@ -37,7 +37,7 @@ const PERIODE_KOSONG: Record<Periode, string> = {
 const PIE_COLORS = ['#3b82f6', '#6366f1', '#f59e0b', '#ec4899', '#10b981', '#6b7280'];
 
 const StatCard: React.FC<{ label: string; value: number; icon: React.ReactNode; color: string }> = ({ label, value, icon, color }) => (
-  <div style={{ flex: 1, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
+  <div style={{ flex: 1, background: '#F9FAFB', borderRadius: 12, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
     <div style={{ width: 48, height: 48, borderRadius: 10, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       {icon}
     </div>
@@ -131,20 +131,24 @@ const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: nu
   );
 };
 
-// CaraBayarCard — card "Pasien Poliklinik/Rawat Jalan" atau "Pasien Rawat
-// Inap", isinya 3 donut chart perbandingan cara bayar bersebelahan
-// (hari ini/bulan ini/tahun ini), dipakai 2x di DashboardView dgn data yg
-// sudah difilter status_lanjut ('Ralan'/'Ranap') dari backend.
+// CaraBayarCard — section "Pasien Poliklinik/Rawat Jalan" atau "Pasien
+// Rawat Inap", isinya 3 CARD TERPISAH (Hari Ini/Bulan Ini/Tahun Ini)
+// bersebelahan, masing-masing donut chart + legend cara bayar sendiri.
+// Dipakai 2x di DashboardView dgn data yg sudah difilter status_lanjut
+// ('Ralan'/'Ranap') dari backend. Warna aksen (border/judul) samain dgn
+// sidebar (App.tsx: judul biru #2563eb, border biru #bfdbfe + shadow tipis
+// spy card kelihatan jelas batasnya, bukan nempel langsung ke BG halaman
+// yg sama-sama putih).
 const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { label: string; total: number }[]> }> = ({ title, byPeriode }) => (
-  <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, padding: 20 }}>
-    <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 16 }}>{title}</div>
-    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+  <div>
+    <div style={{ fontSize: 14, fontWeight: 400, color: '#2563eb', marginBottom: 12 }}>{title}</div>
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
       {PERIODE_OPTIONS.map((p) => {
         const data = byPeriode[p.key];
         const totalData = data.reduce((sum, d) => sum + d.total, 0);
         return (
-          <div key={p.key} style={{ flex: '1 1 240px', minWidth: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{p.label}</div>
+          <div key={p.key} style={{ flex: '1 1 240px', minWidth: 220, background: '#F9FAFB', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 400, color: '#374151' }}>{p.label}</div>
             <DonutChart data={data} total={totalData} size={170} />
             <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 16px', width: '100%' }}>
               {data.length === 0 ? (
@@ -155,8 +159,8 @@ const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { labe
                   return (
                     <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
                       <span style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: '#374151' }}>{d.label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{pct}%</span>
+                      <span style={{ fontSize: 12, color: '#374151' }}>{d.label}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{pct}%</span>
                       <span style={{ fontSize: 12, color: '#9ca3af' }}>({d.total})</span>
                     </div>
                   );
