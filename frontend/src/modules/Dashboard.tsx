@@ -34,7 +34,28 @@ const PERIODE_KOSONG: Record<Periode, string> = {
   tahun: 'Belum ada kunjungan tahun ini.',
 };
 
-const PIE_COLORS = ['#3b82f6', '#6366f1', '#f59e0b', '#ec4899', '#10b981', '#6b7280'];
+// Warna cara bayar — 3 kategori besar dapat warna TETAP (gampang dikenali
+// user tiap lihat dashboard, tidak berubah-ubah cuma krn urutan/rank total
+// beda tiap periode): UMUM ungu, BPJS hijau, PLN kuning/oranye. Kategori
+// lain (Asuransi, PT lain, dst) bebas — dapat warna bergiliran dari
+// OTHER_PIE_COLORS berdasar urutan kemunculan di data.
+const FIXED_PIE_COLORS: { match: (label: string) => boolean; color: string }[] = [
+  { match: (l) => l.trim().toUpperCase() === 'UMUM', color: '#8b5cf6' }, // ungu
+  { match: (l) => l.trim().toUpperCase() === 'BPJS', color: '#10b981' }, // hijau
+  { match: (l) => l.trim().toUpperCase().includes('PLN'), color: '#f59e0b' }, // kuning/oranye
+];
+const OTHER_PIE_COLORS = ['#3b82f6', '#ec4899', '#6366f1', '#6b7280', '#14b8a6', '#ef4444'];
+
+function getCaraBayarColors(data: { label: string; total: number }[]): string[] {
+  let otherIdx = 0;
+  return data.map((d) => {
+    const fixed = FIXED_PIE_COLORS.find((f) => f.match(d.label));
+    if (fixed) return fixed.color;
+    const color = OTHER_PIE_COLORS[otherIdx % OTHER_PIE_COLORS.length];
+    otherIdx++;
+    return color;
+  });
+}
 
 const StatCard: React.FC<{ label: string; value: number; icon: React.ReactNode; color: string }> = ({ label, value, icon, color }) => (
   <div style={{ flex: 1, background: '#F9FAFB', borderRadius: 12, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -72,6 +93,7 @@ const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: nu
 
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const gapDeg = data.length > 1 ? 8 : 0;
+  const colors = getCaraBayarColors(data);
 
   let cumulativeAngle = -90; // mulai dari jam 12
   const slices = data.map((d, i) => {
@@ -81,7 +103,7 @@ const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: nu
     // lingkaran penuh (cuma keluar titik krn strokeLinecap round di 1
     // koordinat yg sama), gambar sbg <circle> stroke biasa.
     if (fraction >= 0.999) {
-      return <circle key={i} cx={cx} cy={cy} r={ringR} fill="none" stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={strokeWidth} />;
+      return <circle key={i} cx={cx} cy={cy} r={ringR} fill="none" stroke={colors[i]} strokeWidth={strokeWidth} />;
     }
 
     const sliceAngle = fraction * 360;
@@ -100,7 +122,7 @@ const DonutChart: React.FC<{ data: { label: string; total: number }[]; total: nu
     const largeArc = drawEnd - drawStart > 180 ? 1 : 0;
 
     const path = `M ${x1} ${y1} A ${ringR} ${ringR} 0 ${largeArc} 1 ${x2} ${y2}`;
-    return <path key={i} d={path} fill="none" stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={strokeWidth} strokeLinecap="round" />;
+    return <path key={i} d={path} fill="none" stroke={colors[i]} strokeWidth={strokeWidth} strokeLinecap="round" />;
   });
 
   // Tick putus-putus di luar cincin, statis 5deg sekali (72 garis).
@@ -146,6 +168,7 @@ const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { labe
       {PERIODE_OPTIONS.map((p) => {
         const data = byPeriode[p.key];
         const totalData = data.reduce((sum, d) => sum + d.total, 0);
+        const colors = getCaraBayarColors(data);
         return (
           <div key={p.key} style={{ flex: '1 1 240px', minWidth: 220, background: '#F9FAFB', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 400, color: '#374151' }}>{p.label}</div>
@@ -158,7 +181,7 @@ const CaraBayarCard: React.FC<{ title: string; byPeriode: Record<Periode, { labe
                   const pct = totalData > 0 ? Math.round((d.total / totalData) * 100) : 0;
                   return (
                     <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: colors[i], flexShrink: 0 }} />
                       <span style={{ fontSize: 12, color: '#374151' }}>{d.label}</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{pct}%</span>
                       <span style={{ fontSize: 12, color: '#9ca3af' }}>({d.total})</span>
