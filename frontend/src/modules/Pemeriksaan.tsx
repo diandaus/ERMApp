@@ -1135,13 +1135,17 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
     }, 100);
   };
 
-  const copySoapieToForm = (soapieData: any) => {
+  // excludePlanning — khusus tombol Copy di card "Riwayat Kunjungan
+  // Terakhir" (Planning kunjungan lalu tidak relevan buat kunjungan baru,
+  // harus diisi ulang oleh dokter). Tombol Copy di tabel SOAP/CPPT tetap
+  // copy semua field seperti biasa (excludePlanning default false).
+  const copySoapieToForm = (soapieData: any, opts?: { excludePlanning?: boolean }) => {
     // Copy data SOAPIE ke form (mode input baru, bukan edit)
     setForm({
       subjective: soapieData.keluhan || '',
       objective: soapieData.pemeriksaan || '',
       assessment: soapieData.penilaian || '',
-      planning: soapieData.rtl || '',
+      planning: opts?.excludePlanning ? '' : (soapieData.rtl || ''),
       evaluasi: soapieData.evaluasi || '',
       instruksi: soapieData.instruksi || '',
       tensi: soapieData.tensi || '',
@@ -2039,7 +2043,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                         <span style={{ fontSize: 12, fontWeight: 400, color: '#111827' }}>Riwayat Kunjungan Terakhir</span>
                         <button
                           type="button"
-                          onClick={() => copySoapieToForm(lastSoapie)}
+                          onClick={() => copySoapieToForm(lastSoapie, { excludePlanning: true })}
                           title="Copy ke Form"
                           style={{ padding: '4px 8px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 400 }}
                         >
