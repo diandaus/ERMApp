@@ -63,6 +63,38 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
   const [error, setError] = React.useState<string | null>(null);
   const [instansi, setInstansi] = React.useState<InstansiSettings | null>(null);
   const [wallpaper, setWallpaper] = React.useState<LoginWallpaperSettings | null>(null);
+
+  // Autocomplete Nama Pengguna — berguna terutama utk akun dokter, krn 1
+  // poli sering punya lebih dari 1 dokter & usernamenya (kd_dokter) tidak
+  // selalu gampang diingat; ketik sebagian nama, backend (/api/auth/
+  // username-suggestions) balikin username+full_name yg cocok.
+  const [usernameSuggestions, setUsernameSuggestions] = React.useState<{ username: string; full_name: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const usernameFieldRef = React.useRef<HTMLDivElement>(null);
+
+  // q boleh kosong (kolom baru difokus, belum ngetik apa2) — backend
+  // balikin daftar default (8 akun pertama) supaya combobox langsung
+  // kelihatan begitu kursor masuk kolom, bukan nunggu ngetik dulu.
+  React.useEffect(() => {
+    const q = username.trim();
+    const t = setTimeout(() => {
+      fetch(`/api/auth/username-suggestions?q=${encodeURIComponent(q)}`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => setUsernameSuggestions(Array.isArray(data) ? data : []))
+        .catch(() => setUsernameSuggestions([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [username]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (usernameFieldRef.current && !usernameFieldRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   // Breakpoint HP (beda dari isMobileLogin di App — dipakai di sini
   // krn LoginView dirender SEBELUM login, jadi belum tahu account-nya
   // pegawai atau bukan; ini murni penyesuaian ukuran layar).
@@ -215,7 +247,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}></label>
-            <div style={{ position: 'relative' }}>
+            <div ref={usernameFieldRef} style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex' }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -228,7 +260,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
                 autoComplete="username"
                 placeholder="Nama Pengguna"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); setShowSuggestions(true); }}
+                onFocus={(e) => { e.target.style.borderColor = '#1AB1E5'; setShowSuggestions(true); }}
+                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                 style={{
                   width: '100%',
                   padding: '9px 12px 9px 36px',
@@ -239,9 +273,40 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
                   outline: 'none',
                   transition: 'border-color 0.15s ease'
                 }}
-                onFocus={(e) => e.target.style.borderColor = '#1AB1E5'}
-                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
               />
+
+              {/* Autocomplete — berguna terutama utk akun dokter, krn 1 poli
+                  sering punya lebih dari 1 dokter & username (kd_dokter)
+                  tidak selalu gampang diingat; cari lewat sebagian nama. */}
+              {showSuggestions && usernameSuggestions.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+                    background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 20,
+                    maxHeight: 220, overflowY: 'auto',
+                  }}
+                >
+                  {usernameSuggestions.map((s) => (
+                    <button
+                      key={s.username}
+                      type="button"
+                      onClick={() => { setUsername(s.username); setShowSuggestions(false); }}
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none',
+                        borderBottom: '1px solid #f3f4f6', background: '#fff', cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', gap: 1,
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseOver={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
+                      onMouseOut={(e) => { e.currentTarget.style.background = '#fff'; }}
+                    >
+                      <span style={{ fontSize: 13, color: '#111827' }}>{s.full_name}</span>
+                      <span style={{ fontSize: 11, color: '#9ca3af' }}>{s.username}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div style={{ marginBottom: 12 }}>

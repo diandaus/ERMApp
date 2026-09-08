@@ -1118,6 +1118,41 @@ func main() {
 	r.GET("/api/auth/cari-pegawai", cariPegawaiRegistrasi(db))
 	r.POST("/api/auth/register", registerAkunMandiri(db))
 
+	// username-suggestions — autocomplete kolom "Nama Pengguna" di halaman
+	// Masuk (Auth.tsx). Sengaja endpoint TERPISAH & MINIMAL dari
+	// /api/admin/users (bukan reuse) — cuma balikin username+full_name akun
+	// aktif yg cocok query, TANPA role/allowed_modules/nip/kd_dokter, biar
+	// halaman login (belum ada sesi) tidak membocorkan data akun lebih dari
+	// perlu. Berguna terutama utk akun dokter — 1 poli sering punya lebih
+	// dari 1 dokter & usernamenya (kd_dokter) tidak selalu gampang diingat,
+	// jadi bisa cari lewat nama. q kosong (fokus pertama kali, blm ngetik
+	// apa2) SENGAJA tetap query (LIKE '%%' cocok semua) supaya dropdown
+	// langsung muncul begitu kolom diklik, bukan nunggu 2 huruf dulu.
+	r.GET("/api/auth/username-suggestions", func(c *gin.Context) {
+		q := strings.TrimSpace(c.Query("q"))
+		rows, err := db.Query(
+			`SELECT username, full_name FROM app_users
+			 WHERE is_active = 1 AND (username LIKE ? OR full_name LIKE ?)
+			 ORDER BY full_name LIMIT 8`,
+			"%"+q+"%", "%"+q+"%",
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		results := []gin.H{}
+		for rows.Next() {
+			var username, fullName string
+			if err := rows.Scan(&username, &fullName); err != nil {
+				continue
+			}
+			results = append(results, gin.H{"username": username, "full_name": fullName})
+		}
+		c.JSON(http.StatusOK, results)
+	})
+
 	r.POST("/api/auth/login", func(c *gin.Context) {
 		var req LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
