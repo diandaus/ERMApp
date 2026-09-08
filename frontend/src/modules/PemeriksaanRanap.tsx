@@ -994,9 +994,9 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                           SoapCpptFormIGD.tsx), Tanggal/Jam dikunci saat edit
                           krn jadi bagian kunci data. */}
                       <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 16, flexWrap: isPermanentSidebar ? 'nowrap' : 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1.4, minWidth: 220 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '0 0 auto', width: 350 }}>
                           <label style={{ ...soapLabelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Pegawai :</label>
-                          <div style={{ display: 'flex', gap: 2, position: 'relative', flex: 1 }}>
+                          <div style={{ display: 'flex', gap: 2, position: 'relative', flex: 1, minWidth: 0 }}>
                             <input type="text" value={soapPetugasNama} readOnly placeholder="Cari pegawai..." style={{ ...soapInputStyle, flex: 1, background: '#f9fafb' }} />
                             <button
                               type="button" onClick={() => setSoapPetugasOpen(true)} title="Cari pegawai"
@@ -1195,7 +1195,10 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
 
                       {/* Action buttons — flat radius 0, PERSIS pola tombol
                           aksi tab SOAP Pemeriksaan.tsx (Poli)/PemeriksaanIGD.tsx,
-                          3 tombol Ranap yg sudah ada dipertahankan semua. */}
+                          3 tombol Ranap yg sudah ada dipertahankan semua.
+                          Konsultasi Medik/Perawat — placeholder tombol dulu,
+                          perilaku (buka form apa) nyusul, nunggu source Java
+                          referensinya dari user. */}
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingTop: 16 }}>
                         <button type="submit" disabled={loading} style={soapActionBtn('#1AB1E5', loading)}>
                           {loading ? 'Menyimpan...' : isEditMode ? 'Update SOAP' : 'Simpan SOAP'}
@@ -1205,6 +1208,12 @@ export const PemeriksaanRanapView: React.FC<PemeriksaanRanapProps> = ({ patient,
                         </button>
                         <button type="button" onClick={() => setShowRiwayatModal(true)} style={soapActionBtn('#6b7280')}>
                           Riwayat Perawatan
+                        </button>
+                        <button type="button" onClick={() => { /* TODO: Konsultasi Medik */ }} style={soapActionBtn('#2563eb')}>
+                          Konsultasi Medik
+                        </button>
+                        <button type="button" onClick={() => { /* TODO: Konsultasi Perawat */ }} style={soapActionBtn('#0d9488')}>
+                          Konsultasi Perawat
                         </button>
                       </div>
 
