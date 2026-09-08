@@ -50,6 +50,12 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
   const [nmDokter, setNmDokter] = React.useState('');
   const [kdPoli, setKdPoli] = React.useState('');
   const [nmPoli, setNmPoli] = React.useState('');
+  // mappedDokterList — dokter yg sudah dipetakan ke poli dituju (Admin.tsx
+  // tab "Mapping Dokter Poliklinik"). Kalau cuma 1, langsung auto-isi
+  // Dokter Dituju; kalau lebih dari 1 (poli itu punya beberapa dokter),
+  // ditampilkan sbg chip quick-pick di bawah field Dokter Dituju biar tidak
+  // perlu cari manual.
+  const [mappedDokterList, setMappedDokterList] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [loadingDokter, setLoadingDokter] = React.useState(false);
   const [loadingPoli, setLoadingPoli] = React.useState(false);
@@ -168,6 +174,31 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
       fetchPoliList(searchPoli);
     }
   }, [showPoliDropdown, searchPoli]);
+
+  // Begitu Poli Dituju dipilih, tarik dokter yg sudah dipetakan ke poli itu
+  // (Admin.tsx tab "Mapping Dokter Poliklinik"). 1 hasil -> auto-isi Dokter
+  // Dituju langsung; >1 hasil -> tampil sbg chip quick-pick (poli tsb
+  // punya lebih dari 1 dokter, user tinggal klik salah satu).
+  React.useEffect(() => {
+    if (!kdPoli) {
+      setMappedDokterList([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/poli-dokter-mapping/by-poli/${encodeURIComponent(kdPoli)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : [];
+        setMappedDokterList(list);
+        if (list.length === 1) {
+          setKdDokter(list[0].kd_dokter);
+          setNmDokter(list[0].nm_dokter);
+        }
+      })
+      .catch(() => { if (!cancelled) setMappedDokterList([]); });
+    return () => { cancelled = true; };
+  }, [kdPoli]);
 
   const fetchDokterByKode = async (kode: string) => {
     try {
@@ -910,6 +941,29 @@ export const RujukanInternalModal: React.FC<RujukanInternalModalProps> = ({ pati
                 document.body
               )}
             </div>
+
+            {/* Quick-pick dokter yg sudah dipetakan ke poli dituju (Admin >
+                Mapping Dokter Poliklinik) — muncul kalau poli itu punya
+                lebih dari 1 dokter, jadi tidak perlu cari manual. */}
+            {mappedDokterList.length > 1 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {mappedDokterList.map((d) => (
+                  <button
+                    key={d.kd_dokter}
+                    type="button"
+                    onClick={() => { setKdDokter(d.kd_dokter); setNmDokter(d.nm_dokter); }}
+                    style={{
+                      padding: '4px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer',
+                      border: '1px solid ' + (kdDokter === d.kd_dokter ? '#1AB1E5' : '#d1d5db'),
+                      background: kdDokter === d.kd_dokter ? '#e0f2fe' : '#fff',
+                      color: kdDokter === d.kd_dokter ? '#0369a1' : '#374151',
+                    }}
+                  >
+                    {d.nm_dokter}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

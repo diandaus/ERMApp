@@ -977,6 +977,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel jadwal_obat: %v", err)
 	}
 
+	if err := ensurePoliDokterMappingTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel poli_dokter_mapping: %v", err)
+	}
+
 	if err := ensureAntrianApotekTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel antrian_apotek: %v", err)
 	}
@@ -3855,6 +3859,12 @@ func main() {
 	// Pengaturan — Set Penggunaan Tarif (set_tarif)
 	r.GET("/api/pengaturan/tarif", getSetTarif(db))
 	r.PUT("/api/pengaturan/tarif", saveSetTarif(db))
+
+	// Mapping Dokter Poliklinik — Admin.tsx, dipakai RujukanInternalModal.tsx
+	r.GET("/api/poli-dokter-mapping", getPoliDokterMappingList(db))
+	r.GET("/api/poli-dokter-mapping/by-poli/:kd_poli", getPoliDokterMappingByPoli(db))
+	r.POST("/api/poli-dokter-mapping", addPoliDokterMapping(db))
+	r.DELETE("/api/poli-dokter-mapping/:id", hapusPoliDokterMapping(db))
 
 	// Apotek — Industri Farmasi (master data pabrik/distributor obat)
 	r.GET("/api/apotek/industri-farmasi", getIndustriFarmasiList(db))

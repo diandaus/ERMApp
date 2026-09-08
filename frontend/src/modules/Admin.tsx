@@ -1,6 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { AddUserModal } from '../components/AddUserModal';
+import { ModalCariDokter } from '../components/ModalCariDokter';
+import { ModalCariPoli } from '../components/ModalCariPoli';
 
 type AppUser = {
   id: number;
@@ -224,7 +226,7 @@ const SET_TARIF_DEFAULT: Record<SetTarifKey, 'Yes' | 'No'> = {
 };
 
 export const AdminView: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif'>('users');
+  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif' | 'poli-dokter'>('users');
   const [users, setUsers] = React.useState<AppUser[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -279,6 +281,20 @@ export const AdminView: React.FC = () => {
   const [setTarif, setSetTarif] = React.useState<Record<SetTarifKey, 'Yes' | 'No'>>(SET_TARIF_DEFAULT);
   const [loadingSetTarif, setLoadingSetTarif] = React.useState(false);
   const [savingSetTarif, setSavingSetTarif] = React.useState(false);
+
+  // Mapping Dokter Poliklinik — petakan poliklinik -> dokter (bisa lebih
+  // dari 1 dokter per poli), dipakai fitur Rujuk (RujukanInternalModal.tsx
+  // via Pemeriksaan.tsx) supaya dokter tujuan otomatis tersaring begitu
+  // poli dituju dipilih.
+  const [poliDokterList, setPoliDokterList] = React.useState<{ id: number; kd_poli: string; nm_poli: string; kd_dokter: string; nm_dokter: string }[]>([]);
+  const [loadingPoliDokter, setLoadingPoliDokter] = React.useState(false);
+  const [pdmKdPoli, setPdmKdPoli] = React.useState('');
+  const [pdmNmPoli, setPdmNmPoli] = React.useState('');
+  const [pdmKdDokter, setPdmKdDokter] = React.useState('');
+  const [pdmNmDokter, setPdmNmDokter] = React.useState('');
+  const [showPdmPoliPicker, setShowPdmPoliPicker] = React.useState(false);
+  const [showPdmDokterPicker, setShowPdmDokterPicker] = React.useState(false);
+  const [savingPoliDokter, setSavingPoliDokter] = React.useState(false);
 
   // ─── User Management ─────────────────────────────────────────────────────
 
@@ -805,6 +821,66 @@ export const AdminView: React.FC = () => {
     }
   };
 
+  // ─── Mapping Dokter Poliklinik ────────────────────────────────────────────
+
+  const loadPoliDokterMapping = async () => {
+    setLoadingPoliDokter(true);
+    try {
+      const res = await fetch('/api/poli-dokter-mapping');
+      const data = await res.json();
+      if (res.ok) setPoliDokterList(Array.isArray(data) ? data : []);
+    } catch { /* silent */ } finally {
+      setLoadingPoliDokter(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === 'poli-dokter') void loadPoliDokterMapping();
+  }, [activeTab]);
+
+  const resetPdmForm = () => {
+    setPdmKdPoli(''); setPdmNmPoli('');
+    setPdmKdDokter(''); setPdmNmDokter('');
+  };
+
+  const handleAddPoliDokterMapping = async () => {
+    if (!pdmKdPoli || !pdmKdDokter) {
+      Swal.fire({ icon: 'warning', title: 'Pilih poliklinik dan dokter dulu', confirmButtonColor: '#2563eb' });
+      return;
+    }
+    setSavingPoliDokter(true);
+    try {
+      const res = await fetch('/api/poli-dokter-mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kd_poli: pdmKdPoli, kd_dokter: pdmKdDokter }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal simpan mapping');
+      resetPdmForm();
+      await loadPoliDokterMapping();
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });
+    } finally {
+      setSavingPoliDokter(false);
+    }
+  };
+
+  const handleHapusPoliDokterMapping = async (id: number, nmPoli: string, nmDokter: string) => {
+    const confirm = await Swal.fire({
+      icon: 'warning', title: 'Hapus mapping ini?', text: `${nmDokter} — ${nmPoli}`,
+      showCancelButton: true, confirmButtonText: 'Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/poli-dokter-mapping/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Gagal hapus mapping');
+      await loadPoliDokterMapping();
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });
+    }
+  };
+
   // ─── Main Render ──────────────────────────────────────────────────────────
 
   return (
@@ -812,7 +888,7 @@ export const AdminView: React.FC = () => {
       {/* Tab Navigation */}
       <div style={{ marginBottom: 24, borderBottom: '2px solid #e5e7eb' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['users', 'settings', 'bridging', 'set-tarif'] as const).map((tab) => (
+          {(['users', 'settings', 'bridging', 'set-tarif', 'poli-dokter'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -825,7 +901,7 @@ export const AdminView: React.FC = () => {
                 marginBottom: -2, transition: 'all 0.2s'
               }}
             >
-              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : 'Set Penggunaan Tarif'}
+              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : tab === 'set-tarif' ? 'Set Penggunaan Tarif' : 'Mapping Dokter Poliklinik'}
             </button>
           ))}
         </div>
@@ -1298,6 +1374,108 @@ export const AdminView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Tab: Mapping Dokter Poliklinik — petakan poliklinik -> dokter
+          (bisa lebih dari 1 dokter per poli), dipakai fitur Rujuk
+          (RujukanInternalModal.tsx) supaya dokter tujuan otomatis
+          tersaring begitu poli dituju dipilih. */}
+      {activeTab === 'poli-dokter' && (
+        <div>
+
+          {/* Form tambah mapping */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 24 }}>
+            <div style={{ width: 220 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}>Poliklinik</label>
+              <button
+                type="button"
+                onClick={() => setShowPdmPoliPicker(true)}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 8,
+                  border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13,
+                  color: pdmNmPoli ? '#111827' : '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                {pdmNmPoli || 'Pilih poliklinik...'}
+              </button>
+            </div>
+            <div style={{ width: 220 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}>Dokter</label>
+              <button
+                type="button"
+                onClick={() => setShowPdmDokterPicker(true)}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 8,
+                  border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13,
+                  color: pdmNmDokter ? '#111827' : '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                {pdmNmDokter || 'Pilih dokter...'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddPoliDokterMapping}
+              disabled={savingPoliDokter}
+              style={{
+                padding: '9px 20px', borderRadius: 8, border: 'none',
+                background: savingPoliDokter ? '#9ca3af' : '#2563eb', color: '#fff',
+                fontSize: 13, fontWeight: 600, cursor: savingPoliDokter ? 'not-allowed' : 'pointer', flexShrink: 0,
+              }}
+            >
+              {savingPoliDokter ? 'Menyimpan...' : 'Tambah'}
+            </button>
+          </div>
+
+          {/* Daftar mapping — tabel Nama Poliklinik | Nama Dokter | Aksi */}
+          {loadingPoliDokter ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat...</div>
+          ) : poliDokterList.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px dashed #d1d5db', borderRadius: 10 }}>
+              Belum ada mapping poliklinik-dokter.
+            </div>
+          ) : (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', maxWidth: 560 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb' }}>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb' }}>Nama Poliklinik</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb' }}>Nama Dokter</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {poliDokterList.map((item, idx) => (
+                    <tr key={item.id} style={{ borderTop: idx === 0 ? 'none' : '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '10px 16px', color: '#374151' }}>{item.nm_poli || item.kd_poli}</td>
+                      <td style={{ padding: '10px 16px', color: '#374151' }}>{item.nm_dokter || item.kd_dokter}</td>
+                      <td style={{ padding: '10px 16px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleHapusPoliDokterMapping(item.id, item.nm_poli, item.nm_dokter)}
+                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <ModalCariPoli
+        isOpen={showPdmPoliPicker}
+        onClose={() => setShowPdmPoliPicker(false)}
+        onSelect={(kode, nama) => { setPdmKdPoli(kode); setPdmNmPoli(nama); setShowPdmPoliPicker(false); }}
+      />
+      <ModalCariDokter
+        isOpen={showPdmDokterPicker}
+        onClose={() => setShowPdmDokterPicker(false)}
+        onSelect={(kode, nama) => { setPdmKdDokter(kode); setPdmNmDokter(nama); setShowPdmDokterPicker(false); }}
+      />
     </section>
   );
 };
