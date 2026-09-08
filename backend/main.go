@@ -973,6 +973,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel antrian_poli: %v", err)
 	}
 
+	if err := ensureJadwalObatTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel jadwal_obat: %v", err)
+	}
+
 	if err := ensureAntrianApotekTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel antrian_apotek: %v", err)
 	}
@@ -3624,6 +3628,18 @@ func main() {
 
 	// Rawat Inap List endpoint (daftar pasien rawat inap)
 	r.GET("/api/rawat-inap/list", getRawatInapList(db))
+
+	// Jadwal Obat — pengganti digital Formulir Pemberian Obat RM.14 (kertas),
+	// tombol "Jadwal Obat" di RawatInap.tsx.
+	r.GET("/api/jadwal-obat/frekuensi-ref", getJadwalObatFrekuensiRef)
+	r.GET("/api/jadwal-obat/list", getJadwalObatList(db))
+	r.POST("/api/jadwal-obat", createJadwalObat(db))
+	r.PUT("/api/jadwal-obat/:id/hentikan", hentikanJadwalObat(db))
+	r.PUT("/api/jadwal-obat/tanda", markJadwalObatTanda(db))
+	r.DELETE("/api/jadwal-obat/tanda", unmarkJadwalObatTanda(db))
+	r.GET("/api/jadwal-obat/alergi", getJadwalObatAlergiList(db))
+	r.POST("/api/jadwal-obat/alergi", addJadwalObatAlergi(db))
+	r.DELETE("/api/jadwal-obat/alergi/:id", hapusJadwalObatAlergi(db))
 
 	// Klaim INACBG endpoints
 	r.GET("/api/klaim-inacbg/list", getKlaimInacbgList(db))

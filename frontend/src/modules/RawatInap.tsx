@@ -2,6 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { PemeriksaanRanapView } from './PemeriksaanRanap';
 import { ModalPermintaanRanap } from '../components/ModalPermintaanRanap';
+import { ModalJadwalObat } from '../components/ModalJadwalObat';
 import { localDateStr } from '../utils/date';
 
 type Patient = {
@@ -57,6 +58,7 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
   const [selectedPatient, setSelectedPatient] = React.useState<Patient | null>(null);
   const [periksaPatient, setPeriksaPatient] = React.useState<Patient | null>(null);
   const [showPermintaanRanap, setShowPermintaanRanap] = React.useState(false);
+  const [showJadwalObat, setShowJadwalObat] = React.useState(false);
   const filterDropdownRef = React.useRef<HTMLDivElement>(null);
 
   // Fetch data from API
@@ -223,8 +225,7 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
                   });
                   return;
                 }
-                console.log('Jadwal Obat patient:', selectedPatient);
-                // TODO: Implement jadwal obat functionality
+                setShowJadwalObat(true);
               }}
               style={{
                 padding: '6px 12px',
@@ -482,6 +483,12 @@ export const RawatInapView: React.FC<RawatInapViewProps> = ({ user }) => {
       </section>
 
       <ModalPermintaanRanap open={showPermintaanRanap} onClose={() => setShowPermintaanRanap(false)} />
+      <ModalJadwalObat
+        open={showJadwalObat}
+        onClose={() => setShowJadwalObat(false)}
+        patient={selectedPatient}
+        currentUsername={user?.username || ''}
+      />
     </>
   );
 };
