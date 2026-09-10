@@ -95,16 +95,17 @@ const canViewPemeriksaan = (label: string) => {
   return s.includes('belum') || s.includes('selesai');
 };
 
-// effectiveStatusLabel — local_status (Checkin/Batal/Gagal via tombol
-// [Belum] di bawah) diutamakan drpd status mentah BPJS, krn Checkin murni
-// aksi lokal RS yang tidak dilaporkan balik ke BPJS (lihat komentar type
-// PendaftaranRow). Kalau belum ada baris lokal sama sekali (local_status
-// undefined) atau lokal masih 'Belum', tampilkan status asli dari BPJS.
-const effectiveStatusLabel = (item: PendaftaranRow) => {
-  const ls = (item.local_status || '').trim();
-  if (ls === 'Checkin' || ls === 'Batal' || ls === 'Gagal') return ls;
-  return item.status;
-};
+// effectiveStatusLabel — SELALU tampilkan status asli dari BPJS apa adanya
+// (bukan local_status). Sempat dicoba override ke local_status
+// (Checkin/Batal/Gagal) supaya badge "ikut" aksi lokal, tapi itu salah:
+// local_status 'Checkin' TIDAK PERNAH balik lagi begitu BPJS sendiri sudah
+// mencatat "Selesai dilayani" (tidak ada proses yg mereset local_status),
+// jadi badge-nya nyangkut permanen di "Checkin" walau kunjungan sudah
+// benar2 selesai — "Selesai dilayani" jadi tidak pernah kelihatan lagi utk
+// baris Mobile JKN yg sempat di-Checkin. local_status TETAP dipakai (lihat
+// canActOnStatus) utk sembunyikan tombol [Belum] setelah di-Checkin/Batal,
+// cuma sudah tidak dipakai lagi utk teks badge.
+const effectiveStatusLabel = (item: PendaftaranRow) => item.status;
 
 // canActOnStatus — tombol [Belum] cuma muncul utk booking Mobile JKN yang
 // statusnya (efektif) masih "belum dilayani", supaya tidak menawarkan
@@ -794,7 +795,7 @@ export const AntreanRsView: React.FC = () => {
                               e.stopPropagation();
                               setStatusMenuFor(isMenuOpen ? null : item.kodebooking);
                             }}
-                            style={{ marginLeft: 6, padding: '2px 6px', borderRadius: 6, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}
+                            style={{ marginLeft: 6, padding: '2px 6px', borderRadius: 2, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}
                           >
                             [Belum] ▾
                           </button>
@@ -820,7 +821,7 @@ export const AntreanRsView: React.FC = () => {
                                 type="button"
                                 disabled={isBusy}
                                 onClick={() => handleCheckin(item.kodebooking)}
-                                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: isBusy ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
+                                style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: isBusy ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
                               >
                                 Checkin
                               </button>
@@ -828,7 +829,7 @@ export const AntreanRsView: React.FC = () => {
                                 type="button"
                                 disabled={isBusy}
                                 onClick={() => handleBatalMjkn(item.kodebooking)}
-                                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: isBusy ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
+                                style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: isBusy ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
                               >
                                 Batal
                               </button>
@@ -842,21 +843,21 @@ export const AntreanRsView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openWaktuModal(item.kodebooking)}
-                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #0ea5e9', background: '#ffffff', color: '#0ea5e9', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                          style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #0ea5e9', background: '#ffffff', color: '#0ea5e9', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
                         >
                           Waktu
                         </button>
                         <button
                           type="button"
                           onClick={() => openFarmasiModal(item.kodebooking)}
-                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #16a34a', background: '#ffffff', color: '#16a34a', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                          style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #16a34a', background: '#ffffff', color: '#16a34a', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
                         >
                           Farmasi
                         </button>
                         <button
                           type="button"
                           onClick={() => openListTaskModal(item.kodebooking)}
-                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #6b7280', background: '#ffffff', color: '#6b7280', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
+                          style={{ padding: '4px 10px', borderRadius: 2, border: '1px solid #6b7280', background: '#ffffff', color: '#6b7280', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
                         >
                           List Task
                         </button>
@@ -866,7 +867,7 @@ export const AntreanRsView: React.FC = () => {
                             onClick={() => setSepPrintNoRawat(item.no_rawat!)}
                             title="Lihat SEP"
                             style={{
-                              padding: '4px 8px', borderRadius: 6, border: '1px solid #16a34a',
+                              padding: '4px 8px', borderRadius: 2, border: '1px solid #16a34a',
                               background: '#ffffff', color: '#16a34a', cursor: 'pointer',
                               display: 'inline-flex', alignItems: 'center', transition: 'all 0.2s ease',
                             }}
