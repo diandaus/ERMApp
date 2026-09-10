@@ -232,7 +232,16 @@ export const AntreanRsView: React.FC = () => {
     }
     const jknCapaian = sepTerbit > 0 ? Math.floor((jknSelesai / sepTerbit) * 100) : 0;
     const mjknCapaian = sepTerbit > 0 ? Math.floor((mjknSelesai / sepTerbit) * 100) : 0;
-    return { totalBelum, totalSelesai, jknBelum, jknSelesai, jknCapaian, mjknBelum, mjknSelesai, mjknCapaian, nonJknBelum, nonJknSelesai };
+    // seluruhnya — TAMBAHAN di luar Java: total gabungan 3 kategori JKN+MJKN+
+    // Non JKN (Belum+Selesai sekaligus jadi satu angka), BUKAN padanan "Total
+    // Belum/Selesai" di atas (yang itu hitung independen tiap baris apa
+    // adanya). Sengaja bisa beda dari Total: satu baris yg sumberdata=
+    // "Mobile JKN" DAN ispeserta=false ikut kehitung 2x di sini (masuk MJKN &
+    // Non JKN sekaligus) krn kategorinya memang tidak saling eksklusif di
+    // Java — jumlah ini murni "total 3 kategori" per permintaan user, bukan
+    // grand total unik per baris.
+    const seluruhnya = jknBelum + jknSelesai + mjknBelum + mjknSelesai + nonJknBelum + nonJknSelesai;
+    return { totalBelum, totalSelesai, jknBelum, jknSelesai, jknCapaian, mjknBelum, mjknSelesai, mjknCapaian, nonJknBelum, nonJknSelesai, seluruhnya };
   }, [items, sepTerbit]);
 
   // Diambil langsung dari BPJS (bukan tabel lokal) supaya kode booking dari
@@ -870,6 +879,7 @@ export const AntreanRsView: React.FC = () => {
           <span style={{ color: '#009900' }}>MJKN Capaian: ({antreanSummary.mjknCapaian}%)</span>
           <span style={{ color: '#009999' }}>Non JKN Belum: {antreanSummary.nonJknBelum}</span>
           <span style={{ color: '#009999' }}>Non JKN Selesai: {antreanSummary.nonJknSelesai}</span>
+          <span style={{ color: '#374151' }}>Total: {antreanSummary.seluruhnya}</span>
         </div>
       )}
       </div>
