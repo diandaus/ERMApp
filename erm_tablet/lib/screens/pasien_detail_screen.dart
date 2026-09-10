@@ -11,6 +11,24 @@ import 'tindakan_tab.dart';
 
 const kHeaderGreen = Color(0xFF059669);
 
+/// openJadwalObat — dipisah jadi fungsi top-level (bukan method di
+/// PasienDetailScreen) supaya bisa dipanggil juga dari actions AppBar
+/// milik RanapListScreen (tombol Jadwal Obat sejajar tombol back, rata
+/// kanan), per arahan user — bukan cuma dari dalam header hijau.
+void openJadwalObat(BuildContext context, {required AppUser user, required RanapPatient patient}) {
+  Navigator.of(context).push(MaterialPageRoute(
+    builder: (_) => Scaffold(
+      appBar: AppBar(
+        title: const Text('Jadwal Obat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+        backgroundColor: kHeaderGreen,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: JadwalObatTab(user: user, patient: patient),
+    ),
+  ));
+}
+
 /// PasienDetailScreen — panel kanan RanapListScreen. Header identitas
 /// pasien (padanan breadcrumb no_rawat|no_rkm_medis|nm_pasien|umur di web)
 /// + tombol "Jadwal Obat" rata kanan (skrn terpisah, bukan tab — dibuka via
@@ -28,20 +46,6 @@ class PasienDetailScreen extends StatelessWidget {
   final RanapPatient patient;
   const PasienDetailScreen({super.key, required this.user, required this.patient});
 
-  void _openJadwalObat(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Jadwal Obat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
-          backgroundColor: kHeaderGreen,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        body: JadwalObatTab(user: user, patient: patient),
-      ),
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -54,30 +58,16 @@ class PasienDetailScreen extends StatelessWidget {
             // RanapListScreen (kHeaderGreen). Baris tab dipisah di blok
             // putih di bawahnya, spt SegmentedButton di RanapListScreen.
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
               color: kHeaderGreen,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(patient.nmPasien, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _openJadwalObat(context),
-                        icon: const Icon(Icons.medication_outlined, size: 16, color: Colors.white),
-                        label: const Text('Jadwal Obat', style: TextStyle(fontSize: 12, color: Colors.white)),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          side: const BorderSide(color: Colors.white),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Tombol Jadwal Obat DIPINDAH ke actions AppBar (sejajar
+                  // tombol back, rata kanan — lihat RanapListScreen), tidak
+                  // lagi di sini per arahan user.
+                  Text(patient.nmPasien, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Wrap(
