@@ -1148,6 +1148,21 @@ func getAntreanPendaftaranTanggal(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		injectLocalFields(db, result)
+
+		// sep_terbit — padanan PERSIS variabel "sep" di BPJSAntreanPerTanggal.java
+		// (dipakai penyebut JKN Capaian/MJKN Capaian): jumlah SEP rawat jalan
+		// (jnspelayanan='2', kdpolitujuan bukan IGD) yang terbit pada tanggal
+		// ini, dari bridging_sep + bridging_sep_internal — BUKAN dari data
+		// BPJS antrean di atas, query lokal terpisah.
+		var sepTerbit int
+		db.QueryRow(
+			`SELECT
+				(SELECT COUNT(*) FROM bridging_sep WHERE tglsep = ? AND jnspelayanan = '2' AND kdpolitujuan <> 'IGD') +
+				(SELECT COUNT(*) FROM bridging_sep_internal WHERE tglsep = ? AND jnspelayanan = '2' AND kdpolitujuan <> 'IGD')`,
+			tanggal, tanggal,
+		).Scan(&sepTerbit)
+		result["sep_terbit"] = sepTerbit
+
 		c.JSON(http.StatusOK, gin.H{"pendaftaran": result})
 	}
 }

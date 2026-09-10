@@ -49,7 +49,10 @@ type PendaftaranRow = {
   jeniskunjungan: number;
   nomorreferensi: string;
   sumberdata: string;
-  ispeserta: number;
+  // ispeserta — BPJS balikin boolean true/false (bukan angka; Java baca via
+  // .asText().equals("true")) dipakai bedakan JKN Belum/Selesai (ispeserta
+  // true) vs Non JKN Belum/Selesai (ispeserta false) di antreanSummary.
+  ispeserta: boolean | string;
   noantrean: string;
   estimasidilayani: number;
   createdtime: number;
@@ -191,31 +194,46 @@ export const AntreanRsView: React.FC = () => {
   const [pendaftaranError, setPendaftaranError] = React.useState<string | null>(null);
   const [pendaftaranRows, setPendaftaranRows] = React.useState<PendaftaranRow[]>([]);
 
-  // Ringkasan jumlah belum/selesai, dipecah per sumber data: "Total" untuk
-  // antrean yang dibuat lewat bridging RS ini (sumberdata selain Mobile JKN),
-  // "MJKN" untuk antrean yang didaftarkan pasien lewat aplikasi Mobile JKN.
-  // Dihitung dari `items` (data tabel utama, sama persis endpoint yang
-  // sebelumnya dipakai modal "Cek Pendaftaran BPJS" mode tanggal — modal
-  // itu sudah dihapus krn redundan, tinggal dipindah hitungnya ke sini).
+  // sepTerbit — dari response fetchItems (backend sisipkan "sep_terbit",
+  // lihat getAntreanPendaftaranTanggal), dipakai sbg penyebut JKN
+  // Capaian/MJKN Capaian di bawah.
+  const [sepTerbit, setSepTerbit] = React.useState(0);
+
+  // Ringkasan Belum/Selesai — padanan PERSIS logika BPJSAntreanPerTanggal.java
+  // (bukan tebakan): "Total" = grand total semua sumber; "JKN" = sumberdata
+  // "Bridging Antrean" (dibuat RS) + ispeserta true; "MJKN" = sumberdata
+  // "Mobile JKN" (didaftarkan pasien sendiri); "Non JKN" = ispeserta false
+  // (lintas sumber). Capaian = persentase Selesai thd SEP Terbit hari itu.
   const antreanSummary = React.useMemo(() => {
-    let totalBelum = 0;
-    let totalSelesai = 0;
-    let mjknBelum = 0;
-    let mjknSelesai = 0;
+    let totalBelum = 0, totalSelesai = 0;
+    let jknBelum = 0, jknSelesai = 0;
+    let mjknBelum = 0, mjknSelesai = 0;
+    let nonJknBelum = 0, nonJknSelesai = 0;
     for (const row of items) {
-      const isMjkn = isMobileJknSumber(row.sumberdata);
-      const isBelum = (row.status || '').toLowerCase().includes('belum');
-      const isSelesai = (row.status || '').toLowerCase().includes('selesai');
-      if (isMjkn) {
+      const status = (row.status || '').trim();
+      const isBelum = status === 'Belum dilayani';
+      const isSelesai = status === 'Selesai dilayani';
+      const isPeserta = String(row.ispeserta).toLowerCase() === 'true';
+      const sumberdata = (row.sumberdata || '').trim();
+      if (isBelum) totalBelum++;
+      if (isSelesai) totalSelesai++;
+      if (sumberdata === 'Bridging Antrean' && isPeserta) {
+        if (isBelum) jknBelum++;
+        if (isSelesai) jknSelesai++;
+      }
+      if (sumberdata === 'Mobile JKN') {
         if (isBelum) mjknBelum++;
         if (isSelesai) mjknSelesai++;
-      } else {
-        if (isBelum) totalBelum++;
-        if (isSelesai) totalSelesai++;
+      }
+      if (!isPeserta) {
+        if (isBelum) nonJknBelum++;
+        if (isSelesai) nonJknSelesai++;
       }
     }
-    return { totalBelum, totalSelesai, mjknBelum, mjknSelesai };
-  }, [items]);
+    const jknCapaian = sepTerbit > 0 ? Math.floor((jknSelesai / sepTerbit) * 100) : 0;
+    const mjknCapaian = sepTerbit > 0 ? Math.floor((mjknSelesai / sepTerbit) * 100) : 0;
+    return { totalBelum, totalSelesai, jknBelum, jknSelesai, jknCapaian, mjknBelum, mjknSelesai, mjknCapaian, nonJknBelum, nonJknSelesai };
+  }, [items, sepTerbit]);
 
   // Diambil langsung dari BPJS (bukan tabel lokal) supaya kode booking dari
   // Mobile JKN maupun yang dibuat lewat RS (bridging) sama-sama tampil,
@@ -231,6 +249,7 @@ export const AntreanRsView: React.FC = () => {
       if (!res.ok) throw new Error(data.error || 'Gagal mengambil data antrean');
       const rows: PendaftaranRow[] = data.pendaftaran?.list ?? [];
       setItems(Array.isArray(rows) ? rows : []);
+      setSepTerbit(Number(data.pendaftaran?.sep_terbit) || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
       setItems([]);
@@ -831,18 +850,26 @@ export const AntreanRsView: React.FC = () => {
           Pendaftaran BPJS" (skrg dihapus) ke bawah tabel, posisi & gaya
           sama persis indikator "X barang" di ApotekPenerimaan.tsx (absolute
           top:100%, cuma teks berwarna, tanpa background/border pill).
-          Dihitung dari `items` (data tabel utama). */}
+          Label + warna disamakan PERSIS dgn BPJSAntreanPerTanggal.java
+          (jLabel8/TotBelum dst — lihat komentar antreanSummary di atas). */}
       {!loading && items.length > 0 && (
         <div
           style={{
             position: 'absolute', top: '100%', left: 0, marginTop: 4,
-            display: 'flex', gap: 16, fontSize: 11, pointerEvents: 'none',
+            display: 'flex', gap: 16, fontSize: 11, pointerEvents: 'none', flexWrap: 'wrap',
           }}
         >
-          <span style={{ color: '#854d0e' }}>Total Belum: {antreanSummary.totalBelum}</span>
-          <span style={{ color: '#166534' }}>Total Selesai: {antreanSummary.totalSelesai}</span>
-          <span style={{ color: '#1e40af' }}>MJKN Belum: {antreanSummary.mjknBelum}</span>
-          <span style={{ color: '#3730a3' }}>MJKN Selesai: {antreanSummary.mjknSelesai}</span>
+          <span style={{ color: '#ff9900' }}>Total Belum: {antreanSummary.totalBelum}</span>
+          <span style={{ color: '#669900' }}>Total Selesai: {antreanSummary.totalSelesai}</span>
+          <span style={{ color: '#0099ff' }}>SEP Terbit: {sepTerbit}</span>
+          <span style={{ color: '#cccc00' }}>JKN Belum: {antreanSummary.jknBelum}</span>
+          <span style={{ color: '#cccc00' }}>JKN Selesai: {antreanSummary.jknSelesai}</span>
+          <span style={{ color: '#cccc00' }}>JKN Capaian: ({antreanSummary.jknCapaian}%)</span>
+          <span style={{ color: '#009900' }}>MJKN Belum: {antreanSummary.mjknBelum}</span>
+          <span style={{ color: '#009900' }}>MJKN Selesai: {antreanSummary.mjknSelesai}</span>
+          <span style={{ color: '#009900' }}>MJKN Capaian: ({antreanSummary.mjknCapaian}%)</span>
+          <span style={{ color: '#009999' }}>Non JKN Belum: {antreanSummary.nonJknBelum}</span>
+          <span style={{ color: '#009999' }}>Non JKN Selesai: {antreanSummary.nonJknSelesai}</span>
         </div>
       )}
       </div>
