@@ -232,15 +232,15 @@ export const AntreanRsView: React.FC = () => {
     }
     const jknCapaian = sepTerbit > 0 ? Math.floor((jknSelesai / sepTerbit) * 100) : 0;
     const mjknCapaian = sepTerbit > 0 ? Math.floor((mjknSelesai / sepTerbit) * 100) : 0;
-    // seluruhnya — TAMBAHAN di luar Java: total gabungan 3 kategori JKN+MJKN+
-    // Non JKN (Belum+Selesai sekaligus jadi satu angka), BUKAN padanan "Total
-    // Belum/Selesai" di atas (yang itu hitung independen tiap baris apa
-    // adanya). Sengaja bisa beda dari Total: satu baris yg sumberdata=
-    // "Mobile JKN" DAN ispeserta=false ikut kehitung 2x di sini (masuk MJKN &
-    // Non JKN sekaligus) krn kategorinya memang tidak saling eksklusif di
-    // Java — jumlah ini murni "total 3 kategori" per permintaan user, bukan
-    // grand total unik per baris.
-    const seluruhnya = jknBelum + jknSelesai + mjknBelum + mjknSelesai + nonJknBelum + nonJknSelesai;
+    // seluruhnya — TAMBAHAN di luar Java, ringkasan 1 angka. SEMPAT dihitung
+    // dari jumlah 3 kategori (JKN+MJKN+Non JKN), tapi itu keliru: kategori2
+    // itu tidak saling eksklusif MAUPUN tidak menyeluruh (row bisa masuk 2
+    // kategori sekaligus, atau tidak masuk kategori manapun kalau sumberdata-
+    // nya bukan "Bridging Antrean"/"Mobile JKN" tapi ispeserta=true) — hasil
+    // penjumlahannya kebukti meleset (39 vs seharusnya 40, dikonfirmasi
+    // user). totalBelum+totalSelesai di atas sudah pasti benar krn dihitung
+    // independen per baris (persis padanan Java), jadi dipakai langsung.
+    const seluruhnya = totalBelum + totalSelesai;
     return { totalBelum, totalSelesai, jknBelum, jknSelesai, jknCapaian, mjknBelum, mjknSelesai, mjknCapaian, nonJknBelum, nonJknSelesai, seluruhnya };
   }, [items, sepTerbit]);
 
