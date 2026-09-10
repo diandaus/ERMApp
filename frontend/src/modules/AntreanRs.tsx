@@ -185,8 +185,7 @@ export const AntreanRsView: React.FC = () => {
   const [dashboardRows, setDashboardRows] = React.useState<DashboardRow[]>([]);
 
   const [showPendaftaran, setShowPendaftaran] = React.useState(false);
-  const [pendaftaranMode, setPendaftaranMode] = React.useState<'kodebooking' | 'aktif' | 'filter'>('aktif');
-  const [pendaftaranKodeBooking, setPendaftaranKodeBooking] = React.useState<string | null>(null);
+  const [pendaftaranMode, setPendaftaranMode] = React.useState<'aktif' | 'filter'>('aktif');
   const [pendaftaranFilter, setPendaftaranFilter] = React.useState({ kodePoli: '', kodeDokter: '', hari: '1', jamPraktek: '' });
   const [pendaftaranLoading, setPendaftaranLoading] = React.useState(false);
   const [pendaftaranError, setPendaftaranError] = React.useState<string | null>(null);
@@ -570,16 +569,12 @@ export const AntreanRsView: React.FC = () => {
     setDashboardError(null);
   };
 
-  const fetchPendaftaran = async (mode: 'kodebooking' | 'aktif' | 'filter', kodeBooking?: string) => {
+  const fetchPendaftaran = async (mode: 'aktif' | 'filter') => {
     setPendaftaranLoading(true);
     setPendaftaranError(null);
     try {
-      let url = '';
-      if (mode === 'kodebooking') {
-        url = `/api/bridging/antrean/pendaftaran-booking/${encodeURIComponent(kodeBooking || '')}`;
-      } else if (mode === 'aktif') {
-        url = `/api/bridging/antrean/pendaftaran-aktif`;
-      } else {
+      let url = `/api/bridging/antrean/pendaftaran-aktif`;
+      if (mode === 'filter') {
         const p = new URLSearchParams({
           kode_poli: pendaftaranFilter.kodePoli.trim(),
           kode_dokter: pendaftaranFilter.kodeDokter.trim(),
@@ -591,18 +586,8 @@ export const AntreanRsView: React.FC = () => {
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal mengambil pendaftaran antrean');
-      // pencarian per-kodebooking bisa jadi dibalas BPJS sbg objek tunggal
-      // (bukan dibungkus "list" spt endpoint per-tanggal/aktif/filter) —
-      // terima kedua bentuk. Objek KOSONG (kode 204 "tidak ketemu" diteruskan
-      // hfisRequest sbg map kosong {}) harus dianggap TIDAK ADA hasil, bukan
-      // "1 hasil ditemukan" — cek field kodebooking benar2 terisi dulu.
-      const raw = data.pendaftaran?.list ?? data.pendaftaran;
-      const isSingleRecord = raw && typeof raw === 'object' && !Array.isArray(raw) && !!raw.kodebooking;
-      const rows: PendaftaranRow[] = Array.isArray(raw) ? raw : isSingleRecord ? [raw] : [];
-      setPendaftaranRows(rows);
-      if (mode === 'kodebooking' && rows.length === 0) {
-        setPendaftaranError(`Kode booking "${kodeBooking}" tidak ditemukan di BPJS`);
-      }
+      const rows: PendaftaranRow[] = data.pendaftaran?.list ?? [];
+      setPendaftaranRows(Array.isArray(rows) ? rows : []);
     } catch (err: any) {
       setPendaftaranError(err.message || 'Terjadi kesalahan');
       setPendaftaranRows([]);
@@ -613,7 +598,6 @@ export const AntreanRsView: React.FC = () => {
 
   const openPendaftaranAktif = () => {
     setPendaftaranMode('aktif');
-    setPendaftaranKodeBooking(null);
     setShowPendaftaran(true);
     setPendaftaranRows([]);
     setPendaftaranError(null);
@@ -622,22 +606,6 @@ export const AntreanRsView: React.FC = () => {
 
   const openPendaftaranFilter = () => {
     setPendaftaranMode('filter');
-    setPendaftaranKodeBooking(null);
-    setShowPendaftaran(true);
-    setPendaftaranRows([]);
-    setPendaftaranError(null);
-  };
-
-  // openPendaftaranKodeBooking — "Cek Kode Booking": pencarian LANGSUNG ke
-  // BPJS satu kodebooking spesifik (GET antrean/pendaftaran/kodebooking/{..}),
-  // padanan persis BPJSAntreanPerTanggal.java tapi per-booking, bukan per
-  // tanggal. Dipakai utk verifikasi manual — mis. antrean sudah tersimpan
-  // lokal (berarti BPJS sempat merespons sukses) tapi entah kenapa tidak
-  // muncul di tabel utama (Antrian per Tanggal), jadi perlu dicek satu-satu
-  // apakah booking itu benar ada di sisi BPJS.
-  const openPendaftaranKodeBooking = () => {
-    setPendaftaranMode('kodebooking');
-    setPendaftaranKodeBooking('');
     setShowPendaftaran(true);
     setPendaftaranRows([]);
     setPendaftaranError(null);
@@ -656,26 +624,6 @@ export const AntreanRsView: React.FC = () => {
             style={{ ...inputStyle, width: 280 }}
           />
           <input type="date" value={tglDari} onChange={(e) => setTglDari(e.target.value)} style={{ ...inputStyle, width: 150 }} />
-          {/* Ringkasan Belum/Selesai — dipindah dari dalam modal "Cek
-              Pendaftaran BPJS" (skrg dihapus, redundan dgn tabel utama yg
-              sudah pakai endpoint sama persis) ke sini, dihitung langsung
-              dari `items` (data tabel utama), bukan fetch terpisah lagi. */}
-          {items.length > 0 && (
-            <>
-              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a' }}>
-                Total Belum: {antreanSummary.totalBelum}
-              </span>
-              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
-                Total Selesai: {antreanSummary.totalSelesai}
-              </span>
-              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
-                MJKN Belum: {antreanSummary.mjknBelum}
-              </span>
-              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe' }}>
-                MJKN Selesai: {antreanSummary.mjknSelesai}
-              </span>
-            </>
-          )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
@@ -699,13 +647,6 @@ export const AntreanRsView: React.FC = () => {
           >
             Antrean Per Poli/Dokter/Jadwal
           </button>
-          <button
-            type="button"
-            onClick={openPendaftaranKodeBooking}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #7c3aed', background: '#ffffff', color: '#7c3aed', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-          >
-            Cek Kode Booking
-          </button>
         </div>
       </div>
 
@@ -716,7 +657,8 @@ export const AntreanRsView: React.FC = () => {
       )}
 
       {/* Table */}
-      <div style={{ borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto', flex: 1 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto', height: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
@@ -771,7 +713,7 @@ export const AntreanRsView: React.FC = () => {
                           disabled={!item.no_rawat}
                           title={item.no_rawat ? 'Lihat Pemeriksaan' : 'No.Rawat belum tersedia untuk booking ini'}
                           style={{
-                            padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                            padding: '2px 8px', borderRadius: 2, fontSize: 11, fontWeight: 600,
                             background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
                             cursor: item.no_rawat ? 'pointer' : 'not-allowed', opacity: item.no_rawat ? 1 : 0.6,
                           }}
@@ -779,7 +721,7 @@ export const AntreanRsView: React.FC = () => {
                           {statusLabel}
                         </button>
                       ) : (
-                        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 2, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
                           {statusLabel}
                         </span>
                       )}
@@ -884,6 +826,25 @@ export const AntreanRsView: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+      {/* Ringkasan Belum/Selesai — dipindah dari toolbar/modal "Cek
+          Pendaftaran BPJS" (skrg dihapus) ke bawah tabel, posisi & gaya
+          sama persis indikator "X barang" di ApotekPenerimaan.tsx (absolute
+          top:100%, cuma teks berwarna, tanpa background/border pill).
+          Dihitung dari `items` (data tabel utama). */}
+      {!loading && items.length > 0 && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', left: 0, marginTop: 4,
+            display: 'flex', gap: 16, fontSize: 11, pointerEvents: 'none',
+          }}
+        >
+          <span style={{ color: '#854d0e' }}>Total Belum: {antreanSummary.totalBelum}</span>
+          <span style={{ color: '#166534' }}>Total Selesai: {antreanSummary.totalSelesai}</span>
+          <span style={{ color: '#1e40af' }}>MJKN Belum: {antreanSummary.mjknBelum}</span>
+          <span style={{ color: '#3730a3' }}>MJKN Selesai: {antreanSummary.mjknSelesai}</span>
+        </div>
+      )}
       </div>
 
       {antreanModalInitial && (
@@ -1216,11 +1177,7 @@ export const AntreanRsView: React.FC = () => {
           >
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '8px 16px 8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ color: '#000000', fontSize: 13, fontWeight: 400 }}>
-                {pendaftaranMode === 'kodebooking'
-                  ? `Cek Pendaftaran BPJS — ${pendaftaranKodeBooking}`
-                  : pendaftaranMode === 'aktif'
-                    ? 'Antrean Belum Dilayani'
-                    : 'Antrean Belum Dilayani Per Poli/Dokter/Hari/Jam Praktek'}
+                {pendaftaranMode === 'aktif' ? 'Antrean Belum Dilayani' : 'Antrean Belum Dilayani Per Poli/Dokter/Hari/Jam Praktek'}
               </span>
               <button
                 type="button"
@@ -1261,31 +1218,14 @@ export const AntreanRsView: React.FC = () => {
                     </div>
                   </>
                 )}
-                {pendaftaranMode === 'kodebooking' && (
-                  <div>
-                    <label style={labelStyle}>Kode Booking</label>
-                    <input
-                      style={{ ...inputStyle, width: 220 }}
-                      value={pendaftaranKodeBooking || ''}
-                      onChange={(e) => setPendaftaranKodeBooking(e.target.value)}
-                      placeholder="mis. 20260820000001"
-                      autoFocus
-                    />
-                  </div>
-                )}
-                {(() => {
-                  const pendaftaranDisabled = pendaftaranLoading || (pendaftaranMode === 'kodebooking' && !pendaftaranKodeBooking);
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => fetchPendaftaran(pendaftaranMode, pendaftaranKodeBooking || undefined)}
-                      disabled={pendaftaranDisabled}
-                      style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: pendaftaranDisabled ? '#9ca3af' : '#2563eb', color: '#fff', cursor: pendaftaranDisabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
-                    >
-                      {pendaftaranLoading ? 'Memuat...' : 'Cari'}
-                    </button>
-                  );
-                })()}
+                <button
+                  type="button"
+                  onClick={() => fetchPendaftaran(pendaftaranMode)}
+                  disabled={pendaftaranLoading}
+                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: pendaftaranLoading ? '#9ca3af' : '#2563eb', color: '#fff', cursor: pendaftaranLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+                >
+                  {pendaftaranLoading ? 'Memuat...' : 'Cari'}
+                </button>
                 {pendaftaranError && <span style={{ fontSize: 12, color: '#991b1b' }}>{pendaftaranError}</span>}
               </div>
 
