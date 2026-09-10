@@ -185,9 +185,8 @@ export const AntreanRsView: React.FC = () => {
   const [dashboardRows, setDashboardRows] = React.useState<DashboardRow[]>([]);
 
   const [showPendaftaran, setShowPendaftaran] = React.useState(false);
-  const [pendaftaranMode, setPendaftaranMode] = React.useState<'tanggal' | 'kodebooking' | 'aktif' | 'filter'>('tanggal');
+  const [pendaftaranMode, setPendaftaranMode] = React.useState<'kodebooking' | 'aktif' | 'filter'>('aktif');
   const [pendaftaranKodeBooking, setPendaftaranKodeBooking] = React.useState<string | null>(null);
-  const [pendaftaranTanggal, setPendaftaranTanggal] = React.useState(localDateStr());
   const [pendaftaranFilter, setPendaftaranFilter] = React.useState({ kodePoli: '', kodeDokter: '', hari: '1', jamPraktek: '' });
   const [pendaftaranLoading, setPendaftaranLoading] = React.useState(false);
   const [pendaftaranError, setPendaftaranError] = React.useState<string | null>(null);
@@ -196,13 +195,16 @@ export const AntreanRsView: React.FC = () => {
   // Ringkasan jumlah belum/selesai, dipecah per sumber data: "Total" untuk
   // antrean yang dibuat lewat bridging RS ini (sumberdata selain Mobile JKN),
   // "MJKN" untuk antrean yang didaftarkan pasien lewat aplikasi Mobile JKN.
-  const pendaftaranSummary = React.useMemo(() => {
+  // Dihitung dari `items` (data tabel utama, sama persis endpoint yang
+  // sebelumnya dipakai modal "Cek Pendaftaran BPJS" mode tanggal — modal
+  // itu sudah dihapus krn redundan, tinggal dipindah hitungnya ke sini).
+  const antreanSummary = React.useMemo(() => {
     let totalBelum = 0;
     let totalSelesai = 0;
     let mjknBelum = 0;
     let mjknSelesai = 0;
-    for (const row of pendaftaranRows) {
-      const isMjkn = (row.sumberdata || '').toLowerCase().includes('mobile jkn');
+    for (const row of items) {
+      const isMjkn = isMobileJknSumber(row.sumberdata);
       const isBelum = (row.status || '').toLowerCase().includes('belum');
       const isSelesai = (row.status || '').toLowerCase().includes('selesai');
       if (isMjkn) {
@@ -214,7 +216,7 @@ export const AntreanRsView: React.FC = () => {
       }
     }
     return { totalBelum, totalSelesai, mjknBelum, mjknSelesai };
-  }, [pendaftaranRows]);
+  }, [items]);
 
   // Diambil langsung dari BPJS (bukan tabel lokal) supaya kode booking dari
   // Mobile JKN maupun yang dibuat lewat RS (bridging) sama-sama tampil,
@@ -319,10 +321,6 @@ export const AntreanRsView: React.FC = () => {
       [it.kodebooking, it.norekammedis, it.nokapst, it.nik].some((v) => (v || '').toLowerCase().includes(kw))
     );
   }, [items, searchText]);
-
-  const openModal = () => {
-    setAntreanModalInitial({});
-  };
 
   // Dipakai saat BPJS menolak update (Waktu/Farmasi/List Task) dengan "Kode
   // Booking tidak ditemukan" — isi ulang modal "Tambah Antrean" supaya staf
@@ -572,16 +570,16 @@ export const AntreanRsView: React.FC = () => {
     setDashboardError(null);
   };
 
-  const fetchPendaftaran = async (mode: 'tanggal' | 'kodebooking' | 'aktif' | 'filter', kodeBooking?: string) => {
+  const fetchPendaftaran = async (mode: 'kodebooking' | 'aktif' | 'filter', kodeBooking?: string) => {
     setPendaftaranLoading(true);
     setPendaftaranError(null);
     try {
-      let url = `/api/bridging/antrean/pendaftaran-tanggal?tanggal=${pendaftaranTanggal}`;
+      let url = '';
       if (mode === 'kodebooking') {
         url = `/api/bridging/antrean/pendaftaran-booking/${encodeURIComponent(kodeBooking || '')}`;
       } else if (mode === 'aktif') {
         url = `/api/bridging/antrean/pendaftaran-aktif`;
-      } else if (mode === 'filter') {
+      } else {
         const p = new URLSearchParams({
           kode_poli: pendaftaranFilter.kodePoli.trim(),
           kode_dokter: pendaftaranFilter.kodeDokter.trim(),
@@ -613,14 +611,6 @@ export const AntreanRsView: React.FC = () => {
     }
   };
 
-  const openPendaftaran = () => {
-    setPendaftaranMode('tanggal');
-    setPendaftaranKodeBooking(null);
-    setShowPendaftaran(true);
-    setPendaftaranRows([]);
-    setPendaftaranError(null);
-  };
-
   const openPendaftaranAktif = () => {
     setPendaftaranMode('aktif');
     setPendaftaranKodeBooking(null);
@@ -643,8 +633,8 @@ export const AntreanRsView: React.FC = () => {
   // padanan persis BPJSAntreanPerTanggal.java tapi per-booking, bukan per
   // tanggal. Dipakai utk verifikasi manual — mis. antrean sudah tersimpan
   // lokal (berarti BPJS sempat merespons sukses) tapi entah kenapa tidak
-  // muncul di listing "Cek Pendaftaran BPJS (Per Tanggal)", jadi perlu
-  // dicek satu-satu apakah booking itu benar ada di sisi BPJS.
+  // muncul di tabel utama (Antrian per Tanggal), jadi perlu dicek satu-satu
+  // apakah booking itu benar ada di sisi BPJS.
   const openPendaftaranKodeBooking = () => {
     setPendaftaranMode('kodebooking');
     setPendaftaranKodeBooking('');
@@ -666,6 +656,26 @@ export const AntreanRsView: React.FC = () => {
             style={{ ...inputStyle, width: 280 }}
           />
           <input type="date" value={tglDari} onChange={(e) => setTglDari(e.target.value)} style={{ ...inputStyle, width: 150 }} />
+          {/* Ringkasan Belum/Selesai — dipindah dari dalam modal "Cek
+              Pendaftaran BPJS" (skrg dihapus, redundan dgn tabel utama yg
+              sudah pakai endpoint sama persis) ke sini, dihitung langsung
+              dari `items` (data tabel utama), bukan fetch terpisah lagi. */}
+          {items.length > 0 && (
+            <>
+              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a' }}>
+                Total Belum: {antreanSummary.totalBelum}
+              </span>
+              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+                Total Selesai: {antreanSummary.totalSelesai}
+              </span>
+              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                MJKN Belum: {antreanSummary.mjknBelum}
+              </span>
+              <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe' }}>
+                MJKN Selesai: {antreanSummary.mjknSelesai}
+              </span>
+            </>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
@@ -674,13 +684,6 @@ export const AntreanRsView: React.FC = () => {
             style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #2563eb', background: '#ffffff', color: '#2563eb', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
           >
             Dashboard Waktu Tunggu
-          </button>
-          <button
-            type="button"
-            onClick={openPendaftaran}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #6b7280', background: '#ffffff', color: '#6b7280', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-          >
-            Cek Pendaftaran BPJS
           </button>
           <button
             type="button"
@@ -702,13 +705,6 @@ export const AntreanRsView: React.FC = () => {
             style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #7c3aed', background: '#ffffff', color: '#7c3aed', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
           >
             Cek Kode Booking
-          </button>
-          <button
-            type="button"
-            onClick={openModal}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-          >
-            + Tambah Antrean
           </button>
         </div>
       </div>
@@ -1224,9 +1220,7 @@ export const AntreanRsView: React.FC = () => {
                   ? `Cek Pendaftaran BPJS — ${pendaftaranKodeBooking}`
                   : pendaftaranMode === 'aktif'
                     ? 'Antrean Belum Dilayani'
-                    : pendaftaranMode === 'filter'
-                      ? 'Antrean Belum Dilayani Per Poli/Dokter/Hari/Jam Praktek'
-                      : 'Cek Pendaftaran BPJS (Antrean Per Tanggal)'}
+                    : 'Antrean Belum Dilayani Per Poli/Dokter/Hari/Jam Praktek'}
               </span>
               <button
                 type="button"
@@ -1239,12 +1233,6 @@ export const AntreanRsView: React.FC = () => {
 
             <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #d1d5db', padding: 16, overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-                {pendaftaranMode === 'tanggal' && (
-                  <div>
-                    <label style={labelStyle}>Tanggal</label>
-                    <input type="date" style={{ ...inputStyle, width: 160 }} value={pendaftaranTanggal} onChange={(e) => setPendaftaranTanggal(e.target.value)} />
-                  </div>
-                )}
                 {pendaftaranMode === 'filter' && (
                   <>
                     <div>
@@ -1298,22 +1286,6 @@ export const AntreanRsView: React.FC = () => {
                     </button>
                   );
                 })()}
-                {pendaftaranMode === 'tanggal' && pendaftaranRows.length > 0 && (
-                  <>
-                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a' }}>
-                      Total Belum: {pendaftaranSummary.totalBelum}
-                    </span>
-                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
-                      Total Selesai: {pendaftaranSummary.totalSelesai}
-                    </span>
-                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
-                      MJKN Belum: {pendaftaranSummary.mjknBelum}
-                    </span>
-                    <span style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 400, background: '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe' }}>
-                      MJKN Selesai: {pendaftaranSummary.mjknSelesai}
-                    </span>
-                  </>
-                )}
                 {pendaftaranError && <span style={{ fontSize: 12, color: '#991b1b' }}>{pendaftaranError}</span>}
               </div>
 
