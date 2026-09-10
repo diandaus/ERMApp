@@ -1,0 +1,30 @@
+name: erm_tablet
+description: "ERM Tablet — app klinis Rawat Inap (daftar pasien, Pemeriksaan SOAP/CPPT, Jadwal Obat) utk tablet, terpisah dari e_presensi (khusus presensi/self-service)."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.6.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # HTTP client ke backend Go yang sama dgn versi web (ERMApp/backend) —
+  # tidak ada endpoint baru, semua sudah ada & dipakai apa adanya. Pola
+  # ApiClient PERSIS diadaptasi dari e_presensi/lib/services/api_client.dart
+  # (proven, sudah dipakai production).
+  http: ^1.2.2
+  # Sesi login (padanan localStorage 'ermapp_user' di versi web).
+  shared_preferences: ^2.3.3
+  # Format tanggal Indonesia.
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

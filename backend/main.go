@@ -128,6 +128,8 @@ type RawatInapPatient struct {
 	StatusBayar   string  `json:"status_bayar"`
 	Agama         string  `json:"agama"`
 	Jk            string  `json:"jk"`
+	TglLahir      string  `json:"tgl_lahir"`
+	Pekerjaan     string  `json:"pekerjaan"`
 }
 
 type AppUser struct {
@@ -892,7 +894,9 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				reg_periksa.status_bayar,
 				CONCAT(reg_periksa.umurdaftar, ' ', reg_periksa.sttsumur) AS umur,
 				pasien.agama,
-				pasien.jk
+				pasien.jk,
+				COALESCE(DATE_FORMAT(pasien.tgl_lahir, '%Y-%m-%d'), '') AS tgl_lahir,
+				COALESCE(pasien.pekerjaan, '') AS pekerjaan
 			FROM kamar_inap
 			INNER JOIN reg_periksa ON kamar_inap.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
@@ -924,6 +928,7 @@ func getRawatInapList(db *sql.DB) gin.HandlerFunc {
 				&p.TglMasuk, &p.JamMasuk, &p.TglKeluar, &p.JamKeluar,
 				&p.TtlBiaya, &p.SttsPulang, &p.Lama, &p.NmDokter,
 				&p.KdDokter, &p.KdKamar, &p.KdBangsal, &p.StatusBayar, &p.Umur, &p.Agama, &p.Jk,
+				&p.TglLahir, &p.Pekerjaan,
 			)
 			if err != nil {
 				log.Printf("Error scanning row: %v", err)
