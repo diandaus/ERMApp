@@ -884,6 +884,53 @@ func batalAntrean(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// ============================================================================
+// CHECKIN ANTREAN — padanan BtnCheckinActionPerformed
+// (MobileJKNReferensiPendaftaran.java): murni UPDATE status lokal ke
+// 'Checkin' + hapus catatan Batal kalau ada, TANPA panggilan ke BPJS —
+// Checkin di RS adalah bookkeeping internal (menandai pasien sudah
+// datang/diproses), bukan aksi yang perlu dilaporkan balik ke BPJS (beda
+// dari Batal, yang WAJIB lewat BPJS krn mengubah status booking di sisi
+// BPJS juga). Baris harus SUDAH ada di tabel lokal referensi_mobilejkn_bpjs
+// (nobooking = PK) — dipakai dari tombol [Belum] di tabel "Antrian per
+// Tanggal Mobile JKN" (data live BPJS), yang bisa saja menampilkan booking
+// yang belum sempat tersinkron ke tabel lokal; kalau begitu, gagal dgn
+// pesan jelas drpd diam-diam tidak melakukan apa-apa (0 baris ke-update).
+// ============================================================================
+
+type CheckinAntreanRequest struct {
+	KodeBooking string `json:"kodebooking"`
+}
+
+func checkinAntrean(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req CheckinAntreanRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data tidak valid"})
+			return
+		}
+		kodeBooking := strings.TrimSpace(req.KodeBooking)
+		if kodeBooking == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Kode booking wajib diisi"})
+			return
+		}
+
+		res, err := db.Exec(`UPDATE referensi_mobilejkn_bpjs SET status = 'Checkin', validasi = NOW() WHERE nobooking = ?`, kodeBooking)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Booking ini belum tercatat di data lokal RS, belum bisa di-Checkin dari sini"})
+			return
+		}
+		db.Exec(`DELETE FROM referensi_mobilejkn_bpjs_batal WHERE nobooking = ?`, kodeBooking)
+
+		c.JSON(http.StatusOK, gin.H{"message": "Antrean berhasil di-checkin"})
+	}
+}
+
 // getListTaskAntrean menangani "List Waktu Task Id" (POST antrean/getlisttask) —
 // menampilkan riwayat waktu task id yang sudah dikirim ke BPJS untuk satu
 // kodebooking.
@@ -995,6 +1042,87 @@ func getDashboardWaktuTungguBulan(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// resolveLocalMobileJknFields memetakan kodebooking -> {no_rawat, status}
+// lokal (tabel referensi_mobilejkn_bpjs). no_rawat mengikuti aturan yang
+// sama dipakai createListTaskAntrean/updateWaktuAntrean: kodebooking
+// antrean ON-SITE = no_rawat itu sendiri apa adanya (mengandung "/"),
+// sedangkan kodebooking Mobile JKN murni (tanpa "/") di-lookup lokal.
+// status dipakai supaya badge status di tabel "Antrian per Tanggal" ikut
+// mencerminkan Checkin/Batal yang dilakukan lewat RS — checkinAntrean
+// murni update lokal (tidak dilaporkan balik ke BPJS), jadi status
+// "mentah" dari BPJS sendiri tidak akan pernah berubah jadi 'Checkin'.
+// Satu query batch (bukan N+1) untuk seluruh kodebooking yang perlu
+// di-lookup.
+func resolveLocalMobileJknFields(db *sql.DB, kodebookings []string) (noRawatMap, statusMap map[string]string) {
+	noRawatMap = make(map[string]string, len(kodebookings))
+	statusMap = make(map[string]string, len(kodebookings))
+	var lookup []string
+	seen := make(map[string]bool)
+	for _, kb := range kodebookings {
+		if kb == "" || seen[kb] {
+			continue
+		}
+		seen[kb] = true
+		if strings.Contains(kb, "/") {
+			noRawatMap[kb] = kb
+		} else {
+			lookup = append(lookup, kb)
+		}
+	}
+	if len(lookup) == 0 {
+		return
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(lookup)), ",")
+	args := make([]interface{}, len(lookup))
+	for i, kb := range lookup {
+		args[i] = kb
+	}
+	rows, err := db.Query(`SELECT nobooking, COALESCE(no_rawat,''), status FROM referensi_mobilejkn_bpjs WHERE nobooking IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kb, noRawat, status string
+		if err := rows.Scan(&kb, &noRawat, &status); err == nil {
+			noRawatMap[kb] = noRawat
+			statusMap[kb] = status
+		}
+	}
+	return
+}
+
+// injectLocalFields menambahkan field "no_rawat" & "local_status" ke tiap
+// item di result["list"] (dipakai getAntreanPendaftaranTanggal) — lihat
+// resolveLocalMobileJknFields. "local_status" cuma disisipkan kalau baris
+// itu memang ada di tabel lokal (supaya frontend bisa bedakan "belum
+// tersinkron lokal" dari "sudah ada, status Belum").
+func injectLocalFields(db *sql.DB, result map[string]interface{}) {
+	list, ok := result["list"].([]interface{})
+	if !ok {
+		return
+	}
+	kodebookings := make([]string, 0, len(list))
+	for _, it := range list {
+		if m, ok := it.(map[string]interface{}); ok {
+			if kb, ok := m["kodebooking"].(string); ok {
+				kodebookings = append(kodebookings, kb)
+			}
+		}
+	}
+	noRawatMap, statusMap := resolveLocalMobileJknFields(db, kodebookings)
+	for _, it := range list {
+		if m, ok := it.(map[string]interface{}); ok {
+			if kb, ok := m["kodebooking"].(string); ok {
+				m["no_rawat"] = noRawatMap[kb]
+				if st, ok := statusMap[kb]; ok {
+					m["local_status"] = st
+				}
+			}
+		}
+	}
+}
+
 // getAntreanPendaftaranTanggal menangani "Antrean Per Tanggal"
 // (GET antrean/pendaftaran/tanggal/{tanggal}) — menampilkan seluruh
 // pendaftaran antrean (dari semua sumber, termasuk Mobile JKN) yang
@@ -1019,6 +1147,7 @@ func getAntreanPendaftaranTanggal(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
+		injectLocalFields(db, result)
 		c.JSON(http.StatusOK, gin.H{"pendaftaran": result})
 	}
 }

@@ -3789,6 +3789,8 @@ func main() {
 	r.POST("/api/bridging/antrean-farmasi", addAntreanFarmasi(db))
 	r.POST("/api/bridging/antrean/update-waktu", updateWaktuAntrean(db))
 	r.POST("/api/bridging/antrean/batal", batalAntrean(db))
+	r.POST("/api/bridging/antrean/checkin", checkinAntrean(db))
+	r.GET("/api/pemeriksaan-summary/*no_rawat", getPemeriksaanSummary(db))
 	r.POST("/api/bridging/antrean/list-task", getListTaskAntrean(db))
 	r.GET("/api/bridging/antrean/dashboard", getDashboardWaktuTunggu(db))
 	r.GET("/api/bridging/antrean/dashboard-bulan", getDashboardWaktuTungguBulan(db))

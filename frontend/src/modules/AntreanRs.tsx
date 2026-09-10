@@ -2,6 +2,8 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { localDateStr } from '../utils/date';
 import { TambahAntreanModal, epochMsToDatetimeLocal, type AntreanFormState } from './TambahAntreanModal';
+import { SepPrintView } from '../components/SepPrintView';
+import { PemeriksaanSummaryModal } from '../components/PemeriksaanSummaryModal';
 
 type TaskListRow = {
   taskid: number;
@@ -28,6 +30,14 @@ type DashboardRow = {
 
 type PendaftaranRow = {
   kodebooking: string;
+  // no_rawat & local_status — BUKAN field asli BPJS, disisipkan backend
+  // (injectLocalFields di getAntreanPendaftaranTanggal) dgn cocokkan
+  // kodebooking ke data lokal referensi_mobilejkn_bpjs. local_status cuma
+  // terisi kalau baris ini memang sudah ada lokal (Checkin murni aksi
+  // lokal, tidak dilaporkan ke BPJS — status "mentah" BPJS di bawah tidak
+  // akan pernah berubah jadi Checkin dgn sendirinya).
+  no_rawat?: string;
+  local_status?: string;
   tanggal: string;
   kodepoli: string;
   kodedokter: number;
@@ -70,9 +80,39 @@ const TASK_ID_OPTIONS: { value: string; label: string }[] = [
 const getStatusColor = (status: string): { bg: string; color: string; border: string } => {
   const s = (status || '').toLowerCase();
   if (s.includes('batal') || s.includes('gagal')) return { bg: '#fef2f2', color: '#991b1b', border: '#fecaca' };
-  if (s.includes('selesai')) return { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' };
+  if (s.includes('selesai') || s.includes('checkin')) return { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' };
   if (s.includes('belum')) return { bg: '#fefce8', color: '#854d0e', border: '#fde68a' };
   return { bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' };
+};
+
+const isMobileJknSumber = (sumberdata: string) => (sumberdata || '').toLowerCase().includes('mobile jkn');
+
+// canViewPemeriksaan — badge status jadi tombol "Lihat Pemeriksaan" HANYA
+// utk 2 status yg diminta ("Belum dilayani"/"Selesai dilayani"); status lain
+// (Checkin/Batal/Gagal, hasil override local_status) tetap badge biasa.
+const canViewPemeriksaan = (label: string) => {
+  const s = (label || '').toLowerCase();
+  return s.includes('belum') || s.includes('selesai');
+};
+
+// effectiveStatusLabel — local_status (Checkin/Batal/Gagal via tombol
+// [Belum] di bawah) diutamakan drpd status mentah BPJS, krn Checkin murni
+// aksi lokal RS yang tidak dilaporkan balik ke BPJS (lihat komentar type
+// PendaftaranRow). Kalau belum ada baris lokal sama sekali (local_status
+// undefined) atau lokal masih 'Belum', tampilkan status asli dari BPJS.
+const effectiveStatusLabel = (item: PendaftaranRow) => {
+  const ls = (item.local_status || '').trim();
+  if (ls === 'Checkin' || ls === 'Batal' || ls === 'Gagal') return ls;
+  return item.status;
+};
+
+// canActOnStatus — tombol [Belum] cuma muncul utk booking Mobile JKN yang
+// statusnya (efektif) masih "belum dilayani", supaya tidak menawarkan
+// Checkin/Batal utk antrean yang sudah selesai/batal/checkin.
+const canActOnStatus = (item: PendaftaranRow) => {
+  const ls = (item.local_status || '').trim();
+  if (ls === 'Checkin' || ls === 'Batal' || ls === 'Gagal') return false;
+  return isMobileJknSumber(item.sumberdata) && (item.status || '').toLowerCase().includes('belum');
 };
 
 const formatTgl = (tgl: string) => {
@@ -115,6 +155,10 @@ export const AntreanRsView: React.FC = () => {
   const [tglDari, setTglDari] = React.useState(localDateStr());
   const [antreanModalInitial, setAntreanModalInitial] = React.useState<Partial<AntreanFormState> | null>(null);
   const [selectedKodeBooking, setSelectedKodeBooking] = React.useState<string | null>(null);
+  const [statusMenuFor, setStatusMenuFor] = React.useState<string | null>(null);
+  const [statusActionBusy, setStatusActionBusy] = React.useState<string | null>(null);
+  const [sepPrintNoRawat, setSepPrintNoRawat] = React.useState<string | null>(null);
+  const [pemeriksaanNoRawat, setPemeriksaanNoRawat] = React.useState<string | null>(null);
 
   const [farmasiKodeBooking, setFarmasiKodeBooking] = React.useState<string | null>(null);
   const [farmasiForm, setFarmasiForm] = React.useState({ jenisresep: 'non racikan', nomorantrean: '', keterangan: '' });
@@ -196,6 +240,76 @@ export const AntreanRsView: React.FC = () => {
   React.useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  // Tutup popover [Belum] kalau klik di luar (tombol Checkin/Batal &
+  // trigger-nya sendiri stopPropagation, jadi tidak ikut ke-trigger di sini).
+  React.useEffect(() => {
+    if (!statusMenuFor) return;
+    const handler = () => setStatusMenuFor(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [statusMenuFor]);
+
+  // handleCheckin — padanan tombol Checkin (BtnCheckinActionPerformed di
+  // MobileJKNReferensiPendaftaran.java): murni aksi lokal RS, tidak
+  // memanggil BPJS (lihat komentar checkinAntrean di backend).
+  const handleCheckin = async (kodebooking: string) => {
+    setStatusActionBusy(kodebooking);
+    try {
+      const res = await fetch('/api/bridging/antrean/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kodebooking }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal checkin');
+      setStatusMenuFor(null);
+      await fetchItems();
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Antrean berhasil di-checkin', timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal Checkin', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setStatusActionBusy(null);
+    }
+  };
+
+  // handleBatalMjkn — padanan tombol Batal (BtnBatalActionPerformed di
+  // Java), tapi lewat /api/bridging/antrean/batal yang SUDAH ADA (bukan
+  // cuma update lokal spt Java — beneran memanggil BPJS antrean/batal dulu,
+  // baru dicatat lokal kalau baris-nya ada). Keterangan/alasan wajib diisi
+  // BPJS, jadi diminta lewat prompt (default sama seperti hardcode di Java:
+  // "Dibatalkan Oleh Admin", tapi bisa diganti).
+  const handleBatalMjkn = async (kodebooking: string) => {
+    setStatusMenuFor(null);
+    const { value: keterangan } = await Swal.fire({
+      title: 'Batalkan Antrean',
+      input: 'text',
+      inputLabel: 'Alasan pembatalan',
+      inputValue: 'Dibatalkan Oleh Admin',
+      showCancelButton: true,
+      confirmButtonText: 'Batalkan',
+      cancelButtonText: 'Tutup',
+      confirmButtonColor: '#dc2626',
+      inputValidator: (v) => (!v || !v.trim() ? 'Alasan wajib diisi' : undefined),
+    });
+    if (!keterangan) return;
+    setStatusActionBusy(kodebooking);
+    try {
+      const res = await fetch('/api/bridging/antrean/batal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kodebooking, keterangan }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal membatalkan antrean');
+      await fetchItems();
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Antrean berhasil dibatalkan', timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal Membatalkan', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setStatusActionBusy(null);
+    }
+  };
 
   const filteredItems = React.useMemo(() => {
     const kw = searchText.trim().toLowerCase();
@@ -610,6 +724,7 @@ export const AntreanRsView: React.FC = () => {
           <thead style={{ position: 'sticky', top: 0, background: '#f3f4f6', zIndex: 1 }}>
             <tr>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Kode Booking</th>
+              <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. Rawat</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>No. RM</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Poli</th>
               <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>Tgl Periksa</th>
@@ -621,13 +736,17 @@ export const AntreanRsView: React.FC = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Memuat data...</td></tr>
             ) : filteredItems.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Belum ada data antrean</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Belum ada data antrean</td></tr>
             ) : (
               filteredItems.map((item, index) => {
-                const sc = getStatusColor(item.status);
+                const statusLabel = effectiveStatusLabel(item);
+                const sc = getStatusColor(statusLabel);
                 const isSelected = selectedKodeBooking === item.kodebooking;
+                const showStatusAction = canActOnStatus(item);
+                const isMenuOpen = statusMenuFor === item.kodebooking;
+                const isBusy = statusActionBusy === item.kodebooking;
                 return (
                   <tr
                     key={item.kodebooking}
@@ -638,15 +757,85 @@ export const AntreanRsView: React.FC = () => {
                     }}
                   >
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.kodebooking}</td>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.no_rawat || '-'}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.norekammedis}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#111827' }}>{item.kodepoli}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{formatTgl(item.tanggal)}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.noantrean}</td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{item.sumberdata}</td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
-                        {item.status}
-                      </span>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', position: 'relative' }}>
+                      {canViewPemeriksaan(statusLabel) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (item.no_rawat) setPemeriksaanNoRawat(item.no_rawat);
+                          }}
+                          disabled={!item.no_rawat}
+                          title={item.no_rawat ? 'Lihat Pemeriksaan' : 'No.Rawat belum tersedia untuk booking ini'}
+                          style={{
+                            padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                            background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+                            cursor: item.no_rawat ? 'pointer' : 'not-allowed', opacity: item.no_rawat ? 1 : 0.6,
+                          }}
+                        >
+                          {statusLabel}
+                        </button>
+                      ) : (
+                        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
+                          {statusLabel}
+                        </span>
+                      )}
+                      {showStatusAction && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusMenuFor(isMenuOpen ? null : item.kodebooking);
+                            }}
+                            style={{ marginLeft: 6, padding: '2px 6px', borderRadius: 6, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}
+                          >
+                            [Belum] ▾
+                          </button>
+                          {isMenuOpen && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                marginTop: 4,
+                                background: '#ffffff',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: 8,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                                padding: 6,
+                                zIndex: 10,
+                                display: 'flex',
+                                gap: 6,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => handleCheckin(item.kodebooking)}
+                                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: isBusy ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
+                              >
+                                Checkin
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => handleBatalMjkn(item.kodebooking)}
+                                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626', background: '#ffffff', color: '#dc2626', cursor: isBusy ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 6 }}>
@@ -671,6 +860,25 @@ export const AntreanRsView: React.FC = () => {
                         >
                           List Task
                         </button>
+                        {item.no_rawat && (
+                          <button
+                            type="button"
+                            onClick={() => setSepPrintNoRawat(item.no_rawat!)}
+                            title="Lihat SEP"
+                            style={{
+                              padding: '4px 8px', borderRadius: 6, border: '1px solid #16a34a',
+                              background: '#ffffff', color: '#16a34a', cursor: 'pointer',
+                              display: 'inline-flex', alignItems: 'center', transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = '#16a34a'; e.currentTarget.style.color = '#ffffff'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#16a34a'; }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                              <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1143,6 +1351,14 @@ export const AntreanRsView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {sepPrintNoRawat && (
+        <SepPrintView noRawat={sepPrintNoRawat} onClose={() => setSepPrintNoRawat(null)} />
+      )}
+
+      {pemeriksaanNoRawat && (
+        <PemeriksaanSummaryModal noRawat={pemeriksaanNoRawat} onClose={() => setPemeriksaanNoRawat(null)} />
       )}
     </div>
   );
