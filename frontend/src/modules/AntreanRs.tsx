@@ -232,15 +232,15 @@ export const AntreanRsView: React.FC = () => {
     }
     const jknCapaian = sepTerbit > 0 ? Math.floor((jknSelesai / sepTerbit) * 100) : 0;
     const mjknCapaian = sepTerbit > 0 ? Math.floor((mjknSelesai / sepTerbit) * 100) : 0;
-    // seluruhnya — TAMBAHAN di luar Java, ringkasan 1 angka. SEMPAT dihitung
-    // dari jumlah 3 kategori (JKN+MJKN+Non JKN), tapi itu keliru: kategori2
-    // itu tidak saling eksklusif MAUPUN tidak menyeluruh (row bisa masuk 2
-    // kategori sekaligus, atau tidak masuk kategori manapun kalau sumberdata-
-    // nya bukan "Bridging Antrean"/"Mobile JKN" tapi ispeserta=true) — hasil
-    // penjumlahannya kebukti meleset (39 vs seharusnya 40, dikonfirmasi
-    // user). totalBelum+totalSelesai di atas sudah pasti benar krn dihitung
-    // independen per baris (persis padanan Java), jadi dipakai langsung.
-    const seluruhnya = totalBelum + totalSelesai;
+    // seluruhnya — TAMBAHAN di luar Java: total SEMUA baris yang tampil di
+    // tabel utk tanggal ini (items.length), apa pun status/kategorinya.
+    // Riwayat percobaan sebelumnya: sempat dihitung dari jumlah 3 kategori
+    // (JKN+MJKN+Non JKN) — keliru krn tidak saling eksklusif/menyeluruh;
+    // lalu totalBelum+totalSelesai — masih bisa kurang kalau ada baris
+    // berstatus SELAIN persis "Belum dilayani"/"Selesai dilayani" (mis.
+    // "Batal", "Ditunda"). items.length paling akurat krn cuma menghitung
+    // baris apa adanya, tanpa syarat status/kategori sama sekali.
+    const seluruhnya = items.length;
     return { totalBelum, totalSelesai, jknBelum, jknSelesai, jknCapaian, mjknBelum, mjknSelesai, mjknCapaian, nonJknBelum, nonJknSelesai, seluruhnya };
   }, [items, sepTerbit]);
 
