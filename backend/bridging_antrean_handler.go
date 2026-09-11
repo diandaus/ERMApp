@@ -1092,11 +1092,49 @@ func resolveLocalMobileJknFields(db *sql.DB, kodebookings []string) (noRawatMap,
 	return
 }
 
-// injectLocalFields menambahkan field "no_rawat" & "local_status" ke tiap
-// item di result["list"] (dipakai getAntreanPendaftaranTanggal) — lihat
-// resolveLocalMobileJknFields. "local_status" cuma disisipkan kalau baris
-// itu memang ada di tabel lokal (supaya frontend bisa bedakan "belum
-// tersinkron lokal" dari "sudah ada, status Belum").
+// resolveHasSepBatch memetakan no_rawat -> ada/tidaknya SEP lokal (tabel
+// bridging_sep — SAMA PERSIS sumber data dipakai getBridgingSepByNoRawat,
+// yang jadi backend tombol "Lihat SEP"/SepPrintView). Satu query batch.
+func resolveHasSepBatch(db *sql.DB, noRawats []string) map[string]bool {
+	result := make(map[string]bool, len(noRawats))
+	var lookup []string
+	seen := make(map[string]bool)
+	for _, nr := range noRawats {
+		if nr == "" || seen[nr] {
+			continue
+		}
+		seen[nr] = true
+		lookup = append(lookup, nr)
+	}
+	if len(lookup) == 0 {
+		return result
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(lookup)), ",")
+	args := make([]interface{}, len(lookup))
+	for i, nr := range lookup {
+		args[i] = nr
+	}
+	rows, err := db.Query(`SELECT DISTINCT no_rawat FROM bridging_sep WHERE no_rawat IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nr string
+		if err := rows.Scan(&nr); err == nil {
+			result[nr] = true
+		}
+	}
+	return result
+}
+
+// injectLocalFields menambahkan field "no_rawat", "local_status", & "has_sep"
+// ke tiap item di result["list"] (dipakai getAntreanPendaftaranTanggal) —
+// lihat resolveLocalMobileJknFields/resolveHasSepBatch. "local_status" cuma
+// disisipkan kalau baris itu memang ada di tabel lokal (supaya frontend
+// bisa bedakan "belum tersinkron lokal" dari "sudah ada, status Belum").
+// "has_sep" dipakai frontend utk sembunyikan tombol "Lihat SEP" kalau
+// kunjungan itu memang belum punya SEP terbit.
 func injectLocalFields(db *sql.DB, result map[string]interface{}) {
 	list, ok := result["list"].([]interface{})
 	if !ok {
@@ -1111,13 +1149,22 @@ func injectLocalFields(db *sql.DB, result map[string]interface{}) {
 		}
 	}
 	noRawatMap, statusMap := resolveLocalMobileJknFields(db, kodebookings)
+
+	noRawats := make([]string, 0, len(noRawatMap))
+	for _, nr := range noRawatMap {
+		noRawats = append(noRawats, nr)
+	}
+	hasSepMap := resolveHasSepBatch(db, noRawats)
+
 	for _, it := range list {
 		if m, ok := it.(map[string]interface{}); ok {
 			if kb, ok := m["kodebooking"].(string); ok {
-				m["no_rawat"] = noRawatMap[kb]
+				noRawat := noRawatMap[kb]
+				m["no_rawat"] = noRawat
 				if st, ok := statusMap[kb]; ok {
 					m["local_status"] = st
 				}
+				m["has_sep"] = hasSepMap[noRawat]
 			}
 		}
 	}

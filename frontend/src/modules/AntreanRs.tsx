@@ -38,6 +38,9 @@ type PendaftaranRow = {
   // akan pernah berubah jadi Checkin dgn sendirinya).
   no_rawat?: string;
   local_status?: string;
+  // has_sep — juga disisipkan backend (cek tabel bridging_sep), dipakai
+  // sembunyikan tombol "Lihat SEP" kalau kunjungan ini belum punya SEP.
+  has_sep?: boolean;
   tanggal: string;
   kodepoli: string;
   kodedokter: number;
@@ -763,7 +766,7 @@ export const AntreanRsView: React.FC = () => {
                             }}
                             style={{ marginLeft: 6, padding: '2px 6px', borderRadius: 2, border: '1px solid #d1d5db', background: '#ffffff', color: '#374151', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}
                           >
-                            [Belum] ▾
+                            Belum ▾
                           </button>
                           {isMenuOpen && (
                             <div
@@ -827,7 +830,7 @@ export const AntreanRsView: React.FC = () => {
                         >
                           List Task
                         </button>
-                        {item.no_rawat && (
+                        {item.no_rawat && item.has_sep && (
                           <button
                             type="button"
                             onClick={() => setSepPrintNoRawat(item.no_rawat!)}
@@ -879,7 +882,7 @@ export const AntreanRsView: React.FC = () => {
           <span style={{ color: '#009900' }}>MJKN Capaian: ({antreanSummary.mjknCapaian}%)</span>
           <span style={{ color: '#009999' }}>Non JKN Belum: {antreanSummary.nonJknBelum}</span>
           <span style={{ color: '#009999' }}>Non JKN Selesai: {antreanSummary.nonJknSelesai}</span>
-          <span style={{ color: '#374151' }}>Total: {antreanSummary.seluruhnya}</span>
+          <span style={{ color: '#374151' }}>Record: {antreanSummary.seluruhnya}</span>
         </div>
       )}
       </div>
