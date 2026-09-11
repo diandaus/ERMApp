@@ -49,6 +49,34 @@ type LoginWallpaperSettings = {
   login_wallpaper_url: string;
 };
 
+type LoginHistoryEntry = { username: string; full_name: string };
+
+// LOGIN_HISTORY_KEY — riwayat username yang PERNAH BERHASIL login di
+// browser/PC ini (localStorage, per-origin/per-profil browser, TIDAK
+// sinkron ke PC/browser lain). Dipakai sbg sumber autocomplete kolom
+// Nama Pengguna, MENGGANTIKAN fetch ke /api/auth/username-suggestions
+// (yang balikin SEMUA user di sistem — membingungkan kalau user login
+// banyak). Dibatasi 20 entri terakhir (paling baru di depan) supaya
+// tidak tumbuh tanpa batas di browser yang dipakai gantian banyak orang.
+const LOGIN_HISTORY_KEY = 'ermapp_login_history';
+const LOGIN_HISTORY_MAX = 20;
+
+const readLoginHistory = (): LoginHistoryEntry[] => {
+  try {
+    const raw = safeStorage.get('local', LOGIN_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const addLoginHistory = (entry: LoginHistoryEntry) => {
+  const existing = readLoginHistory().filter((h) => h.username !== entry.username);
+  const updated = [entry, ...existing].slice(0, LOGIN_HISTORY_MAX);
+  safeStorage.set('local', LOGIN_HISTORY_KEY, JSON.stringify(updated));
+};
+
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister }) => {
   // Username diingat terpisah dari sesi login (ermapp_user) — supaya
   // tetap terisi otomatis di form login walau user sudah logout
@@ -64,26 +92,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
   const [instansi, setInstansi] = React.useState<InstansiSettings | null>(null);
   const [wallpaper, setWallpaper] = React.useState<LoginWallpaperSettings | null>(null);
 
-  // Autocomplete Nama Pengguna — berguna terutama utk akun dokter, krn 1
-  // poli sering punya lebih dari 1 dokter & usernamenya (kd_dokter) tidak
-  // selalu gampang diingat; ketik sebagian nama, backend (/api/auth/
-  // username-suggestions) balikin username+full_name yg cocok.
+  // Autocomplete Nama Pengguna — SENGAJA per-PC/per-browser (localStorage,
+  // BUKAN lagi fetch ke server /api/auth/username-suggestions yg balikin
+  // daftar SEMUA user di sistem — itu bikin bingung kalau user login-nya
+  // banyak). Cuma nyimpen username yang PERNAH BERHASIL login di browser
+  // ini (lihat handleSubmit) — PC yg baru pernah dipakai 2 orang login
+  // cuma nampilin 2 nama itu, bukan seluruh direktori user.
   const [usernameSuggestions, setUsernameSuggestions] = React.useState<{ username: string; full_name: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const usernameFieldRef = React.useRef<HTMLDivElement>(null);
 
-  // q boleh kosong (kolom baru difokus, belum ngetik apa2) — backend
-  // balikin daftar default (8 akun pertama) supaya combobox langsung
-  // kelihatan begitu kursor masuk kolom, bukan nunggu ngetik dulu.
   React.useEffect(() => {
-    const q = username.trim();
-    const t = setTimeout(() => {
-      fetch(`/api/auth/username-suggestions?q=${encodeURIComponent(q)}`)
-        .then((res) => (res.ok ? res.json() : []))
-        .then((data) => setUsernameSuggestions(Array.isArray(data) ? data : []))
-        .catch(() => setUsernameSuggestions([]));
-    }, 250);
-    return () => clearTimeout(t);
+    const q = username.trim().toLowerCase();
+    const history = readLoginHistory();
+    const filtered = q
+      ? history.filter((h) => h.username.toLowerCase().includes(q) || h.full_name.toLowerCase().includes(q))
+      : history;
+    setUsernameSuggestions(filtered);
   }, [username]);
 
   React.useEffect(() => {
@@ -139,6 +164,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
       } else {
         safeStorage.remove('local', 'ermapp_remembered_username');
       }
+      // Riwayat login per-PC utk autocomplete — dicatat TIAP login berhasil,
+      // lepas dari centang "Ingat saya" (itu cuma soal prefill, bukan riwayat).
+      addLoginHistory({ username: user.username, full_name: user.full_name });
       onLogin(user, rememberMe);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Login gagal');
@@ -275,9 +303,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onShowRegister })
                 }}
               />
 
-              {/* Autocomplete — berguna terutama utk akun dokter, krn 1 poli
-                  sering punya lebih dari 1 dokter & username (kd_dokter)
-                  tidak selalu gampang diingat; cari lewat sebagian nama. */}
+              {/* Autocomplete — sumbernya riwayat login lokal PC ini
+                  (readLoginHistory), BUKAN direktori seluruh user di
+                  sistem, supaya tidak membingungkan di PC yang dipakai
+                  gantian banyak orang. */}
               {showSuggestions && usernameSuggestions.length > 0 && (
                 <div
                   style={{
