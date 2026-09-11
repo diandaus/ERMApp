@@ -19,6 +19,9 @@ type PemeriksaanSummary = {
   no_rawat: string;
   no_rkm_medis: string;
   nm_pasien: string;
+  // status_periksa — reg_periksa.stts apa adanya, padanan persis kolom
+  // "Status" (getStatusStyle) di RawatJalan.tsx.
+  status_periksa: string;
   soap: SoapItem[] | null;
   lab: LabItem[] | null;
   radiologi: RadItem[] | null;
@@ -51,6 +54,36 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   return (
     <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color }}>
       {status || '-'}
+    </span>
+  );
+};
+
+// getStatusPeriksaStyle — SALINAN PERSIS getStatusStyle di RawatJalan.tsx
+// (warna & label kolom "Status" reg_periksa.stts), supaya badge "Status
+// Periksa" di modal ini konsisten sama persis dgn yg dilihat user di
+// RawatJalan.
+const getStatusPeriksaStyle = (status: string): { bg: string; color: string; label: string } => {
+  switch (status) {
+    case 'Sudah':
+      return { bg: '#ecfdf3', color: '#166534', label: 'Sudah' };
+    case 'Belum':
+      return { bg: '#fef3c7', color: '#92400e', label: 'Belum' };
+    case 'Batal':
+      return { bg: '#fee2e2', color: '#991b1b', label: 'Batal' };
+    case 'Dirujuk':
+      return { bg: '#dbeafe', color: '#1e40af', label: 'Dirujuk' };
+    case 'Dirawat':
+      return { bg: '#f3e8ff', color: '#6b21a8', label: 'Dirawat' };
+    default:
+      return { bg: '#f3f4f6', color: '#374151', label: status || '-' };
+  }
+};
+
+const StatusPeriksaBadge: React.FC<{ status: string }> = ({ status }) => {
+  const s = getStatusPeriksaStyle(status);
+  return (
+    <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color }}>
+      {s.label}
     </span>
   );
 };
@@ -107,7 +140,10 @@ export const PemeriksaanSummaryModal: React.FC<Props> = ({ noRawat, onClose }) =
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Detail Pemeriksaan</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Detail Pemeriksaan</div>
+              {data && <StatusPeriksaBadge status={data.status_periksa} />}
+            </div>
             {data && (
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
                 No.Rawat {data.no_rawat} — {data.nm_pasien || '-'} ({data.no_rkm_medis || '-'})

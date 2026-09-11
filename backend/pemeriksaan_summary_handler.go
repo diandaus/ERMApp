@@ -16,6 +16,9 @@ import (
 // endpoint drpd frontend nge-fetch 4x terpisah.
 //
 // Sumber data (semua reuse tabel yg sudah ada, tidak ada tabel baru):
+//   - Status Periksa: reg_periksa.stts apa adanya (Belum/Sudah/Batal/
+//     Dirujuk/Dirawat/dst) — padanan persis kolom "Status" (getStatusStyle)
+//     di RawatJalan.tsx.
 //   - SOAP/CPPT: pemeriksaan_ralan (rawat jalan/poli) — SAMA dgn dipakai
 //     /api/pemeriksaan/soap-history, cuma di sini nip di-resolve ke nama
 //     lewat JOIN pegawai (pemeriksaan_ralan.nip = pegawai.nik).
@@ -66,13 +69,17 @@ type PemeriksaanResepItem struct {
 }
 
 type PemeriksaanSummary struct {
-	NoRawat    string                 `json:"no_rawat"`
-	NoRkmMedis string                 `json:"no_rkm_medis"`
-	NmPasien   string                 `json:"nm_pasien"`
-	Soap       []PemeriksaanSoapItem  `json:"soap"`
-	Lab        []PemeriksaanLabItem   `json:"lab"`
-	Radiologi  []PemeriksaanRadItem   `json:"radiologi"`
-	Resep      []PemeriksaanResepItem `json:"resep"`
+	NoRawat    string `json:"no_rawat"`
+	NoRkmMedis string `json:"no_rkm_medis"`
+	NmPasien   string `json:"nm_pasien"`
+	// StatusPeriksa — reg_periksa.stts apa adanya (Belum/Sudah/Batal/
+	// Dirujuk/Dirawat/dst), padanan persis kolom "Status" (getStatusStyle)
+	// di RawatJalan.tsx, ditampilkan juga di modal ini per arahan user.
+	StatusPeriksa string                 `json:"status_periksa"`
+	Soap          []PemeriksaanSoapItem  `json:"soap"`
+	Lab           []PemeriksaanLabItem   `json:"lab"`
+	Radiologi     []PemeriksaanRadItem   `json:"radiologi"`
+	Resep         []PemeriksaanResepItem `json:"resep"`
 }
 
 func getPemeriksaanSummary(db *sql.DB) gin.HandlerFunc {
@@ -87,12 +94,12 @@ func getPemeriksaanSummary(db *sql.DB) gin.HandlerFunc {
 		summary.NoRawat = noRawat
 
 		err := db.QueryRow(
-			`SELECT reg_periksa.no_rkm_medis, COALESCE(pasien.nm_pasien, '')
+			`SELECT reg_periksa.no_rkm_medis, COALESCE(pasien.nm_pasien, ''), COALESCE(reg_periksa.stts, '')
 			 FROM reg_periksa
 			 LEFT JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			 WHERE reg_periksa.no_rawat = ?`,
 			noRawat,
-		).Scan(&summary.NoRkmMedis, &summary.NmPasien)
+		).Scan(&summary.NoRkmMedis, &summary.NmPasien, &summary.StatusPeriksa)
 		if err != nil && err != sql.ErrNoRows {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
