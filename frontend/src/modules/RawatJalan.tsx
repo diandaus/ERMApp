@@ -498,11 +498,16 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient,
       filtered = filtered.filter((p) => p.kd_dokter === filterDokter);
     }
 
-    // Sort: status "Belum" di atas, "Sudah" di bawah
+    // Sort: status "Belum" di atas, "Sudah" di bawah — DALAM tiap kelompok
+    // tetap urut no antrian naik (no_rawat "YYYY/MM/DD/NNNNNN" bisa
+    // dibandingkan string langsung krn urutannya sudah kronologis+
+    // sekuensial, padanan persis no antrian 001,002,003 dst). Bukan cuma
+    // mengandalkan stable-sort dari urutan asli (yg DESC dari backend) —
+    // dibalik eksplisit di sini spy hasilnya benar apa pun urutan asalnya.
     return filtered.sort((a, b) => {
       if (a.stts === 'Sudah' && b.stts !== 'Sudah') return 1;
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
-      return 0;
+      return (a.no_rawat || '').localeCompare(b.no_rawat || '');
     });
   }, [poliToday, searchText, filterPoli, filterDokter, isDokterLocked, lockedKdDokter]);
 
@@ -522,11 +527,12 @@ export const RawatJalanView: React.FC<RawatJalanViewProps> = ({ onSelectPatient,
       filtered = filtered.filter((r) => r.kd_dokter === filterDokter);
     }
 
-    // Sort: status "Belum" di atas, "Sudah" di bawah
+    // Sort: sama persis pola filteredPoliToday di atas (Belum di atas,
+    // Sudah di bawah, tiap kelompok tetap urut no antrian/no_rawat naik).
     return filtered.sort((a, b) => {
       if (a.stts === 'Sudah' && b.stts !== 'Sudah') return 1;
       if (a.stts !== 'Sudah' && b.stts === 'Sudah') return -1;
-      return 0;
+      return (a.no_rawat || '').localeCompare(b.no_rawat || '');
     });
   }, [rujukanInternal, searchText, filterPoli, filterDokter, isDokterLocked, lockedKdDokter]);
 
