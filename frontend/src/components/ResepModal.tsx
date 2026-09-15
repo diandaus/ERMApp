@@ -1382,8 +1382,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                   </div>
                 </div>
 
-                <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-                <div className="mb-3">
+                <div className="tab-content-resep" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 0 }}>
+                <div className="mb-3" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                   <label className="form-label">Daftar Obat yang Dipilih</label>
                   {resepNonRacikan.length === 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
@@ -1392,7 +1392,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Cari &amp; pilih obat non-racikan di atas untuk ditambahkan ke resep.</div>
                     </div>
                   ) : (
-                    <div className="table-responsive" style={{ maxHeight: 300, overflowY: 'auto' }}>
+                    <div className="table-responsive" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                       <table className="table table-bordered table-sm">
                         <thead className="table-light">
                           <tr>
@@ -1660,8 +1660,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 </div>
                 </div>
 
-                <div className="tab-content-resep" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-                <div className="mb-3">
+                <div className="tab-content-resep" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 0 }}>
+                <div className="mb-3" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                   <label className="form-label">Daftar Obat — {activeRacikan?.nama_racikan || `Racikan ${activeRacikanIdx + 1}`}</label>
                   {(activeRacikan?.detail ?? []).length === 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
@@ -1670,7 +1670,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Cari &amp; pilih obat di atas untuk ditambahkan ke racikan ini.</div>
                     </div>
                   ) : (
-                    <div className="table-responsive" style={{ maxHeight: 250, overflowY: 'auto' }}>
+                    <div className="table-responsive" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                       <table className="table table-bordered table-sm">
                         <thead className="table-light">
                           <tr>
