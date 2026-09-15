@@ -1447,7 +1447,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
                 height: 56,
                 background: 'rgba(255, 255, 255, 0.2)',
                 backdropFilter: 'blur(10px)',
-                borderRadius: 14,
+                borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1475,7 +1475,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               </svg>
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', marginBottom: 4, whiteSpace: 'normal', wordBreak: 'break-word' }}>
                 {patientData.nm_pasien || '-'}
               </div>
               <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>
