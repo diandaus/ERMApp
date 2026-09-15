@@ -280,7 +280,7 @@ func getPermintaanLabPKDetail(db *sql.DB) gin.HandlerFunc {
 }
 
 type hasilLabPKDetailInput struct {
-	IdTemplate int    `json:"id_template" binding:"required"`
+	IdTemplate string `json:"id_template" binding:"required"`
 	Nilai      string `json:"nilai"`
 	Keterangan string `json:"keterangan"`
 }
@@ -495,11 +495,18 @@ func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		var noRawat, dokterPerujukOrder string
-		if err := db.QueryRow(`SELECT no_rawat, dokter_perujuk FROM permintaan_lab WHERE noorder = ?`, noOrder).
-			Scan(&noRawat, &dokterPerujukOrder); err != nil {
+		var noRawat, dokterPerujukOrder, tglPermintaanRaw, jamPermintaan string
+		if err := db.QueryRow(`
+			SELECT no_rawat, dokter_perujuk, DATE_FORMAT(tgl_permintaan,'%Y-%m-%d'), IFNULL(jam_permintaan,'')
+			FROM permintaan_lab WHERE noorder = ?
+		`, noOrder).
+			Scan(&noRawat, &dokterPerujukOrder, &tglPermintaanRaw, &jamPermintaan); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Permintaan lab tidak ditemukan"})
 			return
+		}
+		tglPermintaanFormatted := tglPermintaanRaw
+		if t, err := time.Parse("2006-01-02", tglPermintaanRaw); err == nil {
+			tglPermintaanFormatted = t.Format("02-01-2006")
 		}
 
 		var tglPeriksa, jam string
@@ -607,7 +614,8 @@ func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"no_periksa":          noOrder,
+			"no_periksa":          noRawat,
+			"no_permintaan_lab":   noOrder,
 			"no_rm":               noRkmMedis,
 			"nama_pasien":         nmPasien,
 			"jk":                  jk,
@@ -616,8 +624,10 @@ func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
 			"penanggung_jawab":    nmDokterPj,
 			"kd_penanggung_jawab": kdDokterPj,
 			"dokter_pengirim":     nmDokterPerujuk,
-			"tgl_pemeriksaan":     tglFormatted,
-			"jam_pemeriksaan":     jam,
+			"tgl_permintaan":      tglPermintaanFormatted,
+			"jam_permintaan":      jamPermintaan,
+			"tgl_keluar_hasil":    tglFormatted,
+			"jam_keluar_hasil":    jam,
 			"poli":                poli,
 			"hasil":               items,
 			"petugas_nip":         nip,

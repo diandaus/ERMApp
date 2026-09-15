@@ -1495,23 +1495,6 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             border: '1px solid #e5e7eb'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <div style={{
-                width: 32,
-                height: 32,
-                background: 'linear-gradient(135deg, #1AB1E5 0%, #0891B2 100%)',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </div>
-              <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827' }}>Identitas Diri</h4>
-            </div>
             <div style={{ display: 'grid', gap: 8 }}>
               <InfoItem 
                 label="Jenis Kelamin"

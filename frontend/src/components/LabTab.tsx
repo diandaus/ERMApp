@@ -290,15 +290,19 @@ export const LabTab: React.FC<LabTabProps> = ({ patient }) => {
                         {item.nm_perawatan}
                       </td>
                     </tr>
-                    {item.detail?.length > 0 ? item.detail.map((d: any, di: number) => (
-                      <tr key={di} style={{ background: '#ffffff', borderBottom: '1px solid #f3f4f6' }}>
-                        <td style={{ borderRight: '1px solid #e5e7eb' }}></td>
-                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#374151', borderRight: '1px solid #e5e7eb' }}>{d.pemeriksaan}</td>
-                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#374151', textAlign: 'center', fontWeight: 400, borderRight: '1px solid #e5e7eb' }}>{d.nilai || '-'} {d.satuan}</td>
-                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>{d.nilai_rujukan || '-'} {d.satuan}</td>
-                        <td style={{ padding: '5px 12px', fontSize: 12, color: '#6b7280', textAlign: 'center' }}>{d.keterangan || '-'}</td>
-                      </tr>
-                    )) : (
+                    {item.detail?.length > 0 ? item.detail.map((d: any, di: number) => {
+                      const isHigh = (d.keterangan || '').trim().toUpperCase() === 'H';
+                      const redText = isHigh ? '#dc2626' : undefined;
+                      return (
+                        <tr key={di} style={{ background: '#ffffff', borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ borderRight: '1px solid #e5e7eb' }}></td>
+                          <td style={{ padding: '5px 12px', fontSize: 12, color: redText || '#374151', borderRight: '1px solid #e5e7eb' }}>{d.pemeriksaan}</td>
+                          <td style={{ padding: '5px 12px', fontSize: 12, color: redText || '#374151', textAlign: 'center', fontWeight: 400, borderRight: '1px solid #e5e7eb' }}>{d.nilai || '-'} {d.satuan}</td>
+                          <td style={{ padding: '5px 12px', fontSize: 12, color: redText || '#6b7280', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>{d.nilai_rujukan || '-'} {d.satuan}</td>
+                          <td style={{ padding: '5px 12px', fontSize: 12, color: redText || '#6b7280', textAlign: 'center' }}>{d.keterangan || '-'}</td>
+                        </tr>
+                      );
+                    }) : (
                       <tr style={{ background: '#ffffff' }}>
                         <td></td>
                         <td colSpan={4} style={{ padding: '5px 12px', fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>Belum ada hasil detail</td>

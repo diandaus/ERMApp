@@ -1,6 +1,7 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import QRCode from 'qrcode';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 // ModalHasilLabPK — "Input Data Hasil Periksa Laboratorium PK", padanan pola
 // ModalHasilRadiologi.tsx (header identitas, Dokter P.J. default dari
@@ -76,6 +77,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
 
   const [saving, setSaving] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
+  const [previewingTtd, setPreviewingTtd] = React.useState(false);
 
   const todayStr = () => {
     const d = new Date();
@@ -263,20 +265,33 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
 
       type CetakItem = { nm_perawatan: string; pemeriksaan: string; hasil: string; satuan: string; nilai_rujukan: string; keterangan: string };
       const items: CetakItem[] = data.hasil || [];
-      const rowsHtml = items.map((it) => `
+      // Baris judul kelompok pemeriksaan (mis. "DARAH LENGKAP") — disisipkan
+      // tiap kali nm_perawatan berganti, sama pola dgn tabel on-screen modal
+      // ini & tabel di buildHasilLabPKPdfUntukTtd.
+      let lastGroup = '';
+      const rowsHtml = items.map((it) => {
+        const groupRow = it.nm_perawatan !== lastGroup
+          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="5" style="background:#f3f4f6;">${it.nm_perawatan}</td></tr>`)
+          : '';
+        // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru
+        // kalau "L" (rendah), padanan warna di buildHasilLabPKPdfUntukTtd.
+        const ket = (it.keterangan || '').trim().toUpperCase();
+        const hasilColor = ket === 'H' ? '#dc2626' : ket === 'L' ? '#0044dd' : '';
+        return `${groupRow}
         <tr>
           <td>${it.pemeriksaan}</td>
-          <td>${it.hasil || '-'}</td>
+          <td${hasilColor ? ` style="color:${hasilColor};"` : ''}>${it.hasil || '-'}</td>
           <td>${it.satuan || '-'}</td>
           <td>${it.nilai_rujukan || '-'}</td>
           <td>${it.keterangan || '-'}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       printWindow.document.write(`
         <html>
           <head>
-            <title>Hasil Pemeriksaan Laboratorium - ${data.no_periksa}</title>
+            <title>Hasil Pemeriksaan Laboratorium - ${data.no_permintaan_lab}</title>
             <style>
               @page { size: 210mm 297mm; margin-top: 14px; }
               body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 0 16px 16px; color: #000; }
@@ -314,27 +329,31 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
 
             <table class="info">
               <colgroup>
-                <col style="width:14%"><col style="width:2%"><col style="width:36%">
-                <col style="width:20%"><col style="width:2%"><col style="width:26%">
+                <col style="width:16%"><col style="width:2%"><col style="width:34%">
+                <col style="width:22%"><col style="width:2%"><col style="width:24%">
               </colgroup>
               <tr>
                 <td class="label">No.RM</td><td class="sep">:</td><td>${data.no_rm}</td>
-                <td class="label">Penanggung Jawab</td><td class="sep">:</td><td class="nowrap">${data.penanggung_jawab || '-'}</td>
+                <td class="label">No.Permintaan Lab</td><td class="sep">:</td><td class="nowrap">${data.no_permintaan_lab}</td>
               </tr>
               <tr>
                 <td class="label">Nama Pasien</td><td class="sep">:</td><td>${data.nama_pasien}</td>
-                <td class="label">Dokter Pengirim</td><td class="sep">:</td><td class="nowrap">${data.dokter_pengirim || '-'}</td>
+                <td class="label">Tgl.Permintaan</td><td class="sep">:</td><td>${data.tgl_permintaan}</td>
               </tr>
               <tr>
                 <td class="label">JK/Umur</td><td class="sep">:</td><td>${data.jk || '-'} / ${umurDariTglLahir(data.tgl_lahir)}</td>
-                <td class="label">Tgl.Pemeriksaan</td><td class="sep">:</td><td>${data.tgl_pemeriksaan}</td>
+                <td class="label">Jam Permintaan</td><td class="sep">:</td><td>${data.jam_permintaan}</td>
               </tr>
               <tr>
                 <td class="label">Alamat</td><td class="sep">:</td><td class="truncate" title="${data.alamat || '-'}">${data.alamat || '-'}</td>
-                <td class="label">Jam Pemeriksaan</td><td class="sep">:</td><td>${data.jam_pemeriksaan}</td>
+                <td class="label">Tgl. Keluar Hasil</td><td class="sep">:</td><td>${data.tgl_keluar_hasil}</td>
               </tr>
               <tr>
                 <td class="label">No.Periksa</td><td class="sep">:</td><td>${data.no_periksa}</td>
+                <td class="label">Jam Keluar Hasil</td><td class="sep">:</td><td>${data.jam_keluar_hasil}</td>
+              </tr>
+              <tr>
+                <td class="label">Dokter Pengirim</td><td class="sep">:</td><td class="nowrap">${data.dokter_pengirim || '-'}</td>
                 <td class="label">Poli</td><td class="sep">:</td><td>${data.poli || '-'}</td>
               </tr>
             </table>
@@ -374,6 +393,342 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setPrinting(false);
+    }
+  };
+
+  // Kotak tanda tangan elektronik Peruri (Penanggung Jawab, kiri) — padanan
+  // PERSIS SIGN_BOX di ModalHasilRadiologi.tsx (lihat komentar di sana utk
+  // alasan tag "#A#"/kenapa box di-center pd posisi tag, bukan sebaliknya).
+  const SIGN_BOX_WIDTH = 40;
+  const SIGN_BOX_HEIGHT = 40;
+  const SIGN_BOX_GAP_BELOW_HASIL = 55;
+
+  // buildHasilLabPKPdfUntukTtd — PENGECUALIAN dari CETAK_STANDAR.md §1,
+  // padanan PERSIS buildRadiologiPdfUntukTtd (ModalHasilRadiologi.tsx):
+  // fitur kirim ke Peruri butuh byte PDF asli, window.print() tidak bisa
+  // diambil sbg byte oleh JS. Beda dari versi Radiologi cuma di isi badan
+  // dokumen — di sini TABEL per parameter (Pemeriksaan/Hasil/Satuan/Nilai
+  // Rujukan/Keterangan), bukan satu kotak "Hasil Pemeriksaan" teks bebas.
+  const buildHasilLabPKPdfUntukTtd = async (): Promise<{
+    pdfBytes: Uint8Array; email: string; namaDokterPj: string;
+    signBox: { lowerLeftX: number; lowerLeftY: number; upperRightX: number; upperRightY: number; page: string };
+  }> => {
+    if (!kdDokterPj) {
+      throw new Error('Pilih Dokter P.J. dulu.');
+    }
+    const [dataRes, settingsRes, emailRes] = await Promise.all([
+      fetch(`/api/lab-pk/cetak/${encodeURIComponent(noorder)}`),
+      fetch('/api/admin/settings'),
+      fetch(`/api/dokter/${encodeURIComponent(kdDokterPj)}/email`),
+    ]);
+    const data = await dataRes.json();
+    if (!dataRes.ok) throw new Error(data.error || 'Gagal memuat data cetak');
+    let settings = { nama_instansi: '', alamat: '', logo_url: '', kota_rs: '', kontak: '', email_rs: '' };
+    if (settingsRes.ok) settings = await settingsRes.json();
+    const emailData = await emailRes.json().catch(() => ({}));
+    if (!emailRes.ok) throw new Error(emailData.error || 'Dokter P.J. tidak ditemukan');
+    const namaDokterPj = dokterPjQuery || emailData.nm_dokter || '-';
+    if (!emailData.email) {
+      throw new Error(`Email dokter penanggung jawab (${namaDokterPj}) belum diisi. Hubungi admin untuk menambahkan email di data dokter.`);
+    }
+    const emailDokterPj = emailData.email as string;
+
+    const pdf = await PDFDocument.create();
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
+    const margin = 40;
+    let page = pdf.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - margin;
+
+    const text = (s: string, x: number, size = 10, bold = false) => {
+      page.drawText(s, { x, y, size, font: bold ? fontBold : font, color: rgb(0, 0, 0) });
+    };
+    const centerText = (s: string, size = 10, bold = false) => {
+      const f = bold ? fontBold : font;
+      const w = f.widthOfTextAtSize(s, size);
+      page.drawText(s, { x: (pageWidth - w) / 2, y, size, font: f, color: rgb(0, 0, 0) });
+    };
+    const truncateToWidth = (s: string, size: number, maxWidth: number) => {
+      if (font.widthOfTextAtSize(s, size) <= maxWidth) return s;
+      let truncated = s;
+      while (truncated.length > 0 && font.widthOfTextAtSize(`${truncated}...`, size) > maxWidth) {
+        truncated = truncated.slice(0, -1);
+      }
+      return `${truncated}...`;
+    };
+
+    // Kop 3-kolom PERSIS buildRadiologiPdfUntukTtd/buildBillingPdf.
+    let logoImg: Awaited<ReturnType<typeof pdf.embedPng>> | Awaited<ReturnType<typeof pdf.embedJpg>> | null = null;
+    if (settings.logo_url) {
+      try {
+        const logoSrc = settings.logo_url.startsWith('/') ? `${window.location.origin}${settings.logo_url}` : settings.logo_url;
+        const imgRes = await fetch(logoSrc);
+        if (imgRes.ok) {
+          const bytes = await imgRes.arrayBuffer();
+          const isJpg = /\.(jpe?g)($|\?)/i.test(logoSrc) || (imgRes.headers.get('content-type') || '').includes('jpeg');
+          logoImg = isJpg ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
+        }
+      } catch { /* lanjut tanpa logo kalau gagal fetch/embed */ }
+    }
+
+    const contentWidth = pageWidth - margin * 2;
+    const col1X = margin;
+    const col2X = margin + contentWidth * 0.20;
+    const col2Width = contentWidth * 0.60;
+    const centerInCol = (s: string, colX: number, colWidth: number, size = 9, bold = false) => {
+      const f = bold ? fontBold : font;
+      const w = f.widthOfTextAtSize(s, size);
+      page.drawText(s, { x: colX + (colWidth - w) / 2, y, size, font: f, color: rgb(0, 0, 0) });
+    };
+
+    const kopTop = y;
+    const logoSize = 45;
+    if (logoImg) {
+      page.drawImage(logoImg, { x: col1X, y: kopTop - logoSize + 8, width: logoSize, height: logoSize });
+    }
+    if (settings.nama_instansi) { centerInCol(settings.nama_instansi, col2X, col2Width, 14, false); y -= 11; }
+    if (settings.alamat) { centerInCol(settings.alamat, col2X, col2Width, 9); y -= 11; }
+    if (settings.kontak) { centerInCol(settings.kontak, col2X, col2Width, 9); y -= 11; }
+    if (settings.email_rs) { centerInCol(`E-mail : ${settings.email_rs}`, col2X, col2Width, 9); y -= 0; }
+    y = Math.min(y, kopTop - logoSize + 8 - 4);
+    y -= 1;
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 1, color: rgb(0, 0, 0) });
+    y -= 18;
+    centerText('HASIL PEMERIKSAAN LABORATORIUM', 12, false);
+    y -= 22;
+
+    const colLeftX = margin;
+    const colRightX = pageWidth / 2 + 10;
+    const infoValueX = colLeftX + 90;
+    const infoValuePrefixWidth = font.widthOfTextAtSize(': ', 9.5);
+    const alamatMaxWidth = colRightX - infoValueX - 8 - infoValuePrefixWidth;
+    const alamatSingkat = truncateToWidth(data.alamat || '-', 9.5, alamatMaxWidth);
+    const infoLeft: [string, string][] = [
+      ['No.RM', data.no_rm], ['Nama Pasien', data.nama_pasien],
+      ['JK/Umur', `${data.jk || '-'} / ${umurDariTglLahir(data.tgl_lahir)}`],
+      ['Alamat', alamatSingkat],
+      ['No.Periksa', data.no_periksa],
+      ['Dokter Pengirim', data.dokter_pengirim || '-'],
+    ];
+    const infoRight: [string, string][] = [
+      ['No.Permintaan Lab', data.no_permintaan_lab], ['Tgl.Permintaan', data.tgl_permintaan],
+      ['Jam Permintaan', data.jam_permintaan], ['Tgl. Keluar Hasil', data.tgl_keluar_hasil],
+      ['Jam Keluar Hasil', data.jam_keluar_hasil], ['Poli', data.poli || '-'],
+    ];
+    const rowStartY = y;
+    infoLeft.forEach(([label, value], i) => {
+      y = rowStartY - i * 14;
+      text(label, colLeftX, 9.5); text(`: ${value}`, colLeftX + 90, 9.5);
+    });
+    infoRight.forEach(([label, value], i) => {
+      y = rowStartY - i * 14;
+      text(label, colRightX, 9.5); text(`: ${value}`, colRightX + 100, 9.5);
+    });
+    y = rowStartY - Math.max(infoLeft.length, infoRight.length) * 14;
+    y -= 14;
+
+    // Tabel hasil per parameter — kolom Pemeriksaan/Hasil/Satuan/Nilai
+    // Rujukan/Keterangan, padanan tabel `.hasil` di handleCetak (versi
+    // window.print HTML) tapi digambar manual krn pdf-lib tidak punya
+    // tabel bawaan. Ada pagination sederhana (tambah halaman baru) krn
+    // pemeriksaan spt "Darah Lengkap" bisa 20+ baris parameter.
+    type CetakItem = { nm_perawatan: string; pemeriksaan: string; hasil: string; satuan: string; nilai_rujukan: string; keterangan: string };
+    const items: CetakItem[] = data.hasil || [];
+    const tableColX = [margin, margin + contentWidth * 0.32, margin + contentWidth * 0.47, margin + contentWidth * 0.60, margin + contentWidth * 0.80];
+    const tableColEndX = pageWidth - margin;
+    const rowHeight = 15;
+    const headerHeight = 16;
+
+    // Garis vertikal antar kolom (margin + 4 batas kolom + tepi kanan) —
+    // digambar PER-SEGMEN (per header/per baris, dari sisi atas ke bawah
+    // segmen itu saja) alih-alih satu garis panjang dari atas tabel ke
+    // bawah. Ini supaya tetap benar kalau tabelnya pindah halaman (setiap
+    // segmen digambar di `page` yg sedang aktif saat itu) — segmen2 yg
+    // berurutan otomatis menyambung jadi terlihat seperti satu garis utuh.
+    const colLineX = [margin, tableColX[1], tableColX[2], tableColX[3], tableColX[4], tableColEndX];
+    const drawColLines = (topY: number, bottomY: number) => {
+      colLineX.forEach((x) => {
+        page.drawLine({ start: { x, y: topY }, end: { x, y: bottomY }, thickness: 0.75, color: rgb(0, 0, 0) });
+      });
+    };
+
+    const addPage = () => {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      y = pageHeight - margin;
+    };
+    const drawTableHeader = () => {
+      const headerTop = y;
+      page.drawRectangle({ x: margin, y: y - headerHeight, width: contentWidth, height: headerHeight, color: rgb(0.95, 0.95, 0.96) });
+      // Baseline teks header diturunkan ke dalam kotak (bukan di tepi
+      // atasnya) — kalau dibiarkan di y (tepi atas), ascender huruf
+      // "nongol" di atas kotak sementara badan teksnya nyaris kosong.
+      const headerTextY = y - headerHeight + 5;
+      page.drawText('Pemeriksaan', { x: tableColX[0] + 4, y: headerTextY, size: 9, font: font, color: rgb(0, 0, 0) });
+      page.drawText('Hasil', { x: tableColX[1] + 4, y: headerTextY, size: 9, font: font, color: rgb(0, 0, 0) });
+      page.drawText('Satuan', { x: tableColX[2] + 4, y: headerTextY, size: 9, font: font, color: rgb(0, 0, 0) });
+      page.drawText('Nilai Rujukan', { x: tableColX[3] + 4, y: headerTextY, size: 9, font: font, color: rgb(0, 0, 0) });
+      page.drawText('Keterangan', { x: tableColX[4] + 4, y: headerTextY, size: 9, font: font, color: rgb(0, 0, 0) });
+      y -= headerHeight;
+      page.drawLine({ start: { x: margin, y: headerTop }, end: { x: tableColEndX, y: headerTop }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: margin, y }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      drawColLines(headerTop, y);
+    };
+
+    // Baris judul kelompok pemeriksaan (mis. "DARAH LENGKAP") — padanan
+    // baris header abu-abu di tabel on-screen modal ini, digambar sekali
+    // tiap kali nm_perawatan berganti (items sudah berurutan per exam dari
+    // backend, jadi cukup deteksi perubahan nilai berturut-turut).
+    const drawGroupRow = (label: string) => {
+      const rowTop = y;
+      y -= rowHeight;
+      page.drawRectangle({ x: margin, y, width: contentWidth, height: rowHeight, color: rgb(0.93, 0.93, 0.94) });
+      // Baseline +5 dari dasar kotak (bukan pas di garis bawah) — sama
+      // konvensi dgn headerTextY di drawTableHeader, supaya teks tidak
+      // berhimpit dgn garis bawah baris ini (kalau pas di 0, garis bawah
+      // itu menempel tepat di baseline huruf & keliatan spt tercoret).
+      page.drawText(label, { x: margin + 4, y: y + 5, size: 8.5, font: font, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: margin, y: rowTop }, end: { x: tableColEndX, y: rowTop }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: margin, y }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: margin, y: rowTop }, end: { x: margin, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: tableColEndX, y: rowTop }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+    };
+
+    drawTableHeader();
+    let lastGroup = '';
+    items.forEach((it, idx) => {
+      if (y - rowHeight < margin + 130) {
+        // batas bawah reserved utk blok ttd (~130pt) — pindah halaman baru
+        // kalau tabelnya masih panjang.
+        addPage();
+        drawTableHeader();
+      }
+      if (it.nm_perawatan !== lastGroup) {
+        lastGroup = it.nm_perawatan;
+        if (y - rowHeight < margin + 130) { addPage(); drawTableHeader(); }
+        drawGroupRow(lastGroup);
+      }
+      const rowTop = y;
+      y -= rowHeight;
+      text(truncateToWidth(it.pemeriksaan, 8.5, tableColX[1] - tableColX[0] - 6), tableColX[0] + 4, 8.5);
+      // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru kalau
+      // "L" (rendah), hitam normal selain itu. Kolom lain tetap hitam.
+      const ket = (it.keterangan || '').trim().toUpperCase();
+      const hasilColor = ket === 'H' ? rgb(0.86, 0.15, 0.15) : ket === 'L' ? rgb(0, 0.27, 0.87) : rgb(0, 0, 0);
+      page.drawText(truncateToWidth(it.hasil || '-', 8.5, tableColX[2] - tableColX[1] - 6), { x: tableColX[1] + 4, y, size: 8.5, font, color: hasilColor });
+      text(truncateToWidth(it.satuan || '-', 8.5, tableColX[3] - tableColX[2] - 6), tableColX[2] + 4, 8.5);
+      text(truncateToWidth(it.nilai_rujukan || '-', 8.5, tableColX[4] - tableColX[3] - 6), tableColX[3] + 4, 8.5);
+      text(truncateToWidth(it.keterangan || '-', 8.5, tableColEndX - tableColX[4] - 6), tableColX[4] + 4, 8.5);
+      // Baris terakhir tabel = border PENUTUP (bukan pemisah antar baris) —
+      // tetap hitam pekat spt border lainnya; pemisah antar baris biasa abu2.
+      const isLastRow = idx === items.length - 1;
+      page.drawLine({
+        start: { x: margin, y: y - 3 }, end: { x: tableColEndX, y: y - 3 },
+        thickness: isLastRow ? 0.75 : 0.5, color: isLastRow ? rgb(0, 0, 0) : rgb(0.6, 0.6, 0.6),
+      });
+      drawColLines(rowTop, y - 3);
+    });
+    y -= 3;
+
+    // Tag "#A#" — posisi (tagX, tagY) persis di bawah tabel hasil (padanan
+    // "#A#" di bawah kotak Hasil Pemeriksaan pada versi Radiologi), lalu
+    // SIGN_BOX di-center pd posisi tag ini.
+    const tagX = margin + 60;
+    const tagY = Math.max(margin + SIGN_BOX_HEIGHT / 2, y - SIGN_BOX_GAP_BELOW_HASIL - SIGN_BOX_HEIGHT / 2);
+    const centeredX = Math.trunc(tagX - SIGN_BOX_WIDTH / 2 + 5);
+    const centeredY = Math.trunc(tagY - SIGN_BOX_HEIGHT / 2);
+    const SIGN_BOX = {
+      lowerLeftX: centeredX, lowerLeftY: centeredY,
+      upperRightX: centeredX + SIGN_BOX_WIDTH, upperRightY: centeredY + SIGN_BOX_HEIGHT,
+      page: String(pdf.getPageCount()),
+    };
+
+    // Kolom KANAN — Petugas Laboratorium. BUKAN area stample Peruri, QR-nya
+    // e-signature lokal biasa (persis pola qrPetugas di handleCetak).
+    const petugasBoxX = { start: 395, end: 555 };
+    const petugasBoxCenterX = (petugasBoxX.start + petugasBoxX.end) / 2;
+    const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      + ' ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const fingerPetugas =
+      `Dikeluarkan di ${settings.nama_instansi || ''}, Kabupaten/Kota ${settings.kota_rs || ''}\n` +
+      `Ditandatangani secara elektronik oleh ${data.petugas_nama || '-'}\n` +
+      `ID ${data.petugas_nip || '-'}\n${tanggalCetak}`;
+    let qrPetugasImg: Awaited<ReturnType<typeof pdf.embedPng>> | null = null;
+    try {
+      const qrDataUrl = await QRCode.toDataURL(fingerPetugas, { width: 80, margin: 1 });
+      const qrBytes = await fetch(qrDataUrl).then((r) => r.arrayBuffer());
+      qrPetugasImg = await pdf.embedPng(qrBytes);
+    } catch { /* lanjut tanpa QR kalau gagal generate/embed */ }
+
+    const blockCenterY = (SIGN_BOX.lowerLeftY + SIGN_BOX.upperRightY) / 2;
+    const qrSize = 40;
+    const labelY = blockCenterY + qrSize / 2 + 12;
+    const nameY = blockCenterY - qrSize / 2 - 12;
+
+    const tglCetakText = `Tgl.Cetak : ${tanggalCetak}`;
+    const tglCetakW = font.widthOfTextAtSize(tglCetakText, 8.5);
+    page.drawText(tglCetakText, { x: petugasBoxCenterX - tglCetakW / 2, y: labelY + 14, size: 8.5, font, color: rgb(0, 0, 0) });
+
+    // Kolom KIRI — Penanggung Jawab. Area stample Peruri (SIGN_BOX, 40x40)
+    // TIDAK digambar apa pun (kosong), stample-nya ditempel Peruri sendiri.
+    const visualBoxCenterX = (SIGN_BOX.lowerLeftX + SIGN_BOX.upperRightX) / 2;
+    const signLabelW = font.widthOfTextAtSize('Penanggung Jawab', 9);
+    page.drawText('Penanggung Jawab', { x: visualBoxCenterX - signLabelW / 2, y: labelY, size: 9, font, color: rgb(0, 0, 0) });
+    page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
+    const namaW = font.widthOfTextAtSize(namaDokterPj, 9);
+    page.drawText(namaDokterPj, { x: visualBoxCenterX - namaW / 2, y: nameY, size: 9, font, color: rgb(0, 0, 0) });
+
+    const petugasLabelW = font.widthOfTextAtSize('Petugas Laboratorium', 9);
+    page.drawText('Petugas Laboratorium', { x: petugasBoxCenterX - petugasLabelW / 2, y: labelY, size: 9, font, color: rgb(0, 0, 0) });
+    if (qrPetugasImg) {
+      page.drawImage(qrPetugasImg, { x: petugasBoxCenterX - qrSize / 2, y: blockCenterY - qrSize / 2, width: qrSize, height: qrSize });
+    }
+    const petugasNamaW = font.widthOfTextAtSize(data.petugas_nama || '-', 9);
+    page.drawText(data.petugas_nama || '-', { x: petugasBoxCenterX - petugasNamaW / 2, y: nameY, size: 9, font, color: rgb(0, 0, 0) });
+
+    // Footer legal — jarak tetap dari tepi bawah kertas.
+    const footerSeparatorY = margin - 10;
+    page.drawLine({ start: { x: margin, y: footerSeparatorY }, end: { x: pageWidth - margin, y: footerSeparatorY }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
+    const footerText = 'Dokumen ini sah dan telah ditandatangani secara elektronik menggunakan sertifikat digital yang diterbitkan oleh Peruri';
+    const wrapText = (s: string, maxWidth: number, size = 10): string[] => {
+      const words = s.split(' ');
+      const lines: string[] = [];
+      let line = '';
+      for (const w of words) {
+        const test = line ? `${line} ${w}` : w;
+        if (font.widthOfTextAtSize(test, size) > maxWidth && line) { lines.push(line); line = w; } else { line = test; }
+      }
+      if (line) lines.push(line);
+      return lines;
+    };
+    const footerLines = wrapText(footerText, pageWidth - margin * 2, 7.5);
+    let footerLineY = footerSeparatorY - 10;
+    footerLines.forEach((line) => {
+      const w = font.widthOfTextAtSize(line, 7.5);
+      page.drawText(line, { x: (pageWidth - w) / 2, y: footerLineY, size: 7.5, font, color: rgb(0.45, 0.45, 0.45) });
+      footerLineY -= 9;
+    });
+
+    const pdfBytes = await pdf.save();
+    return { pdfBytes, email: emailDokterPj, namaDokterPj, signBox: SIGN_BOX };
+  };
+
+  // handlePreviewTtd — "Review PDF", buka PDF yg AKAN dikirim ke Peruri
+  // (buildHasilLabPKPdfUntukTtd) di tab baru TANPA benar-benar mengirim apa
+  // pun ke Peruri — padanan handlePreviewTtd di ModalHasilRadiologi.tsx.
+  // Fitur "Tanda Tangan" (upload sungguhan + alur OTP Peruri) belum ada di
+  // modal ini, jadi tombol ini murni preview dokumen.
+  const handlePreviewTtd = async () => {
+    setPreviewingTtd(true);
+    try {
+      const { pdfBytes } = await buildHasilLabPKPdfUntukTtd();
+      const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPreviewingTtd(false);
     }
   };
 
@@ -590,6 +945,12 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                 ))}
               </div>
             </div>
+
+            {detail.sudah_ada_hasil && (
+              <div style={{ fontSize: 12, color: '#92400e', padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+                ⚠ Permintaan ini sudah pernah diisi hasilnya — nilai di atas sudah diprefill dari hasil terakhir, submit ulang akan menimpa nilai yang sama.
+              </div>
+            )}
         </div>
 
         {/* Panel kanan — utama: header+close, tabel hasil per parameter
@@ -630,47 +991,54 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                     <thead>
                       <tr style={{ background: '#f9fafb', color: '#374151' }}>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 180, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Pemeriksaan</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Hasil</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 80, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Satuan</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 180, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Pemeriksaan</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Hasil</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 80, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Satuan</th>
                         {/* 4 kolom terpisah (bukan digabung 1 kolom) — persis
                             header tabel Khanza Desktop (tbDetailPK). */}
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.D.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.A.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.D.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.A.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '8px 10px', textAlign: 'left', width: 90, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Keterangan</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.D.</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.A.</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.D.</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.A.</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 90, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Keterangan</th>
                       </tr>
                     </thead>
                     <tbody>
                       {groupedTemplates.map((g) => (
                         <React.Fragment key={g.kd_jenis_prw}>
-                          {g.items.map((t) => (
-                            <tr key={t.id_template} style={{ borderTop: '1px solid #f3f4f6' }}>
-                              <td style={{ padding: '6px 10px', color: '#111827' }}>{t.pemeriksaan}</td>
-                              <td style={{ padding: '4px 6px' }}>
-                                <input
-                                  type="text"
-                                  value={nilaiMap[t.id_template]?.nilai || ''}
-                                  onChange={(ev) => updateNilai(t.id_template, { nilai: ev.target.value })}
-                                  style={{ width: '100%', padding: '5px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
-                                />
-                              </td>
-                              <td style={{ padding: '6px 10px', color: '#374151' }}>{t.satuan || '-'}</td>
-                              <td style={{ padding: '6px 10px', color: '#6b7280' }}>{t.nilai_rujukan_ld || '-'}</td>
-                              <td style={{ padding: '6px 10px', color: '#6b7280' }}>{t.nilai_rujukan_la || '-'}</td>
-                              <td style={{ padding: '6px 10px', color: '#6b7280' }}>{t.nilai_rujukan_pd || '-'}</td>
-                              <td style={{ padding: '6px 10px', color: '#6b7280' }}>{t.nilai_rujukan_pa || '-'}</td>
-                              <td style={{ padding: '4px 6px' }}>
-                                <input
-                                  type="text"
-                                  value={nilaiMap[t.id_template]?.keterangan || ''}
-                                  onChange={(ev) => updateNilai(t.id_template, { keterangan: ev.target.value })}
-                                  style={{ width: '100%', padding: '5px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
-                                />
-                              </td>
-                            </tr>
-                          ))}
+                          <tr style={{ borderTop: '1px solid #e5e7eb' }}>
+                            <td colSpan={8} style={{ padding: '5px 10px', background: '#f9fafb', color: '#111827', fontWeight: 600 }}>{g.nm_perawatan}</td>
+                          </tr>
+                          {g.items.map((t) => {
+                            const isHigh = (nilaiMap[t.id_template]?.keterangan || '').trim().toUpperCase() === 'H';
+                            const redText = isHigh ? '#dc2626' : undefined;
+                            return (
+                              <tr key={t.id_template} style={{ borderTop: '1px solid #f3f4f6' }}>
+                                <td style={{ padding: '2px 10px', color: redText || '#111827' }}>{t.pemeriksaan}</td>
+                                <td style={{ padding: '2px 6px' }}>
+                                  <input
+                                    type="text"
+                                    value={nilaiMap[t.id_template]?.nilai || ''}
+                                    onChange={(ev) => updateNilai(t.id_template, { nilai: ev.target.value })}
+                                    style={{ width: '100%', padding: '3px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box', color: redText }}
+                                  />
+                                </td>
+                                <td style={{ padding: '2px 10px', color: redText || '#374151' }}>{t.satuan || '-'}</td>
+                                <td style={{ padding: '2px 10px', color: redText || '#6b7280' }}>{t.nilai_rujukan_ld || '-'}</td>
+                                <td style={{ padding: '2px 10px', color: redText || '#6b7280' }}>{t.nilai_rujukan_la || '-'}</td>
+                                <td style={{ padding: '2px 10px', color: redText || '#6b7280' }}>{t.nilai_rujukan_pd || '-'}</td>
+                                <td style={{ padding: '2px 10px', color: redText || '#6b7280' }}>{t.nilai_rujukan_pa || '-'}</td>
+                                <td style={{ padding: '2px 6px' }}>
+                                  <input
+                                    type="text"
+                                    value={nilaiMap[t.id_template]?.keterangan || ''}
+                                    onChange={(ev) => updateNilai(t.id_template, { keterangan: ev.target.value })}
+                                    style={{ width: '100%', padding: '3px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box', color: redText }}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </React.Fragment>
                       ))}
                     </tbody>
@@ -678,12 +1046,6 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                 </div>
               )}
             </div>
-
-            {detail.sudah_ada_hasil && (
-              <div style={{ fontSize: 12, color: '#92400e', padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
-                ⚠ Permintaan ini sudah pernah diisi hasilnya — nilai di atas sudah diprefill dari hasil terakhir, submit ulang akan menimpa nilai yang sama.
-              </div>
-            )}
           </div>
 
           {/* Footer — di luar area scroll, dipaku di dasar modal
@@ -700,6 +1062,18 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                 <polyline points="6 9 6 2 18 2 18 9"></polyline>
                 <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                 <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handlePreviewTtd}
+              disabled={previewingTtd}
+              title="Review PDF yang akan dikirim ke Peruri"
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: previewingTtd ? '#9ca3af' : '#374151', cursor: previewingTtd ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
               </svg>
             </button>
             <button type="button" onClick={onClose} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
