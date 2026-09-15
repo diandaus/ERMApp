@@ -229,9 +229,16 @@ export const LaboratoriumPKView: React.FC<LaboratoriumPKViewProps> = ({ user }) 
                 <tr key={row.noorder}>
                   <td style={{ ...TD, whiteSpace: 'nowrap', fontFamily: 'monospace', color: '#2563eb' }}>{row.noorder}</td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>{row.no_rawat}</td>
-                  <td style={{ ...TD, whiteSpace: 'nowrap' }}>
+                  <td style={{ ...TD, whiteSpace: 'nowrap', maxWidth: 260 }}>
                     <div>{row.no_rkm_medis} {row.nm_pasien}</div>
-                    {row.pemeriksaan && <div style={{ fontSize: 12, color: '#2563eb', marginTop: 2 }}>{row.pemeriksaan}</div>}
+                    {row.pemeriksaan && (
+                      <div
+                        title={row.pemeriksaan}
+                        style={{ fontSize: 12, color: '#2563eb', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {row.pemeriksaan}
+                      </div>
+                    )}
                   </td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>{row.tgl_permintaan}</td>
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>{row.jam_permintaan}</td>

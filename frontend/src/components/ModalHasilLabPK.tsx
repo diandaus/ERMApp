@@ -271,7 +271,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       let lastGroup = '';
       const rowsHtml = items.map((it) => {
         const groupRow = it.nm_perawatan !== lastGroup
-          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="5" style="background:#f3f4f6;">${it.nm_perawatan}</td></tr>`)
+          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="5" style="background:#ffffff;">${it.nm_perawatan}</td></tr>`)
           : '';
         // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru
         // kalau "L" (rendah), padanan warna di buildHasilLabPKPdfUntukTtd.
@@ -442,8 +442,8 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     let page = pdf.addPage([pageWidth, pageHeight]);
     let y = pageHeight - margin;
 
-    const text = (s: string, x: number, size = 10, bold = false) => {
-      page.drawText(s, { x, y, size, font: bold ? fontBold : font, color: rgb(0, 0, 0) });
+    const text = (s: string, x: number, size = 10, bold = false, yOverride?: number) => {
+      page.drawText(s, { x, y: yOverride ?? y, size, font: bold ? fontBold : font, color: rgb(0, 0, 0) });
     };
     const centerText = (s: string, size = 10, bold = false) => {
       const f = bold ? fontBold : font;
@@ -583,7 +583,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     const drawGroupRow = (label: string) => {
       const rowTop = y;
       y -= rowHeight;
-      page.drawRectangle({ x: margin, y, width: contentWidth, height: rowHeight, color: rgb(0.93, 0.93, 0.94) });
+      page.drawRectangle({ x: margin, y, width: contentWidth, height: rowHeight, color: rgb(1, 1, 1) });
       // Baseline +5 dari dasar kotak (bukan pas di garis bawah) — sama
       // konvensi dgn headerTextY di drawTableHeader, supaya teks tidak
       // berhimpit dgn garis bawah baris ini (kalau pas di 0, garis bawah
@@ -611,25 +611,32 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       }
       const rowTop = y;
       y -= rowHeight;
-      text(truncateToWidth(it.pemeriksaan, 8.5, tableColX[1] - tableColX[0] - 6), tableColX[0] + 4, 8.5);
+      // Baseline teks +2 dari dasar baris (bukan pas di 0) — sama alasan
+      // dgn headerTextY/drawGroupRow: kalau pas di garis bawah baris, teks
+      // berhimpit dgn garis pemisah/border baris berikutnya (kentara PARAH
+      // pas baris ini persis sebelum baris judul kelompok berikutnya, krn
+      // border ATAS kelompok itu digambar tepat di koordinat `y` yg sama).
+      const textY = y + 2;
+      text(truncateToWidth(it.pemeriksaan, 8.5, tableColX[1] - tableColX[0] - 6), tableColX[0] + 4, 8.5, false, textY);
       // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru kalau
       // "L" (rendah), hitam normal selain itu. Kolom lain tetap hitam.
       const ket = (it.keterangan || '').trim().toUpperCase();
       const hasilColor = ket === 'H' ? rgb(0.86, 0.15, 0.15) : ket === 'L' ? rgb(0, 0.27, 0.87) : rgb(0, 0, 0);
-      page.drawText(truncateToWidth(it.hasil || '-', 8.5, tableColX[2] - tableColX[1] - 6), { x: tableColX[1] + 4, y, size: 8.5, font, color: hasilColor });
-      text(truncateToWidth(it.satuan || '-', 8.5, tableColX[3] - tableColX[2] - 6), tableColX[2] + 4, 8.5);
-      text(truncateToWidth(it.nilai_rujukan || '-', 8.5, tableColX[4] - tableColX[3] - 6), tableColX[3] + 4, 8.5);
-      text(truncateToWidth(it.keterangan || '-', 8.5, tableColEndX - tableColX[4] - 6), tableColX[4] + 4, 8.5);
-      // Baris terakhir tabel = border PENUTUP (bukan pemisah antar baris) —
-      // tetap hitam pekat spt border lainnya; pemisah antar baris biasa abu2.
+      page.drawText(truncateToWidth(it.hasil || '-', 8.5, tableColX[2] - tableColX[1] - 6), { x: tableColX[1] + 4, y: textY, size: 8.5, font, color: hasilColor });
+      text(truncateToWidth(it.satuan || '-', 8.5, tableColX[3] - tableColX[2] - 6), tableColX[2] + 4, 8.5, false, textY);
+      text(truncateToWidth(it.nilai_rujukan || '-', 8.5, tableColX[4] - tableColX[3] - 6), tableColX[3] + 4, 8.5, false, textY);
+      text(truncateToWidth(it.keterangan || '-', 8.5, tableColEndX - tableColX[4] - 6), tableColX[4] + 4, 8.5, false, textY);
+      // Garis pemisah PERSIS di batas bawah baris (y, bukan y-3 lagi) —
+      // supaya menyatu rapi dgn border ATAS baris/kelompok berikutnya,
+      // bukan tumpang tindih 3pt ke dalam baris berikutnya (itu penyebab
+      // tampilan "dobel garis" tepat di pergantian kelompok pemeriksaan).
       const isLastRow = idx === items.length - 1;
       page.drawLine({
-        start: { x: margin, y: y - 3 }, end: { x: tableColEndX, y: y - 3 },
+        start: { x: margin, y }, end: { x: tableColEndX, y },
         thickness: isLastRow ? 0.75 : 0.5, color: isLastRow ? rgb(0, 0, 0) : rgb(0.6, 0.6, 0.6),
       });
-      drawColLines(rowTop, y - 3);
+      drawColLines(rowTop, y);
     });
-    y -= 3;
 
     // Tag "#A#" — posisi (tagX, tagY) persis di bawah tabel hasil (padanan
     // "#A#" di bawah kotak Hasil Pemeriksaan pada versi Radiologi), lalu
