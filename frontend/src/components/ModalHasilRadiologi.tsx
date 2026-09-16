@@ -1041,7 +1041,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       // di level atas response kita sendiri, bukan cuma "response" (upstream Peruri).
       const res = await fetch('/api/peruri/download-document', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '' }),
+        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '', no_order: noorder }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');

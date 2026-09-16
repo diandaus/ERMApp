@@ -12,12 +12,36 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 // sana kolomnya utk MEMILIH parameter yg diminta, di sini utk MENGISI
 // nilai hasilnya.
 
+// PERURI_SIGNING_ERROR_MAP — tabel kode resultCode resmi API Signing
+// Peruri, persis salinan dari ModalHasilRadiologi.tsx, dipakai
+// handleTandaTangan supaya pesan error yg ditampilkan ke user jelas
+// menyebut penyebabnya, bukan cuma resultDesc mentah yg kadang berupa
+// placeholder rusak spt "%docSigningOutput/errorMessage%".
+const PERURI_SIGNING_ERROR_MAP: Record<string, string> = {
+  '01': 'OTP tidak valid/gagal. Silakan klik "Minta OTP Ulang" lalu coba Tanda Tangan lagi.',
+  '02': 'Expired key.',
+  '03': 'Dokumen sudah kadaluarsa atau sudah pernah ditandatangani. Coba ulangi dari awal (klik Tanda Tangan lagi).',
+  '4001': 'Sertifikat elektronik dokter ini belum tersedia di Peruri. Cek status via tombol "Sertifikat" di Bridging > Peruri > Data Pengguna.',
+  '4003': 'Worker Peruri belum tersedia. Coba lagi beberapa saat.',
+  '4004': 'Worker Peruri sedang bermasalah. Coba lagi beberapa saat.',
+  '4005': 'Spesimen tanda tangan tidak ditemukan — dokter kemungkinan belum submit spesimen tanda tangan ke Peruri.',
+  '4006': 'Gagal mengambil data spesimen tanda tangan dari Peruri.',
+  '4007': 'Gagal menambahkan visibility penandatangan.',
+  '4008': 'Gagal mengubah visibility penandatangan.',
+  '4009': 'File dokumen tidak ditemukan di Peruri.',
+  '4012': 'Gagal melakukan proses penandatanganan di server Peruri.',
+  '4014': 'Koordinat posisi tanda tangan tidak ditemukan di dokumen oleh Peruri.',
+  '4015': 'Gagal generate Peruri Tera (stample tanda tangan).',
+  '4017': 'Gagal generate kode QR tanda tangan.',
+  '4026': 'Gagal memvalidasi token dan OTP. Silakan klik "Minta OTP Ulang" lalu coba Tanda Tangan lagi.',
+};
+
 type ExamDetail = { kd_jenis_prw: string; nm_perawatan: string };
 
 type HasilNilaiItem = { pemeriksaan: string; nilai: string; keterangan: string };
 
 type OrderDetail = {
-  noorder: string; no_rawat: string; no_rkm_medis: string; nm_pasien: string;
+  noorder: string; no_rawat: string; no_rkm_medis: string; nm_pasien: string; umur: string;
   dokter_perujuk: string; nm_dokter: string; status: string;
   diagnosa_klinis: string; informasi_tambahan: string;
   sudah_ada_hasil: boolean; pemeriksaan: ExamDetail[];
@@ -39,15 +63,24 @@ const pill: React.CSSProperties = {
 };
 const pillReadOnly: React.CSSProperties = { ...pill, background: '#f9fafb', color: '#374151' };
 const labelSm: React.CSSProperties = { fontSize: 12.5, color: '#374151', flexShrink: 0, width: 96 };
-const clipBtn: React.CSSProperties = {
-  width: 30, height: 30, borderRadius: 4, border: '1px solid #e5e7eb', background: '#ffffff',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default', flexShrink: 0, color: '#9ca3af',
-};
-
-const ClipIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-  </svg>
+// StepperIcon — ikon bulat chevron atas-bawah, ganti "clip paper" dekoratif
+// yg dulu nempel di samping field Dokter P.J./Petugas/Dokter Perujuk (persis
+// pola PillSelect di ApotekPenerimaan.tsx/TarifLab.tsx, warna disesuaikan
+// tema modal ini #1AB1E5).
+const StepperIcon = () => (
+  <div
+    style={{
+      position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+      width: 20, height: 20, borderRadius: 4, background: '#2563eb',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'none', flexShrink: 0,
+    }}
+  >
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
 );
 
 type Props = { noorder: string; nip?: string; onClose: () => void; onSaved: () => void };
@@ -78,6 +111,14 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
   const [saving, setSaving] = React.useState(false);
   const [printing, setPrinting] = React.useState(false);
   const [previewingTtd, setPreviewingTtd] = React.useState(false);
+  const [signing, setSigning] = React.useState(false);
+  const [requestingOtp, setRequestingOtp] = React.useState(false);
+  const [downloadingTte, setDownloadingTte] = React.useState(false);
+  // lastTteOrderId — orderId dari Send Document/Signing TERAKHIR di sesi
+  // modal ini (bukan disimpan permanen), dipakai tombol Download utk
+  // ambil dokumen yg sudah ditandatangani dari Peruri — persis pola
+  // ModalHasilRadiologi.tsx.
+  const [lastTteOrderId, setLastTteOrderId] = React.useState<string | null>(null);
 
   const todayStr = () => {
     const d = new Date();
@@ -182,6 +223,100 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     setNilaiMap((prev) => ({ ...prev, [idTemplate]: { ...(prev[idTemplate] || { nilai: '', keterangan: '' }), ...patch } }));
   };
 
+  // applyHasilTemplate/handleSimpanTemplateBaru/handleBukaTemplateMenu —
+  // "Template Hasil Pemeriksaan" (tombol bookmark di header tiap grup):
+  // simpan set nilai Hasil (semua parameter dlm 1 pemeriksaan) sbg template
+  // bernama, lalu klik utk langsung autofill ulang form — sangat membantu
+  // pemeriksaan yg hasilnya narasi panjang & berulang (mis. Morfologi),
+  // tinggal klik nama template = langsung terisi, tanpa ketik ulang.
+  const applyHasilTemplate = (details: { id_template: number; nilai: string; keterangan: string }[]) => {
+    details.forEach((d) => updateNilai(d.id_template, { nilai: d.nilai, keterangan: d.keterangan }));
+  };
+
+  const handleSimpanTemplateBaru = async (group: { kd_jenis_prw: string; nm_perawatan: string; items: TemplateItem[] }) => {
+    const { value: nama } = await Swal.fire({
+      title: 'Simpan sebagai Template',
+      input: 'text',
+      inputLabel: `Template untuk "${group.nm_perawatan}"`,
+      inputPlaceholder: 'mis. Normal / Anemia Def.Fe',
+      showCancelButton: true,
+      confirmButtonText: 'Simpan',
+      cancelButtonText: 'Batal',
+      inputValidator: (v) => (!v || !v.trim() ? 'Nama template wajib diisi' : undefined),
+    });
+    if (!nama) return;
+    const details = group.items.map((t) => ({
+      id_template: t.id_template,
+      nilai: nilaiMap[t.id_template]?.nilai || '',
+      keterangan: nilaiMap[t.id_template]?.keterangan || '',
+    }));
+    try {
+      const res = await fetch('/api/lab-pk/hasil-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kd_jenis_prw: group.kd_jenis_prw, nama_template: nama.trim(), details }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan template');
+      Swal.fire({ icon: 'success', title: 'Tersimpan!', text: `Template "${nama.trim()}" siap dipakai lagi`, timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  const handleBukaTemplateMenu = async (group: { kd_jenis_prw: string; nm_perawatan: string; items: TemplateItem[] }) => {
+    let templates: { id: number; nama_template: string; details: { id_template: number; nilai: string; keterangan: string }[] }[] = [];
+    try {
+      const res = await fetch(`/api/lab-pk/hasil-template?kd_jenis_prw=${encodeURIComponent(group.kd_jenis_prw)}`);
+      templates = res.ok ? await res.json() : [];
+    } catch { templates = []; }
+
+    const listHtml = templates.length === 0
+      ? `<div style="color:#9ca3af;font-size:12.5px;padding:10px 0;">Belum ada template tersimpan utk "${group.nm_perawatan}"</div>`
+      : templates.map((t) => `
+          <div class="tmpl-row" data-id="${t.id}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;cursor:pointer;text-align:left;">
+            <span style="font-size:12.5px;color:#111827;">${t.nama_template}</span>
+            <button type="button" class="tmpl-del" data-id="${t.id}" title="Hapus template" style="border:none;background:transparent;color:#dc2626;cursor:pointer;font-size:11px;padding:2px 4px;">Hapus</button>
+          </div>
+        `).join('');
+
+    Swal.fire({
+      title: `Template — ${group.nm_perawatan}`,
+      html: `
+        <div id="tmplListWrap" style="text-align:left;max-height:320px;overflow-y:auto;">${listHtml}</div>
+        <button type="button" id="tmplNewBtn" style="margin-top:10px;width:100%;padding:9px;border-radius:8px;border:1px solid #4338ca;background:#fff;color:#4338ca;font-size:12.5px;font-weight:600;cursor:pointer;">+ Simpan Nilai Saat Ini sbg Template Baru</button>
+      `,
+      showConfirmButton: false,
+      showCloseButton: true,
+      width: 380,
+      didOpen: (el) => {
+        el.querySelectorAll('.tmpl-row').forEach((row) => {
+          row.addEventListener('click', (e) => {
+            if ((e.target as HTMLElement).classList.contains('tmpl-del')) return;
+            const id = row.getAttribute('data-id');
+            const tmpl = templates.find((t) => String(t.id) === id);
+            if (tmpl) applyHasilTemplate(tmpl.details || []);
+            Swal.close();
+          });
+        });
+        el.querySelectorAll('.tmpl-del').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = btn.getAttribute('data-id');
+            try {
+              await fetch(`/api/lab-pk/hasil-template/${id}`, { method: 'DELETE' });
+              (btn.closest('.tmpl-row') as HTMLElement | null)?.remove();
+            } catch { /* biarkan baris tetap tampil kalau gagal hapus */ }
+          });
+        });
+        el.querySelector('#tmplNewBtn')?.addEventListener('click', () => {
+          Swal.close();
+          handleSimpanTemplateBaru(group);
+        });
+      },
+    });
+  };
+
   // isMorfologi — pemeriksaan "Morfologi" (mis. Morfologi Darah Tepi/MDT)
   // hasilnya narasi bebas per parameter (Eritrosit/Leukosit/Trombosit/
   // Kesimpulan), BUKAN nilai numerik dgn nilai rujukan spt parameter lab
@@ -212,6 +347,39 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
   // penuh dipertahankan (krn kolom itu masih relevan utk baris lain),
   // baris Morfologi-nya sendiri tetap disembunyikan kolomnya (colSpan).
   const allMorfologi = groupedTemplates.length > 0 && groupedTemplates.every((g) => isMorfologi(g.nm_perawatan));
+
+  // handleBukaTemplateMenuFooter — tombol bookmark di footer (sejajar tombol
+  // Simpan Hasil, rata kiri). Kalau cuma 1 pemeriksaan dicentang langsung
+  // buka menu templatenya; kalau lebih dari 1, minta pilih dulu grupnya.
+  const handleBukaTemplateMenuFooter = () => {
+    if (groupedTemplates.length === 0) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Centang minimal satu pemeriksaan dulu' });
+      return;
+    }
+    if (groupedTemplates.length === 1) {
+      handleBukaTemplateMenu(groupedTemplates[0]);
+      return;
+    }
+    const optionsHtml = groupedTemplates.map((g, i) => `
+      <button type="button" class="tmpl-group-pick" data-idx="${i}" style="display:block;width:100%;text-align:left;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;background:#fff;color:#111827;font-size:12.5px;cursor:pointer;">${g.nm_perawatan}</button>
+    `).join('');
+    Swal.fire({
+      title: 'Pilih Pemeriksaan',
+      html: `<div style="text-align:left;">${optionsHtml}</div>`,
+      showConfirmButton: false,
+      showCloseButton: true,
+      width: 380,
+      didOpen: (el) => {
+        el.querySelectorAll('.tmpl-group-pick').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const idx = Number(btn.getAttribute('data-idx'));
+            Swal.close();
+            handleBukaTemplateMenu(groupedTemplates[idx]);
+          });
+        });
+      },
+    });
+  };
 
   // umurDariTglLahir — padanan persis di ModalHasilRadiologi.tsx.
   const umurDariTglLahir = (tglLahir: string): string => {
@@ -392,7 +560,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               </tr>
               <tr>
                 <td class="label">Dokter Pengirim</td><td class="sep">:</td><td class="nowrap">${data.dokter_pengirim || '-'}</td>
-                <td class="label">Poli</td><td class="sep">:</td><td>${data.poli || '-'}</td>
+                <td class="label">${data.poli_label || 'Poli'}</td><td class="sep">:</td><td>${data.poli || '-'}</td>
               </tr>
             </table>
 
@@ -576,7 +744,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     const infoRight: [string, string][] = [
       ['No.Permintaan Lab', data.no_permintaan_lab], ['Tgl.Permintaan', data.tgl_permintaan],
       ['Jam Permintaan', data.jam_permintaan], ['Tgl. Keluar Hasil', data.tgl_keluar_hasil],
-      ['Jam Keluar Hasil', data.jam_keluar_hasil], ['Poli', data.poli || '-'],
+      ['Jam Keluar Hasil', data.jam_keluar_hasil], [data.poli_label || 'Poli', data.poli || '-'],
     ];
     const rowStartY = y;
     infoLeft.forEach(([label, value], i) => {
@@ -848,8 +1016,6 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
   // handlePreviewTtd — "Review PDF", buka PDF yg AKAN dikirim ke Peruri
   // (buildHasilLabPKPdfUntukTtd) di tab baru TANPA benar-benar mengirim apa
   // pun ke Peruri — padanan handlePreviewTtd di ModalHasilRadiologi.tsx.
-  // Fitur "Tanda Tangan" (upload sungguhan + alur OTP Peruri) belum ada di
-  // modal ini, jadi tombol ini murni preview dokumen.
   const handlePreviewTtd = async () => {
     setPreviewingTtd(true);
     try {
@@ -860,6 +1026,289 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setPreviewingTtd(false);
+    }
+  };
+
+  // peruriPost — helper kecil, panggil endpoint proxy Peruri (JSON), balikin
+  // response.response (raw upstream Peruri) sambil lempar Error kalau gagal
+  // di level HTTP KITA (bukan level Peruri) ATAU resultCode Peruri bukan
+  // "0" — persis salinan dari ModalHasilRadiologi.tsx (endpoint backend
+  // Peruri sudah generik, dipakai bersama semua modul TTE).
+  const peruriPost = async (path: string, body: unknown): Promise<any> => {
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Gagal memanggil ${path}`);
+    const upstream = data.response;
+    if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
+      throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || `${path} gagal`}`);
+    }
+    return upstream;
+  };
+
+  const showProcessing = (html: string) => {
+    Swal.fire({
+      html,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+  };
+  const hideProcessing = () => Swal.close();
+
+  // showOtpDialog — dialog input kode OTP, persis salinan dari
+  // ModalHasilRadiologi.tsx (ikon amplop, satu kolom input, link "Kirim
+  // ulang").
+  const showOtpDialog = async (email: string, onResend: () => Promise<void>, confirmButtonText: string): Promise<string | undefined> => {
+    const { value: otpCode } = await Swal.fire({
+      html: `
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+          <div style="width:64px;height:64px;border-radius:50%;background:#eff6ff;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 6-10 7L2 6"></path></svg>
+          </div>
+          <div style="font-size:19px;font-weight:700;color:#111827;margin-bottom:6px;">Masukkan Kode OTP</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.5;">Kode verifikasi sudah dikirim ke<br/><b style="color:#111827;">${email}</b></div>
+        </div>
+      `,
+      input: 'text',
+      inputAttributes: { maxlength: '6', inputmode: 'numeric', autocomplete: 'one-time-code' },
+      showCancelButton: false,
+      showCloseButton: true,
+      confirmButtonText,
+      confirmButtonColor: '#2563eb',
+      inputValidator: (value) => (!value ? 'Kode OTP wajib diisi' : undefined),
+      didOpen: (popup) => {
+        const input = popup.querySelector('.swal2-input') as HTMLInputElement | null;
+        if (input) {
+          input.placeholder = '6 digit kode OTP';
+          Object.assign(input.style, {
+            textAlign: 'center', fontSize: '22px', fontWeight: '700', letterSpacing: '8px',
+            maxWidth: '220px', margin: '4px auto 6px', borderRadius: '10px',
+          });
+        }
+        const confirmBtn = popup.querySelector('.swal2-confirm') as HTMLButtonElement | null;
+        if (confirmBtn) Object.assign(confirmBtn.style, { width: '85%', margin: '10px auto 0', borderRadius: '8px', fontWeight: '700' });
+
+        const resendWrap = document.createElement('div');
+        resendWrap.style.cssText = 'text-align:center;font-size:12.5px;color:#6b7280;margin-top:4px;';
+        resendWrap.innerHTML = 'Tidak menerima kode? <button id="btnResendOtpDialogLabPK" type="button" style="background:none;border:none;color:#2563eb;font-weight:600;font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0;">Kirim ulang</button>';
+        input?.insertAdjacentElement('afterend', resendWrap);
+
+        const resendBtn = resendWrap.querySelector('#btnResendOtpDialogLabPK') as HTMLButtonElement | null;
+        resendBtn?.addEventListener('click', async () => {
+          resendBtn.disabled = true;
+          resendBtn.textContent = 'Mengirim ulang...';
+          try {
+            await onResend();
+            resendBtn.textContent = 'Kode baru terkirim';
+          } catch (err) {
+            resendBtn.textContent = err instanceof Error ? err.message : 'Gagal kirim ulang';
+          } finally {
+            window.setTimeout(() => {
+              resendBtn.disabled = false;
+              resendBtn.textContent = 'Kirim ulang';
+            }, 3000);
+          }
+        });
+      },
+    });
+    return otpCode as string | undefined;
+  };
+
+  // handleTandaTangan — tombol "Tanda Tangan", alur Digital Signature
+  // Peruri (Send Document -> Get OTP -> Validate OTP -> Signing), persis
+  // salinan alur ModalHasilRadiologi.tsx, cuma dokumennya dari
+  // buildHasilLabPKPdfUntukTtd (tabel/narasi hasil lab, bukan textarea
+  // bacaan radiologi).
+  const handleTandaTangan = async () => {
+    setSigning(true);
+    showProcessing('Menyiapkan & mengirim dokumen ke Peruri, mohon tunggu...');
+    try {
+      const { pdfBytes, email, namaDokterPj, signBox } = await buildHasilLabPKPdfUntukTtd();
+
+      const form = new FormData();
+      form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), `HasilLabPK_${noorder.replace(/\//g, '_')}.pdf`);
+      form.append('email', email);
+      form.append('isVisualSign', 'YES');
+      form.append('lowerLeftX', String(signBox.lowerLeftX));
+      form.append('lowerLeftY', String(signBox.lowerLeftY));
+      form.append('upperRightX', String(signBox.upperRightX));
+      form.append('upperRightY', String(signBox.upperRightY));
+      form.append('page', signBox.page);
+      form.append('certificateLevel', 'NOT_CERTIFIED');
+      form.append('varLocation', 'Sigli');
+      form.append('varReason', 'Signed');
+      form.append('teraImage', 'QR-DETECSI');
+      form.append('orderType', 'INDIVIDUAL');
+
+      const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) throw new Error(sendData.error || 'Gagal mengirim dokumen ke Peruri');
+      if (sendData.response && typeof sendData.response === 'object' && 'resultCode' in sendData.response && sendData.response.resultCode !== '0') {
+        throw new Error(`[${sendData.response.resultCode}] ${sendData.response.resultDesc || 'Send Document gagal'}`);
+      }
+      const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
+      if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
+
+      showProcessing(`Dokumen berhasil terkirim ke Peruri.<br/>Order ID: <b>${orderId}</b><br/><span style="font-size:12px;color:#6b7280;">Melanjutkan proses tanda tangan...</span>`);
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+
+      const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
+      const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
+      let sesiDipakaiUlang = false;
+
+      if (sessionRes.ok && sessionData.valid) {
+        sesiDipakaiUlang = true;
+      } else {
+        const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+        let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+        if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+        hideProcessing();
+        const otpCode = await showOtpDialog(email, async () => {
+          const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+          const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+          if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+          tokenSession = newTokenSession;
+        }, 'Verifikasi & Tanda Tangan');
+        if (!otpCode) return;
+
+        showProcessing('Memverifikasi OTP & menandatangani dokumen, mohon tunggu...');
+        await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      }
+
+      if (sesiDipakaiUlang) showProcessing('Sesi OTP masih aktif, menandatangani dokumen, mohon tunggu...');
+      try {
+        await peruriPost('/api/peruri/signing', { orderId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        const codeMatch = msg.match(/^\[([^\]]+)\]/);
+        const code = codeMatch?.[1];
+        if (code && code in PERURI_SIGNING_ERROR_MAP) {
+          throw new Error(`[${code}] ${PERURI_SIGNING_ERROR_MAP[code]}`);
+        }
+        if (/otp|session|expired/i.test(msg)) {
+          throw new Error('Masa berlaku sesi OTP sudah habis di sisi Peruri. Silakan klik tombol "Minta OTP Ulang" terlebih dahulu, lalu coba Tanda Tangan lagi.');
+        }
+        throw err;
+      }
+      hideProcessing();
+      setLastTteOrderId(orderId);
+
+      await Swal.fire({
+        icon: 'success', title: 'Berhasil ditandatangani',
+        html: `Dokumen berhasil ditandatangani oleh <b>${namaDokterPj}</b> (${email}).<br/>Order ID: <b>${orderId}</b>`
+          + (sesiDipakaiUlang ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
+      });
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  // handleDownloadDokumen — tombol Download, ambil dokumen yg SUDAH
+  // ditandatangani dari Peruri (downloadDocument/v1, orderId dari signing
+  // TERAKHIR di sesi modal ini — lastTteOrderId), persis salinan dari
+  // ModalHasilRadiologi.tsx. Prefix nama file dibedakan ("HasilLabPK_")
+  // supaya tidak ketimpa/campur dgn hasil Radiologi di berkas rawat.
+  const handleDownloadDokumen = async () => {
+    if (!lastTteOrderId) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani di sesi ini. Lakukan Tanda Tangan dulu.' });
+      return;
+    }
+    setDownloadingTte(true);
+    showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
+    try {
+      const res = await fetch('/api/peruri/download-document', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '', no_order: noorder, prefix: 'HasilLabPK_' }),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
+      const upstream = resData.response;
+      if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
+        throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || 'Download Document gagal'}`);
+      }
+      const data = upstream?.data || upstream || {};
+      const base64Doc: string | undefined = data.base64Document || data.document || data.file || data.base64;
+      if (!base64Doc) {
+        hideProcessing();
+        Swal.fire({
+          icon: 'warning', title: 'Format respons tidak dikenali',
+          html: `Peruri tidak mengembalikan field dokumen yg dikenali. Response mentah:<br/><pre style="text-align:left;font-size:11px;white-space:pre-wrap;">${JSON.stringify(upstream, null, 2)}</pre>`,
+        });
+        return;
+      }
+      const byteChars = atob(base64Doc);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `TTE_HasilLabPK_${noorder.replace(/\//g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      hideProcessing();
+      if (resData.uploaded_to_berkasrawat) {
+        Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen terunduh & otomatis terupload ke Berkas Rawat.', timer: 2000, showConfirmButton: false });
+      }
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setDownloadingTte(false);
+    }
+  };
+
+  // handleMintaOtpUlang — tombol terpisah (sebelum Tanda Tangan), persis
+  // salinan dari ModalHasilRadiologi.tsx.
+  const handleMintaOtpUlang = async () => {
+    if (!kdDokterPj) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih Dokter P.J. dulu' });
+      return;
+    }
+    setRequestingOtp(true);
+    showProcessing('Mengirim kode OTP, mohon tunggu...');
+    try {
+      const emailRes = await fetch(`/api/dokter/${encodeURIComponent(kdDokterPj)}/email`);
+      const emailData = await emailRes.json();
+      if (!emailRes.ok) throw new Error(emailData.error || 'Dokter P.J. tidak ditemukan');
+      if (!emailData.email) {
+        throw new Error(`Email dokter penanggung jawab (${dokterPjQuery || emailData.nm_dokter || '-'}) belum diisi. Hubungi admin untuk menambahkan email di data dokter.`);
+      }
+      const email = emailData.email as string;
+
+      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+      let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+      if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+      hideProcessing();
+      const otpCode = await showOtpDialog(email, async () => {
+        const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+        const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+        if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+        tokenSession = newTokenSession;
+      }, 'Verifikasi');
+      if (!otpCode) return;
+
+      showProcessing('Memverifikasi OTP, mohon tunggu...');
+      await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+      hideProcessing();
+
+      await Swal.fire({
+        icon: 'success', title: 'Sesi OTP diperbarui',
+        html: `Sesi OTP untuk <b>${email}</b> berhasil divalidasi ulang dan aktif selama 24 jam ke depan.`,
+      });
+    } catch (err) {
+      hideProcessing();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setRequestingOtp(false);
     }
   };
 
@@ -959,12 +1408,23 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
           style={{ background: '#ffffff', borderRadius: 16, padding: 20, width: 340, maxWidth: '92vw', height: '90vh', maxHeight: '90vh', boxShadow: '0 20px 50px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Title + baris identitas ringkas sbg teks polos (bukan pill/box
-              input) — persis pola ModalPenyerahanResep.tsx, termasuk
-              ukuran fontnya (judul 15/700, info 12/#6b7280). */}
-          <div style={{ fontSize: 15, color: '#111827', marginBottom: 4 }}>Data Permintaan</div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
-            No.Rawat {detail.no_rawat} — {detail.nm_pasien} ({detail.no_rkm_medis})
+          {/* Kartu identitas avatar (avatar + Nama pasien (Umur) + No.RM +
+              No.Rawat) — pola avatar sama dgn Pemeriksaan.tsx, warna
+              disesuaikan utk latar kartu putih (bukan gradient). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 12C14.7614 12 17 9.76142 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76142 9.23858 12 12 12Z" fill="#2563eb" />
+                <path d="M12 14C6.47715 14 2 17.134 2 21C2 21.5523 2.44772 22 3 22H21C21.5523 22 22 21.5523 22 21C22 17.134 17.5228 14 12 14Z" fill="#2563eb" />
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', wordBreak: 'break-word' }}>
+                {detail.nm_pasien}{detail.umur ? ` (${detail.umur})` : ''}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280' }}>No.RM {detail.no_rkm_medis}</div>
+              <div style={{ fontSize: 12, color: '#6b7280' }}>No.Rawat {detail.no_rawat}</div>
+            </div>
           </div>
 
             {/* Header identitas — pill fields, padanan ModalHasilRadiologi.tsx.
@@ -982,21 +1442,21 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                       onFocus={() => setShowDokterPjDropdown(true)}
                       onBlur={() => setTimeout(() => setShowDokterPjDropdown(false), 200)}
                       placeholder="Cari dokter..."
-                      style={{ ...pill, width: '100%' }}
+                      style={{ ...pill, width: '100%', paddingRight: 28 }}
                     />
+                    <StepperIcon />
                     {showDokterPjDropdown && dokterPjList.length > 0 && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10 }}>
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10 }}>
                         {dokterPjList.map((d) => (
                           <div key={d.kd_dokter} onClick={() => { setKdDokterPj(d.kd_dokter); setDokterPjQuery(d.nm_dokter); setShowDokterPjDropdown(false); }}
-                            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #f3f4f6' }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #e5e7eb' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#f9fafb'}
                           >{d.nm_dokter}</div>
                         ))}
                       </div>
                     )}
                   </div>
-                  <div style={clipBtn}><ClipIcon /></div>
                 </div>
               </div>
 
@@ -1010,29 +1470,31 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                       onFocus={() => setShowPetugasDropdown(true)}
                       onBlur={() => setTimeout(() => setShowPetugasDropdown(false), 200)}
                       placeholder="Cari nama petugas..."
-                      style={{ ...pill, width: '100%' }}
+                      style={{ ...pill, width: '100%', paddingRight: 28 }}
                     />
+                    <StepperIcon />
                     {showPetugasDropdown && petugasList.length > 0 && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10 }}>
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 10 }}>
                         {petugasList.map((p) => (
                           <div key={p.nip} onClick={() => { setPetugasNip(p.nip); setPetugasQuery(p.nama); setShowPetugasDropdown(false); }}
-                            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #f3f4f6' }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #e5e7eb' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#f9fafb'}
                           >{p.nama} <span style={{ color: '#9ca3af' }}>({p.nip})</span></div>
                         ))}
                       </div>
                     )}
                   </div>
-                  <div style={clipBtn}><ClipIcon /></div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ ...labelSm, width: 'auto' }}>Dokter Perujuk :</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <input readOnly value={detail.nm_dokter} style={{ ...pillReadOnly, flex: 1 }} />
-                  <div style={clipBtn}><ClipIcon /></div>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input readOnly value={detail.nm_dokter} style={{ ...pillReadOnly, width: '100%', paddingRight: 28 }} />
+                    <StepperIcon />
+                  </div>
                 </div>
               </div>
 
@@ -1157,12 +1619,13 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                               // nilai rujukan — jadi cuma Pemeriksaan+Hasil yg
                               // tampil (kolom lain disembunyikan via colSpan),
                               // Hasil pakai textarea multi-baris & lebih tinggi.
+                              const isKesimpulan = t.pemeriksaan.trim().toLowerCase() === 'kesimpulan';
                               return (
                                 <tr key={t.id_template} style={{ borderTop: '1px solid #f3f4f6' }}>
                                   <td style={{ padding: '4px 10px', color: redText || '#111827', verticalAlign: 'top' }}>{t.pemeriksaan}</td>
                                   <td style={{ padding: '4px 6px' }} colSpan={allMorfologi ? 1 : 7}>
                                     <textarea
-                                      rows={3}
+                                      rows={isKesimpulan ? 6 : 3}
                                       value={nilaiMap[t.id_template]?.nilai || ''}
                                       onChange={(ev) => updateNilai(t.id_template, { nilai: ev.target.value })}
                                       style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box', color: redText, resize: 'vertical', fontFamily: 'inherit' }}
@@ -1210,7 +1673,18 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
 
           {/* Footer — di luar area scroll, dipaku di dasar modal
               (flexShrink:0) supaya Batal/Simpan selalu kelihatan. */}
-          <div style={{ flexShrink: 0, paddingTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+          <div style={{ flexShrink: 0, paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={handleBukaTemplateMenuFooter}
+              title="Template Hasil Pemeriksaan — simpan/pakai nilai siap-pakai"
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#4338ca', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor">
+                <path d="M70.715,0v512L256,326.715L441.285,512V0H70.715z M411.239,439.462L256,284.224L100.761,439.462V30.046h310.477V439.462z"/>
+              </svg>
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               type="button"
               onClick={handleCetak}
@@ -1236,6 +1710,39 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                 <circle cx="12" cy="12" r="3"></circle>
               </svg>
             </button>
+            <button
+              type="button"
+              onClick={handleMintaOtpUlang}
+              disabled={requestingOtp}
+              title="Minta OTP Ulang (perbarui sesi Peruri Dokter P.J.)"
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: requestingOtp ? '#9ca3af' : '#374151', cursor: requestingOtp ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 15 15" fill="none">
+                <path d="M6 5.5H9M7.5 5.5V10M10.5 10V7.5M10.5 7.5V5.5H11.5C12.0523 5.5 12.5 5.94772 12.5 6.5C12.5 7.05228 12.0523 7.5 11.5 7.5H10.5ZM4.5 6.5V8.5C4.5 9.05228 4.05228 9.5 3.5 9.5C2.94772 9.5 2.5 9.05228 2.5 8.5V6.5C2.5 5.94772 2.94772 5.5 3.5 5.5C4.05228 5.5 4.5 5.94772 4.5 6.5ZM1.5 0.5H13.5C14.0523 0.5 14.5 0.947715 14.5 1.5V13.5C14.5 14.0523 14.0523 14.5 13.5 14.5H1.5C0.947716 14.5 0.5 14.0523 0.5 13.5V1.5C0.5 0.947716 0.947715 0.5 1.5 0.5Z" stroke="currentColor"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadDokumen}
+              disabled={downloadingTte || !lastTteOrderId}
+              title={lastTteOrderId ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen tertandatangani di sesi ini'}
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: (downloadingTte || !lastTteOrderId) ? '#9ca3af' : '#374151', cursor: (downloadingTte || !lastTteOrderId) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9.517 3.31h4.966v6.621h3.31L12 16.552 6.207 9.931h3.31V3.31zM0 19.034h24v1.655H0v-1.655z"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleTandaTangan}
+              disabled={signing}
+              title="Tanda Tangan Elektronik (Peruri)"
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: signing ? '#9ca3af' : '#374151', cursor: signing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="20" height="20" viewBox="0 1.5 14 11" fill="currentColor">
+                <path d="m 1.0324444,11.139308 c 0.0179,-0.1218 0.061,-0.2215 0.0958,-0.2215 0.0348,0 0.0633,-0.064 0.0633,-0.1428 0,-0.079 0.0321,-0.1428 0.0714,-0.1428 0.0393,0 0.0714,-0.064 0.0714,-0.1427 0,-0.079 0.0321,-0.1428 0.0714,-0.1428 0.0393,0 0.0714,-0.047 0.0714,-0.1045 0,-0.058 0.08,-0.2479001 0.17776,-0.4230001 0.12606,-0.2258 0.16557,-0.3794 0.13583,-0.528 -0.0254,-0.1269 0.002,-0.2942 0.0687,-0.4236 0.0608,-0.1177 0.18066,-0.4193 0.26627,-0.6702 0.0856,-0.251 0.17774,-0.4885 0.20472,-0.5277 0.027,-0.039 0.0925,-0.216 0.14571,-0.3927 0.0532,-0.1766 0.1232,-0.3517 0.15563,-0.389 0.0324,-0.037 0.059,-0.1417 0.059,-0.232 0,-0.09 0.0321,-0.1642 0.0714,-0.1642 0.0393,0 0.0714,-0.094 0.0714,-0.21 0,-0.1154 0.0321,-0.2298 0.0714,-0.254 0.0393,-0.024 0.073,-0.099 0.0749,-0.1649 0.002,-0.066 0.16547,-0.2492 0.36338,-0.4062 0.1979,-0.1571 0.43577,-0.3579 0.5286,-0.4462 0.0928,-0.088 0.1866,-0.1606 0.20838,-0.1606 0.0218,0 0.13637,-0.093 0.25466,-0.2056 0.11829,-0.113 0.3509,-0.2977 0.51691,-0.4104 0.16601,-0.1128 0.31254,-0.2291 0.32563,-0.2585 0.0131,-0.029 0.0683,-0.053 0.12276,-0.053 0.0544,0 0.21335,-0.064 0.35316,-0.1428 0.26925,-0.1512 0.60679,-0.1909 0.60679,-0.071 0,0.039 0.0421,0.071 0.0936,0.071 0.0515,0 0.15589,0.058 0.23201,0.1285 0.24872,0.231 0.37942,0.24 0.55068,0.038 0.30396,-0.3586 1.0957,-1.1308 1.25041,-1.2194 0.18638,-0.1068 0.51461,-0.1182 0.51461,-0.018 0,0.039 0.043,0.071 0.0956,0.071 0.12754,0 0.26131,0.3072 0.26131,0.6002 0,0.2369 -0.24982,0.6817 -0.50955,0.9073 -0.0731,0.063 -0.13294,0.139 -0.13294,0.1677 0,0.029 -0.0964,0.1422 -0.21416,0.2523 -0.23429,0.2188 -0.26247,0.3229 -0.12217,0.4512 0.18171,0.1662 0.89017,0.5482 1.01669,0.5482 0.0577,0 0.10491,0.029 0.10491,0.063 0,0.035 0.20949,0.1202 0.46554,0.1895 0.4572796,0.1237 0.4683696,0.1234 0.6246396,-0.018 0.1522,-0.1379 0.20395,-0.1411 1.19421,-0.074 0.56932,0.038 1.0438,0.078 1.05441,0.087 0.0106,0.01 0.0719,0.2706 0.13625,0.5806 0.22137,1.0669 0.1397,2.7256 -0.19548,3.9704001 l -0.0726,0.2698 -1.10376,0 -1.10375,0 0,-0.2142 c 0,-0.1178 -0.0321,-0.2142 -0.0714,-0.2142 -0.0393,0 -0.0714,-0.068 -0.0714,-0.1504 0,-0.1163 -0.0283,-0.1381 -0.12493,-0.096 -0.0687,0.03 -0.2373696,0.067 -0.3747896,0.083 -0.13742,0.016 -0.31799,0.063 -0.40128,0.1034 -0.15948,0.078 -0.59017,0.053 -1.4191,-0.084 -0.56756,-0.093 -0.48797,-0.091 -1.12627,-0.028 -0.26608,0.026 -0.50088,0.076 -0.52177,0.1096 -0.0539,0.087 -1.79571,0.078 -1.84994,-0.01 -0.0243,-0.039 -0.15276,-0.071 -0.28555,-0.071 -0.13279,0 -0.26128,-0.032 -0.28555,-0.071 -0.0243,-0.039 -0.15836,-0.071 -0.29798,-0.071 -0.20152,0 -0.30517,0.055 -0.50271,0.2677 -0.13687,0.1473 -0.29749,0.34 -0.35693,0.4284 -0.0594,0.088 -0.16674,0.1606 -0.23843,0.1606 -0.0717,0 -0.15021,0.032 -0.17447,0.071 -0.0243,0.039 -0.10154,0.071 -0.17172,0.071 -0.0702,0 -0.22087,0.046 -0.33487,0.1034 -0.11401,0.057 -0.33873,0.1244 -0.49939,0.1501 l -0.29211,0.047 0.0325,-0.2215 z m 0.83725,-0.2929 c 0.0243,-0.039 0.10648,-0.071 0.18268,-0.071 0.0762,0 0.13857,-0.032 0.13857,-0.071 0,-0.039 0.0482,-0.071 0.10708,-0.071 0.0589,0 0.10708,-0.048 0.10708,-0.1065 0,-0.1314 -0.28157,-0.4646 -0.39263,-0.4646 -0.11106,0 -0.39263,0.3332 -0.39263,0.4646 0,0.059 -0.0321,0.1065 -0.0714,0.1065 -0.0393,0 -0.0714,0.064 -0.0714,0.1428 0,0.1038 0.0476,0.1428 0.17426,0.1428 0.0958,0 0.19411,-0.032 0.21837,-0.071 z m 9.7914796,-0.4796 c 0.56959,-0.044 0.51279,0.02 0.6796,-0.7697001 0.10998,-0.5207 0.15529,-2.1091 0.0628,-2.2016 -0.0416,-0.042 -0.0756,-0.1661 -0.0756,-0.2766 0,-0.1106 -0.0399,-0.329 -0.0888,-0.4855 l -0.0888,-0.2844 -0.54608,0 c -0.62148,0 -0.64971,0.026 -0.55725,0.5046 0.11336,0.5873 0.075,1.9136 -0.0772,2.6663 -0.15299,0.7568001 -0.13618,1.0112001 0.0617,0.9332001 0.0652,-0.026 0.34848,-0.064 0.62959,-0.086 z M 6.1529444,9.9283079 c 0.15705,-0.042 0.48897,-0.1306 0.73759,-0.1971 0.4275,-0.1144 0.48566,-0.1141 1.07082,0.01 0.34032,0.07 0.81151,0.1273 1.04709,0.1279 0.50257,0.001 1.3830896,-0.1952 1.5309896,-0.3415 0.10718,-0.1061 0.23238,-0.8318 0.23976,-1.3898 0.005,-0.3722 -0.0687,-0.9074 -0.18342,-1.3327 -0.0786,-0.2915 -0.0876,-0.2983 -0.44116,-0.3348 -0.5742096,-0.059 -0.8963196,-0.1281 -0.8963196,-0.1915 0,-0.032 -0.0723,-0.082 -0.16062,-0.1096 -0.0883,-0.028 -0.36468,-0.1746 -0.61409,-0.326 -0.24941,-0.1514 -0.48231,-0.2753 -0.51756,-0.2753 -0.0352,0 -0.0641,-0.032 -0.0641,-0.071 0,-0.1875 -0.27918,-0.03 -0.65538,0.3706 -0.37178,0.3956 -0.41543,0.474 -0.41543,0.7454 0,0.1668 -0.0321,0.3232 -0.0714,0.3474 -0.0393,0.024 -0.0714,0.1069 -0.0714,0.1837 0,0.1551 -0.11414,0.3784 -0.30339,0.5936 -0.0687,0.078 -0.12493,0.1681 -0.12493,0.1999 0,0.1 0.34485,0.063 0.75135,-0.079 0.38822,-0.1364 0.39085,-0.1364 0.39085,0 0,0.078 -0.0993,0.2321 -0.22063,0.3429 l -0.22062,0.2015 -1.10194,0 c -0.7526,0 -1.12849,0.023 -1.18571,0.08 -0.0461,0.046 -0.17371,0.084 -0.28365,0.084 -0.10994,0 -0.19989,0.032 -0.19989,0.071 0,0.039 -0.0642,0.071 -0.14277,0.071 -0.0785,0 -0.14278,0.027 -0.14278,0.059 0,0.033 -0.0779,0.101 -0.17302,0.152 -0.18219,0.098 -0.28332,0.3465 -0.21403,0.5271 0.0461,0.1201 0.52553,0.3324 0.75054,0.3324 0.0805,0 0.19232,-0.046 0.24841,-0.1019 0.1151,-0.1151 0.14054,-0.6833 0.0306,-0.6833 -0.0393,0 -0.0714,-0.064 -0.0714,-0.1428 0,-0.1852 0.0407,-0.18 0.25311,0.033 0.12743,0.1274 0.17522,0.2528 0.17522,0.4598 0,0.1565 -0.0321,0.3044 -0.0714,0.3287 -0.13127,0.081 -0.0734,0.2215 0.12493,0.3028 0.22116,0.091 0.76798,0.071 1.19574,-0.043 z m -3.49888,-1.0793 c 0.20573,-0.3259 0.22956,-0.6039 0.0658,-0.7677 -0.0966,-0.097 -0.12355,-0.099 -0.1804,-0.013 -0.0368,0.055 -0.0861,0.1892 -0.10953,0.2971 -0.0235,0.108 -0.0656,0.1964 -0.0937,0.1964 -0.0642,0 -0.2167,0.3289 -0.2167,0.4673 0,0.063 0.0699,0.1038 0.17757,0.1038 0.12939,0 0.22625,-0.077 0.35694,-0.2842 z m 0.48514,0.048 c 0.26307,-0.271 0.4081,-0.5016 0.4081,-0.6489 0,-0.056 0.0241,-0.1128 0.0535,-0.1259 0.0294,-0.013 0.13385,-0.1992 0.23201,-0.4135 0.0982,-0.2144 0.31499,-0.5268 0.48186,-0.6942 0.16687,-0.1674 0.3034,-0.321 0.3034,-0.3412 0,-0.068 0.24679,-0.3411 1.08866,-1.2037 0.46134,-0.4727 0.8388,-0.888 0.8388,-0.9229 0,-0.1533 -0.39705,-0.4103 -0.63371,-0.4103 -0.16776,0 -0.63626,0.2586 -0.80241,0.443 -0.0635,0.071 -0.14859,0.1281 -0.18909,0.1281 -0.0405,0 -0.23766,0.1606 -0.43816,0.3569 -0.20049,0.1963 -0.3832,0.3569 -0.40602,0.3569 -0.0846,0 -0.78643,0.7789 -0.8785,0.9749 -0.0525,0.1117 -0.12374,0.2588 -0.15842,0.327 -0.0347,0.068 -0.0631,0.1726 -0.0631,0.232 0,0.059 -0.0321,0.1081 -0.0714,0.1081 -0.0393,0 -0.0714,0.094 -0.0714,0.2082 0,0.1145 -0.0388,0.2211 -0.0862,0.2369 -0.0576,0.019 -0.0357,0.083 0.0658,0.1919 0.22734,0.2441 0.34549,0.5655 0.24483,0.6662 -0.0449,0.045 -0.0817,0.1537 -0.0817,0.2417 0,0.088 -0.0321,0.1798 -0.0714,0.2041 -0.0732,0.045 -0.10182,0.3212 -0.0333,0.3212 0.0209,0 0.1414,-0.1064 0.2677,-0.2365 z m 2.72831,-1.0663 c 0.13638,-0.088 0.24836,-0.2008 0.24885,-0.2499 4.8e-4,-0.049 0.033,-0.089 0.0723,-0.089 0.0393,0 0.0714,-0.064 0.0714,-0.1428 0,-0.079 0.0321,-0.1427 0.0714,-0.1427 0.0393,0 0.0714,-0.08 0.0714,-0.1785 0,-0.2216 -0.0932,-0.2288 -0.23214,-0.018 -0.0582,0.088 -0.26617,0.3284 -0.4622,0.5335 -0.19602,0.2051 -0.3395,0.3899 -0.31884,0.4105 0.0753,0.075 0.23533,0.034 0.4779,-0.123 z"></path>
+              </svg>
+            </button>
             <button type="button" onClick={onClose} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Batal</button>
             <button
               type="button" onClick={handleSubmit} disabled={saving}
@@ -1243,6 +1750,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
             >
               {saving ? 'Menyimpan...' : 'Simpan Hasil'}
             </button>
+            </div>
           </div>
         </div>
       </div>

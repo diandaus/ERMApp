@@ -1010,6 +1010,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel akun_peruri: %v", err)
 	}
 
+	if err := ensureLabPkHasilTemplateTables(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel lab_pk_hasil_template: %v", err)
+	}
+
 	if err := ensureSatuSehatPasienDokterTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel satu_sehat_pasien/satu_sehat_dokter: %v", err)
 	}
@@ -3446,6 +3450,11 @@ func main() {
 
 	// Get template laboratorium
 	r.GET("/api/lab/template", getTemplateLab(db))
+
+	// Template Hasil Pemeriksaan Lab PK (ModalHasilLabPK.tsx, tombol bookmark)
+	r.GET("/api/lab-pk/hasil-template", getLabPkHasilTemplateList(db))
+	r.POST("/api/lab-pk/hasil-template", createLabPkHasilTemplate(db))
+	r.DELETE("/api/lab-pk/hasil-template/:id", deleteLabPkHasilTemplate(db))
 
 	// Tarif Lab — daftar utama (menu Tarif Pelayanan > Tarif Lab)
 	r.GET("/api/tarif-lab/list", getTarifLabList(db))

@@ -754,6 +754,13 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 		var reqIn struct {
 			OrderID string `json:"orderId" binding:"required"`
 			NoRawat string `json:"no_rawat"`
+			// NoOrder — no permintaan (mis. "PK202609170003"), WAJIB disertakan
+			// pemanggil kalau 1 no_rawat bisa punya BEBERAPA permintaan/dokumen
+			// terpisah (Lab PK, Radiologi, dst) — tanpa ini, filename upload
+			// cuma dibentuk dari no_rawat saja, jadi 2+ permintaan yg sama
+			// no_rawat-nya akan SALING TIMPA di Berkas Rawat (cuma yg terakhir
+			// ditandatangani yg tersisa).
+			NoOrder string `json:"no_order"`
 			Prefix  string `json:"prefix"`
 		}
 		if err := c.ShouldBindJSON(&reqIn); err != nil {
@@ -802,7 +809,14 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 								if prefix == "" {
 									prefix = "Radiologi_"
 								}
-								fileName := prefix + strings.ReplaceAll(reqIn.NoRawat, "/", "_") + "_signed.pdf"
+								// Sertakan NoOrder di filename kalau dikirim (lihat komentar
+								// field NoOrder di atas) — cegah 2+ permintaan dgn no_rawat
+								// sama saling menimpa file satu sama lain di Berkas Rawat.
+								fileName := prefix + strings.ReplaceAll(reqIn.NoRawat, "/", "_")
+								if reqIn.NoOrder != "" {
+									fileName += "_" + strings.ReplaceAll(reqIn.NoOrder, "/", "_")
+								}
+								fileName += "_signed.pdf"
 								if wErr := WriteWebappsFile(webappsCfg, "berkasrawat/pages/upload", fileName, pdfBytes); wErr == nil {
 									uploaded = true
 								}

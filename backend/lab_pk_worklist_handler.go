@@ -194,10 +194,15 @@ func getPermintaanLabPKDetail(db *sql.DB) gin.HandlerFunc {
 		// Go) — koneksi DB ini pakai parseTime=true, jadi kolom DATE zero-value
 		// '0000-00-00' datang ke Go sbg time.Time{} (bukan literal string
 		// "0000-00-00"), bikin perbandingan string di sisi Go salah terus.
-		var noRawat, noRkmMedis, nmPasien, dokterPerujuk, nmDokter, status, diagnosaKlinis, informasiTambahan string
+		var noRawat, noRkmMedis, nmPasien, umur, dokterPerujuk, nmDokter, status, diagnosaKlinis, informasiTambahan string
 		var sudahAdaHasil bool
 		err := db.QueryRow(`
 			SELECT pl.no_rawat, pasien.no_rkm_medis, pasien.nm_pasien,
+				COALESCE(
+					CONCAT(reg_periksa.umurdaftar, ' ', reg_periksa.sttsumur),
+					CONCAT(TIMESTAMPDIFF(YEAR, pasien.tgl_lahir, CURDATE()), ' Th'),
+					''
+				) as umur,
 				pl.dokter_perujuk, IFNULL(dokter.nm_dokter,''), pl.status,
 				IFNULL(pl.diagnosa_klinis,''), IFNULL(pl.informasi_tambahan,''),
 				IF(pl.tgl_hasil='0000-00-00', 0, 1)
@@ -206,7 +211,7 @@ func getPermintaanLabPKDetail(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN dokter ON pl.dokter_perujuk = dokter.kd_dokter
 			WHERE pl.noorder = ?
-		`, noOrder).Scan(&noRawat, &noRkmMedis, &nmPasien, &dokterPerujuk, &nmDokter, &status, &diagnosaKlinis, &informasiTambahan, &sudahAdaHasil)
+		`, noOrder).Scan(&noRawat, &noRkmMedis, &nmPasien, &umur, &dokterPerujuk, &nmDokter, &status, &diagnosaKlinis, &informasiTambahan, &sudahAdaHasil)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Permintaan lab tidak ditemukan"})
 			return
@@ -268,7 +273,7 @@ func getPermintaanLabPKDetail(db *sql.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"noorder": noOrder, "no_rawat": noRawat, "no_rkm_medis": noRkmMedis, "nm_pasien": nmPasien,
+			"noorder": noOrder, "no_rawat": noRawat, "no_rkm_medis": noRkmMedis, "nm_pasien": nmPasien, "umur": umur,
 			"dokter_perujuk": dokterPerujuk, "nm_dokter": nmDokter, "status": status,
 			"diagnosa_klinis": diagnosaKlinis, "informasi_tambahan": informasiTambahan,
 			"sudah_ada_hasil": sudahAdaHasil,
@@ -588,10 +593,16 @@ func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
 			WHERE reg_periksa.no_rawat = ?
 		`, noRawat).Scan(&noRkmMedis, &nmPasien, &jk, &tglLahir, &alamat)
 
-		var poli string
+		// poliLabel dikirim terpisah dari nilainya ("Kamar" utk ranap, "Poli"
+		// utk ralan/poliklinik) — persis pola getCetakHasilRadiologi
+		// (radiologi_hasil_handler.go), dipakai frontend (ModalHasilLabPK.tsx)
+		// buat label baris info yg sesuai, bukan selalu "Poli" walau
+		// sebenarnya kamar rawat inap.
+		var poli, poliLabel string
 		var statusLanjut string
 		db.QueryRow(`SELECT status_lanjut FROM reg_periksa WHERE no_rawat = ?`, noRawat).Scan(&statusLanjut)
 		if strings.EqualFold(statusLanjut, "ranap") {
+			poliLabel = "Kamar"
 			var kdKamar, nmBangsal string
 			db.QueryRow(`SELECT kd_kamar FROM kamar_inap WHERE no_rawat = ? ORDER BY tgl_masuk DESC, jam_masuk DESC LIMIT 1`, noRawat).Scan(&kdKamar)
 			if kdKamar != "" {
@@ -601,6 +612,7 @@ func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
 				poli = "Ranap Gabung"
 			}
 		} else {
+			poliLabel = "Poli"
 			db.QueryRow(`
 				SELECT IFNULL(poliklinik.nm_poli,'') FROM reg_periksa
 				LEFT JOIN poliklinik ON reg_periksa.kd_poli = poliklinik.kd_poli
@@ -629,6 +641,7 @@ func getCetakHasilLabPK(db *sql.DB) gin.HandlerFunc {
 			"tgl_keluar_hasil":    tglFormatted,
 			"jam_keluar_hasil":    jam,
 			"poli":                poli,
+			"poli_label":          poliLabel,
 			"hasil":               items,
 			"petugas_nip":         nip,
 			"petugas_nama":        nmPetugas,
