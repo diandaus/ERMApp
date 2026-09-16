@@ -182,6 +182,13 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     setNilaiMap((prev) => ({ ...prev, [idTemplate]: { ...(prev[idTemplate] || { nilai: '', keterangan: '' }), ...patch } }));
   };
 
+  // isMorfologi — pemeriksaan "Morfologi" (mis. Morfologi Darah Tepi/MDT)
+  // hasilnya narasi bebas per parameter (Eritrosit/Leukosit/Trombosit/
+  // Kesimpulan), BUKAN nilai numerik dgn nilai rujukan spt parameter lab
+  // PK biasa — jadi kolom Satuan/Nilai Rujukan/Keterangan disembunyikan,
+  // cuma Pemeriksaan+Hasil yg tersisa (Hasil dibuat textarea lebar).
+  const isMorfologi = (nmPerawatan: string) => /morfologi/i.test(nmPerawatan);
+
   // Kelompokkan template per pemeriksaan induk (kd_jenis_prw), cuma yang
   // exam-nya dicentang — sama pola groupedDetailPK di ModalInputLab.tsx.
   const groupedTemplates = React.useMemo(() => {
@@ -198,6 +205,13 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     });
     return groups;
   }, [templates, examChecked, detail]);
+
+  // allMorfologi — SEMUA pemeriksaan yg dicentang bertipe Morfologi (kasus
+  // umum: Morfologi dipesan sendirian) -> header tabel disederhanakan jadi
+  // cuma Pemeriksaan+Hasil. Kalau campur dgn pemeriksaan biasa, header
+  // penuh dipertahankan (krn kolom itu masih relevan utk baris lain),
+  // baris Morfologi-nya sendiri tetap disembunyikan kolomnya (colSpan).
+  const allMorfologi = groupedTemplates.length > 0 && groupedTemplates.every((g) => isMorfologi(g.nm_perawatan));
 
   // umurDariTglLahir — padanan persis di ModalHasilRadiologi.tsx.
   const umurDariTglLahir = (tglLahir: string): string => {
@@ -271,7 +285,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       let lastGroup = '';
       const rowsHtml = items.map((it) => {
         const groupRow = it.nm_perawatan !== lastGroup
-          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="5" style="background:#ffffff;">${it.nm_perawatan}</td></tr>`)
+          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="5" style="background:#ffffff;border-bottom-color:#9ca3af;">${it.nm_perawatan}</td></tr>`)
           : '';
         // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru
         // kalau "L" (rendah), padanan warna di buildHasilLabPKPdfUntukTtd.
@@ -279,7 +293,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
         const hasilColor = ket === 'H' ? '#dc2626' : ket === 'L' ? '#0044dd' : '';
         return `${groupRow}
         <tr>
-          <td>${it.pemeriksaan}</td>
+          <td style="padding-left:1.5em;">${it.pemeriksaan}</td>
           <td${hasilColor ? ` style="color:${hasilColor};"` : ''}>${it.hasil || '-'}</td>
           <td>${it.satuan || '-'}</td>
           <td>${it.nilai_rujukan || '-'}</td>
@@ -433,6 +447,13 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     }
     const emailDokterPj = emailData.email as string;
 
+    // items/allMorfologiPdf dihitung di awal (bukan pas mau digambar tabel
+    // di bawah) krn judul dokumen ("HASIL PEMERIKSAAN MDT" vs "...
+    // LABORATORIUM") sudah butuh tau ini duluan.
+    type CetakItem = { nm_perawatan: string; pemeriksaan: string; hasil: string; satuan: string; nilai_rujukan: string; keterangan: string };
+    const items: CetakItem[] = data.hasil || [];
+    const allMorfologiPdf = items.length > 0 && items.every((it) => isMorfologi(it.nm_perawatan));
+
     const pdf = await PDFDocument.create();
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -457,6 +478,20 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
         truncated = truncated.slice(0, -1);
       }
       return `${truncated}...`;
+    };
+    // wrapText — dipindah ke atas (sebelumnya cuma dipakai footer legal di
+    // bawah) krn sekarang dipakai juga oleh drawNarrativeItem (section
+    // Morfologi) yg letaknya lebih awal dari footer.
+    const wrapText = (s: string, maxWidth: number, size = 10): string[] => {
+      const words = s.split(' ');
+      const lines: string[] = [];
+      let line = '';
+      for (const w of words) {
+        const test = line ? `${line} ${w}` : w;
+        if (font.widthOfTextAtSize(test, size) > maxWidth && line) { lines.push(line); line = w; } else { line = test; }
+      }
+      if (line) lines.push(line);
+      return lines;
     };
 
     // Kop 3-kolom PERSIS buildRadiologiPdfUntukTtd/buildBillingPdf.
@@ -496,7 +531,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     y -= 1;
     page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 1, color: rgb(0, 0, 0) });
     y -= 18;
-    centerText('HASIL PEMERIKSAAN LABORATORIUM', 12, false);
+    centerText(allMorfologiPdf ? 'HASIL PEMERIKSAAN MDT' : 'HASIL PEMERIKSAAN LABORATORIUM', 12, false);
     y -= 22;
 
     const colLeftX = margin;
@@ -534,8 +569,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     // window.print HTML) tapi digambar manual krn pdf-lib tidak punya
     // tabel bawaan. Ada pagination sederhana (tambah halaman baru) krn
     // pemeriksaan spt "Darah Lengkap" bisa 20+ baris parameter.
-    type CetakItem = { nm_perawatan: string; pemeriksaan: string; hasil: string; satuan: string; nilai_rujukan: string; keterangan: string };
-    const items: CetakItem[] = data.hasil || [];
+    // (items/allMorfologiPdf sudah dihitung di atas, dekat judul dokumen.)
     const tableColX = [margin, margin + contentWidth * 0.32, margin + contentWidth * 0.47, margin + contentWidth * 0.60, margin + contentWidth * 0.80];
     const tableColEndX = pageWidth - margin;
     const rowHeight = 15;
@@ -583,31 +617,102 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     const drawGroupRow = (label: string) => {
       const rowTop = y;
       y -= rowHeight;
-      page.drawRectangle({ x: margin, y, width: contentWidth, height: rowHeight, color: rgb(1, 1, 1) });
+      // TIDAK digambar kotak isian putih di sini (beda dari versi lama yg
+      // isi abu2) — latar halaman memang sudah putih, jadi kotak putih di
+      // atas putih itu percuma DAN merusak: rectangle-nya nutup sampai ke
+      // rowTop, pas nimpa garis yg SUDAH digambar elemen sebelumnya di
+      // koordinat itu (mis. border bawah header yg hitam) jadi kepotong
+      // tipis & keliatan pudar/abu2.
       // Baseline +5 dari dasar kotak (bukan pas di garis bawah) — sama
       // konvensi dgn headerTextY di drawTableHeader, supaya teks tidak
       // berhimpit dgn garis bawah baris ini (kalau pas di 0, garis bawah
       // itu menempel tepat di baseline huruf & keliatan spt tercoret).
       page.drawText(label, { x: margin + 4, y: y + 5, size: 8.5, font: font, color: rgb(0, 0, 0) });
-      page.drawLine({ start: { x: margin, y: rowTop }, end: { x: tableColEndX, y: rowTop }, thickness: 0.75, color: rgb(0, 0, 0) });
-      page.drawLine({ start: { x: margin, y }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      // Garis ATAS baris ini SENGAJA tidak digambar ulang — koordinatnya
+      // (rowTop) persis sama dgn garis bawah elemen sebelumnya (border
+      // bawah header, atau garis pemisah baris data terakhir kelompok
+      // sebelumnya), jadi kalau digambar lagi di sini bisa menimpa warna
+      // garis yg sudah benar (mis. border bawah header yg hitam, ketiban
+      // jadi abu2). Cukup garis bawah kotak ini saja yg abu2.
+      page.drawLine({ start: { x: margin, y }, end: { x: tableColEndX, y }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+      // Kiri/kanan — border LUAR tabel (nyambung dgn garis kolom di baris
+      // lain), tetap hitam pekat spy tidak putus-putus di baris ini.
       page.drawLine({ start: { x: margin, y: rowTop }, end: { x: margin, y }, thickness: 0.75, color: rgb(0, 0, 0) });
       page.drawLine({ start: { x: tableColEndX, y: rowTop }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
     };
 
-    drawTableHeader();
+    // drawNarrativeHeader/drawNarrativeItem — padanan render "Morfologi" di
+    // tabel on-screen (cuma Pemeriksaan+Hasil, lihat isMorfologi di
+    // ModalHasilLabPK), tapi digambar sbg TABEL 2 kolom bergaris (bukan
+    // blok teks polos tanpa border) spy rapi & konsisten dgn gaya tabel
+    // hasil lab lainnya — kolom kiri label parameter (mis. "Eritrosit"),
+    // kolom kanan narasi multi-baris (krn Morfologi memang teks bebas
+    // tanpa nilai rujukan numerik, beda dari drawTableHeader 5-kolom).
+    const narrContentColX = margin + 110;
+    // drawNarrativeHeader — header tabel narasi bukan lagi "Pemeriksaan |
+    // Hasil" (generik), tapi nama pemeriksaannya sendiri (mis. "Morfologi
+    // Sel Darah Tepi*"), satu sel menyatu penuh tanpa pembatas kolom —
+    // padanan drawGroupRow tapi bergaya header (kotak abu2 + border atas).
+    const drawNarrativeHeader = (label: string) => {
+      const headerTop = y;
+      page.drawRectangle({ x: margin, y: y - headerHeight, width: contentWidth, height: headerHeight, color: rgb(0.95, 0.95, 0.96) });
+      const headerTextY = y - headerHeight + 5;
+      page.drawText(label, { x: margin + 4, y: headerTextY, size: 9, font, color: rgb(0, 0, 0) });
+      y -= headerHeight;
+      page.drawLine({ start: { x: margin, y: headerTop }, end: { x: tableColEndX, y: headerTop }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: margin, y }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: margin, y: headerTop }, end: { x: margin, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: tableColEndX, y: headerTop }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+    };
+    const drawNarrativeItem = (label: string, content: string, isLastItem: boolean, groupLabel: string) => {
+      const contentColWidth = tableColEndX - narrContentColX - 8;
+      const wrapped = (content || '-').split('\n').flatMap((line) => wrapText(line || ' ', contentColWidth, 9));
+      const rowH = Math.max(18, wrapped.length * 12 + 6);
+      if (y - rowH < margin + 130) {
+        addPage();
+        if (allMorfologiPdf) drawNarrativeHeader(groupLabel); else drawTableHeader();
+      }
+      const rowTop = y;
+      y -= rowH;
+      const firstLineY = rowTop - 12;
+      text(label, margin + 4, 9, false, firstLineY);
+      let lineY = firstLineY;
+      wrapped.forEach((line) => { text(line, narrContentColX + 4, 9, false, lineY); lineY -= 12; });
+      // Garis bawah PERSIS di batas baris (persis konvensi drawGroupRow) —
+      // abu2 utk pemisah antar baris, hitam pekat kalau ini baris TERAKHIR
+      // seluruh tabel (border penutup).
+      page.drawLine({
+        start: { x: margin, y }, end: { x: tableColEndX, y },
+        thickness: isLastItem ? 0.75 : 0.5, color: isLastItem ? rgb(0, 0, 0) : rgb(0.6, 0.6, 0.6),
+      });
+      page.drawLine({ start: { x: margin, y: rowTop }, end: { x: margin, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: tableColEndX, y: rowTop }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      page.drawLine({ start: { x: narrContentColX, y: rowTop }, end: { x: narrContentColX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+    };
+
+    if (!allMorfologiPdf) drawTableHeader();
     let lastGroup = '';
     items.forEach((it, idx) => {
+      const morfologiItem = isMorfologi(it.nm_perawatan);
+      if (it.nm_perawatan !== lastGroup) {
+        lastGroup = it.nm_perawatan;
+        if (allMorfologiPdf) {
+          if (y - headerHeight < margin + 130) addPage();
+          drawNarrativeHeader(lastGroup);
+        } else {
+          if (y - rowHeight < margin + 130) { addPage(); drawTableHeader(); }
+          drawGroupRow(lastGroup);
+        }
+      }
+      if (morfologiItem) {
+        drawNarrativeItem(it.pemeriksaan, it.hasil, idx === items.length - 1, lastGroup);
+        return;
+      }
       if (y - rowHeight < margin + 130) {
         // batas bawah reserved utk blok ttd (~130pt) — pindah halaman baru
         // kalau tabelnya masih panjang.
         addPage();
         drawTableHeader();
-      }
-      if (it.nm_perawatan !== lastGroup) {
-        lastGroup = it.nm_perawatan;
-        if (y - rowHeight < margin + 130) { addPage(); drawTableHeader(); }
-        drawGroupRow(lastGroup);
       }
       const rowTop = y;
       y -= rowHeight;
@@ -617,7 +722,11 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       // pas baris ini persis sebelum baris judul kelompok berikutnya, krn
       // border ATAS kelompok itu digambar tepat di koordinat `y` yg sama).
       const textY = y + 2;
-      text(truncateToWidth(it.pemeriksaan, 8.5, tableColX[1] - tableColX[0] - 6), tableColX[0] + 4, 8.5, false, textY);
+      // Nama parameter diindentasi 1 "tab" (16pt) dari nama kelompok
+      // pemeriksaan di atasnya (mis. "hemoglobin" masuk ke dalam relatif
+      // "DARAH LENGKAP*") supaya hierarkinya kelihatan jelas.
+      const itemIndent = 16;
+      text(truncateToWidth(it.pemeriksaan, 8.5, tableColX[1] - tableColX[0] - 6 - itemIndent), tableColX[0] + 4 + itemIndent, 8.5, false, textY);
       // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru kalau
       // "L" (rendah), hitam normal selain itu. Kolom lain tetap hitam.
       const ket = (it.keterangan || '').trim().toUpperCase();
@@ -698,17 +807,6 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     const footerSeparatorY = margin - 10;
     page.drawLine({ start: { x: margin, y: footerSeparatorY }, end: { x: pageWidth - margin, y: footerSeparatorY }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) });
     const footerText = 'Dokumen ini sah dan telah ditandatangani secara elektronik menggunakan sertifikat digital yang diterbitkan oleh Peruri';
-    const wrapText = (s: string, maxWidth: number, size = 10): string[] => {
-      const words = s.split(' ');
-      const lines: string[] = [];
-      let line = '';
-      for (const w of words) {
-        const test = line ? `${line} ${w}` : w;
-        if (font.widthOfTextAtSize(test, size) > maxWidth && line) { lines.push(line); line = w; } else { line = test; }
-      }
-      if (line) lines.push(line);
-      return lines;
-    };
     const footerLines = wrapText(footerText, pageWidth - margin * 2, 7.5);
     let footerLineY = footerSeparatorY - 10;
     footerLines.forEach((line) => {
@@ -998,27 +1096,55 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                     <thead>
                       <tr style={{ background: '#f9fafb', color: '#374151' }}>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 180, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Pemeriksaan</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Hasil</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 80, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Satuan</th>
-                        {/* 4 kolom terpisah (bukan digabung 1 kolom) — persis
-                            header tabel Khanza Desktop (tbDetailPK). */}
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.D.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.A.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.D.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.A.</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 90, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Keterangan</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: allMorfologi ? 220 : 180, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Pemeriksaan</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: allMorfologi ? 'auto' : 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Hasil</th>
+                        {!allMorfologi && (
+                          <>
+                            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 80, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Satuan</th>
+                            {/* 4 kolom terpisah (bukan digabung 1 kolom) — persis
+                                header tabel Khanza Desktop (tbDetailPK). */}
+                            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.D.</th>
+                            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan L.A.</th>
+                            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.D.</th>
+                            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 100, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Nilai Rujukan P.A.</th>
+                            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f9fafb', padding: '5px 10px', textAlign: 'left', width: 90, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap' }}>Keterangan</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {groupedTemplates.map((g) => (
+                      {groupedTemplates.map((g) => {
+                        const morfologi = isMorfologi(g.nm_perawatan);
+                        const headerColSpan = allMorfologi ? 2 : 8;
+                        return (
                         <React.Fragment key={g.kd_jenis_prw}>
                           <tr style={{ borderTop: '1px solid #e5e7eb' }}>
-                            <td colSpan={8} style={{ padding: '5px 10px', background: '#f9fafb', color: '#111827', fontWeight: 600 }}>{g.nm_perawatan}</td>
+                            <td colSpan={headerColSpan} style={{ padding: '5px 10px', background: '#f9fafb', color: '#111827', fontWeight: 600 }}>{g.nm_perawatan}</td>
                           </tr>
                           {g.items.map((t) => {
                             const isHigh = (nilaiMap[t.id_template]?.keterangan || '').trim().toUpperCase() === 'H';
                             const redText = isHigh ? '#dc2626' : undefined;
+                            if (morfologi) {
+                              // Morfologi (mis. Morfologi Darah Tepi/MDT) —
+                              // hasilnya narasi bebas per parameter (Eritrosit/
+                              // Leukosit/Trombosit/Kesimpulan), bukan angka dgn
+                              // nilai rujukan — jadi cuma Pemeriksaan+Hasil yg
+                              // tampil (kolom lain disembunyikan via colSpan),
+                              // Hasil pakai textarea multi-baris & lebih tinggi.
+                              return (
+                                <tr key={t.id_template} style={{ borderTop: '1px solid #f3f4f6' }}>
+                                  <td style={{ padding: '4px 10px', color: redText || '#111827', verticalAlign: 'top' }}>{t.pemeriksaan}</td>
+                                  <td style={{ padding: '4px 6px' }} colSpan={allMorfologi ? 1 : 7}>
+                                    <textarea
+                                      rows={3}
+                                      value={nilaiMap[t.id_template]?.nilai || ''}
+                                      onChange={(ev) => updateNilai(t.id_template, { nilai: ev.target.value })}
+                                      style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, outline: 'none', boxSizing: 'border-box', color: redText, resize: 'vertical', fontFamily: 'inherit' }}
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            }
                             return (
                               <tr key={t.id_template} style={{ borderTop: '1px solid #f3f4f6' }}>
                                 <td style={{ padding: '2px 10px', color: redText || '#111827' }}>{t.pemeriksaan}</td>
@@ -1047,7 +1173,8 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
                             );
                           })}
                         </React.Fragment>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

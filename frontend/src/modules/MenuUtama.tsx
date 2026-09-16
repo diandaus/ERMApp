@@ -18,6 +18,7 @@ type MenuKey =
   | 'rekam-medis'
   | 'berkas-digital'
   | 'jadwal-operasi'
+  | 'tarif-pelayanan'
   | 'laporan'
   | 'admin'
   | 'satu-sehat'
@@ -163,6 +164,13 @@ export const MenuUtamaView: React.FC<MenuUtamaViewProps> = ({ user, setActiveMen
       description: 'Penjadwalan & manajemen operasi ruang OK',
       icon: '🗓️',
       category: 'klinik',
+    },
+    {
+      key: 'tarif-pelayanan',
+      label: 'Tarif Pelayanan',
+      description: 'Kelola tarif Kamar, Ralan, Ranap, Lab & Radiologi',
+      icon: '💲',
+      category: 'manajemen',
     },
     {
       key: 'laporan',
