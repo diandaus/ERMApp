@@ -279,14 +279,38 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
 
       type CetakItem = { nm_perawatan: string; pemeriksaan: string; hasil: string; satuan: string; nilai_rujukan: string; keterangan: string };
       const items: CetakItem[] = data.hasil || [];
+      // allMorfologiPrint — sama konsep dgn allMorfologiPdf di
+      // buildHasilLabPKPdfUntukTtd: pemeriksaan "Morfologi" (mis. MDT)
+      // hasilnya narasi bebas tanpa nilai rujukan, jadi kolom Satuan/Nilai
+      // Rujukan/Keterangan disembunyikan & judul dokumen berubah jadi
+      // "HASIL PEMERIKSAAN MDT".
+      const allMorfologiPrint = items.length > 0 && items.every((it) => isMorfologi(it.nm_perawatan));
       // Baris judul kelompok pemeriksaan (mis. "DARAH LENGKAP") — disisipkan
       // tiap kali nm_perawatan berganti, sama pola dgn tabel on-screen modal
       // ini & tabel di buildHasilLabPKPdfUntukTtd.
       let lastGroup = '';
       const rowsHtml = items.map((it) => {
+        const morfologiItem = isMorfologi(it.nm_perawatan);
+        const groupColspan = allMorfologiPrint ? 2 : 5;
+        // Kalau allMorfologiPrint, baris judul kelompok ini SEKALIGUS jadi
+        // header tabel (latar abu2 #f3f4f6 spt <thead> th) krn <thead>
+        // "Pemeriksaan|Hasil" generik-nya sengaja dihilangkan di mode ini.
         const groupRow = it.nm_perawatan !== lastGroup
-          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="5" style="background:#ffffff;border-bottom-color:#9ca3af;">${it.nm_perawatan}</td></tr>`)
+          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="${groupColspan}" style="background:${allMorfologiPrint ? '#f3f4f6' : '#ffffff'};border-bottom-color:${allMorfologiPrint ? '#333' : '#9ca3af'};">${it.nm_perawatan}</td></tr>`)
           : '';
+        if (morfologiItem) {
+          // Morfologi — cuma Pemeriksaan+Hasil, kolom Satuan/Nilai Rujukan/
+          // Keterangan disembunyikan (Hasil merentang via colspan). Baris
+          // baru di textarea (multi-baris) diubah jadi <br/> krn HTML
+          // meratakan \n polos jadi satu baris.
+          const hasilHtml = (it.hasil || '-').split('\n').map((line) => line || '&nbsp;').join('<br/>');
+          return `${groupRow}
+        <tr>
+          <td style="padding-left:1.5em;">${it.pemeriksaan}</td>
+          <td colspan="4">${hasilHtml}</td>
+        </tr>
+      `;
+        }
         // Kolom Hasil saja — merah kalau Keterangan "H" (tinggi), biru
         // kalau "L" (rendah), padanan warna di buildHasilLabPKPdfUntukTtd.
         const ket = (it.keterangan || '').trim().toUpperCase();
@@ -305,7 +329,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       printWindow.document.write(`
         <html>
           <head>
-            <title>Hasil Pemeriksaan Laboratorium - ${data.no_permintaan_lab}</title>
+            <title>${allMorfologiPrint ? 'Hasil Pemeriksaan MDT' : 'Hasil Pemeriksaan Laboratorium'} - ${data.no_permintaan_lab}</title>
             <style>
               @page { size: 210mm 297mm; margin-top: 14px; }
               body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 0 16px 16px; color: #000; }
@@ -317,7 +341,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               table.info td.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
               table.info td.nowrap { white-space: nowrap; }
               table.hasil { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10.5pt; }
-              table.hasil th, table.hasil td { border: 1px solid #333; padding: 4px 6px; text-align: left; }
+              table.hasil th, table.hasil td { border: 1px solid #333; padding: 4px 6px; text-align: left; vertical-align: top; }
               table.hasil th { background: #f3f4f6; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
               .rs-nama { font-size: 14pt; }
@@ -339,7 +363,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               </tr>
             </table>
             <hr/>
-            <center><div class="judul">HASIL PEMERIKSAAN LABORATORIUM</div></center>
+            <center><div class="judul">${allMorfologiPrint ? 'HASIL PEMERIKSAAN MDT' : 'HASIL PEMERIKSAAN LABORATORIUM'}</div></center>
 
             <table class="info">
               <colgroup>
@@ -373,9 +397,11 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
             </table>
 
             <table class="hasil">
+              ${allMorfologiPrint ? '' : `
               <thead>
                 <tr><th>Pemeriksaan</th><th>Hasil</th><th>Satuan</th><th>Nilai Rujukan</th><th>Keterangan</th></tr>
               </thead>
+              `}
               <tbody>${rowsHtml}</tbody>
             </table>
 
