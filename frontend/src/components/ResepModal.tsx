@@ -51,6 +51,11 @@ type Racikan = {
   detail: RacikanDetail[];
 };
 
+type ResepRacikanTemplateItem = {
+  id: number; nama_template: string; metode_racik: string; jml_dr: number;
+  aturan_pakai: string; keterangan: string; detail: RacikanDetail[];
+};
+
 // Input inline tabel master racikan — tanpa garis tabel (borderless), cuma
 // border tipis di tiap input sendiri, padanan gaya screenshot yang
 // diminta user (beda dari tabel Bootstrap `table-bordered` yang dipakai
@@ -274,6 +279,22 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     setRiwayatVisible(false);
   }, [showModalRiwayatResep]);
   const [loadingRiwayatResep, setLoadingRiwayatResep] = React.useState(false);
+
+  // Template Resep Racikan State — panel slide-in dari KIRI, sama persis
+  // pola Modal Riwayat Resep (dibuka dari tombol mengambang "Template
+  // Resep"), tapi isinya daftar template racikan tersimpan (bisa dipakai
+  // ulang atau dihapus).
+  const [showModalTemplateResep, setShowModalTemplateResep] = React.useState(false);
+  const [templateResepVisible, setTemplateResepVisible] = React.useState(false);
+  React.useEffect(() => {
+    if (showModalTemplateResep) {
+      const t = setTimeout(() => setTemplateResepVisible(true), 10);
+      return () => clearTimeout(t);
+    }
+    setTemplateResepVisible(false);
+  }, [showModalTemplateResep]);
+  const [loadingTemplateResep, setLoadingTemplateResep] = React.useState(false);
+  const [templateResepList, setTemplateResepList] = React.useState<ResepRacikanTemplateItem[]>([]);
   const [riwayatResep, setRiwayatResep] = React.useState<any[]>([]);
 
   // Pre-fill items saat mode edit resep yang sudah ada
@@ -731,6 +752,88 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   };
   const activeRacikan = racikanList[activeRacikanIdx] ?? racikanList[0];
 
+  // Template Resep Racikan — tombol mengambang "Template Resep" (di atas
+  // "Riwayat Resep") biar dokter/petugas tinggal pilih susunan racikan yg
+  // sudah pernah disimpan (nama racikan, metode racik, jml, aturan pakai,
+  // keterangan, + daftar obatnya) tanpa mengetik ulang dari nol. Begitu
+  // racikan aktif sudah ada isinya, tombol "Jadikan Template Resep" muncul
+  // utk menyimpan susunan saat ini sbg template baru. Sama pola dgn
+  // Template Hasil Pemeriksaan di ModalHasilLabPK.tsx (Swal list + hapus).
+  const handleSimpanTemplateRacikanBaru = async () => {
+    if (!activeRacikan || activeRacikan.detail.length === 0) return;
+    const { value: nama } = await Swal.fire({
+      title: 'Jadikan Template Resep',
+      input: 'text',
+      inputLabel: 'Nama Template',
+      inputValue: activeRacikan.nama_racikan || '',
+      inputPlaceholder: 'mis. Puyer Batuk Anak',
+      showCancelButton: true,
+      confirmButtonText: 'Simpan',
+      cancelButtonText: 'Batal',
+      inputValidator: (v) => (!v || !v.trim() ? 'Nama template wajib diisi' : undefined),
+    });
+    if (!nama) return;
+    try {
+      const res = await fetch('/api/resep/racikan-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nama_template: nama.trim(),
+          metode_racik: activeRacikan.metode_racik,
+          jml_dr: activeRacikan.jml_dr,
+          aturan_pakai: activeRacikan.aturan_pakai,
+          keterangan: activeRacikan.keterangan,
+          detail: activeRacikan.detail.map((d) => ({
+            kode_brng: d.kode_brng, nama_brng: d.nama_brng, kode_sat: d.kode_sat,
+            kapasitas: d.kapasitas, kandungan: d.kandungan, jml: d.jml,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan template');
+      Swal.fire({ icon: 'success', title: 'Tersimpan!', text: `Template "${nama.trim()}" siap dipakai lagi`, timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
+
+  // Modal Template Resep — panel slide-in dari kiri, sama persis pola
+  // Modal Riwayat Resep (openModalRiwayatResep/closeModalRiwayatResep),
+  // tapi isinya daftar template racikan lengkap dgn nama obat/jumlah/
+  // metode racik per template (bukan cuma nama template spt versi Swal
+  // sebelumnya).
+  const openModalTemplateResep = async () => {
+    setShowModalRiwayatResep(false); // tutup Riwayat dulu kalau sedang terbuka
+    setShowModalTemplateResep(true);
+    setLoadingTemplateResep(true);
+    try {
+      const res = await fetch('/api/resep/racikan-template');
+      const data = res.ok ? await res.json() : [];
+      setTemplateResepList(Array.isArray(data) ? data : []);
+    } catch {
+      setTemplateResepList([]);
+    } finally {
+      setLoadingTemplateResep(false);
+    }
+  };
+
+  const closeModalTemplateResep = () => {
+    setShowModalTemplateResep(false);
+  };
+
+  const applyTemplateResep = (tmpl: ResepRacikanTemplateItem) => {
+    updateRacikanAt(activeRacikanIdx, (prev) => ({
+      ...prev,
+      nama_racikan: tmpl.nama_template,
+      metode_racik: tmpl.metode_racik || prev.metode_racik,
+      jml_dr: tmpl.jml_dr || prev.jml_dr,
+      aturan_pakai: tmpl.aturan_pakai || prev.aturan_pakai,
+      keterangan: tmpl.keterangan || prev.keterangan,
+      detail: tmpl.detail.map((d) => ({ ...d })),
+    }));
+    closeModalTemplateResep();
+  };
+
   // Pilih Obat Racikan
   const pilihObatRacikan = (obat: ObatItem) => {
     if (obat.stok <= 0) {
@@ -1041,6 +1144,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
   // Open Modal Riwayat Resep
   const openModalRiwayatResep = async () => {
+    setShowModalTemplateResep(false); // tutup Template Resep dulu kalau sedang terbuka
     setShowModalRiwayatResep(true);
     setLoadingRiwayatResep(true);
 
@@ -1662,7 +1766,21 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
                 <div className="tab-content-resep" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 0 }}>
                 <div className="mb-3" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                  <label className="form-label">Daftar Obat — {activeRacikan?.nama_racikan || `Racikan ${activeRacikanIdx + 1}`}</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <label className="form-label" style={{ marginBottom: 0 }}>Daftar Obat — {activeRacikan?.nama_racikan || `Racikan ${activeRacikanIdx + 1}`}</label>
+                    {(activeRacikan?.detail ?? []).length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleSimpanTemplateRacikanBaru}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 0, border: '1px solid #1AB1E5', background: '#fff', color: '#1AB1E5', fontSize: 11.5, fontWeight: 400, cursor: 'pointer', flexShrink: 0 }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Jadikan Template Resep
+                      </button>
+                    )}
+                  </div>
                   {(activeRacikan?.detail ?? []).length === 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
@@ -1714,6 +1832,30 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               </div>
             )}
           </div>
+
+          {/* Tombol mengambang "Template Resep" — cuma di tab Racikan,
+              posisi absolute relatif ke panel (yg position:absolute), jadi
+              tetap di tempat walau body di atasnya discroll, mengambang
+              persis di atas tombol "Riwayat Resep" di footer. */}
+          {activeResepTab === 'racikan' && (
+            <div style={{ position: 'absolute', left: 20, bottom: 76, zIndex: 5 }}>
+              <button
+                type="button"
+                onClick={openModalTemplateResep}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 14px', borderRadius: 0, border: '1px solid #1AB1E5',
+                  background: '#ffffff', color: '#1AB1E5', cursor: 'pointer', fontSize: 12, fontWeight: 400,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Template Resep
+              </button>
+            </div>
+          )}
 
           {/* Footer — sticky, di luar area scroll body, PERSIS pola
               ModalInputTriase.tsx (padding 16, borderTop). */}
@@ -1925,7 +2067,12 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
           krn modal ini dibuka DARI DALAM modal Resep. */}
       {showModalRiwayatResep && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1001 }}
+          // Lebar overlay disamakan PERSIS dgn lebar panel (bukan inset:0/
+          // full viewport) — supaya klik di panel Resep sebelah kanan
+          // (mis. tombol "Template Resep") TIDAK ketutup overlay ini &
+          // langsung nyambung ke handler-nya sendiri dalam SATU klik,
+          // bukan cuma nutup Riwayat dulu (perlu klik 2x spt sebelumnya).
+          style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: '50vw', maxWidth: '90vw', zIndex: 1001 }}
           onClick={closeModalRiwayatResep}
         >
           <div
@@ -2063,6 +2210,137 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                 </tr>
                               ))}
                             </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Template Resep — panel slide-in dari KIRI, sama persis pola
+          Modal Riwayat Resep di atas (overlay transparan, lebar 50vw,
+          berdampingan dgn panel Resep di kanan). Isinya daftar template
+          racikan lengkap: nama racikan, metode racik, jumlah, aturan
+          pakai, dan tabel obatnya (nama/kandungan/jumlah/satuan) — bukan
+          cuma nama template spt versi ringkas sebelumnya. */}
+      {showModalTemplateResep && (
+        <div
+          // Sama alasan dgn overlay Modal Riwayat Resep — lebar disamakan
+          // persis dgn panel (bukan inset:0/full viewport) supaya klik di
+          // tombol "Riwayat Resep" di panel Resep sebelah kanan langsung
+          // nyambung dlm SATU klik, tidak ketutup overlay ini dulu.
+          style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: '50vw', maxWidth: '90vw', zIndex: 1001 }}
+          onClick={closeModalTemplateResep}
+        >
+          <div
+            style={{
+              position: 'absolute', top: 0, left: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+              background: '#ffffff', boxShadow: '8px 0 24px rgba(0,0,0,0.15)',
+              display: 'flex', flexDirection: 'column',
+              transform: templateResepVisible ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.3s ease',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <span style={{ color: '#000000', fontSize: 12, fontWeight: 400 }}>Template Resep Racikan</span>
+              <button
+                type="button"
+                onClick={closeModalTemplateResep}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+                  background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+                  flexShrink: 0,
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20, minHeight: 0 }}>
+              {loadingTemplateResep ? (
+                <div className="text-center p-5">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : templateResepList.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+                  <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Template Resep</div>
+                  <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Isi racikan lalu klik "Jadikan Template Resep" utk menyimpannya di sini.</div>
+                </div>
+              ) : (
+                <div className="resep-history-container">
+                  {templateResepList.map((tmpl) => (
+                    <div key={tmpl.id} style={{ marginBottom: 16 }}>
+                      <table className="table table-sm table-bordered mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th>Nama Template</th>
+                            <th>Metode Racik</th>
+                            <th>Jumlah</th>
+                            <th>Aturan Pakai</th>
+                            <th style={{ width: 150 }}>
+                              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={() => applyTemplateResep(tmpl)}
+                                  className="btn btn-sm btn-primary"
+                                  title="Pakai template ini"
+                                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, whiteSpace: 'nowrap', fontWeight: 400, fontSize: 11, borderRadius: 0, padding: '4px 26px' }}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                  </svg>
+                                  Pilih
+                                </button>
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>{tmpl.nama_template}</td>
+                            <td>{tmpl.metode_racik || '-'}</td>
+                            <td>{tmpl.jml_dr}</td>
+                            <td colSpan={2}>{tmpl.aturan_pakai || '-'}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table className="table table-sm table-bordered" style={{ tableLayout: 'fixed' }}>
+                        <colgroup>
+                          <col style={{ width: '5%' }} />
+                          <col style={{ width: '15%' }} />
+                          <col />
+                          <col style={{ width: '15%' }} />
+                          <col style={{ width: '10%' }} />
+                        </colgroup>
+                        <thead className="table-light">
+                          <tr>
+                            <th>No</th>
+                            <th>Kode</th>
+                            <th>Nama Obat</th>
+                            <th>Kandungan</th>
+                            <th>Jumlah</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tmpl.detail.map((d, idx) => (
+                            <tr key={idx}>
+                              <td className="text-center">{idx + 1}</td>
+                              <td>{d.kode_brng}</td>
+                              <td>{d.nama_brng}</td>
+                              <td className="text-center">{d.kandungan || '-'}</td>
+                              <td className="text-center">{d.jml} {d.kode_sat}</td>
+                            </tr>
                           ))}
                         </tbody>
                       </table>

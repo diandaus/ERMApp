@@ -812,11 +812,12 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 								// Sertakan NoOrder di filename kalau dikirim (lihat komentar
 								// field NoOrder di atas) — cegah 2+ permintaan dgn no_rawat
 								// sama saling menimpa file satu sama lain di Berkas Rawat.
-								fileName := prefix + strings.ReplaceAll(reqIn.NoRawat, "/", "_")
+								// Urutan: NoOrder (no permintaan) dulu, baru NoRawat setelahnya.
+								fileName := prefix
 								if reqIn.NoOrder != "" {
-									fileName += "_" + strings.ReplaceAll(reqIn.NoOrder, "/", "_")
+									fileName += strings.ReplaceAll(reqIn.NoOrder, "/", "_") + "_"
 								}
-								fileName += "_signed.pdf"
+								fileName += strings.ReplaceAll(reqIn.NoRawat, "/", "_") + "_signed.pdf"
 								if wErr := WriteWebappsFile(webappsCfg, "berkasrawat/pages/upload", fileName, pdfBytes); wErr == nil {
 									uploaded = true
 								}

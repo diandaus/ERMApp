@@ -829,10 +829,11 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       // garis yg sudah benar (mis. border bawah header yg hitam, ketiban
       // jadi abu2). Cukup garis bawah kotak ini saja yg abu2.
       page.drawLine({ start: { x: margin, y }, end: { x: tableColEndX, y }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
-      // Kiri/kanan — border LUAR tabel (nyambung dgn garis kolom di baris
-      // lain), tetap hitam pekat spy tidak putus-putus di baris ini.
-      page.drawLine({ start: { x: margin, y: rowTop }, end: { x: margin, y }, thickness: 0.75, color: rgb(0, 0, 0) });
-      page.drawLine({ start: { x: tableColEndX, y: rowTop }, end: { x: tableColEndX, y }, thickness: 0.75, color: rgb(0, 0, 0) });
+      // Garis kolom (termasuk kiri/kanan) ikut digambar di baris ini juga
+      // (sama spt drawColLines di baris data biasa) — supaya nyambung terus
+      // dgn garis kolom baris di atas/bawahnya, bukan putus tepat di baris
+      // nama pemeriksaan ini.
+      drawColLines(rowTop, y);
     };
 
     // drawNarrativeHeader/drawNarrativeItem — padanan render "Morfologi" di
@@ -1223,7 +1224,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     try {
       const res = await fetch('/api/peruri/download-document', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '', no_order: noorder, prefix: 'HasilLabPK_' }),
+        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '', no_order: noorder, prefix: 'Lab_' }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');

@@ -1014,6 +1014,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel lab_pk_hasil_template: %v", err)
 	}
 
+	if err := ensureResepRacikanTemplateTables(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel resep_racikan_template: %v", err)
+	}
+
 	if err := ensureSatuSehatPasienDokterTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel satu_sehat_pasien/satu_sehat_dokter: %v", err)
 	}
@@ -3456,6 +3460,11 @@ func main() {
 	r.POST("/api/lab-pk/hasil-template", createLabPkHasilTemplate(db))
 	r.DELETE("/api/lab-pk/hasil-template/:id", deleteLabPkHasilTemplate(db))
 
+	// Template Resep Racikan (ResepModal.tsx, tombol "Template Resep" / "Jadikan Template Resep")
+	r.GET("/api/resep/racikan-template", getResepRacikanTemplateList(db))
+	r.POST("/api/resep/racikan-template", createResepRacikanTemplate(db))
+	r.DELETE("/api/resep/racikan-template/:id", deleteResepRacikanTemplate(db))
+
 	// Tarif Lab — daftar utama (menu Tarif Pelayanan > Tarif Lab)
 	r.GET("/api/tarif-lab/list", getTarifLabList(db))
 	r.POST("/api/tarif-lab/jenis-perawatan", createTarifLabJenisPerawatan(db))
@@ -3514,6 +3523,12 @@ func main() {
 	r.GET("/api/lab-pk/cetak/:noorder", getCetakHasilLabPK(db))
 	r.POST("/api/lab-pk/hasil", saveHasilLabPK(db))
 	r.POST("/api/lab-pk/sampel/:noorder", setSampelLabPK(db))
+
+	// Modul LaboratoriumPA.tsx (worklist departemen Laboratorium PA)
+	r.GET("/api/lab-pa/list", getPermintaanLabPAList(db))
+	r.POST("/api/lab-pa/sampel/:noorder", setSampelLabPA(db))
+	r.GET("/api/lab-pa/permintaan/:noorder", getPermintaanLabPADetail(db))
+	r.POST("/api/lab-pa/hasil", saveHasilLabPA(db))
 
 	// Riwayat Perawatan endpoint
 	r.GET("/api/riwayat-perawatan/:no_rkm_medis", getRiwayatPerawatan(db))

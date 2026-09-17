@@ -11,6 +11,7 @@ import { ApotekView } from './Apotek';
 import { JadwalOperasiView } from './JadwalOperasi';
 import { RadiologiView } from './Radiologi';
 import { LaboratoriumPKView } from './LaboratoriumPK';
+import { LaboratoriumPAView } from './LaboratoriumPA';
 import { RegistrasiView } from './Registrasi';
 import { IGDKView } from './IGDK';
 import { DisplayAntrianView } from './DisplayAntrian';
@@ -555,12 +556,7 @@ export const App: React.FC = () => {
       case 'laboratorium-pk':
         return <LaboratoriumPKView user={user} />;
       case 'laboratorium-pa':
-        return (
-          <section style={{ background: '#ffffff', borderRadius: 16, padding: 24, boxShadow: '0 10px 30px rgba(15,23,42,0.08)', border: '1px solid #e5e7eb' }}>
-            <h2 style={{ marginTop: 0 }}>Laboratorium PA</h2>
-            <p style={{ color: '#6b7280' }}>Pemeriksaan lab PA & hasil laboratorium — segera hadir, menyusul Laboratorium PK.</p>
-          </section>
-        );
+        return <LaboratoriumPAView user={user} />;
       case 'kepegawaian':
         // Layout sendiri (sidebar + full layar), lepas dari shell aplikasi
         // sepenuhnya — persis pola ApotekView/BridgingBpjsView.
