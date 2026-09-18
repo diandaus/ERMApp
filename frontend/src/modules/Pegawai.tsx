@@ -1,6 +1,15 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { ModalTambahPegawai } from '../components/ModalTambahPegawai';
+import { mediaUrl } from '../utils/apiBase';
+
+// Sama pola isUsablePhotoUrl di App.tsx/ModalTambahPegawai.tsx — path
+// legacy Khanza desktop (mis. "pages/pegawai/photo/xxx.jpg") tidak bisa
+// diakses backend web ini, cuma URL hasil upload baru (/uploads/...) yg
+// dipakai.
+function isUsablePhotoUrl(photo: string): boolean {
+  return photo.startsWith('/uploads/') || photo.startsWith('http://') || photo.startsWith('https://');
+}
 
 type Pegawai = {
   nik: string; nama: string; jk: string; jbtn: string;
@@ -449,12 +458,16 @@ export const PegawaiView: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 36, height: 36, borderRadius: '50%',
+              width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
               background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-              </svg>
+              {selectedPegawai.photo && isUsablePhotoUrl(selectedPegawai.photo) ? (
+                <img src={mediaUrl(selectedPegawai.photo)} alt={selectedPegawai.nama} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                </svg>
+              )}
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{selectedPegawai.nama}</div>

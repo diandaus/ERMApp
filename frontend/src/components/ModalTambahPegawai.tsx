@@ -1,5 +1,6 @@
 import React from 'react';
 import Swal from 'sweetalert2';
+import { mediaUrl } from '../utils/apiBase';
 
 type PegawaiForm = {
   nik: string; nama: string; jk: string; jbtn: string;
@@ -9,7 +10,17 @@ type PegawaiForm = {
   alamat: string; kota: string; mulai_kerja: string; ms_kerja: string;
   indexins: string; bpd: string; rekening: string; stts_aktif: string;
   wajibmasuk: number; mulai_kontrak: string; no_ktp: string; email: string;
+  photo: string;
 };
+
+// pegawai.photo sering berisi path legacy Khanza desktop (mis.
+// "pages/pegawai/photo/xxx.jpg") yang tidak bisa diakses backend web ini —
+// hanya dipakai kalau sudah berupa URL yang valid (/uploads/... hasil
+// upload baru, atau http/https), selain itu tampilkan placeholder kosong.
+// Sama pola dgn isUsablePhotoUrl di App.tsx/PresensiMobile.tsx.
+function isUsablePhotoUrl(photo: string): boolean {
+  return photo.startsWith('/uploads/') || photo.startsWith('http://') || photo.startsWith('https://');
+}
 
 interface Props {
   isOpen: boolean;
@@ -47,7 +58,7 @@ const INIT: PegawaiForm = {
   npwp: '', pendidikan: '-', tmp_lahir: '', tgl_lahir: '',
   alamat: '', kota: '', mulai_kerja: '', ms_kerja: '<1',
   indexins: '-', bpd: '-', rekening: '', stts_aktif: 'AKTIF',
-  wajibmasuk: 0, mulai_kontrak: '', no_ktp: '', email: '',
+  wajibmasuk: 0, mulai_kontrak: '', no_ktp: '', email: '', photo: '',
 };
 
 const iStyle: React.CSSProperties = {
@@ -112,6 +123,8 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
   const [saving, setSaving] = React.useState(false);
   const [error, setError]   = React.useState<string | null>(null);
   const [master, setMaster] = React.useState<Master>(EMPTY_MASTER);
+  const [uploadingFoto, setUploadingFoto] = React.useState(false);
+  const fotoInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     fetch('/api/pegawai/master').then(r => r.json()).then(d => setMaster(d)).catch(() => {});
@@ -126,6 +139,31 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
 
   const set = (k: keyof PegawaiForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [k]: k === 'wajibmasuk' ? parseInt(e.target.value) || 0 : e.target.value }));
+
+  // Upload foto pegawai — pakai endpoint generik /api/upload yg sudah ada
+  // (sama pola dgn foto profil self-service di PresensiMobile.tsx),
+  // hasilnya (URL /uploads/...) cuma disimpan di form.photo dulu, baru
+  // ikut terkirim ke backend saat "Simpan" (Tambah/Edit) diklik —
+  // sengaja TIDAK langsung PUT ke pegawai di sini krn utk "Tambah Pegawai
+  // Baru" baris pegawainya belum ada sama sekali sampai form ini disubmit.
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengunggah foto');
+      setForm(prev => ({ ...prev, photo: data.url }));
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });
+    } finally {
+      setUploadingFoto(false);
+      if (fotoInputRef.current) fotoInputRef.current.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +216,43 @@ export const ModalTambahPegawai: React.FC<Props> = ({ isOpen, onClose, onSuccess
           <form onSubmit={handleSubmit}>
             {/* ── Section: Identitas ───────────────────────────────────────── */}
             <SectionTitle>Data Identitas</SectionTitle>
+
+            {/* Foto profil — upload lewat /api/upload, URL-nya disimpan di
+                form.photo (ikut terkirim saat Simpan). Preview pakai foto
+                yg sudah ada (isEdit) atau yg baru diunggah. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
+                background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid #e5e7eb',
+              }}>
+                {form.photo && isUsablePhotoUrl(form.photo) ? (
+                  <img src={mediaUrl(form.photo)} alt={form.nama} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 12C14.7614 12 17 9.76142 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76142 9.23858 12 12 12Z" fill="#2563eb" />
+                    <path d="M12 14C6.47715 14 2 17.134 2 21C2 21.5523 2.44772 22 3 22H21C21.5523 22 22 21.5523 22 21C22 17.134 17.5228 14 12 14Z" fill="#2563eb" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <input ref={fotoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFotoChange} />
+                <button
+                  type="button"
+                  onClick={() => fotoInputRef.current?.click()}
+                  disabled={uploadingFoto}
+                  style={{
+                    padding: '6px 14px', borderRadius: 8, border: '1px solid #d1d5db',
+                    background: '#fff', color: '#374151', fontSize: 12, fontWeight: 500,
+                    cursor: uploadingFoto ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {uploadingFoto ? 'Mengunggah...' : (form.photo ? 'Ganti Foto' : 'Upload Foto')}
+                </button>
+                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>JPG/PNG, opsional</div>
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px 16px', marginBottom: 16 }}>
               <F label="NIP / NIK Pegawai" req={!isEdit}>
                 <input style={{ ...iStyle, background: isEdit ? '#f3f4f6' : '#fff', color: isEdit ? '#6b7280' : '#111' }}

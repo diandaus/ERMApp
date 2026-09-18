@@ -7,15 +7,17 @@ import Swal from 'sweetalert2';
 // Pemeriksaan|Jasa Sarana|Paket BHP|J.M. Perujuk|J.M. Dokter|J.M. Petugas|
 // K.S.O.|Menejemen|Total Tarif|Jenis Bayar|Kelas|Kategori. Satu baris =
 // kombinasi (kd_jenis_prw, kd_pj) — satu pemeriksaan bisa muncul beberapa
-// kali kalau tarifnya beda per jenis bayar. Kolom "P" sengaja belum ada
-// aksi (snippet Java yg diberikan cuma berisi tabMode/tampil(), belum ada
-// method Simpan/Edit) — baru tampilan baca saja dulu.
+// kali kalau tarifnya beda per jenis bayar. Kolom "P" (checkbox) SUDAH
+// aktif — centang MULTI baris khusus utk hapus massal ("Hapus Terpilih"),
+// BUKAN utk ditampilkan ke modal; centang PERSIS SATU baris lalu klik
+// "+ Tambah Tarif Lab" -> modal terbuka mode EDIT terisi data baris itu
+// (bukan tambah baru).
 
 type TarifLabRow = {
   kd_jenis_prw: string; nm_perawatan: string;
   bagian_rs: number; bhp: number; tarif_perujuk: number; tarif_tindakan_dokter: number;
   tarif_tindakan_petugas: number; kso: number; menejemen: number; total_byr: number;
-  png_jawab: string; kelas: string; kategori: string;
+  kd_pj: string; png_jawab: string; kelas: string; kategori: string;
 };
 
 const inputStyle: React.CSSProperties = {
@@ -84,14 +86,27 @@ const emptyForm = () => ({
   tarif_tindakan_petugas: '0', kso: '0', menejemen: '0',
 });
 
+const formFromRow = (row: TarifLabRow) => ({
+  kd_jenis_prw: row.kd_jenis_prw, nm_perawatan: row.nm_perawatan, kd_pj: row.kd_pj,
+  kelas: row.kelas, kategori: row.kategori,
+  bagian_rs: String(row.bagian_rs), bhp: String(row.bhp), tarif_perujuk: String(row.tarif_perujuk),
+  tarif_tindakan_dokter: String(row.tarif_tindakan_dokter), tarif_tindakan_petugas: String(row.tarif_tindakan_petugas),
+  kso: String(row.kso), menejemen: String(row.menejemen),
+});
+
 // ModalTambahTarifLab — form "+ Tambah Tarif Lab", padanan field yg
 // ditampilkan tabel utama (kd_jenis_prw jadi PK jns_perawatan_lab, jadi
 // WAJIB unik — satu exam yg tarifnya beda per jenis bayar disimpan sbg
 // baris terpisah dgn kode beda, persis data existing "101-K.3"/"102-K.2").
 // Total Tarif read-only, dihitung live dari 7 komponen biaya (server juga
-// menghitung ulang, angka dari form ini cuma utk preview).
-const ModalTambahTarifLab: React.FC<{ onClose: () => void; onSaved: () => void }> = ({ onClose, onSaved }) => {
-  const [form, setForm] = React.useState(emptyForm());
+// menghitung ulang, angka dari form ini cuma utk preview). editRow — kalau
+// diisi (persis SATU baris dicentang di kolom "P" lalu klik tombol tambah),
+// modal jadi mode EDIT: form terisi data baris itu, Kode Periksa dikunci
+// (kd_jenis_prw primary key, tidak boleh diubah lewat sini), submit PUT
+// bukan POST.
+const ModalTambahTarifLab: React.FC<{ editRow?: TarifLabRow | null; onClose: () => void; onSaved: () => void }> = ({ editRow, onClose, onSaved }) => {
+  const isEdit = !!editRow;
+  const [form, setForm] = React.useState(editRow ? formFromRow(editRow) : emptyForm());
   const [penjabList, setPenjabList] = React.useState<PenjabOpsi[]>([]);
   const [saving, setSaving] = React.useState(false);
 
@@ -113,10 +128,18 @@ const ModalTambahTarifLab: React.FC<{ onClose: () => void; onSaved: () => void }
       Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih Jenis Bayar dulu' });
       return;
     }
+    // Kode Periksa DIUBAH di mode edit -> jadi baris BARU (POST), bukan PUT
+    // ke kode lama — memudahkan user bikin tarif baru yg mirip: tinggal
+    // buka edit baris yg sudah ada, ganti Kode Periksa (+ field lain kalau
+    // perlu), klik Simpan, langsung jadi baris baru tanpa isi dari nol.
+    // Kode Periksa TETAP SAMA di mode edit -> PUT spt biasa (edit di tempat).
+    const kodeBerubah = isEdit && form.kd_jenis_prw.trim() !== editRow!.kd_jenis_prw;
+    const jadiEdit = isEdit && !kodeBerubah;
     setSaving(true);
     try {
-      const res = await fetch('/api/tarif-lab/jenis-perawatan', {
-        method: 'POST',
+      const url = jadiEdit ? `/api/tarif-lab/jenis-perawatan/${encodeURIComponent(editRow!.kd_jenis_prw)}` : '/api/tarif-lab/jenis-perawatan';
+      const res = await fetch(url, {
+        method: jadiEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kd_jenis_prw: form.kd_jenis_prw.trim(),
@@ -135,7 +158,7 @@ const ModalTambahTarifLab: React.FC<{ onClose: () => void; onSaved: () => void }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
-      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Tarif Lab tersimpan', timer: 1800, showConfirmButton: false });
+      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: `Tarif Lab ${jadiEdit ? 'berhasil diperbarui' : 'ditambahkan sebagai baris baru'}`, timer: 1800, showConfirmButton: false });
       onSaved();
       onClose();
     } catch (err) {
@@ -155,7 +178,7 @@ const ModalTambahTarifLab: React.FC<{ onClose: () => void; onSaved: () => void }
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{ fontSize: 15, fontWeight: 400, color: '#111827' }}>Tambah Tarif Lab</span>
+          <span style={{ fontSize: 15, fontWeight: 400, color: '#111827' }}>{isEdit ? 'Edit Tarif Lab' : 'Tambah Tarif Lab'}</span>
           <button
             type="button"
             onClick={onClose}
@@ -172,7 +195,12 @@ const ModalTambahTarifLab: React.FC<{ onClose: () => void; onSaved: () => void }
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,40%) minmax(0,60%)', gap: '10px 24px' }}>
             {/* Kolom kiri */}
             <Row label="Kode Periksa" width={110}>
-              <input required style={pillInputStyle} value={form.kd_jenis_prw} onChange={(e) => setForm((p) => ({ ...p, kd_jenis_prw: e.target.value }))} />
+              <input
+                required
+                style={pillInputStyle}
+                title={isEdit ? 'Ganti kode ini utk simpan sbg baris BARU (bukan edit baris yg sedang dibuka)' : undefined}
+                value={form.kd_jenis_prw} onChange={(e) => setForm((p) => ({ ...p, kd_jenis_prw: e.target.value }))}
+              />
             </Row>
             <Row label="Nama Pemeriksaan" width={150}>
               <input required style={pillInputStyle} value={form.nm_perawatan} onChange={(e) => setForm((p) => ({ ...p, nm_perawatan: e.target.value }))} />
@@ -470,10 +498,22 @@ export const TarifLabView: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [showTambah, setShowTambah] = React.useState(false);
+  const [editTarget, setEditTarget] = React.useState<TarifLabRow | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [menuKey, setMenuKey] = React.useState<string | null>(null);
   const [menuPos, setMenuPos] = React.useState<{ top: number; left: number; alignBottom?: boolean } | null>(null);
   const [templateRow, setTemplateRow] = React.useState<TarifLabRow | null>(null);
+  // copySourceRow — non-null berarti "mode Copy Template" aktif: klik
+  // berikutnya di baris Nama Pemeriksaan MANAPUN (kecuali baris sumber
+  // sendiri) dianggap sbg pemilihan tujuan, bukan buka dropdown menu spt
+  // biasa. Lihat handleCopyTemplate/handleKonfirmasiCopyTarget.
+  const [copySourceRow, setCopySourceRow] = React.useState<TarifLabRow | null>(null);
+  // checkedKeys — kolom "P", key-nya kd_jenis_prw (primary key jns_perawatan_lab,
+  // jadi sudah unik per baris). Centang MULTI baris khusus utk hapus massal;
+  // centang PERSIS SATU baris lalu klik "+ Tambah Tarif Lab" -> buka modal
+  // mode edit baris itu (lihat editRow di bawah).
+  const [checkedKeys, setCheckedKeys] = React.useState<Set<string>>(new Set());
+  const [deletingBulk, setDeletingBulk] = React.useState(false);
 
   React.useEffect(() => {
     setLoading(true);
@@ -483,12 +523,93 @@ export const TarifLabView: React.FC = () => {
       if (search.trim()) params.set('search', search.trim());
       fetch(`/api/tarif-lab/list?${params}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Gagal memuat daftar Tarif Lab'))))
-        .then((data) => setRows(Array.isArray(data) ? data : []))
+        .then((data) => { setRows(Array.isArray(data) ? data : []); setCheckedKeys(new Set()); })
         .catch((err) => { setRows([]); setError(err instanceof Error ? err.message : 'Terjadi kesalahan'); })
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(t);
   }, [search, reloadKey]);
+
+  const toggleChecked = (kd: string) => {
+    setCheckedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(kd)) next.delete(kd); else next.add(kd);
+      return next;
+    });
+  };
+
+  const handleHapusTerpilih = async () => {
+    if (checkedKeys.size === 0) return;
+    const result = await Swal.fire({
+      icon: 'warning', title: 'Hapus Tarif Terpilih?',
+      text: `${checkedKeys.size} baris tarif lab akan dihapus permanen.`,
+      showCancelButton: true, confirmButtonColor: '#dc2626', cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal',
+    });
+    if (!result.isConfirmed) return;
+    setDeletingBulk(true);
+    try {
+      const res = await fetch('/api/tarif-lab/jenis-perawatan', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kd_jenis_prw: Array.from(checkedKeys) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus');
+      setCheckedKeys(new Set());
+      setReloadKey((k) => k + 1);
+      Swal.fire({ icon: 'success', title: 'Berhasil!', text: `${data.deleted} baris tarif lab dihapus`, timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setDeletingBulk(false);
+    }
+  };
+
+  // handleCopyTemplate — "Copy Template" di menu dropdown Nama Pemeriksaan:
+  // notif konfirmasi dulu (tanpa dropdown pilih tujuan), klik "Salin" ->
+  // modal tutup & masuk "mode pilih tujuan" (copySourceRow terisi). User
+  // lanjut klik LANGSUNG baris pemeriksaan tujuan di tabel halaman ini
+  // (bukan pilih dari dropdown) -> handleKonfirmasiCopyTarget yg eksekusi
+  // penyalinannya & tampilkan notif berhasil.
+  const handleCopyTemplate = (row: TarifLabRow) => {
+    setMenuKey(null);
+    setMenuPos(null);
+    Swal.fire({
+      icon: 'info',
+      title: 'Copy Template',
+      html: `Silahkan pilih nama pemeriksaan yang mau disalin template <b>${row.nm_perawatan}</b>-nya — klik langsung baris pemeriksaan tujuan di tabel Tarif Lab.`,
+      showCancelButton: true,
+      confirmButtonText: 'Salin',
+      cancelButtonText: 'Batal',
+    }).then((result) => {
+      if (result.isConfirmed) setCopySourceRow(row);
+    });
+  };
+
+  // handleKonfirmasiCopyTarget — dipanggil saat user klik baris pemeriksaan
+  // TUJUAN sementara mode "copy template" aktif (copySourceRow != null).
+  const handleKonfirmasiCopyTarget = async (targetRow: TarifLabRow) => {
+    const source = copySourceRow;
+    if (!source) return;
+    if (source.kd_jenis_prw === targetRow.kd_jenis_prw) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih pemeriksaan lain, bukan sumbernya sendiri' });
+      return;
+    }
+    setCopySourceRow(null);
+    try {
+      const res = await fetch('/api/tarif-lab/template/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_kd_jenis_prw: source.kd_jenis_prw, to_kd_jenis_prw: targetRow.kd_jenis_prw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal menyalin template');
+      Swal.fire({ icon: 'success', title: 'Berhasil!', text: `Template berhasil disalin ke "${targetRow.nm_perawatan}"`, timer: 1800, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
@@ -500,10 +621,32 @@ export const TarifLabView: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...inputStyle, width: 380 }}
         />
+        {checkedKeys.size > 0 && (
+          <button
+            type="button"
+            onClick={handleHapusTerpilih}
+            disabled={deletingBulk}
+            style={{ marginLeft: 'auto', padding: '8px 16px', borderRadius: 2, border: 'none', background: deletingBulk ? '#fca5a5' : '#dc2626', color: '#fff', cursor: deletingBulk ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {deletingBulk ? 'Menghapus...' : `Hapus Terpilih (${checkedKeys.size})`}
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setShowTambah(true)}
-          style={{ marginLeft: 'auto', padding: '8px 16px', borderRadius: 8, border: 'none', background: '#4338ca', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+          onClick={() => {
+            // Centang PERSIS SATU baris -> modal terbuka mode edit terisi
+            // data baris itu; selain itu (0 atau >1 dicentang, krn multi
+            // dikhususkan utk hapus massal) -> modal tambah baru kosong.
+            if (checkedKeys.size === 1) {
+              const kd = Array.from(checkedKeys)[0];
+              const row = rows.find((r) => r.kd_jenis_prw === kd) || null;
+              setEditTarget(row);
+            } else {
+              setEditTarget(null);
+            }
+            setShowTambah(true);
+          }}
+          style={{ marginLeft: checkedKeys.size > 0 ? undefined : 'auto', padding: '8px 16px', borderRadius: 2, border: 'none', background: '#000000', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
         >
           + Tambah Tarif Lab
         </button>
@@ -511,6 +654,19 @@ export const TarifLabView: React.FC = () => {
 
       {error && (
         <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{error}</div>
+      )}
+
+      {copySourceRow && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', background: '#ecfdf5', border: '1px dashed #059669', borderRadius: 8, color: '#065f46', fontSize: 12.5 }}>
+          <span>Mode Copy Template: klik pemeriksaan tujuan di tabel utk menyalin template <b>{copySourceRow.nm_perawatan}</b>-nya.</span>
+          <button
+            type="button"
+            onClick={() => setCopySourceRow(null)}
+            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', background: '#ffffff', color: '#059669', cursor: 'pointer', fontSize: 12, fontWeight: 500, flexShrink: 0 }}
+          >
+            Batal
+          </button>
+        </div>
       )}
 
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
@@ -543,14 +699,26 @@ export const TarifLabView: React.FC = () => {
               const rowKey = `${row.kd_jenis_prw}-${row.png_jawab}-${i}`;
               return (
               <tr key={rowKey} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
-                <td style={{ ...td, textAlign: 'center' }}>
-                  <input type="checkbox" disabled style={{ cursor: 'default' }} />
+                <td style={{ ...td, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={checkedKeys.has(row.kd_jenis_prw)}
+                    onChange={() => toggleChecked(row.kd_jenis_prw)}
+                    style={{ cursor: 'pointer' }}
+                  />
                 </td>
                 <td style={{ ...td, fontFamily: 'monospace', color: '#4338ca' }}>{row.kd_jenis_prw}</td>
                 <td style={{ ...td, whiteSpace: 'normal' }}>
                   <button
                     type="button"
                     onClick={(e) => {
+                      // Mode "Copy Template" aktif -> klik baris ini artinya
+                      // pilih sbg TUJUAN penyalinan, bukan buka dropdown menu
+                      // spt biasa.
+                      if (copySourceRow) {
+                        handleKonfirmasiCopyTarget(row);
+                        return;
+                      }
                       if (menuKey === rowKey) {
                         setMenuKey(null);
                         setMenuPos(null);
@@ -571,9 +739,10 @@ export const TarifLabView: React.FC = () => {
                       setMenuKey(rowKey);
                     }}
                     style={{
-                      width: '100%', textAlign: 'left', padding: '5px 8px', borderRadius: 2, border: '1px solid #4338ca',
-                      background: menuKey === rowKey ? '#4338ca' : '#ffffff',
-                      color: menuKey === rowKey ? '#ffffff' : '#4338ca',
+                      width: '100%', textAlign: 'left', padding: '5px 8px', borderRadius: 2,
+                      border: copySourceRow ? '1px dashed #059669' : '1px solid #4338ca',
+                      background: copySourceRow ? '#ecfdf5' : menuKey === rowKey ? '#4338ca' : '#ffffff',
+                      color: copySourceRow ? '#059669' : menuKey === rowKey ? '#ffffff' : '#4338ca',
                       fontWeight: 400, fontSize: 12, cursor: 'pointer',
                     }}
                   >
@@ -590,6 +759,26 @@ export const TarifLabView: React.FC = () => {
                           boxShadow: '0 10px 15px -3px rgba(0,0,0,0.15)', minWidth: 190, overflow: 'hidden',
                         }}
                       >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Cara KEDUA masuk mode edit (selain centang "P"
+                            // lalu klik "+ Tambah Tarif Lab") — klik langsung
+                            // nama pemeriksaan di baris ini, sama tujuan
+                            // (buka ModalTambahTarifLab dgn editRow terisi).
+                            setMenuKey(null); setMenuPos(null);
+                            setEditTarget(row);
+                            setShowTambah(true);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#ffffff', color: '#111827', fontSize: 12.5, cursor: 'pointer' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4338ca" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                          </svg>
+                          Ubah Pemeriksaan
+                        </button>
                         <button
                           type="button"
                           onClick={() => { setMenuKey(null); setMenuPos(null); setTemplateRow(row); }}
@@ -609,7 +798,7 @@ export const TarifLabView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => { setMenuKey(null); setMenuPos(null); Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Fitur Data Sampah akan dikembangkan.' }); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: '#ffffff', color: '#111827', fontSize: 12.5, cursor: 'pointer' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#ffffff', color: '#111827', fontSize: 12.5, cursor: 'pointer' }}
                           onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
                           onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
                         >
@@ -620,6 +809,19 @@ export const TarifLabView: React.FC = () => {
                             <line x1="14" y1="11" x2="14" y2="17"></line>
                           </svg>
                           Data Sampah
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyTemplate(row)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: '#ffffff', color: '#111827', fontSize: 12.5, cursor: 'pointer' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4338ca" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                          </svg>
+                          Copy Template
                         </button>
                       </div>
                     </>
@@ -657,8 +859,9 @@ export const TarifLabView: React.FC = () => {
 
       {showTambah && (
         <ModalTambahTarifLab
-          onClose={() => setShowTambah(false)}
-          onSaved={() => setReloadKey((k) => k + 1)}
+          editRow={editTarget}
+          onClose={() => { setShowTambah(false); setEditTarget(null); }}
+          onSaved={() => { setReloadKey((k) => k + 1); setCheckedKeys(new Set()); }}
         />
       )}
 

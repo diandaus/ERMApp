@@ -247,6 +247,7 @@ type PegawaiPayload struct {
 	MulaiKontrak  string `json:"mulai_kontrak"`
 	NoKTP         string `json:"no_ktp"`
 	Email         string `json:"email"`
+	Photo         string `json:"photo"`
 }
 
 func defVal(v, def string) string {
@@ -281,8 +282,8 @@ func tambahPegawai(db *sql.DB) gin.HandlerFunc {
 				 departemen, bidang, stts_wp, stts_kerja, npwp, pendidikan, gapok,
 				 tmp_lahir, tgl_lahir, alamat, kota, mulai_kerja, ms_kerja,
 				 indexins, bpd, rekening, stts_aktif, wajibmasuk, pengurang,
-				 indek, cuti_diambil, dankes, mulai_kontrak, no_ktp, email)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,0,0,0,0,?,?,?)`,
+				 indek, cuti_diambil, dankes, mulai_kontrak, no_ktp, email, photo)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,0,0,0,0,?,?,?,?)`,
 			p.NIK, p.Nama, p.JK,
 			defVal(p.Jbtn, "-"),
 			defVal(p.JnjJabatan, "-"),
@@ -303,7 +304,7 @@ func tambahPegawai(db *sql.DB) gin.HandlerFunc {
 			p.SttsAktif,
 			p.Wajibmasuk,
 			nullableDate(p.MulaiKontrak),
-			p.NoKTP, p.Email,
+			p.NoKTP, p.Email, p.Photo,
 		)
 		if err != nil {
 			if strings.Contains(err.Error(), "Duplicate entry") {
@@ -347,7 +348,7 @@ func editPegawai(db *sql.DB) gin.HandlerFunc {
 				mulai_kerja=?, ms_kerja=?,
 				indexins=?, bpd=?, rekening=?,
 				stts_aktif=?, wajibmasuk=?, mulai_kontrak=?,
-				no_ktp=?, email=?
+				no_ktp=?, email=?, photo=?
 			WHERE nik=?`,
 			p.Nama, p.JK, defVal(p.Jbtn, "-"),
 			defVal(p.JnjJabatan, "-"), defVal(p.KodeKelompok, "-"),
@@ -359,7 +360,7 @@ func editPegawai(db *sql.DB) gin.HandlerFunc {
 			defVal(p.MulaiKerja, "2000-01-01"), p.MsKerja,
 			defVal(p.Indexins, "-"), defVal(p.Bpd, "-"), p.Rekening,
 			p.SttsAktif, p.Wajibmasuk, nullableDate(p.MulaiKontrak),
-			p.NoKTP, p.Email,
+			p.NoKTP, p.Email, p.Photo,
 			nik,
 		)
 		if err != nil {

@@ -52,6 +52,7 @@ type TarifLabListRow struct {
 	Kso                  float64 `json:"kso"`
 	Menejemen            float64 `json:"menejemen"`
 	TotalByr             float64 `json:"total_byr"`
+	KdPj                 string  `json:"kd_pj"`
 	PngJawab             string  `json:"png_jawab"`
 	Kelas                string  `json:"kelas"`
 	Kategori             string  `json:"kategori"`
@@ -117,6 +118,93 @@ func createTarifLabJenisPerawatan(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// PUT /api/tarif-lab/jenis-perawatan/:kd_jenis_prw — edit baris Tarif Lab yg
+// sudah ada. Dibuka dari kolom checkbox "P" di tabel utama TarifLab.tsx:
+// centang PERSIS SATU baris lalu klik "+ Tambah Tarif Lab" -> modal terisi
+// data baris itu (mode edit, bukan tambah baru). kd_jenis_prw TIDAK ikut
+// diubah di sini (dipakai sbg kunci URL, sama alasan NIK readOnly di form
+// Pegawai) — kalau mau ganti kode, hapus baris lama & buat baris baru.
+func updateTarifLabJenisPerawatan(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		kdJenisPrw := c.Param("kd_jenis_prw")
+		if kdJenisPrw == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "kd_jenis_prw wajib diisi"})
+			return
+		}
+		var input tarifLabCreateInput
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data tidak valid: " + err.Error()})
+			return
+		}
+
+		totalByr := input.BagianRs + input.Bhp + input.TarifPerujuk + input.TarifTindakanDokter + input.TarifTindakanPetugas + input.Kso + input.Menejemen
+
+		res, err := db.Exec(`
+			UPDATE jns_perawatan_lab SET
+				nm_perawatan=?, kd_pj=?, kelas=?, kategori=?,
+				bagian_rs=?, bhp=?, tarif_perujuk=?, tarif_tindakan_dokter=?, tarif_tindakan_petugas=?,
+				kso=?, menejemen=?, total_byr=?
+			WHERE kd_jenis_prw=?
+		`, input.NmPerawatan, input.KdPj, input.Kelas, input.Kategori,
+			input.BagianRs, input.Bhp, input.TarifPerujuk, input.TarifTindakanDokter, input.TarifTindakanPetugas,
+			input.Kso, input.Menejemen, totalByr, kdJenisPrw)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan: " + err.Error()})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Tarif Lab tidak ditemukan"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "total_byr": totalByr})
+	}
+}
+
+// DELETE /api/tarif-lab/jenis-perawatan — hapus banyak baris sekaligus,
+// dipakai tombol "Hapus Terpilih" saat >=1 baris dicentang di kolom "P"
+// (beda dari kolom "P" tunggal -> edit di atas: fungsi centang MULTI baris
+// SENGAJA khusus utk hapus massal, bukan utk ditampilkan ke modal).
+func deleteTarifLabJenisPerawatanBulk(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var input struct {
+			KdJenisPrw []string `json:"kd_jenis_prw" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data tidak valid: " + err.Error()})
+			return
+		}
+		if len(input.KdJenisPrw) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Pilih minimal satu baris"})
+			return
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		deleted := 0
+		for _, kd := range input.KdJenisPrw {
+			res, err := tx.Exec(`DELETE FROM jns_perawatan_lab WHERE kd_jenis_prw = ?`, kd)
+			if err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus " + kd + ": " + err.Error()})
+				return
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				deleted++
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "deleted": deleted})
+	}
+}
+
 // GET /api/tarif-lab/list?search=... — daftar utama Tarif Lab, padanan
 // method tampil() di DlgHargaLab.java (SELECT jns_perawatan_lab INNER JOIN
 // penjab, status='1', search across kd_jenis_prw/nm_perawatan/kelas/
@@ -131,7 +219,7 @@ func getTarifLabList(db *sql.DB) gin.HandlerFunc {
 				IFNULL(jns_perawatan_lab.tarif_perujuk,0), IFNULL(jns_perawatan_lab.tarif_tindakan_dokter,0),
 				IFNULL(jns_perawatan_lab.tarif_tindakan_petugas,0), IFNULL(jns_perawatan_lab.kso,0),
 				IFNULL(jns_perawatan_lab.menejemen,0), IFNULL(jns_perawatan_lab.total_byr,0),
-				penjab.png_jawab, IFNULL(jns_perawatan_lab.kelas,'-'), jns_perawatan_lab.kategori
+				jns_perawatan_lab.kd_pj, penjab.png_jawab, IFNULL(jns_perawatan_lab.kelas,'-'), jns_perawatan_lab.kategori
 			FROM jns_perawatan_lab
 			INNER JOIN penjab ON penjab.kd_pj = jns_perawatan_lab.kd_pj
 			WHERE jns_perawatan_lab.status = '1'
@@ -158,7 +246,7 @@ func getTarifLabList(db *sql.DB) gin.HandlerFunc {
 			if err := rows.Scan(
 				&it.KdJenisPrw, &it.NmPerawatan, &it.BagianRs, &it.Bhp, &it.TarifPerujuk,
 				&it.TarifTindakanDokter, &it.TarifTindakanPetugas, &it.Kso, &it.Menejemen,
-				&it.TotalByr, &it.PngJawab, &it.Kelas, &it.Kategori,
+				&it.TotalByr, &it.KdPj, &it.PngJawab, &it.Kelas, &it.Kategori,
 			); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -258,6 +346,91 @@ func createTarifLabTemplate(db *sql.DB) gin.HandlerFunc {
 		input.BiayaItem = biayaItem
 		input.Urut = nextUrut
 		c.JSON(http.StatusOK, input)
+	}
+}
+
+// POST /api/tarif-lab/template/copy — "Copy Template" di menu dropdown Nama
+// Pemeriksaan (TarifLab.tsx): salin SEMUA baris parameter template_laboratorium
+// dari satu kd_jenis_prw (sumber) ke kd_jenis_prw lain (tujuan yg dipilih user
+// lewat notifikasi Swal). Baris tujuan yg sudah ada DIHAPUS dulu (bukan
+// ditambah/duplikat) supaya hasilnya persis salinan sumber, bukan campuran.
+func copyTarifLabTemplate(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var input struct {
+			FromKdJenisPrw string `json:"from_kd_jenis_prw" binding:"required"`
+			ToKdJenisPrw   string `json:"to_kd_jenis_prw" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Data tidak valid: " + err.Error()})
+			return
+		}
+		if input.FromKdJenisPrw == input.ToKdJenisPrw {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Pemeriksaan tujuan harus berbeda dari sumber"})
+			return
+		}
+
+		rows, err := db.Query(`
+			SELECT Pemeriksaan, IFNULL(satuan,''), IFNULL(nilai_rujukan_ld,''), IFNULL(nilai_rujukan_la,''),
+				IFNULL(nilai_rujukan_pd,''), IFNULL(nilai_rujukan_pa,''), IFNULL(bagian_rs,0), IFNULL(bhp,0),
+				IFNULL(bagian_perujuk,0), IFNULL(bagian_dokter,0), IFNULL(bagian_laborat,0),
+				IFNULL(kso,0), IFNULL(menejemen,0), IFNULL(biaya_item,0), urut
+			FROM template_laboratorium WHERE kd_jenis_prw = ? ORDER BY urut
+		`, input.FromKdJenisPrw)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		type srcRow struct {
+			pemeriksaan, satuan, ld, la, pd, pa                                            string
+			bagianRs, bhp, bagianPerujuk, bagianDokter, bagianLaborat, kso, mnj, biayaItem float64
+			urut                                                                           int
+		}
+		src := []srcRow{}
+		for rows.Next() {
+			var r srcRow
+			if rows.Scan(&r.pemeriksaan, &r.satuan, &r.ld, &r.la, &r.pd, &r.pa,
+				&r.bagianRs, &r.bhp, &r.bagianPerujuk, &r.bagianDokter, &r.bagianLaborat,
+				&r.kso, &r.mnj, &r.biayaItem, &r.urut) == nil {
+				src = append(src, r)
+			}
+		}
+		rows.Close()
+		if len(src) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Pemeriksaan sumber belum punya template parameter"})
+			return
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if _, err := tx.Exec(`DELETE FROM template_laboratorium WHERE kd_jenis_prw = ?`, input.ToKdJenisPrw); err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus template lama tujuan: " + err.Error()})
+			return
+		}
+		for _, r := range src {
+			if _, err := tx.Exec(`
+				INSERT INTO template_laboratorium (
+					kd_jenis_prw, Pemeriksaan, satuan, nilai_rujukan_ld, nilai_rujukan_la,
+					nilai_rujukan_pd, nilai_rujukan_pa, bagian_rs, bhp, bagian_perujuk,
+					bagian_dokter, bagian_laborat, kso, menejemen, biaya_item, urut
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, input.ToKdJenisPrw, r.pemeriksaan, r.satuan, r.ld, r.la, r.pd, r.pa,
+				r.bagianRs, r.bhp, r.bagianPerujuk, r.bagianDokter, r.bagianLaborat,
+				r.kso, r.mnj, r.biayaItem, r.urut); err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyalin: " + err.Error()})
+				return
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "copied": len(src)})
 	}
 }
 

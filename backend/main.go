@@ -3468,11 +3468,14 @@ func main() {
 	// Tarif Lab — daftar utama (menu Tarif Pelayanan > Tarif Lab)
 	r.GET("/api/tarif-lab/list", getTarifLabList(db))
 	r.POST("/api/tarif-lab/jenis-perawatan", createTarifLabJenisPerawatan(db))
+	r.PUT("/api/tarif-lab/jenis-perawatan/:kd_jenis_prw", updateTarifLabJenisPerawatan(db))
+	r.DELETE("/api/tarif-lab/jenis-perawatan", deleteTarifLabJenisPerawatanBulk(db))
 	// Tarif Lab — CRUD template_laboratorium (belum dipakai frontend saat ini)
 	r.GET("/api/tarif-lab/template", getTarifLabTemplateList(db))
 	r.POST("/api/tarif-lab/template", createTarifLabTemplate(db))
 	r.PUT("/api/tarif-lab/template/:id", updateTarifLabTemplate(db))
 	r.DELETE("/api/tarif-lab/template/:id", deleteTarifLabTemplate(db))
+	r.POST("/api/tarif-lab/template/copy", copyTarifLabTemplate(db))
 
 	// Simpan permintaan lab
 	r.POST("/api/lab/permintaan-pk", simpanPermintaanLabPK(db))
