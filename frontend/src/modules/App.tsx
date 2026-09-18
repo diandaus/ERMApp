@@ -1012,8 +1012,14 @@ export const App: React.FC = () => {
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 style={{
-                  width: 32,
-                  height: 32,
+                  width: 40,
+                  height: 40,
+                  // Margin negatif -4px atas/bawah — avatar dibesarkan dari
+                  // 32 jadi 40px TANPA menambah tinggi header (fixed 48px,
+                  // padding 8px atas/bawah): 40 - 8 (diserap margin negatif)
+                  // = 32, pas sama dgn ruang vertikal yg tersedia sebelumnya.
+                  marginTop: -4,
+                  marginBottom: -4,
                   borderRadius: '999px',
                   background: 'linear-gradient(135deg, #2563eb, #1e40af)',
                   display: 'flex',
@@ -1024,6 +1030,7 @@ export const App: React.FC = () => {
                   padding: 0,
                   overflow: 'hidden',
                   cursor: 'pointer',
+                  flexShrink: 0,
                   transition: 'all 0.2s ease'
                 }}
                 onMouseEnter={(e) => {
@@ -1042,7 +1049,7 @@ export const App: React.FC = () => {
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 12C14.7614 12 17 9.76142 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76142 9.23858 12 12 12Z" fill="white" />
                     <path d="M12 14C6.47715 14 2 17.134 2 21C2 21.5523 2.44772 22 3 22H21C21.5523 22 22 21.5523 22 21C22 17.134 17.5228 14 12 14Z" fill="white" />
                   </svg>

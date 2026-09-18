@@ -261,8 +261,8 @@ const ModalTambahTarifLab: React.FC<{ editRow?: TarifLabRow | null; onClose: () 
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: 12.5, fontWeight: 500 }}>Batal</button>
-            <button type="submit" disabled={saving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: saving ? '#9ca3af' : '#4338ca', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 600 }}>
+            <button type="button" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 2, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontSize: 12.5, fontWeight: 500 }}>Batal</button>
+            <button type="submit" disabled={saving} style={{ padding: '8px 16px', borderRadius: 2, border: 'none', background: saving ? '#9ca3af' : '#4338ca', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 600 }}>
               {saving ? 'Menyimpan...' : 'Simpan'}
             </button>
           </div>
