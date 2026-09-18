@@ -31,6 +31,16 @@ import { PresensiMobileView } from './PresensiMobile';
 import { useBreakpoint, useMediaQuery } from '../hooks/useBreakpoint';
 import { AppUser, LoginView, RegisterView, BATAS_TIDAK_AKTIF_MS, catatAktivitas } from './Auth';
 import { safeStorage } from '../utils/safeStorage';
+import { mediaUrl } from '../utils/apiBase';
+
+// pegawai.photo sering berisi path legacy Khanza desktop (mis.
+// "pages/pegawai/photo/xxx.jpg") yang tidak bisa diakses backend web ini —
+// hanya dipakai kalau sudah berupa URL yang valid (/uploads/... hasil
+// upload baru, atau http/https), selain itu fallback ke ikon avatar
+// generik. Sama pola dgn isUsablePhotoUrl di PresensiMobile.tsx.
+function isUsablePhotoUrl(photo: string): boolean {
+  return photo.startsWith('/uploads/') || photo.startsWith('http://') || photo.startsWith('https://');
+}
 
 type MenuKey =
   | 'dashboard'
@@ -87,6 +97,22 @@ export const App: React.FC = () => {
   const userMenuRef = React.useRef<HTMLDivElement>(null);
   const [displayType, setDisplayType] = React.useState<string | null>(null);
   const [instansi, setInstansi] = React.useState<{ nama_instansi: string; logo_url: string } | null>(null);
+  // Foto profil pegawai (pegawai.photo) utk avatar navbar — diambil dari
+  // endpoint yg sama dgn PresensiMobile.tsx (GET /api/presensi/profil?nik=),
+  // kd_dokter dipakai kalau akun ini dokter, selain itu nip (sama pola
+  // resolveNik di PresensiMobile.tsx).
+  const [profilePhoto, setProfilePhoto] = React.useState<string>('');
+
+  React.useEffect(() => {
+    const nik = user?.role === 'dokter' && user.kd_dokter ? user.kd_dokter : user?.nip || '';
+    if (!nik) { setProfilePhoto(''); return; }
+    let cancelled = false;
+    fetch(`/api/presensi/profil?nik=${encodeURIComponent(nik)}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (!cancelled) setProfilePhoto(data?.photo || ''); })
+      .catch(() => { if (!cancelled) setProfilePhoto(''); });
+    return () => { cancelled = true; };
+  }, [user?.nip, user?.kd_dokter, user?.role]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -994,9 +1020,9 @@ export const App: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#ffffff',
-                  fontSize: 13,
-                  fontWeight: 600,
                   border: 'none',
+                  padding: 0,
+                  overflow: 'hidden',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}
@@ -1009,12 +1035,18 @@ export const App: React.FC = () => {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                {user.full_name
-                  .split(' ')
-                  .map((p) => p.charAt(0))
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()}
+                {profilePhoto && isUsablePhotoUrl(profilePhoto) ? (
+                  <img
+                    src={mediaUrl(profilePhoto)}
+                    alt={user.full_name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 12C14.7614 12 17 9.76142 17 7C17 4.23858 14.7614 2 12 2C9.23858 2 7 4.23858 7 7C7 9.76142 9.23858 12 12 12Z" fill="white" />
+                    <path d="M12 14C6.47715 14 2 17.134 2 21C2 21.5523 2.44772 22 3 22H21C21.5523 22 22 21.5523 22 21C22 17.134 17.5228 14 12 14Z" fill="white" />
+                  </svg>
+                )}
               </button>
 
               {/* Dropdown Menu */}

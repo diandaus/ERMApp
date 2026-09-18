@@ -64,6 +64,12 @@ type ResepRacikanTemplateItem = {
 // diblok wajib isi), lihat confirmTambahObat.
 const ATURAN_PAKAI_PLACEHOLDER = '3x1 sehari setelah makan';
 
+// Placeholder tabel master Racikan (Nama Racikan/Aturan Pakai) — dipakai jg
+// sbg default kalau kolomnya dibiarkan kosong pas submit, sama pola dgn
+// ATURAN_PAKAI_PLACEHOLDER di atas (bukan diblok wajib isi manual).
+const RACIKAN_NAMA_PLACEHOLDER = 'Pulvis';
+const RACIKAN_ATURAN_PAKAI_PLACEHOLDER = '3x1 sehari';
+
 // Input inline tabel master racikan — tanpa garis tabel (borderless), cuma
 // border tipis di tiap input sendiri, padanan gaya screenshot yang
 // diminta user (beda dari tabel Bootstrap `table-bordered` yang dipakai
@@ -171,11 +177,6 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [showObatDropdownRacikan, setShowObatDropdownRacikan] = React.useState(false);
   const [selectedObatRacikan, setSelectedObatRacikan] = React.useState<ObatItem | null>(null);
   const [showModalInputObatRacikan, setShowModalInputObatRacikan] = React.useState(false);
-  // emptyRacikanWarnIdx — index racikan yg kolom Nama Racikan-nya disorot
-  // merah krn user coba klik langsung ke Detail Obat Racikan padahal nama
-  // racikan masih kosong. Direset begitu user mulai mengetik nama racikan.
-  const [emptyRacikanWarnIdx, setEmptyRacikanWarnIdx] = React.useState<number | null>(null);
-
   const [racikanList, setRacikanList] = React.useState<Racikan[]>([
     { nama_racikan: '', keterangan: '', metode_racik: 'Puyer', jml_dr: 0, aturan_pakai: '', detail: [] }
   ]);
@@ -1031,13 +1032,27 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const submitResepUnified = async () => {
     try {
       const hasNonRacikan = resepNonRacikan.length > 0;
-      const hasRacikan = racikanList.some(r => r.nama_racikan && r.detail.length > 0);
+      const hasRacikan = racikanList.some(r => r.detail.length > 0);
 
       if (!hasNonRacikan && !hasRacikan) {
         Swal.fire({
           icon: 'warning',
           title: 'Peringatan!',
           text: 'Belum ada obat yang dipilih (non-racikan atau racikan)'
+        });
+        return;
+      }
+
+      // Jumlah Racik/Bungkus WAJIB diisi (beda dari Nama Racikan/Aturan
+      // Pakai yg boleh kosong & otomatis dipakaikan placeholder) — tidak
+      // ada default yg masuk akal utk jumlah bungkus, jadi diblok di sini
+      // drpd diam2 terkirim 0/1 ke backend.
+      const racikanTanpaJumlah = racikanList.find(r => r.detail.length > 0 && (!r.jml_dr || r.jml_dr <= 0));
+      if (racikanTanpaJumlah) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Peringatan!',
+          text: `Jumlah Racik/Bungkus untuk racikan "${racikanTanpaJumlah.nama_racikan || RACIKAN_NAMA_PLACEHOLDER}" wajib diisi`,
         });
         return;
       }
@@ -1062,11 +1077,11 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
           : [];
 
         const racikanPayload = hasRacikan
-          ? racikanList.filter(r => r.nama_racikan && r.detail.length > 0).map(rac => ({
-              nama_racikan: rac.nama_racikan || '',
+          ? racikanList.filter(r => r.detail.length > 0).map(rac => ({
+              nama_racikan: rac.nama_racikan.trim() || RACIKAN_NAMA_PLACEHOLDER,
               metode_racik: rac.metode_racik || 'R01',
               jml_dr: rac.jml_dr || 1,
-              aturan_pakai: rac.aturan_pakai || '',
+              aturan_pakai: rac.aturan_pakai.trim() || RACIKAN_ATURAN_PAKAI_PLACEHOLDER,
               keterangan: rac.keterangan || '',
               detail: rac.detail.map(det => ({
                 kode_brng: det.kode_brng,
@@ -1128,17 +1143,17 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         }
 
         if (hasRacikan) {
-          racikanList.filter(r => r.nama_racikan && r.detail.length > 0).forEach(rac => {
+          racikanList.filter(r => r.detail.length > 0).forEach(rac => {
             if (rac.nama_racikan.trim()) saveNamaRacikanToHistory(rac.nama_racikan);
             if (rac.keterangan.trim()) saveKeteranganToHistory(rac.keterangan);
             if (rac.aturan_pakai.trim()) saveAturanPakaiToHistory(rac.aturan_pakai);
           });
-          payload.racikan = racikanList.filter(r => r.nama_racikan && r.detail.length > 0).map(rac => ({
-            nama_racikan: rac.nama_racikan,
+          payload.racikan = racikanList.filter(r => r.detail.length > 0).map(rac => ({
+            nama_racikan: rac.nama_racikan.trim() || RACIKAN_NAMA_PLACEHOLDER,
             keterangan: rac.keterangan || '',
             metode_racik: rac.metode_racik,
             jml_dr: rac.jml_dr,
-            aturan_pakai: rac.aturan_pakai,
+            aturan_pakai: rac.aturan_pakai.trim() || RACIKAN_ATURAN_PAKAI_PLACEHOLDER,
             detail: rac.detail.map(det => ({
               kode_brng: det.kode_brng,
               kandungan: det.kandungan,
@@ -1430,7 +1445,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       boxShadow: 'none'
                     }}
                   >
-                    {tab === 'non-racikan' ? `Non Racikan (${resepNonRacikan.length})` : `Racikan (${racikanList.filter(r => r.nama_racikan && r.detail.length > 0).length})`}
+                    {tab === 'non-racikan' ? `Non Racikan (${resepNonRacikan.length})` : `Racikan (${racikanList.filter(r => r.detail.length > 0).length})`}
                   </button>
                 ))}
               </div>
@@ -1641,7 +1656,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                         <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>No</th>
                         <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Nama Racikan</th>
                         <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Metode Racik</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400, width: '1%', whiteSpace: 'nowrap' }}>Jml.Racik/Bungkus</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400, width: '1%', whiteSpace: 'nowrap' }}>Jml.Racik/Bungkus <span className="text-danger">*</span></th>
                         <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Aturan Pakai</th>
                         <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 400 }}>Keterangan</th>
                         <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 400 }}>Aksi</th>
@@ -1658,18 +1673,16 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                         >
                           <td style={{ padding: '4px 6px', verticalAlign: 'middle', color: '#374151' }}>{idx + 1}</td>
                           <td style={{ padding: '4px 6px', verticalAlign: 'middle' }}>
-                            <div className={emptyRacikanWarnIdx === idx ? 'blink-red-field' : ''}>
-                              <input
-                                ref={(el) => { namaRacikanRefs.current[idx] = el; }}
-                                type="text"
-                                style={racikanInputStyle}
-                                value={rac.nama_racikan}
-                                onFocus={() => { setActiveRacikanIdx(idx); setEmptyRacikanWarnIdx(null); }}
-                                onChange={(e) => { updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value })); setEmptyRacikanWarnIdx(null); }}
-                                placeholder="Pulvis"
-                                autoComplete="off"
-                              />
-                            </div>
+                            <input
+                              ref={(el) => { namaRacikanRefs.current[idx] = el; }}
+                              type="text"
+                              style={racikanInputStyle}
+                              value={rac.nama_racikan}
+                              onFocus={() => setActiveRacikanIdx(idx)}
+                              onChange={(e) => updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value }))}
+                              placeholder="Pulvis"
+                              autoComplete="off"
+                            />
                           </td>
                           <td style={{ padding: '4px 4px', verticalAlign: 'middle' }}>
                             <select
@@ -1755,10 +1768,11 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       value={searchObatRacikan}
                       onChange={(e) => setSearchObatRacikan(e.target.value)}
                       onFocus={() => {
+                        // Nama Racikan kosong -> isi otomatis dari
+                        // placeholdernya ("Pulvis"), tidak lagi diblok/
+                        // disorot merah minta diisi manual dulu.
                         if (!activeRacikan?.nama_racikan.trim()) {
-                          setEmptyRacikanWarnIdx(activeRacikanIdx);
-                          namaRacikanRefs.current[activeRacikanIdx]?.focus();
-                          window.setTimeout(() => setEmptyRacikanWarnIdx(null), 1500);
+                          updateRacikanAt(activeRacikanIdx, prev => ({ ...prev, nama_racikan: RACIKAN_NAMA_PLACEHOLDER }));
                         }
                       }}
                       autoComplete="off"
