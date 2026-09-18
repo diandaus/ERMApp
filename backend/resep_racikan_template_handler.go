@@ -38,6 +38,14 @@ func ensureResepRacikanTemplateTables(db *sql.DB) error {
 	if _, err := db.Exec(createTemplate); err != nil {
 		return err
 	}
+	// kd_dokter — pemilik template (dokter peresep yg klik "Jadikan Template
+	// Resep"). Privasi per dokter: dokter lain yg login TIDAK melihat
+	// template dokter ini (getResepRacikanTemplateList WAJIB filter by
+	// kd_dokter, bukan tampilkan semua). Ditambah via ALTER krn tabel ini
+	// sudah ada duluan (fitur sebelumnya belum per-dokter).
+	if _, err := db.Exec(`ALTER TABLE resep_racikan_template ADD COLUMN IF NOT EXISTS kd_dokter VARCHAR(20) NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
 	const createDetail = `
 		CREATE TABLE IF NOT EXISTS resep_racikan_template_detail (
 			id INT AUTO_INCREMENT PRIMARY KEY,
@@ -67,6 +75,7 @@ type resepRacikanTemplateDetail struct {
 type resepRacikanTemplate struct {
 	ID           int                          `json:"id"`
 	NamaTemplate string                       `json:"nama_template"`
+	KdDokter     string                       `json:"kd_dokter"`
 	MetodeRacik  string                       `json:"metode_racik"`
 	JmlDr        int                          `json:"jml_dr"`
 	AturanPakai  string                       `json:"aturan_pakai"`
@@ -74,14 +83,22 @@ type resepRacikanTemplate struct {
 	Detail       []resepRacikanTemplateDetail `json:"detail"`
 }
 
-// GET /api/resep/racikan-template — daftar semua template racikan
-// tersimpan (lengkap dgn detail obatnya), diurutkan nama.
+// GET /api/resep/racikan-template?kd_dokter=xxx — daftar template racikan
+// milik dokter TERSEBUT SAJA (lengkap dgn detail obatnya), diurutkan nama.
+// kd_dokter WAJIB — dokter lain yg login tidak boleh melihat template
+// dokter ini, jadi tanpa kd_dokter (kosong) sengaja dibalas list kosong,
+// bukan "tampilkan semua".
 func getResepRacikanTemplateList(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		kdDokter := c.Query("kd_dokter")
+		if kdDokter == "" {
+			c.JSON(http.StatusOK, []resepRacikanTemplate{})
+			return
+		}
 		rows, err := db.Query(`
-			SELECT id, nama_template, IFNULL(metode_racik,''), jml_dr, IFNULL(aturan_pakai,''), IFNULL(keterangan,'')
-			FROM resep_racikan_template ORDER BY nama_template
-		`)
+			SELECT id, nama_template, kd_dokter, IFNULL(metode_racik,''), jml_dr, IFNULL(aturan_pakai,''), IFNULL(keterangan,'')
+			FROM resep_racikan_template WHERE kd_dokter = ? ORDER BY nama_template
+		`, kdDokter)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -89,7 +106,7 @@ func getResepRacikanTemplateList(db *sql.DB) gin.HandlerFunc {
 		templates := []resepRacikanTemplate{}
 		for rows.Next() {
 			var t resepRacikanTemplate
-			if err := rows.Scan(&t.ID, &t.NamaTemplate, &t.MetodeRacik, &t.JmlDr, &t.AturanPakai, &t.Keterangan); err == nil {
+			if err := rows.Scan(&t.ID, &t.NamaTemplate, &t.KdDokter, &t.MetodeRacik, &t.JmlDr, &t.AturanPakai, &t.Keterangan); err == nil {
 				templates = append(templates, t)
 			}
 		}
@@ -129,6 +146,10 @@ func createResepRacikanTemplate(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Nama Template wajib diisi"})
 			return
 		}
+		if input.KdDokter == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Dokter peresep wajib diisi (template bersifat pribadi per dokter)"})
+			return
+		}
 		if len(input.Detail) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Racikan belum ada obat, tidak bisa dijadikan template"})
 			return
@@ -140,9 +161,9 @@ func createResepRacikanTemplate(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		res, err := tx.Exec(`
-			INSERT INTO resep_racikan_template (nama_template, metode_racik, jml_dr, aturan_pakai, keterangan)
-			VALUES (?, ?, ?, ?, ?)
-		`, input.NamaTemplate, input.MetodeRacik, input.JmlDr, input.AturanPakai, input.Keterangan)
+			INSERT INTO resep_racikan_template (nama_template, kd_dokter, metode_racik, jml_dr, aturan_pakai, keterangan)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, input.NamaTemplate, input.KdDokter, input.MetodeRacik, input.JmlDr, input.AturanPakai, input.Keterangan)
 		if err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan: " + err.Error()})

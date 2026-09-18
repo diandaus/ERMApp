@@ -40,6 +40,9 @@ type RacikanDetail = {
   kapasitas: string;
   kandungan: string;
   jml: number;
+  stok?: number; // stok TERKINI — cuma diisi klien (dicek ulang saat pakai
+                 // template, TIDAK disimpan ke template), dipakai tampilkan
+                 // peringatan kalau stok saat ini < jumlah yg dibutuhkan.
 };
 
 type Racikan = {
@@ -55,6 +58,11 @@ type ResepRacikanTemplateItem = {
   id: number; nama_template: string; metode_racik: string; jml_dr: number;
   aturan_pakai: string; keterangan: string; detail: RacikanDetail[];
 };
+
+// ATURAN_PAKAI_PLACEHOLDER — dipakai jg sbg default kalau field "Aturan
+// Pakai" obat non-racikan dibiarkan kosong saat klik "Tambah" (bukan
+// diblok wajib isi), lihat confirmTambahObat.
+const ATURAN_PAKAI_PLACEHOLDER = '3x1 sehari setelah makan';
 
 // Input inline tabel master racikan — tanpa garis tabel (borderless), cuma
 // border tipis di tiap input sendiri, padanan gaya screenshot yang
@@ -169,7 +177,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [emptyRacikanWarnIdx, setEmptyRacikanWarnIdx] = React.useState<number | null>(null);
 
   const [racikanList, setRacikanList] = React.useState<Racikan[]>([
-    { nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }
+    { nama_racikan: '', keterangan: '', metode_racik: 'Puyer', jml_dr: 0, aturan_pakai: '', detail: [] }
   ]);
   const [activeRacikanIdx, setActiveRacikanIdx] = React.useState<number>(0);
 
@@ -673,15 +681,17 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
     if (!selectedObatNonRacikan) return;
 
+    // Aturan Pakai kosong -> pakai teks placeholder saja sbg default,
+    // tidak perlu diblok/wajib diisi manual.
+    const aturanPakai = inputObatForm.aturan_pakai.trim() || ATURAN_PAKAI_PLACEHOLDER;
+
     // Save aturan pakai to history
-    if (inputObatForm.aturan_pakai.trim()) {
-      saveAturanPakaiToHistory(inputObatForm.aturan_pakai);
-    }
+    saveAturanPakaiToHistory(aturanPakai);
 
     const newObat: ObatItem = {
       ...selectedObatNonRacikan,
       jml: inputObatForm.jml,
-      aturan_pakai: inputObatForm.aturan_pakai
+      aturan_pakai: aturanPakai
     };
 
     setResepNonRacikan(prev => [...prev, newObat]);
@@ -761,6 +771,10 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   // Template Hasil Pemeriksaan di ModalHasilLabPK.tsx (Swal list + hapus).
   const handleSimpanTemplateRacikanBaru = async () => {
     if (!activeRacikan || activeRacikan.detail.length === 0) return;
+    if (!resepDokterKode) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Pilih dokter peresep dulu — template bersifat pribadi per dokter' });
+      return;
+    }
     const { value: nama } = await Swal.fire({
       title: 'Jadikan Template Resep',
       input: 'text',
@@ -779,6 +793,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nama_template: nama.trim(),
+          kd_dokter: resepDokterKode,
           metode_racik: activeRacikan.metode_racik,
           jml_dr: activeRacikan.jml_dr,
           aturan_pakai: activeRacikan.aturan_pakai,
@@ -801,13 +816,21 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   // Modal Riwayat Resep (openModalRiwayatResep/closeModalRiwayatResep),
   // tapi isinya daftar template racikan lengkap dgn nama obat/jumlah/
   // metode racik per template (bukan cuma nama template spt versi Swal
-  // sebelumnya).
+  // sebelumnya). Difilter kd_dokter (dokter peresep resep ini) — template
+  // bersifat pribadi per dokter, dokter lain yg login tidak melihat
+  // template dokter ini (backend jg menolak balas semua kalau kd_dokter
+  // kosong, bukan cuma difilter di frontend).
   const openModalTemplateResep = async () => {
     setShowModalRiwayatResep(false); // tutup Riwayat dulu kalau sedang terbuka
     setShowModalTemplateResep(true);
     setLoadingTemplateResep(true);
+    if (!resepDokterKode) {
+      setTemplateResepList([]);
+      setLoadingTemplateResep(false);
+      return;
+    }
     try {
-      const res = await fetch('/api/resep/racikan-template');
+      const res = await fetch(`/api/resep/racikan-template?kd_dokter=${encodeURIComponent(resepDokterKode)}`);
       const data = res.ok ? await res.json() : [];
       setTemplateResepList(Array.isArray(data) ? data : []);
     } catch {
@@ -821,8 +844,9 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     setShowModalTemplateResep(false);
   };
 
-  const applyTemplateResep = (tmpl: ResepRacikanTemplateItem) => {
-    updateRacikanAt(activeRacikanIdx, (prev) => ({
+  const applyTemplateResep = async (tmpl: ResepRacikanTemplateItem) => {
+    const idxToApply = activeRacikanIdx;
+    updateRacikanAt(idxToApply, (prev) => ({
       ...prev,
       nama_racikan: tmpl.nama_template,
       metode_racik: tmpl.metode_racik || prev.metode_racik,
@@ -832,6 +856,39 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
       detail: tmpl.detail.map((d) => ({ ...d })),
     }));
     closeModalTemplateResep();
+
+    // Cek stok TERKINI tiap obat di template (bisa saja sudah berubah sejak
+    // template disimpan) — dicek di sini (bukan disimpan di template),
+    // hasilnya ditempel ke field `stok` per baris utk ditampilkan sbg
+    // peringatan di tabel "Daftar Obat", + toast ringkasan kalau ada yg
+    // kurang.
+    try {
+      const stokResults = await Promise.all(
+        tmpl.detail.map(async (d) => {
+          try {
+            const res = await fetch(`/api/obat/search?query=${encodeURIComponent(d.kode_brng)}&no_rawat=${encodeURIComponent(patient.no_rawat || '')}`);
+            if (!res.ok) return null;
+            const list: ObatItem[] = await res.json();
+            const match = list.find((o) => o.kode_brng === d.kode_brng);
+            return match ? match.stok : null;
+          } catch { return null; }
+        })
+      );
+      updateRacikanAt(idxToApply, (prev) => ({
+        ...prev,
+        detail: prev.detail.map((d, i) => (stokResults[i] != null ? { ...d, stok: stokResults[i] as number } : d)),
+      }));
+      const kurang = tmpl.detail
+        .map((d, i) => ({ nama: d.nama_brng, butuh: d.jml, stok: stokResults[i] }))
+        .filter((x) => x.stok != null && x.stok < x.butuh);
+      if (kurang.length > 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Stok Tidak Cukup',
+          html: kurang.map((k) => `${k.nama}: butuh ${k.butuh}, stok tersedia ${k.stok}`).join('<br/>'),
+        });
+      }
+    } catch { /* biarkan diam kalau gagal cek stok — tabel tetap tanpa info stok */ }
   };
 
   // Pilih Obat Racikan
@@ -921,7 +978,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
       kode_sat: selectedObatRacikan.kode_sat,
       kapasitas: selectedObatRacikan.kapasitas || '',
       kandungan: inputObatRacikanForm.kandungan,
-      jml: inputObatRacikanForm.jml
+      jml: inputObatRacikanForm.jml,
+      stok: selectedObatRacikan.stok,
     };
 
     updateRacikanAt(activeRacikanIdx, prev => ({
@@ -1118,7 +1176,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
 
       setResepNonRacikan([]);
       setSearchObatNonRacikan('');
-      setRacikanList([{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }]);
+      setRacikanList([{ nama_racikan: '', keterangan: '', metode_racik: 'Puyer', jml_dr: 0, aturan_pakai: '', detail: [] }]);
       setActiveRacikanIdx(0);
       setSearchObatRacikan('');
 
@@ -1379,7 +1437,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               <div>
                 {activeResepTab === 'racikan' && (
                   <button type="button" onClick={() => {
-                    setRacikanList(prev => [{ nama_racikan: '', keterangan: '', metode_racik: '', jml_dr: 0, aturan_pakai: '', detail: [] }, ...prev]);
+                    setRacikanList(prev => [{ nama_racikan: '', keterangan: '', metode_racik: 'Puyer', jml_dr: 0, aturan_pakai: '', detail: [] }, ...prev]);
                     setActiveRacikanIdx(0);
                   }} style={{
                     padding: '6px 14px', borderRadius: 0, border: '1px solid #000000',
@@ -1608,7 +1666,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                 value={rac.nama_racikan}
                                 onFocus={() => { setActiveRacikanIdx(idx); setEmptyRacikanWarnIdx(null); }}
                                 onChange={(e) => { updateRacikanAt(idx, prev => ({ ...prev, nama_racikan: e.target.value })); setEmptyRacikanWarnIdx(null); }}
-                                placeholder="Contoh: Pulvis / Racikan Batuk"
+                                placeholder="Pulvis"
                                 autoComplete="off"
                               />
                             </div>
@@ -1797,17 +1855,24 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                             <th style={{ width: '10%' }}>Kandungan</th>
                             <th style={{ width: '10%' }}>Jumlah</th>
                             <th style={{ width: '10%' }}>Satuan</th>
+                            <th style={{ width: '10%' }}>Stok</th>
                             <th style={{ width: '5%' }}>Aksi</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {(activeRacikan?.detail ?? []).map((obat, index) => (
-                            <tr key={index}>
+                          {(activeRacikan?.detail ?? []).map((obat, index) => {
+                            const stokKurang = obat.stok != null && obat.stok < obat.jml;
+                            return (
+                            <tr key={index} style={stokKurang ? { background: '#fef2f2' } : undefined}>
                               <td className="text-center">{index + 1}</td>
                               <td>{obat.nama_brng}</td>
                               <td className="text-center">{obat.kandungan}</td>
                               <td className="text-center">{obat.jml}</td>
                               <td className="text-center">{obat.kode_sat}</td>
+                              <td className="text-center" style={stokKurang ? { color: '#dc2626', fontWeight: 600 } : undefined} title={stokKurang ? `Stok tidak cukup — butuh ${obat.jml}, tersedia ${obat.stok}` : undefined}>
+                                {obat.stok != null ? obat.stok : '-'}
+                                {stokKurang && ' ⚠'}
+                              </td>
                               <td className="text-center">
                                 <button
                                   type="button"
@@ -1822,7 +1887,8 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1908,7 +1974,34 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                     type="number"
                     className="form-control"
                     value={inputObatForm.jml}
-                    onChange={(e) => setInputObatForm(prev => ({ ...prev, jml: parseInt(e.target.value) || 1 }))}
+                    onChange={(e) => {
+                      setInputObatForm(prev => ({ ...prev, jml: parseInt(e.target.value) || 1 }));
+                      // Cek & tampilkan tooltip validasi LANGSUNG tiap
+                      // ketikan (bukan nunggu klik "Tambah") — pesan Bahasa
+                      // Indonesia via setCustomValidity, reportValidity()
+                      // yg munculkan tooltip-nya seketika.
+                      const el = e.target;
+                      if (el.validity.rangeOverflow) {
+                        el.setCustomValidity(`Stok obat yang tersedia hanya ${selectedObatNonRacikan.stok}`);
+                      } else if (el.validity.rangeUnderflow) {
+                        el.setCustomValidity('Jumlah minimal 1');
+                      } else {
+                        el.setCustomValidity('');
+                      }
+                      el.reportValidity();
+                    }}
+                    onInvalid={(e) => {
+                      const el = e.currentTarget;
+                      if (el.validity.rangeOverflow) {
+                        el.setCustomValidity(`Stok obat yang tersedia hanya ${selectedObatNonRacikan.stok}`);
+                      } else if (el.validity.valueMissing) {
+                        el.setCustomValidity('Jumlah wajib diisi');
+                      } else if (el.validity.rangeUnderflow) {
+                        el.setCustomValidity('Jumlah minimal 1');
+                      } else {
+                        el.setCustomValidity('');
+                      }
+                    }}
                     min="1"
                     max={selectedObatNonRacikan.stok}
                     required
@@ -1917,7 +2010,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                   />
                 </div>
                 <div className="col" style={{ position: 'relative' }}>
-                  <label className="form-label mb-1">Aturan Pakai <span className="text-danger">*</span></label>
+                  <label className="form-label mb-1">Aturan Pakai</label>
                   <input
                     type="text"
                     className="form-control"
@@ -1934,8 +2027,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                       // Delay to allow click on dropdown
                       setTimeout(() => setShowAturanPakaiDropdown(false), 200);
                     }}
-                    placeholder="3x1 sehari setelah makan"
-                    required
+                    placeholder={ATURAN_PAKAI_PLACEHOLDER}
                     autoComplete="off"
                   />
                   {/* Dropdown Aturan Pakai History */}
@@ -2276,7 +2368,11 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
                   <div style={{ fontSize: 12, color: '#374151' }}>Belum Ada Template Resep</div>
-                  <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Isi racikan lalu klik "Jadikan Template Resep" utk menyimpannya di sini.</div>
+                  <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>
+                    {resepDokterKode
+                      ? 'Isi racikan lalu klik "Jadikan Template Resep" utk menyimpannya di sini.'
+                      : 'Pilih dokter peresep dulu — template bersifat pribadi per dokter.'}
+                  </div>
                 </div>
               ) : (
                 <div className="resep-history-container">
