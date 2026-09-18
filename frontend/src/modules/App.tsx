@@ -1026,7 +1026,7 @@ export const App: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#ffffff',
-                  border: 'none',
+                  border: '2px solid #2563eb',
                   padding: 0,
                   overflow: 'hidden',
                   cursor: 'pointer',
