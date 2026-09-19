@@ -197,6 +197,27 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noorder]);
 
+  // Cek tracking_dokumen_ttd begitu detail selesai dimuat — kalau No.Order
+  // ini SUDAH pernah ditandatangani sebelumnya (sesi modal yg beda/sudah
+  // lama tertutup), lastTteOrderId langsung terisi dari sini, jadi tombol
+  // Download otomatis AKTIF begitu modal dibuka (tidak perlu tanda tangan
+  // ulang). Persis pola ModalHasilLabPK.tsx — nama_dokumen SENGAJA
+  // menyertakan noorder (bukan cuma "Radiologi_<no_rawat>.pdf" spt di source
+  // Java MnSendSigningDokumenActionPerformed) krn satu no_rawat di ERMApp
+  // bisa punya beberapa No.Order Radiologi berbeda (lihat no_order yg ikut
+  // dikirim di handleDownloadDokumen) — tanpa ini order lain bisa tertukar.
+  React.useEffect(() => {
+    if (!detail?.no_rawat) return;
+    let cancelled = false;
+    const noRawatNoSlash = detail.no_rawat.replace(/\//g, '');
+    const namaDokumenTracking = `Radiologi_${noorder}_${noRawatNoSlash}.pdf`;
+    fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(detail.no_rawat)}&nama_dokumen=${encodeURIComponent(namaDokumenTracking)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (!cancelled && data?.order_id) setLastTteOrderId(data.order_id); })
+      .catch(() => { /* biarkan tombol nonaktif kalau gagal cek — bukan error fatal */ });
+    return () => { cancelled = true; };
+  }, [detail?.no_rawat, noorder]);
+
   React.useEffect(() => {
     (async () => {
       setLoadingFoto(true);
@@ -934,6 +955,20 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
       if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
 
+      // Catat ke tracking_dokumen_ttd (status "Belum") — persis
+      // MnSendSigningDokumenActionPerformed Java, INSERT tepat setelah
+      // orderId didapat, spy tab Berkas Klaim/riwayat bisa memverifikasi
+      // dokumen ini sudah pernah dikirim. Best-effort — gagal dicatat TIDAK
+      // menggagalkan proses TTE yg sedang berjalan.
+      const noRawatNoSlash = (detail?.no_rawat || '').replace(/\//g, '');
+      const namaDokumenTracking = `Radiologi_${noorder}_${noRawatNoSlash}.pdf`;
+      try {
+        await fetch('/api/peruri/tracking/kirim', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ no_rawat: detail?.no_rawat || '', nama_dokumen: namaDokumenTracking, order_id: orderId, user_pengirim: petugasNip, email_ttd: email }),
+        });
+      } catch { /* non-blocking, lihat komentar di atas */ }
+
       // Tampilkan dulu Order ID yg berhasil didapat dari Send Document
       // sebentar, supaya user tau dokumennya sudah benar2 terkirim ke
       // Peruri SEBELUM lanjut ke proses OTP/Signing berikutnya.
@@ -1005,6 +1040,14 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
         }
         throw err;
       }
+      // Signing sukses -> tandai tracking_dokumen_ttd jadi "Sudah". Best-effort,
+      // sama alasan dgn tracking/kirim di atas.
+      try {
+        await fetch('/api/peruri/tracking/sukses', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+      } catch { /* non-blocking */ }
       hideProcessing();
       setLastTteOrderId(orderId);
 
@@ -1030,18 +1073,33 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
   // tidak ketemu, tampilkan raw response-nya spy bisa diperiksa manual
   // (sama pola debugging spt endpoint Peruri lain di sesi ini).
   const handleDownloadDokumen = async () => {
-    if (!lastTteOrderId) {
-      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani di sesi ini. Lakukan Tanda Tangan dulu.' });
-      return;
-    }
     setDownloadingTte(true);
     showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
     try {
+      // orderId diutamakan dari signing TERAKHIR di sesi modal ini
+      // (lastTteOrderId); kalau kosong (mis. proactive check di atas belum
+      // sempat selesai), fallback CARI ke tracking_dokumen_ttd — persis pola
+      // ModalHasilLabPK.tsx.
+      let orderId = lastTteOrderId;
+      if (!orderId) {
+        const noRawatNoSlash = (detail?.no_rawat || '').replace(/\//g, '');
+        const namaDokumenTracking = `Radiologi_${noorder}_${noRawatNoSlash}.pdf`;
+        const lookupRes = await fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(detail?.no_rawat || '')}&nama_dokumen=${encodeURIComponent(namaDokumenTracking)}`);
+        const lookupData = await lookupRes.json();
+        if (!lookupRes.ok || !lookupData.order_id) {
+          hideProcessing();
+          Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani. Lakukan Tanda Tangan dulu.' });
+          return;
+        }
+        orderId = lookupData.order_id;
+        setLastTteOrderId(orderId);
+      }
+
       // fetch langsung (bukan peruriPost) krn butuh field "uploaded_to_berkasrawat"
       // di level atas response kita sendiri, bukan cuma "response" (upstream Peruri).
       const res = await fetch('/api/peruri/download-document', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '', no_order: noorder }),
+        body: JSON.stringify({ orderId, no_rawat: detail?.no_rawat || '', no_order: noorder }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
@@ -1416,7 +1474,7 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
                     type="button"
                     onClick={handleDownloadDokumen}
                     disabled={downloadingTte || !lastTteOrderId}
-                    title={lastTteOrderId ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen tertandatangani di sesi ini'}
+                    title={lastTteOrderId ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen yang ditandatangani utk No.Order ini'}
                     style={{ padding: '9px 12px', borderRadius: 8, border: 'none', background: 'transparent', color: (downloadingTte || !lastTteOrderId) ? '#9ca3af' : '#374151', cursor: (downloadingTte || !lastTteOrderId) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
