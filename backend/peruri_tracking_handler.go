@@ -58,6 +58,39 @@ func createPeruriTrackingKirim(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+// GET /api/peruri/tracking/order-id?no_rawat=...&nama_dokumen=... — cari
+// order_id TERAKHIR yg statusnya "Sudah" utk no_rawat (+nama_dokumen kalau
+// disertakan, wajib utk Lab krn satu no_rawat bisa punya BEBERAPA No.Order
+// lab berbeda). Persis query di MnDonwloadDokumenActionPerformed Java —
+// dipakai tombol Download supaya TETAP AKTIF & bisa diklik ulang di sesi
+// modal manapun (buka lagi modal ini besok pun tetap bisa download), TIDAK
+// bergantung pada state di memori (lastTteOrderId) yg hilang begitu modal
+// ditutup/browser di-refresh.
+func getPeruriTrackingOrderID(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		noRawat := c.Query("no_rawat")
+		namaDokumen := c.Query("nama_dokumen")
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
+			return
+		}
+		query := `SELECT order_id FROM tracking_dokumen_ttd WHERE no_rawat=? AND status_ttd='Sudah'`
+		args := []interface{}{noRawat}
+		if namaDokumen != "" {
+			query += ` AND nama_dokumen=?`
+			args = append(args, namaDokumen)
+		}
+		query += ` ORDER BY tgl_kirim DESC LIMIT 1`
+
+		var orderID string
+		if err := db.QueryRow(query, args...).Scan(&orderID); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Dokumen belum ditandatangani atau Order ID tidak ditemukan"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"order_id": orderID})
+	}
+}
+
 // POST /api/peruri/tracking/sukses — dipanggil begitu signingSession Peruri
 // sukses, tandai status_ttd='Sudah' — inilah baris yg dicari getBerkasKlaimTte.
 func updatePeruriTrackingSukses(db *sql.DB) gin.HandlerFunc {

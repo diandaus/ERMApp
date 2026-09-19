@@ -1235,21 +1235,36 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
   };
 
   // handleDownloadDokumen — tombol Download, ambil dokumen yg SUDAH
-  // ditandatangani dari Peruri (downloadDocument/v1, orderId dari signing
-  // TERAKHIR di sesi modal ini — lastTteOrderId), persis salinan dari
-  // ModalHasilRadiologi.tsx. Prefix nama file dibedakan ("HasilLabPK_")
-  // supaya tidak ketimpa/campur dgn hasil Radiologi di berkas rawat.
+  // ditandatangani dari Peruri (downloadDocument/v1). orderId diutamakan
+  // dari signing TERAKHIR di sesi modal ini (lastTteOrderId) kalau ada;
+  // kalau modal baru dibuka (lastTteOrderId kosong, mis. sesi sebelumnya
+  // sudah tertutup), fallback CARI ke tracking_dokumen_ttd lewat
+  // /api/peruri/tracking/order-id — PERSIS query di
+  // MnDonwloadDokumenActionPerformed Java — supaya tombol Download TETAP
+  // AKTIF & bisa diklik berulang kapan pun tanpa perlu tanda tangan ulang,
+  // tidak cuma terbatas di sesi modal yg sama.
   const handleDownloadDokumen = async () => {
-    if (!lastTteOrderId) {
-      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani di sesi ini. Lakukan Tanda Tangan dulu.' });
-      return;
-    }
     setDownloadingTte(true);
     showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
     try {
+      let orderId = lastTteOrderId;
+      if (!orderId) {
+        const noRawatNoSlash = (detail?.no_rawat || '').replace(/\//g, '');
+        const namaDokumenTracking = `Hasil_Lab_${noorder}_${noRawatNoSlash}.pdf`;
+        const lookupRes = await fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(detail?.no_rawat || '')}&nama_dokumen=${encodeURIComponent(namaDokumenTracking)}`);
+        const lookupData = await lookupRes.json();
+        if (!lookupRes.ok || !lookupData.order_id) {
+          hideProcessing();
+          Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani. Lakukan Tanda Tangan dulu.' });
+          return;
+        }
+        orderId = lookupData.order_id;
+        setLastTteOrderId(orderId);
+      }
+
       const res = await fetch('/api/peruri/download-document', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: lastTteOrderId, no_rawat: detail?.no_rawat || '', no_order: noorder, prefix: 'Lab_' }),
+        body: JSON.stringify({ orderId, no_rawat: detail?.no_rawat || '', no_order: noorder, prefix: 'Lab_' }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
@@ -1758,9 +1773,9 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
             <button
               type="button"
               onClick={handleDownloadDokumen}
-              disabled={downloadingTte || !lastTteOrderId}
-              title={lastTteOrderId ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen tertandatangani di sesi ini'}
-              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: (downloadingTte || !lastTteOrderId) ? '#9ca3af' : '#374151', cursor: (downloadingTte || !lastTteOrderId) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              disabled={downloadingTte}
+              title="Download Dokumen Tertandatangani (Peruri) — otomatis cari No.Order terakhir yg sudah ditandatangani kalau belum ada di sesi ini"
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: downloadingTte ? '#9ca3af' : '#374151', cursor: downloadingTte ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9.517 3.31h4.966v6.621h3.31L12 16.552 6.207 9.931h3.31V3.31zM0 19.034h24v1.655H0v-1.655z"/>
