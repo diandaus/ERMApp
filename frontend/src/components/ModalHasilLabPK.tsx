@@ -1151,6 +1151,22 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
       if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
 
+      // Catat ke tracking_dokumen_ttd (status "Belum") — persis
+      // MnSendSigningDokumenActionPerformed Java, INSERT tepat setelah
+      // orderId didapat. TANPA baris ini, dokumen yg sudah ditandatangani &
+      // terupload pun TIDAK PERNAH muncul di tab Berkas Klaim (getBerkasKlaimTte
+      // baca tabel ini dulu utk tahu No.Order mana yg perlu dicek filenya).
+      // Best-effort — gagal dicatat TIDAK menggagalkan proses TTE yg sedang
+      // berjalan, cuma nanti tidak muncul di Berkas Klaim.
+      const noRawatNoSlash = (detail?.no_rawat || '').replace(/\//g, '');
+      const namaDokumenTracking = `Hasil_Lab_${noorder}_${noRawatNoSlash}.pdf`;
+      try {
+        await fetch('/api/peruri/tracking/kirim', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ no_rawat: detail?.no_rawat || '', nama_dokumen: namaDokumenTracking, order_id: orderId, user_pengirim: petugasNip, email_ttd: email }),
+        });
+      } catch { /* non-blocking, lihat komentar di atas */ }
+
       showProcessing(`Dokumen berhasil terkirim ke Peruri.<br/>Order ID: <b>${orderId}</b><br/><span style="font-size:12px;color:#6b7280;">Melanjutkan proses tanda tangan...</span>`);
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
 
@@ -1193,6 +1209,15 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
         }
         throw err;
       }
+      // Signing sukses -> tandai tracking_dokumen_ttd jadi "Sudah" (dibaca
+      // getBerkasKlaimTte utk memunculkan dokumen ini di tab Berkas Klaim).
+      // Best-effort, sama alasan dgn tracking/kirim di atas.
+      try {
+        await fetch('/api/peruri/tracking/sukses', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+      } catch { /* non-blocking */ }
       hideProcessing();
       setLastTteOrderId(orderId);
 
