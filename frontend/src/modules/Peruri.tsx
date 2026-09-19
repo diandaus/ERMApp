@@ -8,11 +8,171 @@ import { AkunPeruriView } from './AkunPeruri';
 // di Bridging.tsx). Tahap ini BARU shell (Dashboard + Lihat Dokumen +
 // Pengaturan), menu lain menyusul.
 
-const Placeholder: React.FC<{ title: string }> = ({ title }) => (
-  <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 16, background: '#ffffff' }}>
-    Fitur {title} akan dikembangkan nanti.
-  </div>
-);
+// LihatDokumenSection — daftar file dibaca LANGSUNG dari folder server
+// webapps (bukan dari tabel DB manapun — ERMApp tidak mencatat riwayat
+// auto-upload TTE sendiri, lihat komentar downloadPeruriDocument di
+// peruri_handler.go), lewat GET /api/peruri/dokumen/list. Cuma didukung
+// mode LOKAL server webapps (backend & webapps satu server); mode remote
+// dibalas error jelas oleh backend.
+type PeruriDokumenFile = { name: string; size: number; modified_at: string; url: string };
+
+const FOLDER_OPTIONS: { key: string; label: string }[] = [
+  { key: 'berkasrawat', label: 'Berkas Rawat (hasil TTE Lab/Radiologi)' },
+  { key: 'radiologi', label: 'Radiologi' },
+];
+
+const formatUkuran = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const LihatDokumenSection: React.FC = () => {
+  const [folder, setFolder] = React.useState('berkasrawat');
+  const [search, setSearch] = React.useState('');
+  const [files, setFiles] = React.useState<PeruriDokumenFile[]>([]);
+  const [dir, setDir] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [deletingName, setDeletingName] = React.useState<string | null>(null);
+
+  const fetchFiles = React.useCallback(() => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({ folder });
+    if (search.trim()) params.set('search', search.trim());
+    fetch(`/api/peruri/dokumen/list?${params}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal memuat daftar file');
+        setFiles(Array.isArray(data.files) ? data.files : []);
+        setDir(data.dir || '');
+      })
+      .catch((err) => { setFiles([]); setError(err instanceof Error ? err.message : 'Terjadi kesalahan'); })
+      .finally(() => setLoading(false));
+  }, [folder, search]);
+
+  React.useEffect(() => {
+    const t = setTimeout(fetchFiles, 300);
+    return () => clearTimeout(t);
+  }, [fetchFiles]);
+
+  const handleHapus = async (name: string) => {
+    const result = await Swal.fire({
+      icon: 'warning', title: 'Hapus File?',
+      html: `File <b>${name}</b> akan dihapus permanen dari server webapps.`,
+      showCancelButton: true, confirmButtonColor: '#dc2626', cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Hapus', cancelButtonText: 'Batal',
+    });
+    if (!result.isConfirmed) return;
+    setDeletingName(name);
+    try {
+      const params = new URLSearchParams({ folder, name });
+      const res = await fetch(`/api/peruri/dokumen?${params}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal menghapus file');
+      setFiles((prev) => prev.filter((f) => f.name !== name));
+      Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'File dihapus', timer: 1500, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setDeletingName(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#fff' }}
+        >
+          {FOLDER_OPTIONS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+        </select>
+        <input
+          type="text"
+          placeholder="Cari nama file..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
+        />
+        <button
+          type="button"
+          onClick={fetchFiles}
+          disabled={loading}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loading ? '#a7f3d0' : '#059669', color: '#fff', fontSize: 13, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
+        >
+          {loading ? 'Memuat...' : 'Refresh'}
+        </button>
+      </div>
+
+      {dir && !error && (
+        <div style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'monospace' }}>{dir}</div>
+      )}
+
+      {error && (
+        <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{error}</div>
+      )}
+
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead style={{ position: 'sticky', top: 0, background: '#f9fafb', zIndex: 1 }}>
+            <tr>
+              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>No</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>Nama File</th>
+              <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>Ukuran</th>
+              <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>Terakhir Diubah</th>
+              <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Memuat...</td></tr>
+            ) : !error && files.length === 0 ? (
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Tidak ada file di folder ini</td></tr>
+            ) : (
+              files.map((f, i) => (
+                <tr key={f.name} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #f3f4f6' }}>{i + 1}</td>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #f3f4f6', wordBreak: 'break-all' }}>{f.name}</td>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'right', whiteSpace: 'nowrap' }}>{formatUkuran(f.size)}</td>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>{f.modified_at}</td>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #059669', color: '#059669', fontSize: 11.5, fontWeight: 600, textDecoration: 'none', display: 'inline-block', marginRight: 6 }}
+                    >
+                      Buka
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleHapus(f.name)}
+                      disabled={deletingName === f.name}
+                      style={{
+                        padding: '4px 10px', borderRadius: 6, border: '1px solid #dc2626',
+                        background: '#fff', color: '#dc2626', fontSize: 11.5, fontWeight: 600,
+                        cursor: deletingName === f.name ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {deletingName === f.name ? 'Menghapus...' : 'Hapus'}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {!loading && !error && (
+        <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>{files.length} file</div>
+      )}
+    </div>
+  );
+};
 
 // DashboardSection — tahap ini baru "Test Koneksi" (panggil API Generate
 // JSON Web Token pakai kredensial yg diatur di Pengaturan) — sisanya
@@ -532,7 +692,7 @@ export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
           }}
         >
           {activeTab === 'dashboard' && <DashboardSection />}
-          {activeTab === 'lihat-dokumen' && <Placeholder title="Lihat Dokumen Peruri" />}
+          {activeTab === 'lihat-dokumen' && <LihatDokumenSection />}
           {activeTab === 'data-pengguna' && <AkunPeruriView />}
           {activeTab === 'pengaturan' && <PengaturanSection />}
         </div>

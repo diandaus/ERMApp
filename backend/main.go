@@ -4081,6 +4081,8 @@ func main() {
 	r.POST("/api/peruri/download-document", downloadPeruriDocument(db, khanzaCfg))
 	r.POST("/api/peruri/send-document-tmp", sendPeruriDocumentFromFile(db))
 	r.POST("/api/peruri/check-certificate", checkPeruriCertificate(db))
+	r.GET("/api/peruri/dokumen/list", listPeruriDokumen(khanzaCfg))
+	r.DELETE("/api/peruri/dokumen", deletePeruriDokumen(khanzaCfg))
 
 	// Peruri — Data Pengguna (akun_peruri)
 	r.GET("/api/akun-peruri", getAkunPeruriList(db))
