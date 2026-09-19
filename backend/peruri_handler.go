@@ -799,6 +799,8 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 		}
 
 		uploaded := false
+		uploadedFileName := ""
+		uploadError := ""
 		if reqIn.NoRawat != "" {
 			if m, ok := parsed.(map[string]interface{}); ok {
 				if rc, ok := m["resultCode"].(string); ok && rc == "0" {
@@ -812,14 +814,24 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 								// Sertakan NoOrder di filename kalau dikirim (lihat komentar
 								// field NoOrder di atas) — cegah 2+ permintaan dgn no_rawat
 								// sama saling menimpa file satu sama lain di Berkas Rawat.
-								// Urutan: NoOrder (no permintaan) dulu, baru NoRawat setelahnya.
-								fileName := prefix
+								// Urutan PERSIS uploadPDFToServer di Khanza Desktop (MnDonwloadDokumenActionPerformed):
+								// "Lab_" + no_rawat (slash->underscore) + "_" + noorderDownload + "_signed.pdf"
+								// — NoRawat DULU, baru NoOrder setelahnya (bukan sebaliknya).
+								fileName := prefix + strings.ReplaceAll(reqIn.NoRawat, "/", "_")
 								if reqIn.NoOrder != "" {
-									fileName += strings.ReplaceAll(reqIn.NoOrder, "/", "_") + "_"
+									fileName += "_" + strings.ReplaceAll(reqIn.NoOrder, "/", "_")
 								}
-								fileName += strings.ReplaceAll(reqIn.NoRawat, "/", "_") + "_signed.pdf"
+								fileName += "_signed.pdf"
+								uploadedFileName = fileName
 								if wErr := WriteWebappsFile(webappsCfg, "berkasrawat/pages/upload", fileName, pdfBytes); wErr == nil {
 									uploaded = true
+								} else {
+									// Dulu error ini DIBUANG DIAM-DIAM (uploaded cuma jadi false
+									// tanpa penjelasan) — frontend jadinya tidak pernah kasih tau
+									// user kalau auto-upload ke Berkas Rawat gagal, padahal dokumen
+									// tetap "berhasil" diunduh ke komputer lokal. Sekarang pesan
+									// errornya ikut dibalas supaya kegagalan ini kelihatan.
+									uploadError = wErr.Error()
 								}
 							}
 						}
@@ -828,7 +840,12 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status_code": statusCode, "response": parsed, "uploaded_to_berkasrawat": uploaded})
+		c.JSON(http.StatusOK, gin.H{
+			"status_code": statusCode, "response": parsed,
+			"uploaded_to_berkasrawat": uploaded,
+			"upload_file_name":        uploadedFileName,
+			"upload_error":            uploadError,
+		})
 	}
 }
 

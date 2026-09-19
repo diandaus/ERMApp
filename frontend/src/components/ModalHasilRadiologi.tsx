@@ -1074,6 +1074,14 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
       hideProcessing();
       if (resData.uploaded_to_berkasrawat) {
         Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen terunduh & otomatis terupload ke Berkas Rawat.', timer: 2000, showConfirmButton: false });
+      } else {
+        // Dulu kegagalan auto-upload ini DIAM SAJA (dokumen tetap terunduh
+        // lokal, tapi Berkas Rawat di server tidak pernah tertimpa/terupdate
+        // tanpa pemberitahuan apa pun) — sekarang ditampilkan eksplisit.
+        Swal.fire({
+          icon: 'warning', title: 'Auto-upload ke Berkas Rawat gagal',
+          text: `Dokumen berhasil diunduh ke komputer, tapi GAGAL otomatis terupload ke Berkas Rawat${resData.upload_error ? `: ${resData.upload_error}` : '.'}`,
+        });
       }
     } catch (err) {
       hideProcessing();
