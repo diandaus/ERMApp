@@ -154,6 +154,24 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noorder]);
 
+  // Cek tracking_dokumen_ttd begitu detail selesai dimuat — kalau No.Order
+  // ini SUDAH pernah ditandatangani sebelumnya (sesi modal yg beda/sudah
+  // lama tertutup), lastTteOrderId langsung terisi dari sini, jadi tombol
+  // Download otomatis AKTIF begitu modal dibuka (tidak perlu tanda tangan
+  // ulang). Kalau belum pernah ditandatangani sama sekali, tetap kosong ->
+  // tombol Download tetap NONAKTIF sampai proses Tanda Tangan berhasil.
+  React.useEffect(() => {
+    if (!detail?.no_rawat) return;
+    let cancelled = false;
+    const noRawatNoSlash = detail.no_rawat.replace(/\//g, '');
+    const namaDokumenTracking = `Hasil_Lab_${noorder}_${noRawatNoSlash}.pdf`;
+    fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(detail.no_rawat)}&nama_dokumen=${encodeURIComponent(namaDokumenTracking)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (!cancelled && data?.order_id) setLastTteOrderId(data.order_id); })
+      .catch(() => { /* biarkan tombol nonaktif kalau gagal cek — bukan error fatal */ });
+    return () => { cancelled = true; };
+  }, [detail?.no_rawat, noorder]);
+
   // Muat template parameter (template_laboratorium) utk SEMUA pemeriksaan
   // di permintaan ini sekaligus (bukan cuma yg dicentang) — dimuat sekali
   // begitu detail selesai dimuat, ditampilkan/disembunyikan per exam lewat
@@ -1773,9 +1791,9 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
             <button
               type="button"
               onClick={handleDownloadDokumen}
-              disabled={downloadingTte}
-              title="Download Dokumen Tertandatangani (Peruri) — otomatis cari No.Order terakhir yg sudah ditandatangani kalau belum ada di sesi ini"
-              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: downloadingTte ? '#9ca3af' : '#374151', cursor: downloadingTte ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              disabled={downloadingTte || !lastTteOrderId}
+              title={lastTteOrderId ? 'Download Dokumen Tertandatangani (Peruri)' : 'Belum ada dokumen yang ditandatangani utk No.Order ini'}
+              style={{ width: 38, height: 38, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: (downloadingTte || !lastTteOrderId) ? '#9ca3af' : '#374151', cursor: (downloadingTte || !lastTteOrderId) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9.517 3.31h4.966v6.621h3.31L12 16.552 6.207 9.931h3.31V3.31zM0 19.034h24v1.655H0v-1.655z"/>
