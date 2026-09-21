@@ -478,11 +478,14 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       const rowsHtml = items.map((it) => {
         const morfologiItem = isMorfologi(it.nm_perawatan);
         // Kalau allMorfologiPrint, baris judul kelompok ini SEKALIGUS jadi
-        // header tabel (latar abu2 #f2f2f4 + border atas-bawah hitam) krn
-        // <thead> "Pemeriksaan|Hasil" generik-nya sengaja dihilangkan di
-        // mode ini. Kalau bukan allMorfologiPrint, TANPA border atas/bawah
-        // (persis preview PDF — tidak ada garis pemisah antar baris data
-        // ATAUPUN di bawah nama kelompok pemeriksaan).
+        // header tabel (latar abu2 #f2f2f4 + border atas-bawah HITAM tegas)
+        // krn <thead> "Pemeriksaan|Hasil" generik-nya sengaja dihilangkan di
+        // mode ini — border-bottom-nya dioverride hitam (bukan ikut default
+        // abu2 spt baris data biasa) supaya tetap kelihatan sbg header, bukan
+        // baris data biasa. Kalau bukan allMorfologiPrint, border-bottom
+        // dibiarkan ikut default `table.hasil td` (abu2 tipis, sama spt
+        // baris data lain) — garis pemisah antar SEMUA baris (termasuk baris
+        // nama kelompok) jadi konsisten.
         // SENGAJA dirender sbg beberapa <td> terpisah (BUKAN satu <td
         // colspan>) walau isinya cuma teks di kolom pertama — kalau pakai
         // colspan, garis vertikal antar kolom (border-left, lihat CSS
@@ -490,7 +493,7 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
         // gabungan tidak punya pembatas kolom internal. Dgn <td> kosong
         // terpisah per kolom, garis vertikalnya tetap nyambung utuh dari
         // header sampai baris terakhir.
-        const groupCellStyle = `background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};border-top:${allMorfologiPrint ? '1px solid #000' : 'none'};border-bottom:${allMorfologiPrint ? '1px solid #000' : 'none'};`;
+        const groupCellStyle = `background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};${allMorfologiPrint ? 'border-top:1px solid #000;border-bottom:1px solid #000;' : ''}`;
         const groupColCount = allMorfologiPrint ? 2 : 5;
         const groupCells = `<td style="${groupCellStyle}">${it.nm_perawatan}</td>` + `<td style="${groupCellStyle}"></td>`.repeat(groupColCount - 1);
         const groupRow = it.nm_perawatan !== lastGroup
@@ -541,14 +544,14 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               table.info td.nowrap { white-space: nowrap; }
               /* Ukuran font tabel.hasil disamakan dgn preview PDF Peruri
                  (header 9pt tanpa bold, baris data 8.5pt). Border: garis
-                 vertikal antar kolom TETAP ADA (kiri tiap kolom, jadi
-                 nyambung jadi garis penuh dari header sampai baris terakhir)
-                 — TANPA garis horizontal antar baris data (biar tidak
-                 sesak/ramai spt versi awal), cuma garis atas-bawah header &
-                 penutup baris terakhir. */
+                 vertikal antar kolom (kiri tiap kolom, nyambung jadi garis
+                 penuh dari header sampai baris terakhir) + garis abu-abu
+                 tipis antar baris data (border-bottom td), sementara header
+                 & baris paling akhir tetap digarisi HITAM tegas. */
               table.hasil { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 8.5pt; }
               table.hasil th, table.hasil td { border: none; border-left: 1px solid #000; padding: 3px 6px; text-align: left; vertical-align: top; }
               table.hasil th:last-child, table.hasil td:last-child { border-right: 1px solid #000; }
+              table.hasil td { border-bottom: 0.5px solid #999; }
               table.hasil th { background: #f2f2f4; font-size: 9pt; font-weight: normal; border-top: 1px solid #000; border-bottom: 1px solid #000; }
               table.hasil tbody tr:last-child td { border-bottom: 1px solid #000; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
