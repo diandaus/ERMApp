@@ -135,6 +135,31 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // beratBadan — Berat Badan pasien, dipakai di header (bantu petugas cek
+  // dosis obat anak/racikan). Diambil dari isian SOAP/CPPT (pemeriksaan_ralan
+  // utk Ralan, pemeriksaan_ranap utk Ranap — endpoint yg sama dgn tab
+  // SOAP/CPPT pasien ini), ambil dari entri PALING BARU yg field beratnya
+  // terisi. HATI-HATI: urutan kedua endpoint ini BEDA — pemeriksaan_ralan
+  // ASC (lama->baru, perlu di-reverse dulu), pemeriksaan_ranap DESC
+  // (baru->lama, sudah langsung terurut terbaru dulu).
+  const [beratBadan, setBeratBadan] = React.useState('');
+  React.useEffect(() => {
+    if (!patient.no_rawat) return;
+    const url = isRanap
+      ? `/api/pemeriksaan-ranap/${encodeURIComponent(patient.no_rawat)}`
+      : `/api/pemeriksaan-ralan/${encodeURIComponent(patient.no_rawat)}`;
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: { berat?: string }[]) => {
+        if (!Array.isArray(data)) return;
+        const terurutTerbaruDulu = isRanap ? data : [...data].reverse();
+        const terbaru = terurutTerbaruDulu.find((p) => p.berat && p.berat.trim() !== '');
+        if (terbaru) setBeratBadan(terbaru.berat!.trim());
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient.no_rawat, isRanap]);
+
   // Auto-time tick — sama pola dgn Tgl/Jam SOAP di PemeriksaanRanap.tsx.
   React.useEffect(() => {
     if (!isRanap || !resepUseAutoTime) return;
@@ -1322,7 +1347,7 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1AB1E5" strokeWidth="2.5" style={{ flexShrink: 0 }}>
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
               </svg>
-              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur]
+              {[patient?.no_rawat, patient?.no_rkm_medis, patient?.nm_pasien, patient?.umur, beratBadan ? `Berat Badan : ${beratBadan} kg` : '']
                 .filter(Boolean)
                 .map((v, i, arr) => (
                   <React.Fragment key={i}>
