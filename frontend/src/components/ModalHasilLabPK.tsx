@@ -477,15 +477,24 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
       let lastGroup = '';
       const rowsHtml = items.map((it) => {
         const morfologiItem = isMorfologi(it.nm_perawatan);
-        const groupColspan = allMorfologiPrint ? 2 : 5;
         // Kalau allMorfologiPrint, baris judul kelompok ini SEKALIGUS jadi
         // header tabel (latar abu2 #f2f2f4 + border atas-bawah hitam) krn
         // <thead> "Pemeriksaan|Hasil" generik-nya sengaja dihilangkan di
-        // mode ini. Kalau bukan allMorfologiPrint, TANPA border sama sekali
+        // mode ini. Kalau bukan allMorfologiPrint, TANPA border atas/bawah
         // (persis preview PDF — tidak ada garis pemisah antar baris data
         // ATAUPUN di bawah nama kelompok pemeriksaan).
+        // SENGAJA dirender sbg beberapa <td> terpisah (BUKAN satu <td
+        // colspan>) walau isinya cuma teks di kolom pertama — kalau pakai
+        // colspan, garis vertikal antar kolom (border-left, lihat CSS
+        // table.hasil td di atas) jadi PUTUS persis di baris ini krn sel
+        // gabungan tidak punya pembatas kolom internal. Dgn <td> kosong
+        // terpisah per kolom, garis vertikalnya tetap nyambung utuh dari
+        // header sampai baris terakhir.
+        const groupCellStyle = `background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};border-top:${allMorfologiPrint ? '1px solid #000' : 'none'};border-bottom:${allMorfologiPrint ? '1px solid #000' : 'none'};`;
+        const groupColCount = allMorfologiPrint ? 2 : 5;
+        const groupCells = `<td style="${groupCellStyle}">${it.nm_perawatan}</td>` + `<td style="${groupCellStyle}"></td>`.repeat(groupColCount - 1);
         const groupRow = it.nm_perawatan !== lastGroup
-          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="${groupColspan}" style="background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};border-top:${allMorfologiPrint ? '1px solid #000' : 'none'};border-bottom:${allMorfologiPrint ? '1px solid #000' : 'none'};">${it.nm_perawatan}</td></tr>`)
+          ? (lastGroup = it.nm_perawatan, `<tr>${groupCells}</tr>`)
           : '';
         if (morfologiItem) {
           // Morfologi — cuma Pemeriksaan+Hasil, kolom Satuan/Nilai Rujukan/
