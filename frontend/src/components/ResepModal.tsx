@@ -122,12 +122,18 @@ export const ResepModal: React.FC<ResepModalProps> = ({ patient, onClose, onRese
   const [noResepAuto, setNoResepAuto] = React.useState(true);
   const [manualNoResep, setManualNoResep] = React.useState('');
 
+  // resepDokterKode/Nama diisi dari dokter kunjungan (patient.kd_dokter)
+  // begitu modal dibuka, TANPA syarat isRanap — dulu cuma diisi utk Ranap
+  // (field Peresep di header memang cuma tampil di Ranap), akibatnya
+  // Template Resep Racikan (kd_dokter-nya) di Ralan SELALU kosong walau
+  // simpan resep Ralan sendiri sudah otomatis pakai patient.kd_dokter
+  // (lihat handleSimpanResep bagian RALAN) — jadi tombol Template selalu
+  // muncul "Pilih dokter peresep dulu" padahal dokternya sudah ada.
   React.useEffect(() => {
-    if (!isRanap) return;
     setResepDokterKode(patient.kd_dokter || '');
     setResepDokterNama(patient.nm_dokter || '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRanap]);
+  }, []);
 
   // Auto-time tick — sama pola dgn Tgl/Jam SOAP di PemeriksaanRanap.tsx.
   React.useEffect(() => {
