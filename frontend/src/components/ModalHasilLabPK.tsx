@@ -479,12 +479,13 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
         const morfologiItem = isMorfologi(it.nm_perawatan);
         const groupColspan = allMorfologiPrint ? 2 : 5;
         // Kalau allMorfologiPrint, baris judul kelompok ini SEKALIGUS jadi
-        // header tabel (latar abu2 #f2f2f4 + border atas-bawah hitam, persis
-        // drawNarrativeHeader) krn <thead> "Pemeriksaan|Hasil" generik-nya
-        // sengaja dihilangkan di mode ini. Kalau bukan allMorfologiPrint,
-        // border-bottom abu2 tipis persis drawGroupRow (BUKAN garis header).
+        // header tabel (latar abu2 #f2f2f4 + border atas-bawah hitam) krn
+        // <thead> "Pemeriksaan|Hasil" generik-nya sengaja dihilangkan di
+        // mode ini. Kalau bukan allMorfologiPrint, TANPA border sama sekali
+        // (persis preview PDF — tidak ada garis pemisah antar baris data
+        // ATAUPUN di bawah nama kelompok pemeriksaan).
         const groupRow = it.nm_perawatan !== lastGroup
-          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="${groupColspan}" style="background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};border-top:${allMorfologiPrint ? '1px solid #000' : 'none'};border-bottom:${allMorfologiPrint ? '1px solid #000' : '0.5px solid #999'};">${it.nm_perawatan}</td></tr>`)
+          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="${groupColspan}" style="background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};border-top:${allMorfologiPrint ? '1px solid #000' : 'none'};border-bottom:${allMorfologiPrint ? '1px solid #000' : 'none'};">${it.nm_perawatan}</td></tr>`)
           : '';
         if (morfologiItem) {
           // Morfologi — cuma Pemeriksaan+Hasil, kolom Satuan/Nilai Rujukan/
@@ -530,18 +531,17 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               table.info td.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
               table.info td.nowrap { white-space: nowrap; }
               /* Ukuran font & border tabel.hasil SENGAJA disamakan persis dgn
-                 buildHasilLabPKPdfUntukTtd (PDF yg dikirim ke Peruri, lihat
-                 tombol "Preview PDF") — bukan cuma tampilan window.print biasa
-                 lagi, spy dokumen cetak & dokumen TTE terlihat konsisten:
-                 header 9pt (TIDAK bold, persis drawTableHeader), baris data
-                 8.5pt (persis textY loop), garis kolom vertikal hitam penuh
-                 (persis drawColLines), garis pemisah antar baris abu2 tipis
-                 (persis rgb(0.6,0.6,0.6) di drawGroupRow/loop baris data),
-                 garis atas/bawah header & baris TERAKHIR hitam tegas. */
+                 tampilan preview PDF yg dikirim ke Peruri (tombol "Preview
+                 PDF") — TERNYATA preview-nya TIDAK ada garis grid internal
+                 sama sekali (bukan cuma tipis/samar), cuma kotak luar tabel
+                 (kiri/kanan/bawah-baris-terakhir) + garis atas-bawah pemisah
+                 header. Jadi TIDAK ada garis vertikal antar kolom & TIDAK
+                 ada garis horizontal antar baris data — beda dari percobaan
+                 sebelumnya yg masih meniru drawColLines/drawGroupRow PENUH. */
               table.hasil { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 8.5pt; }
-              table.hasil th, table.hasil td { border-left: 1px solid #000; padding: 3px 6px; text-align: left; vertical-align: top; }
+              table.hasil th, table.hasil td { border: none; padding: 3px 6px; text-align: left; vertical-align: top; }
+              table.hasil th:first-child, table.hasil td:first-child { border-left: 1px solid #000; }
               table.hasil th:last-child, table.hasil td:last-child { border-right: 1px solid #000; }
-              table.hasil td { border-bottom: 0.5px solid #999; }
               table.hasil th { background: #f2f2f4; font-size: 9pt; font-weight: normal; border-top: 1px solid #000; border-bottom: 1px solid #000; }
               table.hasil tbody tr:last-child td { border-bottom: 1px solid #000; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
