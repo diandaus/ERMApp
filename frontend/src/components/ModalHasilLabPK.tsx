@@ -530,17 +530,15 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               table.info td.label { white-space: nowrap; }
               table.info td.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
               table.info td.nowrap { white-space: nowrap; }
-              /* Ukuran font & border tabel.hasil SENGAJA disamakan persis dgn
-                 tampilan preview PDF yg dikirim ke Peruri (tombol "Preview
-                 PDF") — TERNYATA preview-nya TIDAK ada garis grid internal
-                 sama sekali (bukan cuma tipis/samar), cuma kotak luar tabel
-                 (kiri/kanan/bawah-baris-terakhir) + garis atas-bawah pemisah
-                 header. Jadi TIDAK ada garis vertikal antar kolom & TIDAK
-                 ada garis horizontal antar baris data — beda dari percobaan
-                 sebelumnya yg masih meniru drawColLines/drawGroupRow PENUH. */
+              /* Ukuran font tabel.hasil disamakan dgn preview PDF Peruri
+                 (header 9pt tanpa bold, baris data 8.5pt). Border: garis
+                 vertikal antar kolom TETAP ADA (kiri tiap kolom, jadi
+                 nyambung jadi garis penuh dari header sampai baris terakhir)
+                 — TANPA garis horizontal antar baris data (biar tidak
+                 sesak/ramai spt versi awal), cuma garis atas-bawah header &
+                 penutup baris terakhir. */
               table.hasil { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 8.5pt; }
-              table.hasil th, table.hasil td { border: none; padding: 3px 6px; text-align: left; vertical-align: top; }
-              table.hasil th:first-child, table.hasil td:first-child { border-left: 1px solid #000; }
+              table.hasil th, table.hasil td { border: none; border-left: 1px solid #000; padding: 3px 6px; text-align: left; vertical-align: top; }
               table.hasil th:last-child, table.hasil td:last-child { border-right: 1px solid #000; }
               table.hasil th { background: #f2f2f4; font-size: 9pt; font-weight: normal; border-top: 1px solid #000; border-bottom: 1px solid #000; }
               table.hasil tbody tr:last-child td { border-bottom: 1px solid #000; }
