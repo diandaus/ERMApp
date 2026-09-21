@@ -479,19 +479,22 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
         const morfologiItem = isMorfologi(it.nm_perawatan);
         const groupColspan = allMorfologiPrint ? 2 : 5;
         // Kalau allMorfologiPrint, baris judul kelompok ini SEKALIGUS jadi
-        // header tabel (latar abu2 #f3f4f6 spt <thead> th) krn <thead>
-        // "Pemeriksaan|Hasil" generik-nya sengaja dihilangkan di mode ini.
+        // header tabel (latar abu2 #f2f2f4 + border atas-bawah hitam, persis
+        // drawNarrativeHeader) krn <thead> "Pemeriksaan|Hasil" generik-nya
+        // sengaja dihilangkan di mode ini. Kalau bukan allMorfologiPrint,
+        // border-bottom abu2 tipis persis drawGroupRow (BUKAN garis header).
         const groupRow = it.nm_perawatan !== lastGroup
-          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="${groupColspan}" style="background:${allMorfologiPrint ? '#f3f4f6' : '#ffffff'};border-bottom-color:${allMorfologiPrint ? '#333' : '#9ca3af'};">${it.nm_perawatan}</td></tr>`)
+          ? (lastGroup = it.nm_perawatan, `<tr><td colspan="${groupColspan}" style="background:${allMorfologiPrint ? '#f2f2f4' : '#ffffff'};font-size:${allMorfologiPrint ? '9pt' : '8.5pt'};border-top:${allMorfologiPrint ? '1px solid #000' : 'none'};border-bottom:${allMorfologiPrint ? '1px solid #000' : '0.5px solid #999'};">${it.nm_perawatan}</td></tr>`)
           : '';
         if (morfologiItem) {
           // Morfologi — cuma Pemeriksaan+Hasil, kolom Satuan/Nilai Rujukan/
           // Keterangan disembunyikan (Hasil merentang via colspan). Baris
           // baru di textarea (multi-baris) diubah jadi <br/> krn HTML
-          // meratakan \n polos jadi satu baris.
+          // meratakan \n polos jadi satu baris. font-size 9pt persis
+          // drawNarrativeItem (beda dari baris data biasa yg 8.5pt).
           const hasilHtml = (it.hasil || '-').split('\n').map((line) => line || '&nbsp;').join('<br/>');
           return `${groupRow}
-        <tr>
+        <tr style="font-size:9pt;">
           <td style="padding-left:1.5em;">${it.pemeriksaan}</td>
           <td colspan="4">${hasilHtml}</td>
         </tr>
@@ -521,14 +524,26 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
               body { font-family: Tahoma, Arial, sans-serif; font-size: 11pt; padding: 0 16px 16px; color: #000; }
               table.tbl_form td { border: 0; vertical-align: middle; }
               hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
-              table.info { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
+              table.info { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 10px; font-size: 9.5pt; }
               table.info td { padding: 2px 4px; vertical-align: top; }
               table.info td.label { white-space: nowrap; }
               table.info td.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
               table.info td.nowrap { white-space: nowrap; }
-              table.hasil { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10.5pt; }
-              table.hasil th, table.hasil td { border: 1px solid #333; padding: 4px 6px; text-align: left; vertical-align: top; }
-              table.hasil th { background: #f3f4f6; }
+              /* Ukuran font & border tabel.hasil SENGAJA disamakan persis dgn
+                 buildHasilLabPKPdfUntukTtd (PDF yg dikirim ke Peruri, lihat
+                 tombol "Preview PDF") — bukan cuma tampilan window.print biasa
+                 lagi, spy dokumen cetak & dokumen TTE terlihat konsisten:
+                 header 9pt (TIDAK bold, persis drawTableHeader), baris data
+                 8.5pt (persis textY loop), garis kolom vertikal hitam penuh
+                 (persis drawColLines), garis pemisah antar baris abu2 tipis
+                 (persis rgb(0.6,0.6,0.6) di drawGroupRow/loop baris data),
+                 garis atas/bawah header & baris TERAKHIR hitam tegas. */
+              table.hasil { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 8.5pt; }
+              table.hasil th, table.hasil td { border-left: 1px solid #000; padding: 3px 6px; text-align: left; vertical-align: top; }
+              table.hasil th:last-child, table.hasil td:last-child { border-right: 1px solid #000; }
+              table.hasil td { border-bottom: 0.5px solid #999; }
+              table.hasil th { background: #f2f2f4; font-size: 9pt; font-weight: normal; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+              table.hasil tbody tr:last-child td { border-bottom: 1px solid #000; }
               .ttd { width: 45%; text-align: center; font-size: 11pt; }
               .rs-nama { font-size: 14pt; }
               .rs-alamat { font-size: 9pt; }
@@ -583,6 +598,10 @@ export const ModalHasilLabPK: React.FC<Props> = ({ noorder, nip, onClose, onSave
             </table>
 
             <table class="hasil">
+              <colgroup>
+                <col style="width:32%"><col style="width:15%"><col style="width:13%">
+                <col style="width:20%"><col style="width:20%">
+              </colgroup>
               ${allMorfologiPrint ? '' : `
               <thead>
                 <tr><th>Pemeriksaan</th><th>Hasil</th><th>Satuan</th><th>Nilai Rujukan</th><th>Keterangan</th></tr>
