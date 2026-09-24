@@ -226,11 +226,8 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
             onMouseEnter={(e) => { if (!sendingMwl) e.currentTarget.style.background = '#e0f2fe'; }}
             onMouseLeave={(e) => { if (!sendingMwl) e.currentTarget.style.background = '#fff'; }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2"></rect>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-              <line x1="8" y1="14" x2="16" y2="14"></line>
-              <line x1="8" y1="18" x2="13" y2="18"></line>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 4L3 11L10 14M20 4L13 21L10 14M20 4L10 14"></path>
             </svg>
             {sendingMwl ? 'Mengirim...' : 'Kirim Modality Worklist'}
           </button>
