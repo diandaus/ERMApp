@@ -80,6 +80,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({ show, onClose, onSuc
     { key: 'rawat-jalan', label: 'Rawat Jalan' },
     { key: 'rawat-inap', label: 'Rawat Inap' },
     { key: 'radiologi', label: 'Radiologi' },
+    // pemeriksaan-usg — BUKAN menu sidebar tersendiri (cek canAccessMenu di
+    // App.tsx), tapi fitur granular di DALAM Pemeriksaan.tsx (tab
+    // "Pemeriksaan USG" pd rekam medis rawat jalan) — dicek terpisah lewat
+    // canAccessFeature (currentUser.ts). Sengaja masih di list yg sama krn
+    // kolom allowed_modules-nya memang dipakai bersama.
+    { key: 'pemeriksaan-usg', label: 'Pemeriksaan USG (di dalam Rekam Medis)' },
     { key: 'laboratorium-pk', label: 'Laboratorium PK' },
     { key: 'laboratorium-pa', label: 'Laboratorium PA' },
     { key: 'farmasi', label: 'Farmasi' },

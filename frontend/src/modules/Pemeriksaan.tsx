@@ -12,6 +12,7 @@ import { TindakanTab } from '../components/TindakanTab';
 import { DiagnosaTab } from '../components/DiagnosaTab';
 import { CatatanDokterTab } from '../components/CatatanDokterTab';
 import { renderSoapCpptTable } from '../utils/soapCpptIgdDisplay';
+import { canAccessFeature } from '../utils/currentUser';
 
 type SoapViewProps = {
   patient: any;
@@ -164,6 +165,12 @@ const SoapAutoField: React.FC<{
 
 export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) => {
   const [activeTab, setActiveTab] = React.useState<'soap' | 'resep' | 'lab' | 'rad' | 'usg' | 'tindakan' | 'diagnosa' | 'catatan_dokter' | 'upload'>('soap');
+  // Tab "Pemeriksaan USG" dibatasi: admin selalu lihat, role lain wajib
+  // di-whitelist eksplisit lewat allowed_modules (key 'pemeriksaan-usg',
+  // dicentang admin di menu Manajemen User > AddUserModal.tsx) — dicek
+  // sekali di sini (bukan per-render ulang) krn sesi login tidak berubah
+  // selama modal Pemeriksaan ini terbuka.
+  const canAccessUsg = React.useMemo(() => canAccessFeature('pemeriksaan-usg'), []);
   const [isEditMode, setIsEditMode] = React.useState(false);
   const [editingItem, setEditingItem] = React.useState<any>(null); // Menyimpan item yang sedang diedit
   const [loading, setLoading] = React.useState(false);
@@ -1756,22 +1763,24 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
           >
             RADIOLOGI
           </button>
-          <button
-            onClick={() => setActiveTab('usg')}
-            style={{
-              padding: '10px 20px',
-              border: 'none',
-              background: activeTab === 'usg' ? '#e0f2fe' : 'transparent',
-              borderBottom: activeTab === 'usg' ? '3px solid #1AB1E5' : '3px solid transparent',
-              color: activeTab === 'usg' ? '#1AB1E5' : '#6b7280',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 400,
-              transition: 'all 0.2s'
-            }}
-          >
-            PEMERIKSAAN USG
-          </button>
+          {canAccessUsg && (
+            <button
+              onClick={() => setActiveTab('usg')}
+              style={{
+                padding: '10px 20px',
+                border: 'none',
+                background: activeTab === 'usg' ? '#e0f2fe' : 'transparent',
+                borderBottom: activeTab === 'usg' ? '3px solid #1AB1E5' : '3px solid transparent',
+                color: activeTab === 'usg' ? '#1AB1E5' : '#6b7280',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 400,
+                transition: 'all 0.2s'
+              }}
+            >
+              PEMERIKSAAN USG
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('tindakan')}
             style={{
@@ -2122,7 +2131,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
               </div>
             )}
 
-            {activeTab === 'usg' && (
+            {activeTab === 'usg' && canAccessUsg && (
               <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <RadTab patient={patient} kategoriUsg />
               </div>

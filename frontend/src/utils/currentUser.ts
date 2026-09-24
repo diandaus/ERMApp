@@ -54,3 +54,19 @@ export function getCurrentUserRole(): string {
   const user = readErmappUser() as { role?: string } | null;
   return user?.role || '';
 }
+
+// canAccessFeature — cek hak akses fitur GRANULAR di dalam suatu modul (mis.
+// tab "Pemeriksaan USG" di dalam Pemeriksaan.tsx), BEDA dari canAccessMenu
+// di App.tsx yang menggerbang MENU LEVEL ATAS (sidebar). Reuse kolom
+// app_users.allowed_modules yang SAMA (diatur admin lewat AddUserModal.tsx,
+// key ditambahkan ke availableModules) — cukup daftarkan key fitur di sana
+// spy admin bisa centang per-akun, tanpa perlu tabel/UI permission baru.
+// Admin SELALU lolos (walau allowed_modules-nya tidak eksplisit menyebut
+// key ini) — cuma role lain yang wajib di-whitelist eksplisit.
+export function canAccessFeature(featureKey: string): boolean {
+  const user = readErmappUser() as { role?: string; allowed_modules?: string } | null;
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const allowed = (user.allowed_modules || '').split(',').filter(Boolean);
+  return allowed.includes(featureKey);
+}
