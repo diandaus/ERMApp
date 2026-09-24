@@ -41,6 +41,7 @@ func getJenisPerawatanRadiologi(db *sql.DB) gin.HandlerFunc {
 		search := c.Query("search")
 		kdPj := c.Query("kd_pj")
 		kelas := c.Query("kelas")
+		kategori := c.Query("kategori")
 
 		// Saklar Set Penggunaan Tarif (set_tarif.cara_bayar_radiologi/
 		// kelas_radiologi, lihat set_tarif_handler.go) — padanan
@@ -87,6 +88,16 @@ func getJenisPerawatanRadiologi(db *sql.DB) gin.HandlerFunc {
 			query += " AND (jns_perawatan_radiologi.kd_jenis_prw LIKE ? OR jns_perawatan_radiologi.nm_perawatan LIKE ?)"
 			searchPattern := "%" + search + "%"
 			args = append(args, searchPattern, searchPattern)
+		}
+
+		// kategori=usg — dipakai tab "Pemeriksaan USG" (Pemeriksaan.tsx),
+		// batasi ke jenis pemeriksaan yg namanya diawali "USG" saja. Tidak
+		// ada kolom kategori/modality di jns_perawatan_radiologi, jadi
+		// prefix nama inilah satu-satunya penanda yg konsisten (dikonfirmasi
+		// dari data produksi: semua varian USG ABDOMEN/MAMMAE/THYROID/dst
+		// selalu diawali "USG ").
+		if kategori == "usg" {
+			query += " AND jns_perawatan_radiologi.nm_perawatan LIKE 'USG%'"
 		}
 
 		query += " ORDER BY jns_perawatan_radiologi.kd_jenis_prw LIMIT 50"
@@ -372,6 +383,7 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No rawat wajib diisi"})
 			return
 		}
+		kategori := c.Query("kategori")
 
 		query := `
 			SELECT
@@ -388,10 +400,26 @@ func getRiwayatRadiologi(db *sql.DB) gin.HandlerFunc {
 			FROM permintaan_radiologi pr
 			LEFT JOIN dokter d ON pr.dokter_perujuk = d.kd_dokter
 			WHERE pr.no_rawat = ?
-			ORDER BY pr.tgl_permintaan DESC, pr.jam_permintaan DESC
 		`
+		args := []interface{}{noRawat}
 
-		rows, err := db.Query(query, noRawat)
+		// kategori=usg — tab "Pemeriksaan USG" cuma mau lihat permintaan yg
+		// SALAH SATU pemeriksaannya USG (bukan noorder yg 100% semua USG,
+		// krn satu permintaan Radiologi biasa bisa berisi campuran jenis
+		// pemeriksaan). Sama prinsip prefix nama dgn getJenisPerawatanRadiologi.
+		if kategori == "usg" {
+			query += `
+				AND EXISTS (
+					SELECT 1 FROM permintaan_pemeriksaan_radiologi ppr
+					INNER JOIN jns_perawatan_radiologi jpr ON ppr.kd_jenis_prw = jpr.kd_jenis_prw
+					WHERE ppr.noorder = pr.noorder AND jpr.nm_perawatan LIKE 'USG%'
+				)
+			`
+		}
+
+		query += " ORDER BY pr.tgl_permintaan DESC, pr.jam_permintaan DESC"
+
+		rows, err := db.Query(query, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil riwayat radiologi", "details": err.Error()})
 			return

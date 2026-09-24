@@ -12,9 +12,13 @@ type ModalInputRadProps = {
   patient: any;
   onClose: () => void;
   onSaved: () => void;
+  // kategoriUsg — dipanggil dari RadTab versi tab "Pemeriksaan USG"
+  // (Pemeriksaan.tsx), batasi daftar pilihan pemeriksaan cuma yg USG saja
+  // lewat ?kategori=usg (lihat getJenisPerawatanRadiologi di rad_handler.go).
+  kategoriUsg?: boolean;
 };
 
-export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, onSaved }) => {
+export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, onSaved, kategoriUsg = false }) => {
   // Redesain jadi panel slide-in dari kanan, PERSIS pola ModalInputLab.tsx/
   // ModalInputTriase.tsx/ResepModal.tsx (overlay fixed + panel anchor kanan
   // full-height, header breadcrumb pasien + tombol close bulat, body
@@ -94,6 +98,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
         search: searchRad,
         kd_pj: patient.kd_pj || '',
         kelas: infoRawat.kelas || patient.kelas || '',
+        ...(kategoriUsg ? { kategori: 'usg' } : {}),
       });
       const res = await fetch(`/api/radiologi/jenis-perawatan?${params}`);
       if (!res.ok) throw new Error();
@@ -191,7 +196,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
       await Swal.fire({
         icon: 'success',
         title: 'Berhasil!',
-        text: `Permintaan Radiologi berhasil disimpan!\nNo. Permintaan: ${result.noorder}`,
+        text: `Permintaan ${kategoriUsg ? 'USG' : 'Radiologi'} berhasil disimpan!\nNo. Permintaan: ${result.noorder}`,
         timer: 3000,
         showConfirmButton: false,
       });
@@ -350,7 +355,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
                 onChange={(e) => { setSearchRad(e.target.value); setShowDropdown(true); }}
                 onFocus={() => setShowDropdown(true)}
                 onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                placeholder="Cari pemeriksaan radiologi..."
+                placeholder={kategoriUsg ? 'Cari pemeriksaan USG...' : 'Cari pemeriksaan radiologi...'}
                 style={{ ...inputStyle, padding: '5px 12px 5px 38px' }}
               />
               {showDropdown && searchRad.length > 0 && (
@@ -447,7 +452,7 @@ export const ModalInputRad: React.FC<ModalInputRadProps> = ({ patient, onClose, 
               onMouseOver={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#0891B2'; }}
               onMouseOut={(e) => { if (!loadingSubmit) e.currentTarget.style.background = '#1AB1E5'; }}
             >
-              {loadingSubmit ? 'Menyimpan...' : 'Simpan Radiologi'}
+              {loadingSubmit ? 'Menyimpan...' : `Simpan ${kategoriUsg ? 'USG' : 'Radiologi'}`}
             </button>
           </div>
         </div>

@@ -5,9 +5,15 @@ import { ModalInputRad } from './ModalInputRad';
 
 type RadTabProps = {
   patient: any;
+  // kategoriUsg — dipakai tab "Pemeriksaan USG" terpisah di Pemeriksaan.tsx
+  // (RadTab yg sama di-reuse, cuma dibatasi ke jenis pemeriksaan USG saja
+  // lewat query param ?kategori=usg, lihat rad_handler.go/radiologi_handler.go).
+  // ModalInputRad ikut dibatasi supaya daftar pilihan pemeriksaannya juga
+  // cuma USG.
+  kategoriUsg?: boolean;
 };
 
-export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
+export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) => {
   const [showInputModal, setShowInputModal] = React.useState(false);
 
   const [riwayatRad, setRiwayatRad] = React.useState<any[]>([]);
@@ -21,12 +27,13 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
   React.useEffect(() => {
     fetchRiwayatRadiologi();
     fetchRadiolojiData();
-  }, [patient.no_rawat]);
+  }, [patient.no_rawat, kategoriUsg]);
 
   const fetchRadiolojiData = async () => {
     setLoadingRadiologi(true);
     try {
-      const res = await fetch(`/api/radiologi-data/${encodeURIComponent(patient.no_rawat)}`);
+      const qs = kategoriUsg ? '?kategori=usg' : '';
+      const res = await fetch(`/api/radiologi-data/${encodeURIComponent(patient.no_rawat)}${qs}`);
       if (res.ok) {
         const data = await res.json();
         setRadiolojiData({
@@ -42,7 +49,8 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
   const fetchRiwayatRadiologi = async () => {
     setLoadingRiwayat(true);
     try {
-      const res = await fetch(`/api/radiologi/riwayat/${encodeURIComponent(patient.no_rawat)}`);
+      const qs = kategoriUsg ? '?kategori=usg' : '';
+      const res = await fetch(`/api/radiologi/riwayat/${encodeURIComponent(patient.no_rawat)}${qs}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setRiwayatRad(Array.isArray(data) ? data : []);
@@ -120,7 +128,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          Buat Permintaan Radiologi
+          {kategoriUsg ? 'Buat Permintaan USG' : 'Buat Permintaan Radiologi'}
         </button>
       </div>
 
@@ -128,7 +136,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
       {(loadingRiwayat || loadingRadiologi) && (
         <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
           <div style={{ display: 'inline-block', width: 30, height: 30, border: '3px solid #f3f4f6', borderTop: '3px solid #1AB1E5', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-          <p style={{ marginTop: 12 }}>Memuat data radiologi...</p>
+          <p style={{ marginTop: 12 }}>Memuat data {kategoriUsg ? 'USG' : 'radiologi'}...</p>
         </div>
       )}
 
@@ -138,8 +146,8 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
       {!loadingRiwayat && !loadingRadiologi && riwayatPending.length === 0 && !hasRadiologiData && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '64px 24px', color: '#6b7280', border: '1px dashed #d1d5db', borderRadius: 12, background: '#fff' }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Belum Ada Data Radiologi</div>
-          <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>Belum ada permintaan atau hasil radiologi untuk pasien ini.</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{kategoriUsg ? 'Belum Ada Data USG' : 'Belum Ada Data Radiologi'}</div>
+          <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>{kategoriUsg ? 'Belum ada permintaan atau hasil USG untuk pasien ini.' : 'Belum ada permintaan atau hasil radiologi untuk pasien ini.'}</div>
         </div>
       )}
 
@@ -331,6 +339,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient }) => {
       {showInputModal && (
         <ModalInputRad
           patient={patient}
+          kategoriUsg={kategoriUsg}
           onClose={() => setShowInputModal(false)}
           onSaved={fetchRiwayatRadiologi}
         />

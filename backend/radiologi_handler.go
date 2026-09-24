@@ -58,6 +58,15 @@ func getRadiologi(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat is required"})
 			return
 		}
+		// kategori=usg — dipakai tab "Pemeriksaan USG" (Pemeriksaan.tsx).
+		// periksa_radiologi punya kd_jenis_prw jadi bisa difilter LANGSUNG
+		// by prefix nama "USG". hasil_radiologi/gambar_radiologi TIDAK punya
+		// kd_jenis_prw sama sekali (skema Khanza aslinya juga begitu, PK-nya
+		// cuma no_rawat+tgl_periksa+jam) — satu-satunya cara atribusi yg
+		// benar adalah lewat EXISTS ke periksa_radiologi pd (no_rawat,
+		// tgl_periksa, jam) YANG SAMA, bukan tebak dari isi teks hasil.
+		kategori := c.Query("kategori")
+		usgOnly := kategori == "usg"
 
 		response := RadiologiResponse{
 			Pemeriksaan: []RadiologiPemeriksaan{},
@@ -69,7 +78,7 @@ func getRadiologi(db *sql.DB) gin.HandlerFunc {
 		// 1. GET PEMERIKSAAN RADIOLOGI
 		// ====================================================================
 	queryPemeriksaan := `
-		SELECT 
+		SELECT
 			DATE_FORMAT(periksa_radiologi.tgl_periksa, '%d/%m/%Y') as tgl_periksa,
 			TIME_FORMAT(periksa_radiologi.jam, '%H:%i:%s') as jam,
 				periksa_radiologi.kd_jenis_prw,
@@ -92,8 +101,11 @@ func getRadiologi(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN petugas ON periksa_radiologi.nip = petugas.nip
 			INNER JOIN dokter ON periksa_radiologi.kd_dokter = dokter.kd_dokter
 			WHERE periksa_radiologi.no_rawat = ?
-			ORDER BY periksa_radiologi.tgl_periksa, periksa_radiologi.jam
-		`
+	`
+		if usgOnly {
+			queryPemeriksaan += " AND jns_perawatan_radiologi.nm_perawatan LIKE 'USG%'"
+		}
+		queryPemeriksaan += " ORDER BY periksa_radiologi.tgl_periksa, periksa_radiologi.jam"
 
 		rowsPemeriksaan, err := db.Query(queryPemeriksaan, noRawat)
 		if err != nil {
@@ -131,8 +143,20 @@ func getRadiologi(db *sql.DB) gin.HandlerFunc {
 		SELECT DATE_FORMAT(tgl_periksa, '%d/%m/%Y') as tgl_periksa, TIME_FORMAT(jam, '%H:%i:%s') as jam, hasil
 		FROM hasil_radiologi
 		WHERE no_rawat = ?
-		ORDER BY tgl_periksa, jam
 	`
+		if usgOnly {
+			queryHasil += `
+			AND EXISTS (
+				SELECT 1 FROM periksa_radiologi pr2
+				INNER JOIN jns_perawatan_radiologi jpr2 ON pr2.kd_jenis_prw = jpr2.kd_jenis_prw
+				WHERE pr2.no_rawat = hasil_radiologi.no_rawat
+					AND pr2.tgl_periksa = hasil_radiologi.tgl_periksa
+					AND pr2.jam = hasil_radiologi.jam
+					AND jpr2.nm_perawatan LIKE 'USG%'
+			)
+		`
+		}
+		queryHasil += " ORDER BY tgl_periksa, jam"
 
 		rowsHasil, err := db.Query(queryHasil, noRawat)
 		if err != nil {
@@ -161,8 +185,20 @@ func getRadiologi(db *sql.DB) gin.HandlerFunc {
 		SELECT DATE_FORMAT(tgl_periksa, '%d/%m/%Y') as tgl_periksa, TIME_FORMAT(jam, '%H:%i:%s') as jam, lokasi_gambar
 		FROM gambar_radiologi
 		WHERE no_rawat = ?
-		ORDER BY tgl_periksa, jam
 	`
+		if usgOnly {
+			queryGambar += `
+			AND EXISTS (
+				SELECT 1 FROM periksa_radiologi pr2
+				INNER JOIN jns_perawatan_radiologi jpr2 ON pr2.kd_jenis_prw = jpr2.kd_jenis_prw
+				WHERE pr2.no_rawat = gambar_radiologi.no_rawat
+					AND pr2.tgl_periksa = gambar_radiologi.tgl_periksa
+					AND pr2.jam = gambar_radiologi.jam
+					AND jpr2.nm_perawatan LIKE 'USG%'
+			)
+		`
+		}
+		queryGambar += " ORDER BY tgl_periksa, jam"
 
 		rowsGambar, err := db.Query(queryGambar, noRawat)
 		if err != nil {
