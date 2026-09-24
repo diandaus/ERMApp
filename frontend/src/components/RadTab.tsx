@@ -112,24 +112,73 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
   );
 
   // handleKirimModalityWorklist — tombol khusus tab "Pemeriksaan USG"
-  // (kategoriUsg), kirim SEMUA permintaan USG pending pasien ini ke
-  // Modality Worklist Orthanc sekaligus. Tujuannya: AccessionNumber &
-  // identitas pasien (No.RM, Nama, dll) otomatis muncul begitu mesin
-  // USG query worklist, dokter tidak perlu ketik ulang manual di alat.
+  // (kategoriUsg). Alur USG Kandungan BEDA dari Radiologi biasa: mesin ada
+  // langsung di poliklinik & dokter poliklinik yg periksa sendiri (tidak
+  // ada rujukan formal spt "Buat Permintaan Radiologi") — jadi kalau
+  // BELUM ada permintaan USG pending sama sekali, order-nya dibuat
+  // OTOMATIS di sini (jenis pemeriksaan "USG" — dicari persis by nama,
+  // BUKAN hardcode kd_jenis_prw krn beda2 tiap instalasi Khanza) sebelum
+  // dikirim ke Orthanc, supaya dokter tidak perlu isi form apa pun
+  // sebelum scan. Kalau SUDAH ada permintaan pending (mis. dari Radiologi
+  // biasa atau sesi sebelumnya), itu yg dikirim — tidak bikin dobel.
   // Reuse endpoint yg sama dgn ModalityWorklist.tsx (POST
   // /api/satu-sehat/mwl/send/*noorder) — dicek dulu status MWL tiap order
   // via GET /api/satu-sehat/mwl/status/*noorder, yg SUDAH 'terkirim'
   // dilewati (percuma dikirim ulang), sama prinsip dgn selectedForKirim
   // di ModalityWorklist.tsx.
   const handleKirimModalityWorklist = async () => {
-    if (riwayatPending.length === 0) {
-      Swal.fire({ icon: 'info', title: 'Tidak ada permintaan', text: 'Belum ada permintaan USG yang pending untuk pasien ini.' });
-      return;
-    }
     setSendingMwl(true);
     try {
+      let pendingOrders: { noorder: string }[] = riwayatPending;
+
+      if (pendingOrders.length === 0) {
+        // Jenis pemeriksaan "USG" utk auto-create — kode periksa RJ.OBG
+        // (dikonfirmasi user, master data jns_perawatan_radiologi RS ini).
+        // Dicari via search=RJ.OBG (bukan search nama "USG" yg dibatasi
+        // LIMIT 50 baris & berisiko tidak ketemu di antara 168+ varian USG
+        // lain) lalu dicocokkan PERSIS ke kd_jenis_prw, supaya kalau
+        // instalasi lain kode-nya beda, gagal jelas alih2 salah pilih.
+        const KD_JENIS_USG = 'RJ.OBG';
+        const cariRes = await fetch(`/api/radiologi/jenis-perawatan?search=${encodeURIComponent(KD_JENIS_USG)}`);
+        const cariData = await cariRes.json();
+        const usg = Array.isArray(cariData)
+          ? cariData.find((x: any) => (x.kd_jenis_prw || '').trim().toUpperCase() === KD_JENIS_USG)
+          : null;
+        if (!usg) {
+          await Swal.fire({
+            icon: 'error', title: 'Gagal',
+            text: `Jenis pemeriksaan USG (kode ${KD_JENIS_USG}) tidak ditemukan di Master Data Radiologi.`,
+          });
+          return;
+        }
+
+        const infoRes = await fetch(`/api/radiologi/info-rawat/${encodeURIComponent(patient.no_rawat)}`);
+        const infoRawat = infoRes.ok ? await infoRes.json() : { status: 'ralan' };
+
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const createRes = await fetch('/api/radiologi/permintaan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            no_rawat: patient.no_rawat,
+            dokter_perujuk: patient.kd_dokter || '',
+            status: infoRawat.status || 'ralan',
+            diagnosis_klinis: 'USG',
+            informasi_tambahan: '',
+            pemeriksaan_list: [usg.kd_jenis_prw],
+            tgl_permintaan: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+            jam_permintaan: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
+          }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) throw new Error(createData.error || 'Gagal membuat permintaan USG');
+        pendingOrders = [{ noorder: createData.noorder }];
+        fetchRiwayatRadiologi();
+      }
+
       const statusChecks = await Promise.all(
-        riwayatPending.map(async (item) => {
+        pendingOrders.map(async (item) => {
           try {
             const res = await fetch(`/api/satu-sehat/mwl/status/${encodeURIComponent(item.noorder)}`);
             const data = await res.json();
@@ -168,6 +217,8 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
       } else {
         await Swal.fire({ icon: ok > 0 ? 'warning' : 'error', title: 'Selesai dengan catatan', html: `${ok} berhasil, ${failed.length} gagal:<br/><small>${failed.join('<br/>')}</small>` });
       }
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setSendingMwl(false);
     }
