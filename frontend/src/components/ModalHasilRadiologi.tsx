@@ -88,9 +88,24 @@ const PERURI_SIGNING_ERROR_MAP: Record<string, string> = {
   '4026': 'Gagal memvalidasi token dan OTP. Silakan klik "Minta OTP Ulang" lalu coba Tanda Tangan lagi.',
 };
 
-type Props = { noorder: string; nip?: string; onClose: () => void; onSaved: () => void };
+type Props = {
+  noorder: string; nip?: string; onClose: () => void; onSaved: () => void;
+  // defaultKdDokterPj/defaultNmDokterPj — dipakai tab "Pemeriksaan USG"
+  // (RadTab.tsx, kategoriUsg): dokter poliklinik yg periksa langsung
+  // sendiri, jadi Dokter P.J. wajib default ke dokter poliklinik ybs
+  // (patient.kd_dokter di Pemeriksaan.tsx), BUKAN default fixed
+  // set_pjlab.kd_dokterrad yg dipakai worklist Radiologi.tsx biasa (baca
+  // komentar getPermintaanRadiologiDetail, backend/radiologi_hasil_handler.go).
+  // Kalau di-isi, MENIMPA default backend (bukan cuma fallback), tapi
+  // field-nya tetap bisa dikoreksi manual spt biasa. Dokter Perujuk TIDAK
+  // perlu prop serupa — sudah otomatis benar krn permintaan_radiologi.dokter_perujuk
+  // diisi patient.kd_dokter saat order USG dibuat (lihat handleKirimModalityWorklist/
+  // handleInputHasilUsg di RadTab.tsx).
+  defaultKdDokterPj?: string;
+  defaultNmDokterPj?: string;
+};
 
-export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, onSaved }) => {
+export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, onSaved, defaultKdDokterPj, defaultNmDokterPj }) => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [detail, setDetail] = React.useState<OrderDetail | null>(null);
@@ -159,7 +174,11 @@ export const ModalHasilRadiologi: React.FC<Props> = ({ noorder, nip, onClose, on
           kd_jenis_prw: e.kd_jenis_prw, nm_perawatan: e.nm_perawatan, checked: true,
           proyeksi: '', kV: '', mAS: '', FFD: '', BSF: '', inak: '', jml_penyinaran: '', dosis: '',
         })));
-        if (data.kd_dokter_pj) {
+        if (defaultKdDokterPj) {
+          setKdDokterPj(defaultKdDokterPj);
+          setDokterPjQuery(defaultNmDokterPj || '');
+          setDokterPjList([{ kd_dokter: defaultKdDokterPj, nm_dokter: defaultNmDokterPj || '' }]);
+        } else if (data.kd_dokter_pj) {
           setKdDokterPj(data.kd_dokter_pj);
           setDokterPjQuery(data.nm_dokter_pj || '');
           setDokterPjList([{ kd_dokter: data.kd_dokter_pj, nm_dokter: data.nm_dokter_pj || '' }]);

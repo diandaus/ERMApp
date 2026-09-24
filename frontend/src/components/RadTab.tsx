@@ -1,7 +1,9 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { khanzaRadiologiUrl } from '../utils/khanzaUrl';
+import { getCurrentUserNip } from '../utils/currentUser';
 import { ModalInputRad } from './ModalInputRad';
+import { ModalHasilRadiologi } from './ModalHasilRadiologi';
 
 type RadTabProps = {
   patient: any;
@@ -24,6 +26,10 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
   const [loadingRadiologi, setLoadingRadiologi] = React.useState(false);
   const [gambarModal, setGambarModal] = React.useState<string | null>(null);
   const [sendingMwl, setSendingMwl] = React.useState(false);
+  // hasilUsgNoOrder — noorder yg sedang dibuka di ModalHasilRadiologi lewat
+  // tombol "Input Hasil Pemeriksaan USG" (kategoriUsg). null = modal tertutup.
+  const [hasilUsgNoOrder, setHasilUsgNoOrder] = React.useState<string | null>(null);
+  const [preparingHasilUsg, setPreparingHasilUsg] = React.useState(false);
 
   React.useEffect(() => {
     fetchRiwayatRadiologi();
@@ -111,17 +117,58 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
     [riwayatRad]
   );
 
+  // ensurePendingUsgOrder — dipakai BERSAMA oleh "Kirim Modality Worklist"
+  // & "Input Hasil Pemeriksaan USG": kalau pasien ini SUDAH punya
+  // permintaan USG pending, pakai yg pertama (terbaru, riwayatPending
+  // sudah urut DESC dari backend); kalau BELUM ada sama sekali, buat
+  // OTOMATIS (jenis pemeriksaan kode RJ.OBG — dikonfirmasi user, master
+  // data jns_perawatan_radiologi RS ini) — dicari via search=RJ.OBG
+  // (BUKAN search nama "USG" yg dibatasi LIMIT 50 baris & berisiko tidak
+  // ketemu di antara 168+ varian USG lain) lalu dicocokkan PERSIS ke
+  // kd_jenis_prw, supaya kalau instalasi lain kode-nya beda, gagal jelas
+  // alih2 salah pilih. dokter_perujuk diisi patient.kd_dokter (dokter
+  // poliklinik yg periksa) — alur USG Kandungan TIDAK ada rujukan formal
+  // spt Radiologi biasa, mesin ada langsung di poliklinik.
+  const ensurePendingUsgOrder = async (): Promise<string> => {
+    if (riwayatPending.length > 0) return riwayatPending[0].noorder;
+
+    const KD_JENIS_USG = 'RJ.OBG';
+    const cariRes = await fetch(`/api/radiologi/jenis-perawatan?search=${encodeURIComponent(KD_JENIS_USG)}`);
+    const cariData = await cariRes.json();
+    const usg = Array.isArray(cariData)
+      ? cariData.find((x: any) => (x.kd_jenis_prw || '').trim().toUpperCase() === KD_JENIS_USG)
+      : null;
+    if (!usg) {
+      throw new Error(`Jenis pemeriksaan USG (kode ${KD_JENIS_USG}) tidak ditemukan di Master Data Radiologi.`);
+    }
+
+    const infoRes = await fetch(`/api/radiologi/info-rawat/${encodeURIComponent(patient.no_rawat)}`);
+    const infoRawat = infoRes.ok ? await infoRes.json() : { status: 'ralan' };
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const createRes = await fetch('/api/radiologi/permintaan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        no_rawat: patient.no_rawat,
+        dokter_perujuk: patient.kd_dokter || '',
+        status: infoRawat.status || 'ralan',
+        diagnosis_klinis: 'USG',
+        informasi_tambahan: '',
+        pemeriksaan_list: [usg.kd_jenis_prw],
+        tgl_permintaan: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+        jam_permintaan: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
+      }),
+    });
+    const createData = await createRes.json();
+    if (!createRes.ok) throw new Error(createData.error || 'Gagal membuat permintaan USG');
+    fetchRiwayatRadiologi();
+    return createData.noorder as string;
+  };
+
   // handleKirimModalityWorklist — tombol khusus tab "Pemeriksaan USG"
-  // (kategoriUsg). Alur USG Kandungan BEDA dari Radiologi biasa: mesin ada
-  // langsung di poliklinik & dokter poliklinik yg periksa sendiri (tidak
-  // ada rujukan formal spt "Buat Permintaan Radiologi") — jadi kalau
-  // BELUM ada permintaan USG pending sama sekali, order-nya dibuat
-  // OTOMATIS di sini (jenis pemeriksaan "USG" — dicari persis by nama,
-  // BUKAN hardcode kd_jenis_prw krn beda2 tiap instalasi Khanza) sebelum
-  // dikirim ke Orthanc, supaya dokter tidak perlu isi form apa pun
-  // sebelum scan. Kalau SUDAH ada permintaan pending (mis. dari Radiologi
-  // biasa atau sesi sebelumnya), itu yg dikirim — tidak bikin dobel.
-  // Reuse endpoint yg sama dgn ModalityWorklist.tsx (POST
+  // (kategoriUsg). Reuse endpoint yg sama dgn ModalityWorklist.tsx (POST
   // /api/satu-sehat/mwl/send/*noorder) — dicek dulu status MWL tiap order
   // via GET /api/satu-sehat/mwl/status/*noorder, yg SUDAH 'terkirim'
   // dilewati (percuma dikirim ulang), sama prinsip dgn selectedForKirim
@@ -129,53 +176,8 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
   const handleKirimModalityWorklist = async () => {
     setSendingMwl(true);
     try {
-      let pendingOrders: { noorder: string }[] = riwayatPending;
-
-      if (pendingOrders.length === 0) {
-        // Jenis pemeriksaan "USG" utk auto-create — kode periksa RJ.OBG
-        // (dikonfirmasi user, master data jns_perawatan_radiologi RS ini).
-        // Dicari via search=RJ.OBG (bukan search nama "USG" yg dibatasi
-        // LIMIT 50 baris & berisiko tidak ketemu di antara 168+ varian USG
-        // lain) lalu dicocokkan PERSIS ke kd_jenis_prw, supaya kalau
-        // instalasi lain kode-nya beda, gagal jelas alih2 salah pilih.
-        const KD_JENIS_USG = 'RJ.OBG';
-        const cariRes = await fetch(`/api/radiologi/jenis-perawatan?search=${encodeURIComponent(KD_JENIS_USG)}`);
-        const cariData = await cariRes.json();
-        const usg = Array.isArray(cariData)
-          ? cariData.find((x: any) => (x.kd_jenis_prw || '').trim().toUpperCase() === KD_JENIS_USG)
-          : null;
-        if (!usg) {
-          await Swal.fire({
-            icon: 'error', title: 'Gagal',
-            text: `Jenis pemeriksaan USG (kode ${KD_JENIS_USG}) tidak ditemukan di Master Data Radiologi.`,
-          });
-          return;
-        }
-
-        const infoRes = await fetch(`/api/radiologi/info-rawat/${encodeURIComponent(patient.no_rawat)}`);
-        const infoRawat = infoRes.ok ? await infoRes.json() : { status: 'ralan' };
-
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const createRes = await fetch('/api/radiologi/permintaan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            no_rawat: patient.no_rawat,
-            dokter_perujuk: patient.kd_dokter || '',
-            status: infoRawat.status || 'ralan',
-            diagnosis_klinis: 'USG',
-            informasi_tambahan: '',
-            pemeriksaan_list: [usg.kd_jenis_prw],
-            tgl_permintaan: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-            jam_permintaan: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
-          }),
-        });
-        const createData = await createRes.json();
-        if (!createRes.ok) throw new Error(createData.error || 'Gagal membuat permintaan USG');
-        pendingOrders = [{ noorder: createData.noorder }];
-        fetchRiwayatRadiologi();
-      }
+      const noorder = await ensurePendingUsgOrder();
+      const pendingOrders = [{ noorder }];
 
       const statusChecks = await Promise.all(
         pendingOrders.map(async (item) => {
@@ -224,6 +226,29 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
     }
   };
 
+  // handleInputHasilUsg — tombol "Input Hasil Pemeriksaan USG" (kategoriUsg).
+  // Pastikan dulu ada permintaan USG pending (ensurePendingUsgOrder, sama
+  // helper dgn Kirim Modality Worklist), lalu buka ModalHasilRadiologi
+  // (modal Input Hasil yg SUDAH ada, dipakai jg oleh Radiologi.tsx) pada
+  // order itu. Dokter P.J. di-override ke dokter poliklinik pasien ini
+  // (patient.kd_dokter/nm_dokter, prop defaultKdDokterPj/defaultNmDokterPj)
+  // — BUKAN default set_pjlab.kd_dokterrad spt Radiologi.tsx biasa, krn
+  // USG Kandungan tidak ada radiolog terpisah, dokter poliklinik yg
+  // periksa sekaligus jadi PJ-nya. Dokter Perujuk TIDAK perlu override
+  // serupa — sudah otomatis benar krn ensurePendingUsgOrder mengisi
+  // dokter_perujuk = patient.kd_dokter saat order baru dibuat.
+  const handleInputHasilUsg = async () => {
+    setPreparingHasilUsg(true);
+    try {
+      const noorder = await ensurePendingUsgOrder();
+      setHasilUsgNoOrder(noorder);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPreparingHasilUsg(false);
+    }
+  };
+
   return (
     <div>
 
@@ -240,24 +265,24 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
             // poliklinik yg periksa sendiri (bukan rujuk ke radiologi
             // terpisah), jadi alurnya BEDA dari Radiologi biasa — bukan
             // "Buat Permintaan" (ModalInputRad, alur rujukan) tapi langsung
-            // "Input Hasil Pemeriksaan". Modal input hasilnya BELUM dibuat
-            // (tampilan akan diberikan user), placeholder dulu spy tombol
-            // tidak salah membuka modal rujukan yg sudah tidak relevan.
+            // "Input Hasil Pemeriksaan" (handleInputHasilUsg, buka
+            // ModalHasilRadiologi yg sudah ada dipakai Radiologi.tsx).
             if (kategoriUsg) {
-              Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Modal Input Hasil Pemeriksaan USG sedang disiapkan.' });
+              handleInputHasilUsg();
               return;
             }
             setShowInputModal(true);
           }}
-          style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
+          disabled={kategoriUsg && preparingHasilUsg}
+          style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: (kategoriUsg && preparingHasilUsg) ? '#9ca3af' : '#1AB1E5', color: '#fff', cursor: (kategoriUsg && preparingHasilUsg) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
+          onMouseEnter={(e) => { if (!(kategoriUsg && preparingHasilUsg)) e.currentTarget.style.background = '#0891B2'; }}
+          onMouseLeave={(e) => { if (!(kategoriUsg && preparingHasilUsg)) e.currentTarget.style.background = '#1AB1E5'; }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          {kategoriUsg ? 'Input Hasil Pemeriksaan USG' : 'Buat Permintaan Radiologi'}
+          {kategoriUsg ? (preparingHasilUsg ? 'Menyiapkan...' : 'Input Hasil Pemeriksaan USG') : 'Buat Permintaan Radiologi'}
         </button>
         {kategoriUsg && (
           <button
@@ -484,6 +509,20 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
           patient={patient}
           kategoriUsg={kategoriUsg}
           onClose={() => setShowInputModal(false)}
+          onSaved={fetchRiwayatRadiologi}
+        />
+      )}
+
+      {/* Modal Input Hasil Pemeriksaan USG — reuse ModalHasilRadiologi yg
+          sudah dipakai Radiologi.tsx, Dokter P.J. di-override ke dokter
+          poliklinik pasien ini (lihat handleInputHasilUsg). */}
+      {hasilUsgNoOrder && (
+        <ModalHasilRadiologi
+          noorder={hasilUsgNoOrder}
+          nip={getCurrentUserNip()}
+          defaultKdDokterPj={patient.kd_dokter || ''}
+          defaultNmDokterPj={patient.nm_dokter || ''}
+          onClose={() => setHasilUsgNoOrder(null)}
           onSaved={fetchRiwayatRadiologi}
         />
       )}
