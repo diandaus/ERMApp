@@ -11,8 +11,16 @@ import { getCurrentUserNip } from '../utils/currentUser';
 // getDicomPreviewList di dicom_handler.go) — utk order USG yg BARU dibuat
 // & belum pernah dikirim ke Orthanc, ini malah nampilin foto rontgen LAMA
 // yg tidak relevan sama sekali (ketauan dari screenshot user, order baru
-// tapi foto tulang belakang lama ikut muncul). Modal ini SENGAJA TIDAK
-// ada bagian foto Orthanc sama sekali.
+// tapi foto tulang belakang lama ikut muncul).
+//
+// Modal ini TETAP menampilkan foto (reuse endpoint yg sama, GET
+// /api/satu-sehat/dicom/preview-image/:noorder), TAPI cuma kalau
+// data.search_mode === 'accession_number' — artinya studi itu BENAR-BENAR
+// dari mesin USG utk order ini (AccessionNumber = noorder ketemu persis di
+// Orthanc), BUKAN hasil fallback lintas riwayat by No.RM. Kalau
+// search_mode 'patient_id' (fallback), foto TIDAK ditampilkan sama sekali
+// (biarkan kosong "Belum ada foto") — inilah yg menghindari bug foto lama
+// nyasar ke order baru.
 //
 // Shell slide-in dari kanan PERSIS pola ModalInputRad.tsx/ModalInputLab.tsx
 // (overlay fixed + panel anchor kanan, header breadcrumb pasien + close
@@ -21,11 +29,13 @@ import { getCurrentUserNip } from '../utils/currentUser';
 // — radiologi_hasil_handler.go, sudah mereplikasi persis simpan() di
 // DlgPeriksaRadiologi.java Khanza), tidak ada perubahan backend.
 //
-// Dokter P.J. & Dokter Perujuk SENGAJA read-only, terkunci ke dokter
-// poliklinik pasien ini (patient.kd_dokter/nm_dokter dari Pemeriksaan.tsx —
-// DPJP kunjungan) — bukan dipilih manual spt ModalHasilRadiologi, krn alur
-// USG Kandungan: dokter poliklinik yg periksa sendiri, tidak ada
-// radiolog/rujukan terpisah.
+// Dokter P.J. SENGAJA read-only, terkunci ke dokter poliklinik pasien ini
+// (patient.kd_dokter/nm_dokter dari Pemeriksaan.tsx — DPJP kunjungan) —
+// bukan dipilih manual spt ModalHasilRadiologi, krn alur USG Kandungan:
+// dokter poliklinik yg periksa sendiri, tidak ada radiolog terpisah.
+// Field Dokter Perujuk SENGAJA disembunyikan (tidak relevan ditampilkan
+// di alur ini, dokter P.J. sekaligus perujuknya) — datanya tetap dikirim
+// ke backend sbg patient.kd_dokter di handleSubmit, cuma tanpa input field.
 
 type ModalInputUSGProps = {
   patient: any;
@@ -35,6 +45,7 @@ type ModalInputUSGProps = {
 };
 
 type ExamRow = { kd_jenis_prw: string; nm_perawatan: string };
+type DicomInstance = { id: string; series_id: string; modality: string };
 
 export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, onClose, onSaved }) => {
   const [visible, setVisible] = React.useState(false);
@@ -61,6 +72,10 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
   const [jamPeriksa, setJamPeriksa] = React.useState('');
 
   const [saving, setSaving] = React.useState(false);
+
+  const [foto, setFoto] = React.useState<{ instances: DicomInstance[] }>({ instances: [] });
+  const [loadingFoto, setLoadingFoto] = React.useState(false);
+  const [previewFoto, setPreviewFoto] = React.useState<string | null>(null);
 
   const todayStr = () => {
     const d = new Date();
@@ -93,6 +108,32 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
     const now = new Date();
     setTglPeriksa(todayStr());
     setJamPeriksa(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+  }, [noorder]);
+
+  // Foto USG dari Orthanc — SENGAJA cuma ditampilkan kalau search_mode
+  // backend "accession_number" (studi ketemu PERSIS by AccessionNumber =
+  // noorder, artinya benar dari mesin USG utk order ini). Kalau backend
+  // fallback ke "patient_id" (AccessionNumber belum ketemu, cari longgar
+  // by No.RM — lihat getDicomPreviewList/dicom_handler.go), foto TIDAK
+  // ditampilkan sama sekali — itulah penyebab bug foto rontgen lama pasien
+  // nyasar ke order USG baru yg dilaporkan user, dihindari di sini.
+  React.useEffect(() => {
+    (async () => {
+      setLoadingFoto(true);
+      try {
+        const res = await fetch(`/api/satu-sehat/dicom/preview-list/${noorder}`);
+        const data = await res.json();
+        if (res.ok && data.search_mode === 'accession_number') {
+          setFoto({ instances: Array.isArray(data.instances) ? data.instances : [] });
+        } else {
+          setFoto({ instances: [] });
+        }
+      } catch {
+        setFoto({ instances: [] });
+      } finally {
+        setLoadingFoto(false);
+      }
+    })();
   }, [noorder]);
 
   React.useEffect(() => {
@@ -229,21 +270,18 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
               </div>
             ) : (
               <>
-                {/* Dokter P.J. & Dokter Perujuk — read-only, terkunci ke
-                    dokter poliklinik pasien ini (patient.kd_dokter/nm_dokter). */}
+                {/* Dokter P.J. (read-only, terkunci ke dokter poliklinik
+                    pasien ini) langsung diikuti Petugas — field Dokter
+                    Perujuk SENGAJA disembunyikan (tidak relevan ditampilkan
+                    di alur USG Kandungan, dokter poliklinik yg periksa
+                    sekaligus jadi perujuknya), tapi datanya TETAP dikirim
+                    ke backend (dokter_perujuk = patient.kd_dokter) di
+                    handleSubmit di bawah, cuma tidak ada input field-nya. */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>Dokter Penanggung Jawab</label>
                     <input readOnly value={patient.nm_dokter || '-'} style={pillReadOnly} title="Otomatis dokter poliklinik pasien ini" />
                   </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>Dokter Perujuk</label>
-                    <input readOnly value={patient.nm_dokter || '-'} style={pillReadOnly} title="Otomatis dokter poliklinik pasien ini" />
-                  </div>
-                </div>
-
-                {/* Petugas & Tanggal/Jam */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div style={{ position: 'relative' }}>
                     <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
                       Petugas <span style={{ color: '#ef4444' }}>*</span>
@@ -271,16 +309,18 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
                       </div>
                     )}
                   </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>Tanggal / Jam</label>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <input type="date" disabled={otomatisJam} value={tglPeriksa} onChange={(e) => setTglPeriksa(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-                      <input type="time" disabled={otomatisJam} value={jamPeriksa} onChange={(e) => setJamPeriksa(e.target.value)} style={{ ...inputStyle, width: 90 }} />
-                      <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                        <input type="checkbox" checked={otomatisJam} onChange={(e) => setOtomatisJam(e.target.checked)} />
-                        Otomatis
-                      </label>
-                    </div>
+                </div>
+
+                {/* Tanggal / Jam */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>Tanggal / Jam</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="date" disabled={otomatisJam} value={tglPeriksa} onChange={(e) => setTglPeriksa(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+                    <input type="time" disabled={otomatisJam} value={jamPeriksa} onChange={(e) => setJamPeriksa(e.target.value)} style={{ ...inputStyle, width: 90 }} />
+                    <label style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                      <input type="checkbox" checked={otomatisJam} onChange={(e) => setOtomatisJam(e.target.checked)} />
+                      Otomatis
+                    </label>
                   </div>
                 </div>
 
@@ -303,17 +343,50 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
                   </div>
                 </div>
 
-                {/* Hasil Pemeriksaan */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
-                  <label style={{ fontSize: 12, fontWeight: 400, marginBottom: 6, display: 'block', color: '#374151' }}>
-                    Hasil Pemeriksaan <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <textarea
-                    value={hasil}
-                    onChange={(e) => setHasil(e.target.value)}
-                    placeholder="Tulis hasil bacaan/expertise USG..."
-                    style={{ flex: 1, minHeight: 200, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
-                  />
+                {/* Foto USG (kiri) + Hasil Pemeriksaan (kanan) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1, minHeight: 260 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 400, color: '#374151' }}>Foto USG (dari Orthanc)</span>
+                    <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: 4, padding: 10, overflowY: 'auto', background: '#000', minHeight: 240 }}>
+                      {loadingFoto ? (
+                        <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat dari Orthanc...</div>
+                      ) : foto.instances.length === 0 ? (
+                        <div style={{ padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Belum ada foto USG untuk pemeriksaan ini</div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+                          {foto.instances.map((inst) => {
+                            const src = `/api/satu-sehat/dicom/preview-image/${inst.id}`;
+                            return (
+                              <div
+                                key={inst.id}
+                                onClick={() => setPreviewFoto(src)}
+                                style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid #374151', cursor: 'zoom-in' }}
+                              >
+                                <img
+                                  src={src}
+                                  alt={inst.modality || 'USG'}
+                                  style={{ width: '100%', display: 'block', aspectRatio: '1 / 1', objectFit: 'contain', background: '#111827' }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 400, color: '#374151' }}>
+                      Hasil Pemeriksaan <span style={{ color: '#ef4444' }}>*</span>
+                    </span>
+                    <textarea
+                      value={hasil}
+                      onChange={(e) => setHasil(e.target.value)}
+                      placeholder="Tulis hasil bacaan/expertise USG..."
+                      style={{ flex: 1, minHeight: 240, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -334,6 +407,27 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
           </div>
         </div>
       </div>
+
+      {/* Preview foto ukuran penuh — klik gambar mana pun di grid utk lihat */}
+      {previewFoto && (
+        <div
+          onClick={(e) => { e.stopPropagation(); setPreviewFoto(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, cursor: 'zoom-out' }}
+        >
+          <img
+            src={previewFoto}
+            alt="Foto USG"
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={(e) => { e.stopPropagation(); setPreviewFoto(null); }}
+            style={{ position: 'fixed', top: 20, right: 20, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       <style>{`@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }`}</style>
     </>
