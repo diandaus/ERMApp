@@ -1,9 +1,8 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { khanzaRadiologiUrl } from '../utils/khanzaUrl';
-import { getCurrentUserNip } from '../utils/currentUser';
 import { ModalInputRad } from './ModalInputRad';
-import { ModalHasilRadiologi } from './ModalHasilRadiologi';
+import { ModalInputUSG } from './ModalInputUSG';
 
 type RadTabProps = {
   patient: any;
@@ -228,15 +227,14 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
 
   // handleInputHasilUsg — tombol "Input Hasil Pemeriksaan USG" (kategoriUsg).
   // Pastikan dulu ada permintaan USG pending (ensurePendingUsgOrder, sama
-  // helper dgn Kirim Modality Worklist), lalu buka ModalHasilRadiologi
-  // (modal Input Hasil yg SUDAH ada, dipakai jg oleh Radiologi.tsx) pada
-  // order itu. Dokter P.J. di-override ke dokter poliklinik pasien ini
-  // (patient.kd_dokter/nm_dokter, prop defaultKdDokterPj/defaultNmDokterPj)
-  // — BUKAN default set_pjlab.kd_dokterrad spt Radiologi.tsx biasa, krn
-  // USG Kandungan tidak ada radiolog terpisah, dokter poliklinik yg
-  // periksa sekaligus jadi PJ-nya. Dokter Perujuk TIDAK perlu override
-  // serupa — sudah otomatis benar krn ensurePendingUsgOrder mengisi
-  // dokter_perujuk = patient.kd_dokter saat order baru dibuat.
+  // helper dgn Kirim Modality Worklist), lalu buka ModalInputUSG — modal
+  // KHUSUS (bukan reuse ModalHasilRadiologi.tsx yg dipakai Radiologi.tsx
+  // biasa, lihat komentar di ModalInputUSG.tsx kenapa dipisah: modal itu
+  // ada bagian "Foto dari Orthanc" yg fallback nampilin SEMUA studi lama
+  // pasien by No.RM kalau AccessionNumber belum ketemu — membingungkan utk
+  // order USG yg baru dibuat & belum dikirim ke Orthanc). Dokter P.J. &
+  // Dokter Perujuk terkunci ke dokter poliklinik pasien ini
+  // (patient.kd_dokter/nm_dokter) di dalam ModalInputUSG sendiri.
   const handleInputHasilUsg = async () => {
     setPreparingHasilUsg(true);
     try {
@@ -266,7 +264,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
             // terpisah), jadi alurnya BEDA dari Radiologi biasa — bukan
             // "Buat Permintaan" (ModalInputRad, alur rujukan) tapi langsung
             // "Input Hasil Pemeriksaan" (handleInputHasilUsg, buka
-            // ModalHasilRadiologi yg sudah ada dipakai Radiologi.tsx).
+            // ModalInputUSG — modal khusus, lihat komentarnya).
             if (kategoriUsg) {
               handleInputHasilUsg();
               return;
@@ -513,15 +511,12 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
         />
       )}
 
-      {/* Modal Input Hasil Pemeriksaan USG — reuse ModalHasilRadiologi yg
-          sudah dipakai Radiologi.tsx, Dokter P.J. di-override ke dokter
-          poliklinik pasien ini (lihat handleInputHasilUsg). */}
+      {/* Modal Input Hasil Pemeriksaan USG — modal khusus (bukan
+          ModalHasilRadiologi.tsx), lihat komentar handleInputHasilUsg. */}
       {hasilUsgNoOrder && (
-        <ModalHasilRadiologi
+        <ModalInputUSG
+          patient={patient}
           noorder={hasilUsgNoOrder}
-          nip={getCurrentUserNip()}
-          defaultKdDokterPj={patient.kd_dokter || ''}
-          defaultNmDokterPj={patient.nm_dokter || ''}
           onClose={() => setHasilUsgNoOrder(null)}
           onSaved={fetchRiwayatRadiologi}
         />
