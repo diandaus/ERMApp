@@ -19,12 +19,6 @@ import { ModalityWorklistSection } from './ModalityWorklist';
 // tidak memanggil Orthanc REST API sama sekali.
 type OrthancTab = 'koneksi' | 'mwl' | 'mapping';
 
-const TABS: { key: OrthancTab; label: string }[] = [
-  { key: 'koneksi', label: 'Koneksi' },
-  { key: 'mwl', label: 'Modality Worklist' },
-  { key: 'mapping', label: 'Mapping Modality' },
-];
-
 const inputSm: React.CSSProperties = {
   width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', background: '#fff',
 };
@@ -401,36 +395,243 @@ const MappingModalitySection: React.FC = () => {
 };
 
 // ─── Halaman utama tab Orthanc ───────────────────────────────────────────────
+//
+// Shell sidebar fullscreen, PERSIS pola BridgingBpjsView/SatuSehatView/
+// PeruriView (dibuka fullscreen dari Bridging.tsx, position:fixed inset:0
+// dibungkus di sana) — gradient ungu spy visualnya beda dari BPJS (biru),
+// Satu Sehat (hijau), Peruri (putih). "Koneksi" ditaruh sbg item footer
+// terpisah (pola "Pengaturan" di 3 modul lain) krn isinya memang murni
+// konfigurasi, sementara Modality Worklist & Mapping Modality adalah
+// menu/fitur utamanya.
+const MENU: { key: OrthancTab; label: string; icon: React.ReactNode }[] = [
+  {
+    key: 'mwl',
+    label: 'Modality Worklist',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+        <line x1="8" y1="14" x2="16" y2="14"></line>
+        <line x1="8" y1="18" x2="13" y2="18"></line>
+      </svg>
+    ),
+  },
+  {
+    key: 'mapping',
+    label: 'Mapping Modality',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <circle cx="9" cy="9" r="2"></circle>
+        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
+      </svg>
+    ),
+  },
+];
 
-export const OrthancBridgingSection: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<OrthancTab>('koneksi');
+const SETTINGS_ITEM: { key: OrthancTab; label: string; icon: React.ReactNode } = {
+  key: 'koneksi',
+  label: 'Koneksi',
+  icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+    </svg>
+  ),
+};
+
+type OrthancBridgingViewProps = {
+  onBack?: () => void;
+};
+
+export const OrthancBridgingView: React.FC<OrthancBridgingViewProps> = ({ onBack }) => {
+  const [activeTab, setActiveTab] = React.useState<OrthancTab>('mwl');
+  const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 4, height: '100%', minHeight: 0 }}>
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb' }}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: '10px 18px', border: 'none', background: 'transparent',
-              color: activeTab === tab.key ? '#2563eb' : '#6b7280',
-              fontSize: 13.5, fontWeight: activeTab === tab.key ? 600 : 400, cursor: 'pointer',
-              borderBottom: activeTab === tab.key ? '2px solid #2563eb' : '2px solid transparent',
-              marginBottom: -1,
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <section
+      style={{
+        background: '#F3F4F6',
+        padding: 20,
+        height: '100%',
+        display: 'flex',
+        gap: 16,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* Sidebar */}
+      <aside
+        style={{
+          width: 240,
+          background: 'linear-gradient(135deg, #3a8bc4 0%, #459ed7 100%)',
+          borderRadius: 24,
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          padding: 16,
+          boxSizing: 'border-box',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+        }}
+      >
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 20px' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              <circle cx="9" cy="9" r="2"></circle>
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
+            </svg>
+          </div>
+          <div style={{ color: '#ffffff', fontSize: 15, fontWeight: 700, letterSpacing: '0.2px' }}>
+            Orthanc
+          </div>
+        </div>
+
+        {/* Menu — pola scrollbar auto-hide sama dgn BridgingBpjs.tsx/SatuSehat.tsx. */}
+        <nav className="orthanc-sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {MENU.map((item) => {
+            const active = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActiveTab(item.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+                  color: active ? '#ffffff' : 'rgba(255,255,255,0.8)',
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Footer — Koneksi, terpisah dari daftar menu utama (pola
+            "Pengaturan" di BridgingBpjs.tsx/SatuSehat.tsx/Peruri.tsx). */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 8 }}>
+          {(() => {
+            const active = activeTab === SETTINGS_ITEM.key;
+            return (
+              <button
+                type="button"
+                onClick={() => setActiveTab(SETTINGS_ITEM.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+                  color: active ? '#ffffff' : 'rgba(255,255,255,0.8)',
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {SETTINGS_ITEM.icon}
+                {SETTINGS_ITEM.label}
+              </button>
+            );
+          })()}
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Header — langsung di atas background, tanpa card */}
+        <div
+          style={{
+            padding: '0 4px 16px',
+            flexShrink: 0,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div style={{ fontSize: 13, color: '#6b7280' }}>
+            <span style={{ color: '#2f7bb5', fontWeight: 600 }}>Bridging</span> / {activeLabel}
+          </div>
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 8,
+                border: '1px solid #2f7bb5',
+                background: '#2f7bb5',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              Tutup
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div
+          style={{
+            padding: 24,
+            overflowY: 'auto',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            background: '#ffffff',
+            borderRadius: 24,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+          }}
+        >
+          {activeTab === 'koneksi' && <KoneksiSection />}
+          {activeTab === 'mwl' && <ModalityWorklistSection />}
+          {activeTab === 'mapping' && <MappingModalitySection />}
+        </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        {activeTab === 'koneksi' && <KoneksiSection />}
-        {activeTab === 'mwl' && <ModalityWorklistSection />}
-        {activeTab === 'mapping' && <MappingModalitySection />}
-      </div>
-    </div>
+      <style>{`
+        .orthanc-sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }
+        .orthanc-sidebar-nav::-webkit-scrollbar { width: 6px; }
+        .orthanc-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+        .orthanc-sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
+        .orthanc-sidebar-nav:hover { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.35) transparent; }
+        .orthanc-sidebar-nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.35); }
+      `}</style>
+    </section>
   );
 };

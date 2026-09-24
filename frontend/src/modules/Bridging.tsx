@@ -2,7 +2,7 @@ import React from 'react';
 import { SatuSehatView } from './SatuSehat';
 import { BridgingBpjsView } from './BridgingBpjs';
 import { PeruriView } from './Peruri';
-import { OrthancBridgingSection } from './OrthancBridging';
+import { OrthancBridgingView } from './OrthancBridging';
 
 type BridgingTab = 'bpjs' | 'satu-sehat' | 'orthanc' | 'peruri';
 
@@ -40,16 +40,11 @@ export const BridgingView: React.FC = () => {
       </div>
     );
   }
-
-  // Sub-halaman penuh setelah salah satu kartu diklik — grid tidak lagi terlihat.
-  // Kembali ke grid dengan klik menu "Bridging" di sidebar (bukan tombol kembali).
-  if (activeTab) {
+  if (activeTab === 'orthanc') {
     return (
-      <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {activeTab === 'orthanc' && <OrthancBridgingSection />}
-        </div>
-      </section>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#f3f4f6', overflow: 'hidden' }}>
+        <OrthancBridgingView onBack={() => setActiveTab(null)} />
+      </div>
     );
   }
 
