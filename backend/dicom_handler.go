@@ -69,6 +69,32 @@ func truncateOrthancMsg(b []byte) string {
 	return s
 }
 
+// GET /api/orthanc/test-connection — ping /system Orthanc, dipakai tombol
+// "Test Koneksi" di menu Bridging > Orthanc (beda dari
+// /api/satu-sehat/test-connection yg tes token OAuth2 Satu Sehat, bukan
+// Orthanc — sebelumnya tidak ada cara cek Orthanc reachable/tidak dari UI
+// sama sekali selain coba fitur lain yg butuh Orthanc & lihat apa error-nya).
+func testConnectionOrthanc(db *sql.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		orthanc := newOrthancClient(db)
+		resp, status, err := orthanc.do("GET", "/system", nil)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})
+			return
+		}
+		if status != 200 {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("Orthanc HTTP %d (cek URL/Username/Password) — %s", status, truncateOrthancMsg(resp))})
+			return
+		}
+		var info struct {
+			Name    string `json:"Name"`
+			Version string `json:"Version"`
+		}
+		json.Unmarshal(resp, &info)
+		c.JSON(http.StatusOK, gin.H{"message": "Koneksi berhasil", "name": info.Name, "version": info.Version})
+	}
+}
+
 func orthancFindIDs(orthanc *orthancClient, query map[string]interface{}) ([]string, error) {
 	resp, status, err := orthanc.do("POST", "/tools/find", query)
 	if err != nil {

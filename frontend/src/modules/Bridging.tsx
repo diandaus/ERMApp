@@ -2,6 +2,7 @@ import React from 'react';
 import { SatuSehatView } from './SatuSehat';
 import { BridgingBpjsView } from './BridgingBpjs';
 import { PeruriView } from './Peruri';
+import { OrthancBridgingSection } from './OrthancBridging';
 
 type BridgingTab = 'bpjs' | 'satu-sehat' | 'orthanc' | 'peruri';
 
@@ -46,11 +47,7 @@ export const BridgingView: React.FC = () => {
     return (
       <section style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {activeTab === 'orthanc' && (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 12 }}>
-              Fitur Bridging Orthanc akan dikembangkan nanti.
-            </div>
-          )}
+          {activeTab === 'orthanc' && <OrthancBridgingSection />}
         </div>
       </section>
     );
