@@ -184,16 +184,39 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
           ini sekaligus ke Orthanc, lihat handleKirimModalityWorklist. */}
       <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
-          onClick={() => setShowInputModal(true)}
+          onClick={() => {
+            // USG Kandungan: mesin USG ada langsung di poliklinik & dokter
+            // poliklinik yg periksa sendiri (bukan rujuk ke radiologi
+            // terpisah), jadi alurnya BEDA dari Radiologi biasa — bukan
+            // "Buat Permintaan" (ModalInputRad, alur rujukan) tapi langsung
+            // "Input Hasil Pemeriksaan". Modal input hasilnya BELUM dibuat
+            // (tampilan akan diberikan user), placeholder dulu spy tombol
+            // tidak salah membuka modal rujukan yg sudah tidak relevan.
+            if (kategoriUsg) {
+              Swal.fire({ icon: 'info', title: 'Segera Hadir', text: 'Modal Input Hasil Pemeriksaan USG sedang disiapkan.' });
+              return;
+            }
+            setShowInputModal(true);
+          }}
           style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
           onMouseEnter={(e) => e.currentTarget.style.background = '#0891B2'}
           onMouseLeave={(e) => e.currentTarget.style.background = '#1AB1E5'}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
+            {kategoriUsg ? (
+              <>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <path d="M14 2v6h6"></path>
+                <path d="m9 15 2 2 4-4"></path>
+              </>
+            ) : (
+              <>
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </>
+            )}
           </svg>
-          {kategoriUsg ? 'Buat Permintaan USG' : 'Buat Permintaan Radiologi'}
+          {kategoriUsg ? 'Input Hasil Pemeriksaan USG' : 'Buat Permintaan Radiologi'}
         </button>
         {kategoriUsg && (
           <button
