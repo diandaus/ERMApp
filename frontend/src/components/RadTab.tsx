@@ -23,6 +23,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
   const [radiolojiData, setRadiolojiData] = React.useState<RadiologiData>({ pemeriksaan: [], hasil: [], gambar: [] });
   const [loadingRadiologi, setLoadingRadiologi] = React.useState(false);
   const [gambarModal, setGambarModal] = React.useState<string | null>(null);
+  const [sendingMwl, setSendingMwl] = React.useState(false);
 
   React.useEffect(() => {
     fetchRiwayatRadiologi();
@@ -110,14 +111,78 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
     [riwayatRad]
   );
 
+  // handleKirimModalityWorklist — tombol khusus tab "Pemeriksaan USG"
+  // (kategoriUsg), kirim SEMUA permintaan USG pending pasien ini ke
+  // Modality Worklist Orthanc sekaligus. Tujuannya: AccessionNumber &
+  // identitas pasien (No.RM, Nama, dll) otomatis muncul begitu mesin
+  // USG query worklist, dokter tidak perlu ketik ulang manual di alat.
+  // Reuse endpoint yg sama dgn ModalityWorklist.tsx (POST
+  // /api/satu-sehat/mwl/send/*noorder) — dicek dulu status MWL tiap order
+  // via GET /api/satu-sehat/mwl/status/*noorder, yg SUDAH 'terkirim'
+  // dilewati (percuma dikirim ulang), sama prinsip dgn selectedForKirim
+  // di ModalityWorklist.tsx.
+  const handleKirimModalityWorklist = async () => {
+    if (riwayatPending.length === 0) {
+      Swal.fire({ icon: 'info', title: 'Tidak ada permintaan', text: 'Belum ada permintaan USG yang pending untuk pasien ini.' });
+      return;
+    }
+    setSendingMwl(true);
+    try {
+      const statusChecks = await Promise.all(
+        riwayatPending.map(async (item) => {
+          try {
+            const res = await fetch(`/api/satu-sehat/mwl/status/${encodeURIComponent(item.noorder)}`);
+            const data = await res.json();
+            return { item, status: data.status || '' };
+          } catch {
+            return { item, status: '' };
+          }
+        })
+      );
+      const toSend = statusChecks.filter((s) => s.status !== 'terkirim');
+      if (toSend.length === 0) {
+        await Swal.fire({ icon: 'info', title: 'Semua sudah terkirim', text: 'Seluruh permintaan USG pending pasien ini sudah ada di Modality Worklist.' });
+        return;
+      }
+      const confirm = await Swal.fire({
+        title: `Kirim ${toSend.length} permintaan USG ke Modality Worklist?`,
+        text: 'AccessionNumber & identitas pasien otomatis terisi — tidak perlu diketik ulang manual di mesin USG.',
+        icon: 'question', showCancelButton: true, confirmButtonText: 'Ya, Kirim', cancelButtonText: 'Batal', confirmButtonColor: '#1AB1E5',
+      });
+      if (!confirm.isConfirmed) return;
+
+      let ok = 0;
+      const failed: string[] = [];
+      for (const { item } of toSend) {
+        try {
+          const res = await fetch(`/api/satu-sehat/mwl/send/${encodeURIComponent(item.noorder)}`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Gagal');
+          ok++;
+        } catch (err) {
+          failed.push(`${item.noorder}: ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
+        }
+      }
+      if (failed.length === 0) {
+        await Swal.fire({ icon: 'success', title: 'Berhasil', text: `${ok} permintaan USG berhasil dikirim ke Modality Worklist` });
+      } else {
+        await Swal.fire({ icon: ok > 0 ? 'warning' : 'error', title: 'Selesai dengan catatan', html: `${ok} berhasil, ${failed.length} gagal:<br/><small>${failed.join('<br/>')}</small>` });
+      }
+    } finally {
+      setSendingMwl(false);
+    }
+  };
+
   return (
     <div>
 
       {/* Tombol Buat Permintaan — rata kiri, ukuran/gaya PERSIS "Input
           Resep" di ResepTab.tsx (padding 8px 16px, radius 0, fontSize 13)
           — per permintaan user, ganti dari versi lama (rata kanan, radius
-          4, lebih besar). */}
-      <div style={{ marginBottom: 16 }}>
+          4, lebih besar). "Kirim Modality Worklist" cuma muncul di tab
+          USG (kategoriUsg) — kirim SEMUA permintaan USG pending pasien
+          ini sekaligus ke Orthanc, lihat handleKirimModalityWorklist. */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           onClick={() => setShowInputModal(true)}
           style={{ padding: '8px 16px', borderRadius: 0, border: 'none', background: '#1AB1E5', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
@@ -130,6 +195,23 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
           </svg>
           {kategoriUsg ? 'Buat Permintaan USG' : 'Buat Permintaan Radiologi'}
         </button>
+        {kategoriUsg && (
+          <button
+            onClick={handleKirimModalityWorklist}
+            disabled={sendingMwl}
+            style={{ padding: '8px 16px', borderRadius: 0, border: '1px solid #1AB1E5', background: '#fff', color: sendingMwl ? '#9ca3af' : '#1AB1E5', cursor: sendingMwl ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 6 }}
+            onMouseEnter={(e) => { if (!sendingMwl) e.currentTarget.style.background = '#e0f2fe'; }}
+            onMouseLeave={(e) => { if (!sendingMwl) e.currentTarget.style.background = '#fff'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+              <line x1="8" y1="14" x2="16" y2="14"></line>
+              <line x1="8" y1="18" x2="13" y2="18"></line>
+            </svg>
+            {sendingMwl ? 'Mengirim...' : 'Kirim Modality Worklist'}
+          </button>
+        )}
       </div>
 
       {/* Loading state */}
