@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../widgets/dalam_pengembangan.dart';
 import 'landscape_shell.dart';
+import 'poli_screen.dart';
 import 'ranap_list_screen.dart';
 
 const kPrimary = Color(0xFF2563EB);
@@ -11,8 +12,8 @@ const kPrimary = Color(0xFF2563EB);
 /// - Portrait: navbar bawah 5 tab (Home/IGD/Ranap/Poli/Saya), spt semula.
 /// - Landscape: [LandscapeShell] — sidebar kiri 8 menu + avatar
 ///   akun/logout melayang pojok kanan-atas, TANPA navbar bawah.
-/// Cuma tab/menu Ranap (Rawat Inap) yg sudah jadi fitur nyata di keduanya;
-/// sisanya placeholder "Dalam Pengembangan", TAPI tab Saya (portrait)
+/// Baru tab/menu Ranap (Rawat Inap) & Poli (Poliklinik) yg sudah jadi fitur
+/// nyata di keduanya; sisanya placeholder "Dalam Pengembangan", TAPI tab Saya (portrait)
 /// tetap punya tombol Keluar krn itu satu-satunya jalan logout di app ini
 /// (landscape: logout dipindah ke avatar, lihat LandscapeShell).
 class MainShell extends StatefulWidget {
@@ -37,7 +38,7 @@ class _MainShellState extends State<MainShell> {
       const DalamPengembangan(title: 'Home', icon: Icons.home_outlined),
       const DalamPengembangan(title: 'IGD', icon: Icons.emergency_outlined),
       RanapListScreen(user: widget.user, onLogout: widget.onLogout),
-      const DalamPengembangan(title: 'Poli', icon: Icons.local_hospital_outlined),
+      PoliScreen(user: widget.user, active: _index == 3),
       DalamPengembangan(
         title: 'Saya',
         icon: Icons.person_outline,

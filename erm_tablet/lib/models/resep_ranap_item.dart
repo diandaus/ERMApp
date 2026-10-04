@@ -66,7 +66,8 @@ class ResepRacikanItem {
   });
 
   factory ResepRacikanItem.fromJson(Map<String, dynamic> json) => ResepRacikanItem(
-        noRacik: json['no_racik'] as String? ?? '',
+        // String di /api/resep-ranap/list, angka di /api/resep/history.
+        noRacik: '${json['no_racik'] ?? ''}',
         namaRacik: json['nama_racik'] as String? ?? '',
         kdRacik: json['kd_racik'] as String? ?? '',
         nmRacik: json['nm_racik'] as String? ?? '',

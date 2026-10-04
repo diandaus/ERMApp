@@ -14,7 +14,10 @@ const kBorder = Color(0xFFE5E7EB);
 /// dibangun di v1 tablet ini — nyusul di fase berikutnya spt Resep.
 class LabTab extends StatefulWidget {
   final RanapPatient patient;
-  const LabTab({super.key, required this.patient});
+  // true = kartu/tabel putih radius 4 (layar pemeriksaan Rawat Jalan),
+  // sama dgn ResepTab(ralan).
+  final bool flat;
+  const LabTab({super.key, required this.patient, this.flat = false});
 
   @override
   State<LabTab> createState() => _LabTabState();
@@ -94,13 +97,13 @@ class _LabTabState extends State<LabTab> {
                         if (_pending.isNotEmpty) ...[
                           const Text('Riwayat Permintaan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 8),
-                          ..._pending.map((it) => _PermintaanCard(item: it)),
+                          ..._pending.map((it) => _PermintaanCard(item: it, flat: widget.flat)),
                           const SizedBox(height: 16),
                         ],
                         if (_hasil.isNotEmpty) ...[
                           const Text('Hasil Periksa Laboratorium', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 8),
-                          ..._hasil.map((it) => _HasilCard(item: it)),
+                          ..._hasil.map((it) => _HasilCard(item: it, flat: widget.flat)),
                         ],
                       ],
                     ),
@@ -110,7 +113,8 @@ class _LabTabState extends State<LabTab> {
 
 class _PermintaanCard extends StatelessWidget {
   final LabPermintaanItem item;
-  const _PermintaanCard({required this.item});
+  final bool flat;
+  const _PermintaanCard({required this.item, this.flat = false});
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +122,7 @@ class _PermintaanCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: flat ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(flat ? 4 : 8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -171,21 +175,22 @@ class _PermintaanCard extends StatelessWidget {
 
 class _HasilCard extends StatelessWidget {
   final LabHasilItem item;
-  const _HasilCard({required this.item});
+  final bool flat;
+  const _HasilCard({required this.item, this.flat = false});
 
   @override
   Widget build(BuildContext context) {
     final pk = item.kategori == 'pk';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: flat ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(flat ? 4 : 8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(color: Color(0xFFF9FAFB), border: Border(bottom: BorderSide(color: kBorder))),
+            decoration: BoxDecoration(color: flat ? null : const Color(0xFFF9FAFB), border: const Border(bottom: BorderSide(color: kBorder))),
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
@@ -210,7 +215,7 @@ class _HasilCard extends StatelessWidget {
                     columnWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(2), 2: FlexColumnWidth(2), 3: FlexColumnWidth(2)},
                     children: [
                       TableRow(
-                        decoration: const BoxDecoration(color: Color(0xFFF9FAFB)),
+                        decoration: BoxDecoration(color: flat ? Colors.white : const Color(0xFFF9FAFB)),
                         children: ['Pemeriksaan', 'Hasil', 'Nilai Rujukan', 'Keterangan'].map((h) => _cell(h, color: const Color(0xFF6B7280))).toList(),
                       ),
                       for (final d in item.detail)

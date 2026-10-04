@@ -5,11 +5,21 @@
 class TindakanDokterItem {
   final String nmPerawatan;
   final num biayaRawat;
-  TindakanDokterItem({required this.nmPerawatan, required this.biayaRawat});
+  // Kunci baris utk Hapus (dipakai tab Tindakan Rawat Jalan).
+  // tglPerawatan di kelompok ini berformat ISO (2026-04-13T00:00:00+07:00).
+  final String kdJenisPrw;
+  final String tglPerawatan;
+  final String jamRawat;
+  final String kdDokter;
+  TindakanDokterItem({required this.nmPerawatan, required this.biayaRawat, this.kdJenisPrw = '', this.tglPerawatan = '', this.jamRawat = '', this.kdDokter = ''});
 
   factory TindakanDokterItem.fromJson(Map<String, dynamic> json) => TindakanDokterItem(
         nmPerawatan: json['nm_perawatan'] as String? ?? '',
         biayaRawat: json['biaya_rawat'] as num? ?? 0,
+        kdJenisPrw: json['kd_jenis_prw'] as String? ?? '',
+        tglPerawatan: json['tgl_perawatan'] as String? ?? '',
+        jamRawat: json['jam_rawat'] as String? ?? '',
+        kdDokter: json['kd_dokter'] as String? ?? '',
       );
 }
 
@@ -17,12 +27,25 @@ class TindakanParamedisItem {
   final String nmPerawatan;
   final String namaParamedis;
   final num biayaRawat;
-  TindakanParamedisItem({required this.nmPerawatan, required this.namaParamedis, required this.biayaRawat});
+  // Kunci baris utk Hapus. tglPerawatan di kelompok Perawat / Dokter &
+  // Perawat berformat DD/MM/YYYY (beda dari Tindakan Dokter yg ISO);
+  // kdDokter cuma terisi di kelompok Dokter & Perawat.
+  final String kdJenisPrw;
+  final String tglPerawatan;
+  final String jamRawat;
+  final String nip;
+  final String kdDokter;
+  TindakanParamedisItem({required this.nmPerawatan, required this.namaParamedis, required this.biayaRawat, this.kdJenisPrw = '', this.tglPerawatan = '', this.jamRawat = '', this.nip = '', this.kdDokter = ''});
 
   factory TindakanParamedisItem.fromJson(Map<String, dynamic> json) => TindakanParamedisItem(
         nmPerawatan: json['nm_perawatan'] as String? ?? '',
         namaParamedis: json['nama_paramedis'] as String? ?? '',
         biayaRawat: json['biaya_rawat'] as num? ?? 0,
+        kdJenisPrw: json['kd_jenis_prw'] as String? ?? '',
+        tglPerawatan: json['tgl_perawatan'] as String? ?? '',
+        jamRawat: json['jam_rawat'] as String? ?? '',
+        nip: json['nip'] as String? ?? '',
+        kdDokter: json['kd_dokter'] as String? ?? '',
       );
 }
 

@@ -14,7 +14,10 @@ const kBorder = Color(0xFFE5E7EB);
 /// tablet ini — nyusul di fase berikutnya spt Resep/Lab/Rad/Tindakan.
 class DiagnosaTab extends StatefulWidget {
   final RanapPatient patient;
-  const DiagnosaTab({super.key, required this.patient});
+  // true = kartu/tabel putih radius 4 (layar pemeriksaan Rawat Jalan),
+  // sama dgn ResepTab(ralan).
+  final bool flat;
+  const DiagnosaTab({super.key, required this.patient, this.flat = false});
 
   @override
   State<DiagnosaTab> createState() => _DiagnosaTabState();
@@ -80,7 +83,7 @@ class _DiagnosaTabState extends State<DiagnosaTab> {
 
   Widget _empty(String title, String subtitle) => Container(
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-        decoration: BoxDecoration(border: Border.all(color: kBorder, style: BorderStyle.solid), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: widget.flat ? Colors.white : null, border: Border.all(color: kBorder, style: BorderStyle.solid), borderRadius: BorderRadius.circular(widget.flat ? 4 : 12)),
         child: Column(
           children: [
             const Icon(Icons.fact_check_outlined, size: 28, color: Color(0xFF9CA3AF)),
@@ -94,13 +97,13 @@ class _DiagnosaTabState extends State<DiagnosaTab> {
 
   Widget _diagnosaTable(List<DiagnosaPasienItem> items) {
     return Container(
-      decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: widget.flat ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(widget.flat ? 4 : 8)),
       child: Table(
         border: TableBorder.symmetric(inside: const BorderSide(color: kBorder)),
         columnWidths: const {0: FlexColumnWidth(1.4), 1: FlexColumnWidth(4), 2: FlexColumnWidth(1.5), 3: FlexColumnWidth(1.5), 4: FlexColumnWidth(1)},
         children: [
           TableRow(
-            decoration: const BoxDecoration(color: Color(0xFFF3F4F6)),
+            decoration: BoxDecoration(color: widget.flat ? Colors.white : const Color(0xFFF3F4F6)),
             children: ['Kode', 'Nama Penyakit', 'Status', 'Kasus', 'Urut'].map((h) => _cell(h, color: const Color(0xFF374151))).toList(),
           ),
           for (final it in items)
@@ -118,13 +121,13 @@ class _DiagnosaTabState extends State<DiagnosaTab> {
 
   Widget _prosedurTable(List<ProsedurPasienItem> items) {
     return Container(
-      decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: widget.flat ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(widget.flat ? 4 : 8)),
       child: Table(
         border: TableBorder.symmetric(inside: const BorderSide(color: kBorder)),
         columnWidths: const {0: FlexColumnWidth(1.4), 1: FlexColumnWidth(4), 2: FlexColumnWidth(1.5), 3: FlexColumnWidth(1), 4: FlexColumnWidth(1)},
         children: [
           TableRow(
-            decoration: const BoxDecoration(color: Color(0xFFF3F4F6)),
+            decoration: BoxDecoration(color: widget.flat ? Colors.white : const Color(0xFFF3F4F6)),
             children: ['Kode', 'Nama Prosedur', 'Status', 'Urut', 'Jml'].map((h) => _cell(h, color: const Color(0xFF374151))).toList(),
           ),
           for (final it in items)

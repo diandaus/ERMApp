@@ -18,6 +18,7 @@ class SoapItem {
   final String keluhan;
   final String pemeriksaan;
   final String alergi;
+  final String lingkarPerut; // cuma ada di pemeriksaan_ralan; Ranap selalu ''
   final String rtl; // Planning
   final String penilaian; // Assessment
   final String instruksi;
@@ -41,6 +42,7 @@ class SoapItem {
     required this.keluhan,
     required this.pemeriksaan,
     required this.alergi,
+    this.lingkarPerut = '',
     required this.rtl,
     required this.penilaian,
     required this.instruksi,
@@ -67,6 +69,7 @@ class SoapItem {
       keluhan: s('keluhan'),
       pemeriksaan: s('pemeriksaan'),
       alergi: s('alergi'),
+      lingkarPerut: s('lingkar_perut'),
       rtl: s('rtl'),
       penilaian: s('penilaian'),
       instruksi: s('instruksi'),

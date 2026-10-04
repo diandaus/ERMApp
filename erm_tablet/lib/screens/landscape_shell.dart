@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../widgets/dalam_pengembangan.dart';
 import 'main_shell.dart' show confirmLogout;
+import 'poli_screen.dart';
 import 'ranap_table_screen.dart';
 
 const kSidebarGreen = Color(0xFF059669);
@@ -13,9 +14,9 @@ class _MenuEntry {
   const _MenuEntry(this.label, this.icon);
 }
 
-/// 8 menu sidebar persis daftar yg diminta user. Cuma index 3 (Rawat
-/// Inap) yg fitur nyata — sisanya "Dalam Pengembangan", sama pola dgn
-/// portrait (MainShell) yg jg cuma Ranap yg jadi.
+/// 8 menu sidebar persis daftar yg diminta user. Baru index 2
+/// (Poliklinik) & 3 (Rawat Inap) yg fitur nyata — sisanya "Dalam
+/// Pengembangan", sama pola dgn portrait (MainShell).
 const List<_MenuEntry> _kLandscapeMenu = [
   _MenuEntry('Dashboard', Icons.dashboard_outlined),
   _MenuEntry('IGD', Icons.emergency_outlined),
@@ -55,7 +56,7 @@ class _LandscapeShellState extends State<LandscapeShell> {
     final pages = [
       const DalamPengembanganInline(title: 'Dashboard'),
       const DalamPengembanganInline(title: 'IGD'),
-      const DalamPengembanganInline(title: 'Poliklinik'),
+      PoliScreen(user: widget.user, landscape: true, searchQuery: _searchQuery, active: _index == 2),
       RanapTableScreen(user: widget.user, onLogout: widget.onLogout, searchQuery: _searchQuery),
       const DalamPengembanganInline(title: 'Farmasi'),
       const DalamPengembanganInline(title: 'Laboratorium'),
@@ -74,7 +75,7 @@ class _LandscapeShellState extends State<LandscapeShell> {
                   user: widget.user,
                   onLogout: widget.onLogout,
                   onSearchChanged: (v) => setState(() => _searchQuery = v),
-                  hintText: _index == 3 ? 'Cari no. RM / nama / dokter...' : 'Cari...',
+                  hintText: _index == 2 || _index == 3 ? 'Cari no. RM / nama / dokter...' : 'Cari...',
                 ),
                 Expanded(child: IndexedStack(index: _index, children: pages)),
               ],
