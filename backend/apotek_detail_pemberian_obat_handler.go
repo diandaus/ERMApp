@@ -27,9 +27,11 @@ import (
 //     sekali) — pemberian obat rawat inap sungguhan tercatat di
 //     detail_pemberian_obat (tabel yang sama dipakai
 //     inventory/DlgPemberianObat.java di Khanza Desktop). detail_pemberian_obat
-//     PER-ITEM OBAT (bisa banyak baris per pasien per hari), jadi
-//     di-GROUP BY no_rawat+tanggal supaya jadi satu baris per pasien per
-//     hari, sesuai bentuk "daftar pasien" yang diminta.
+//     PER-ITEM OBAT, ditambah resep_pulang (obat pulang) yang juga per-item,
+//     jadi di-GROUP BY no_rawat (di subquery) supaya jadi SATU baris per perawatan --
+//     tombol "Lihat" menampilkan total seluruh obat selama dirawat, termasuk
+//     obat pulang. Filter tanggal hanya menentukan perawatan mana yang
+//     muncul di daftar, tidak memotong isi rincian obatnya.
 //   - detail_pemberian_obat.kd_bangsal = DEPO asal obat (mis. "AP" =
 //     Apotek), BUKAN ruangan pasien — kolom "Ruangan" di sini tetap
 //     diambil dari kamar_inap/kamar/bangsal (ruangan pasien SESUNGGUHNYA
@@ -80,24 +82,31 @@ func getApotekDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 		if kind == "ranap" {
 			isRanap = true
 			query = `
-				SELECT detail_pemberian_obat.no_rawat, pasien.no_rkm_medis, pasien.nm_pasien, dokter.nm_dokter,
+				SELECT reg_periksa.no_rawat, pasien.no_rkm_medis, pasien.nm_pasien, dokter.nm_dokter,
 					COALESCE((
 						SELECT bangsal.nm_bangsal
 						FROM kamar_inap
 						INNER JOIN kamar ON kamar.kd_kamar = kamar_inap.kd_kamar
 						INNER JOIN bangsal ON bangsal.kd_bangsal = kamar.kd_bangsal
-						WHERE kamar_inap.no_rawat = detail_pemberian_obat.no_rawat
+						WHERE kamar_inap.no_rawat = reg_periksa.no_rawat
 						ORDER BY kamar_inap.tgl_masuk DESC LIMIT 1
 					), '') AS nm_bangsal,
 					penjab.kd_pj, penjab.png_jawab,
-					MIN(detail_pemberian_obat.tgl_perawatan) AS tgl_perawatan,
-					MIN(detail_pemberian_obat.jam) AS jam
-				FROM detail_pemberian_obat
-				INNER JOIN reg_periksa ON reg_periksa.no_rawat = detail_pemberian_obat.no_rawat
+					pemberian.tgl, pemberian.jam
+				FROM (
+					SELECT sumber.no_rawat, MIN(sumber.tgl) AS tgl, MIN(sumber.jam) AS jam
+					FROM (
+						SELECT no_rawat, tgl_perawatan AS tgl, jam FROM detail_pemberian_obat WHERE tgl_perawatan BETWEEN ? AND ?
+						UNION ALL
+						SELECT no_rawat, tanggal AS tgl, jam FROM resep_pulang WHERE tanggal BETWEEN ? AND ?
+					) sumber
+					GROUP BY sumber.no_rawat
+				) pemberian
+				INNER JOIN reg_periksa ON reg_periksa.no_rawat = pemberian.no_rawat
 				INNER JOIN pasien ON pasien.no_rkm_medis = reg_periksa.no_rkm_medis
 				INNER JOIN dokter ON dokter.kd_dokter = reg_periksa.kd_dokter
 				INNER JOIN penjab ON penjab.kd_pj = reg_periksa.kd_pj
-				WHERE detail_pemberian_obat.tgl_perawatan BETWEEN ? AND ?
+				WHERE 1 = 1
 			`
 		} else {
 			query = `
@@ -114,6 +123,9 @@ func getApotekDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 			`
 		}
 		args := []interface{}{tgl1, tgl2}
+		if isRanap {
+			args = append(args, tgl1, tgl2) // sekali lagi utk cabang resep_pulang
+		}
 		if kdPj != "" {
 			query += " AND penjab.kd_pj = ?"
 			args = append(args, kdPj)
@@ -124,10 +136,8 @@ func getApotekDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 			args = append(args, pattern, pattern, pattern)
 		}
 		if isRanap {
-			// Satu baris per obat di detail_pemberian_obat -> dikelompokkan
-			// jadi satu baris per pasien per hari, sesuai bentuk "daftar
-			// pasien" (lihat komentar di atas berkas ini).
-			query += " GROUP BY detail_pemberian_obat.no_rawat, DATE(detail_pemberian_obat.tgl_perawatan) ORDER BY jam"
+			// Sudah satu baris per perawatan dari subquery "pemberian".
+			query += " ORDER BY pemberian.tgl, pemberian.jam"
 		} else {
 			query += " ORDER BY resep_obat.jam_penyerahan"
 		}
@@ -148,7 +158,7 @@ func getApotekDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 					&r.NmLokasi, &r.KdPj, &r.JenisBayar,
 					&r.TglPenyerahan, &r.JamPenyerahan,
 				) == nil {
-					r.NoResep = r.NoRawat + "-" + r.TglPenyerahan
+					r.NoResep = r.NoRawat
 					list = append(list, r)
 				}
 				continue
@@ -166,11 +176,13 @@ func getApotekDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 }
 
 // detailPemberianObatItemRow — satu baris obat/alkes yang diberikan,
-// padanan PERSIS 16 kolom tabModePO di inventory/DlgPemberianObat.java
-// ("Tgl.Beri"/"Jam Beri"/.../"No.Faktur"). Dipakai tombol "Lihat" di
-// baris Rawat Inap (DetailPemberianObat.tsx) — no_rawat+tanggal yang
-// diklik itulah kunci pengelompokan yang sama dipakai GROUP BY di
-// getApotekDetailPemberianObat.
+// padanan 16 kolom tabModePO di inventory/DlgPemberianObat.java
+// ("Tgl.Beri"/"Jam Beri"/.../"No.Faktur"), ditambah Jenis yang membedakan
+// "Rawat Inap" (detail_pemberian_obat) dan "Obat Pulang" (resep_pulang).
+// Dipakai tombol "Lihat" di baris Rawat Inap (DetailPemberianObat.tsx);
+// no_rawat yang diklik sama dengan kunci GROUP BY di
+// getApotekDetailPemberianObat. resep_pulang tidak punya embalase/tuslah/
+// h_beli, jadi embalase & tuslah 0 dan h_beli diambil dari databarang.
 type detailPemberianObatItemRow struct {
 	TglBeri    string  `json:"tgl_beri"`
 	JamBeri    string  `json:"jam_beri"`
@@ -189,34 +201,47 @@ type detailPemberianObatItemRow struct {
 	Gudang     string  `json:"gudang"`
 	NoBatch    string  `json:"no_batch"`
 	NoFaktur   string  `json:"no_faktur"`
+	Jenis      string  `json:"jenis"`
 }
 
 func getApotekDetailPemberianObatItems(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimSpace(c.Query("no_rawat"))
-		tanggal := strings.TrimSpace(c.Query("tanggal"))
-		if noRawat == "" || tanggal == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat dan tanggal wajib diisi"})
+		if noRawat == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat wajib diisi"})
 			return
 		}
 
 		rows, err := db.Query(`
-			SELECT detail_pemberian_obat.tgl_perawatan, detail_pemberian_obat.jam, detail_pemberian_obat.no_rawat,
+			SELECT pemberian.tgl, pemberian.jam, pemberian.no_rawat,
 				pasien.no_rkm_medis, pasien.nm_pasien,
-				detail_pemberian_obat.kode_brng, COALESCE(databarang.nama_brng,''), COALESCE(kodesatuan.satuan,''),
-				detail_pemberian_obat.embalase, detail_pemberian_obat.tuslah, detail_pemberian_obat.jml,
-				detail_pemberian_obat.biaya_obat, detail_pemberian_obat.total, detail_pemberian_obat.h_beli,
-				COALESCE(bangsal.nm_bangsal, detail_pemberian_obat.kd_bangsal, ''),
-				detail_pemberian_obat.no_batch, detail_pemberian_obat.no_faktur
-			FROM detail_pemberian_obat
-			INNER JOIN reg_periksa ON reg_periksa.no_rawat = detail_pemberian_obat.no_rawat
+				pemberian.kode_brng, COALESCE(databarang.nama_brng,''), COALESCE(kodesatuan.satuan,''),
+				pemberian.embalase, pemberian.tuslah, pemberian.jml,
+				pemberian.biaya_obat, pemberian.total,
+				IF(pemberian.jenis = 'Obat Pulang', COALESCE(databarang.h_beli, 0), pemberian.h_beli),
+				COALESCE(bangsal.nm_bangsal, pemberian.kd_bangsal, ''),
+				pemberian.no_batch, pemberian.no_faktur, pemberian.jenis
+			FROM (
+				SELECT no_rawat, tgl_perawatan AS tgl, jam, kode_brng,
+					COALESCE(embalase, 0) AS embalase, COALESCE(tuslah, 0) AS tuslah, jml,
+					COALESCE(biaya_obat, 0) AS biaya_obat, total, COALESCE(h_beli, 0) AS h_beli,
+					kd_bangsal, COALESCE(no_batch, '') AS no_batch, COALESCE(no_faktur, '') AS no_faktur,
+					'Rawat Inap' AS jenis
+				FROM detail_pemberian_obat
+				WHERE no_rawat = ?
+				UNION ALL
+				SELECT no_rawat, tanggal, jam, kode_brng, 0, 0, jml_barang, harga, total, 0,
+					kd_bangsal, no_batch, no_faktur, 'Obat Pulang'
+				FROM resep_pulang
+				WHERE no_rawat = ?
+			) pemberian
+			INNER JOIN reg_periksa ON reg_periksa.no_rawat = pemberian.no_rawat
 			INNER JOIN pasien ON pasien.no_rkm_medis = reg_periksa.no_rkm_medis
-			LEFT JOIN databarang ON databarang.kode_brng = detail_pemberian_obat.kode_brng
+			LEFT JOIN databarang ON databarang.kode_brng = pemberian.kode_brng
 			LEFT JOIN kodesatuan ON kodesatuan.kode_sat = databarang.kode_sat
-			LEFT JOIN bangsal ON bangsal.kd_bangsal = detail_pemberian_obat.kd_bangsal
-			WHERE detail_pemberian_obat.no_rawat = ? AND DATE(detail_pemberian_obat.tgl_perawatan) = ?
-			ORDER BY detail_pemberian_obat.jam
-		`, noRawat, tanggal)
+			LEFT JOIN bangsal ON bangsal.kd_bangsal = pemberian.kd_bangsal
+			ORDER BY pemberian.tgl, pemberian.jam
+		`, noRawat, noRawat)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -229,7 +254,7 @@ func getApotekDetailPemberianObatItems(db *sql.DB) gin.HandlerFunc {
 			if rows.Scan(
 				&r.TglBeri, &r.JamBeri, &r.NoRawat, &r.NoRkmMedis, &r.NmPasien,
 				&r.KodeBrng, &r.NamaBrng, &r.Satuan, &r.Embalase, &r.Tuslah, &r.Jml,
-				&r.BiayaObat, &r.Total, &r.HBeli, &r.Gudang, &r.NoBatch, &r.NoFaktur,
+				&r.BiayaObat, &r.Total, &r.HBeli, &r.Gudang, &r.NoBatch, &r.NoFaktur, &r.Jenis,
 			) == nil {
 				list = append(list, r)
 			}

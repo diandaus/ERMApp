@@ -95,12 +95,13 @@ type DetailPemberianObatItemRow = {
   gudang: string;
   no_batch: string;
   no_faktur: string;
+  jenis: string;
 };
 
 const fmtAngka = (v: number) => v.toLocaleString('id-ID');
 
 const ModalLihatItemPemberianObat: React.FC<{
-  target: { no_rawat: string; tanggal: string; nm_pasien: string; no_rkm_medis: string } | null;
+  target: { no_rawat: string; nm_pasien: string; no_rkm_medis: string } | null;
   onClose: () => void;
 }> = ({ target, onClose }) => {
   const [rows, setRows] = React.useState<DetailPemberianObatItemRow[]>([]);
@@ -109,7 +110,7 @@ const ModalLihatItemPemberianObat: React.FC<{
   React.useEffect(() => {
     if (!target) return;
     setLoading(true);
-    fetch(`/api/apotek/detail-pemberian-obat/items?no_rawat=${encodeURIComponent(target.no_rawat)}&tanggal=${encodeURIComponent(target.tanggal)}`)
+    fetch(`/api/apotek/detail-pemberian-obat/items?no_rawat=${encodeURIComponent(target.no_rawat)}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setRows(Array.isArray(data) ? data : []))
       .catch(() => setRows([]))
@@ -117,6 +118,11 @@ const ModalLihatItemPemberianObat: React.FC<{
   }, [target]);
 
   if (!target) return null;
+
+  const totalBiaya = rows.reduce((sum, r) => sum + (r.total || 0), 0);
+  const tglAwal = rows.length > 0 ? rows[0].tgl_beri.slice(0, 10) : '';
+  const tglAkhir = rows.length > 0 ? rows[rows.length - 1].tgl_beri.slice(0, 10) : '';
+  const periode = tglAwal === tglAkhir ? tglAwal : `${tglAwal} s.d. ${tglAkhir}`;
 
   // handleCetak — padanan cetak "RINCIAN PEMAKAIAN OBAT/BMHP" Khanza
   // Desktop (kop logo+nama+alamat instansi di atas, lalu tabel item, lalu
@@ -176,11 +182,12 @@ const ModalLihatItemPemberianObat: React.FC<{
       // kalau QR gagal dibuat, tetap lanjut cetak tanpa QR
     }
 
-    const totalBiaya = rows.reduce((sum, r) => sum + (r.total || 0), 0);
     const rowsHtml = rows.map((row, index) => `
       <tr>
         <td style="text-align:center">${index + 1}</td>
+        <td style="text-align:center">${row.tgl_beri.slice(0, 10)}</td>
         <td>${row.nama_brng}</td>
+        <td style="text-align:center">${row.jenis}</td>
         <td style="text-align:center">${row.satuan}</td>
         <td style="text-align:right">${fmtAngka(row.jml)}</td>
         <td style="text-align:right">${fmtAngka(row.biaya_obat)}</td>
@@ -226,13 +233,15 @@ const ModalLihatItemPemberianObat: React.FC<{
             <div>No Rawat : ${target.no_rawat}</div>
             <div>Nama : ${target.nm_pasien}</div>
             <div>No RM : ${target.no_rkm_medis}</div>
-            <div>Tanggal : ${target.tanggal}</div>
+            <div>Periode : ${periode}</div>
           </div>
           <table class="tbl_data">
             <thead>
               <tr>
                 <th>No.</th>
+                <th>Tanggal</th>
                 <th>Nama Obat dan BMHP</th>
+                <th>Jenis</th>
                 <th>Satuan</th>
                 <th>Jumlah</th>
                 <th>Biaya Obat</th>
@@ -242,7 +251,7 @@ const ModalLihatItemPemberianObat: React.FC<{
             <tbody>
               ${rowsHtml}
               <tr>
-                <td colspan="5" style="text-align:right"><b>TOTAL</b></td>
+                <td colspan="7" style="text-align:right"><b>TOTAL</b></td>
                 <td style="text-align:right"><b>${fmtAngka(totalBiaya)}</b></td>
               </tr>
             </tbody>
@@ -271,6 +280,7 @@ const ModalLihatItemPemberianObat: React.FC<{
     { key: 'nm_pasien', label: 'Nama Pasien' },
     { key: 'kode_brng', label: 'Kode Obat' },
     { key: 'nama_brng', label: 'Nama Obat/Alkes' },
+    { key: 'jenis', label: 'Jenis' },
     { key: 'embalase', label: 'Embalase', align: 'right' },
     { key: 'tuslah', label: 'Tuslah', align: 'right' },
     { key: 'jml', label: 'Jml', align: 'right' },
@@ -297,7 +307,7 @@ const ModalLihatItemPemberianObat: React.FC<{
               Detail Pemberian Obat — {target.nm_pasien} ({target.no_rkm_medis})
             </div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>
-              No. Rawat {target.no_rawat} — {target.tanggal}
+              No. Rawat {target.no_rawat}{rows.length > 0 ? ` — ${periode}` : ''}
             </div>
           </div>
           <button
@@ -347,7 +357,8 @@ const ModalLihatItemPemberianObat: React.FC<{
           </table>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Total: {fmtAngka(totalBiaya)}</div>
           <button
             type="button"
             onClick={onClose}
@@ -370,7 +381,7 @@ export const DetailPemberianObatView: React.FC = () => {
   const [penjabOptions, setPenjabOptions] = React.useState<Penjab[]>([]);
   const [items, setItems] = React.useState<DetailPemberianObatRow[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [viewingItem, setViewingItem] = React.useState<{ no_rawat: string; tanggal: string; nm_pasien: string; no_rkm_medis: string } | null>(null);
+  const [viewingItem, setViewingItem] = React.useState<{ no_rawat: string; nm_pasien: string; no_rkm_medis: string } | null>(null);
 
   React.useEffect(() => {
     fetch('/api/pendaftaran/penjab')
@@ -489,7 +500,7 @@ export const DetailPemberianObatView: React.FC = () => {
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
                       <button
                         type="button"
-                        onClick={() => setViewingItem({ no_rawat: item.no_rawat, tanggal: item.tgl_penyerahan.slice(0, 10), nm_pasien: item.nm_pasien, no_rkm_medis: item.no_rkm_medis })}
+                        onClick={() => setViewingItem({ no_rawat: item.no_rawat, nm_pasien: item.nm_pasien, no_rkm_medis: item.no_rkm_medis })}
                         style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid #1AB1E5', background: '#ffffff', color: '#1AB1E5', cursor: 'pointer', fontSize: 11, fontWeight: 500 }}
                       >
                         Lihat
