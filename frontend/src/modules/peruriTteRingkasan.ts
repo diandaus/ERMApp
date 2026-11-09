@@ -324,25 +324,20 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
   });
 }
 
-// unduhRingkasanTte — ambil dokumen yg SUDAH ditandatangani dari Peruri
-// (order_id dicari di tracking_dokumen_ttd), unduh ke komputer & backend
-// otomatis menyimpannya ke Berkas Rawat sebagai
-// Ringkasan_Perawatan_<no_rawat>_<kd_dokter>_signed.pdf.
-export async function unduhRingkasanTte(t: RingkasanTarget): Promise<void> {
+// unduhDokumenTte — unduh dokumen yg SUDAH ditandatangani dari Peruri
+// berdasarkan orderId (dipakai juga submenu Selesai utk semua jenis
+// dokumen). simpanKeBerkas diisi → backend sekalian menyimpan ke Berkas
+// Rawat sbg <prefix><no_rawat>_<no_order>_signed.pdf; kosong → hanya diunduh.
+export async function unduhDokumenTte(
+  orderId: string,
+  namaFile: string,
+  simpanKeBerkas?: { no_rawat: string; no_order: string; prefix: string },
+): Promise<void> {
   showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
   try {
-    const namaDokumen = namaDokumenRingkasan(t);
-    const lookupRes = await fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(t.no_rawat)}&nama_dokumen=${encodeURIComponent(namaDokumen)}`);
-    const lookupData = await lookupRes.json().catch(() => ({}));
-    if (!lookupRes.ok || !lookupData.order_id) {
-      hideProcessing();
-      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani untuk pasien & dokter ini.' });
-      return;
-    }
-
     const res = await fetch('/api/peruri/download-document', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: lookupData.order_id, no_rawat: t.no_rawat, no_order: t.kd_dokter, prefix: 'Ringkasan_Perawatan_' }),
+      body: JSON.stringify({ orderId, ...(simpanKeBerkas || {}) }),
     });
     const resData = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
@@ -360,14 +355,16 @@ export async function unduhRingkasanTte(t: RingkasanTarget): Promise<void> {
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `TTE_${namaDokumen}`;
+    a.download = `TTE_${namaFile}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     hideProcessing();
 
-    if (resData.uploaded_to_berkasrawat) {
+    if (!simpanKeBerkas) {
+      Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen bertanda tangan berhasil diunduh.', timer: 1800, showConfirmButton: false });
+    } else if (resData.uploaded_to_berkasrawat) {
       Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen terunduh & otomatis tersimpan ke Berkas Rawat.', timer: 2000, showConfirmButton: false });
     } else {
       Swal.fire({
@@ -377,6 +374,33 @@ export async function unduhRingkasanTte(t: RingkasanTarget): Promise<void> {
     }
   } catch (err) {
     hideProcessing();
+    Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+  }
+}
+
+// opsiSimpanRingkasan — lokasi simpan Berkas Rawat utk Ringkasan Perawatan:
+// Ringkasan_Perawatan_<no_rawat>_<kd_dokter>_signed.pdf
+export const opsiSimpanRingkasan = (t: Pick<RingkasanTarget, 'no_rawat' | 'kd_dokter'>) =>
+  ({ no_rawat: t.no_rawat, no_order: t.kd_dokter, prefix: 'Ringkasan_Perawatan_' });
+
+// kdDokterDariNamaRingkasan — kebalikan namaDokumenRingkasan (dipakai
+// submenu Selesai, yg cuma punya nama_dokumen dari tracking).
+export const kdDokterDariNamaRingkasan = (namaDokumen: string) =>
+  /^Ringkasan_Perawatan_\d+_(.+)\.pdf$/.exec(namaDokumen)?.[1] || '';
+
+// unduhRingkasanTte — order_id dicari di tracking_dokumen_ttd, lalu unduh &
+// simpan ke Berkas Rawat.
+export async function unduhRingkasanTte(t: RingkasanTarget): Promise<void> {
+  const namaDokumen = namaDokumenRingkasan(t);
+  try {
+    const lookupRes = await fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(t.no_rawat)}&nama_dokumen=${encodeURIComponent(namaDokumen)}`);
+    const lookupData = await lookupRes.json().catch(() => ({}));
+    if (!lookupRes.ok || !lookupData.order_id) {
+      Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Belum ada dokumen yang ditandatangani untuk pasien & dokter ini.' });
+      return;
+    }
+    await unduhDokumenTte(String(lookupData.order_id), namaDokumen, opsiSimpanRingkasan(t));
+  } catch (err) {
     Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
   }
 }

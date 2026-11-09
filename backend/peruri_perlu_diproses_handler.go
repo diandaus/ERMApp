@@ -54,7 +54,7 @@ func trackingDokumenTtdExists(db *sql.DB) bool {
 
 // GET /api/peruri/perlu-diproses?tgl_awal=YYYY-MM-DD&tgl_akhir=YYYY-MM-DD
 //
-//	&jenis=Semua|Ralan|Ranap&kd_dokter=...&search=...
+//	&jenis=Semua|Ralan|Ranap&kd_dokter=...&kd_pj=...&status_bayar=Sudah Bayar|Belum Bayar&search=...
 func getPeruriPerluDiproses(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tglAwal := c.Query("tgl_awal")
@@ -73,8 +73,12 @@ func getPeruriPerluDiproses(db *sql.DB) gin.HandlerFunc {
 
 		tteTersedia := trackingDokumenTtdExists(db)
 		tteCols := `0, 0`
+		// Ringkasan yg SUDAH ditandatangani tidak tampil di sini lagi (pindah
+		// ke submenu Selesai) — lihat filter sudahTteFilter di WHERE bawah.
+		sudahTteFilter := ``
 		if tteTersedia {
 			namaDok := `CONCAT('Ringkasan_Perawatan_', REPLACE(r.no_rawat, '/', ''), '_', IFNULL(dp.kd_dokter, r.kd_dokter), '.pdf')`
+			sudahTteFilter = ` AND NOT EXISTS (SELECT 1 FROM tracking_dokumen_ttd ts WHERE ts.no_rawat = r.no_rawat AND ts.nama_dokumen = ` + namaDok + ` AND ts.status_ttd = 'Sudah')`
 			tteCols = `
 				(SELECT COUNT(*) FROM tracking_dokumen_ttd t WHERE t.no_rawat = r.no_rawat AND t.nama_dokumen = ` + namaDok + ` AND t.status_ttd = 'Sudah'),
 				(SELECT COUNT(*) FROM tracking_dokumen_ttd t WHERE t.no_rawat = r.no_rawat AND t.nama_dokumen = ` + namaDok + ` AND t.status_ttd <> 'Sudah')`
@@ -92,7 +96,7 @@ func getPeruriPerluDiproses(db *sql.DB) gin.HandlerFunc {
 			LEFT JOIN dokter d ON d.kd_dokter = IFNULL(dp.kd_dokter, r.kd_dokter)
 			LEFT JOIN poliklinik pl ON pl.kd_poli = r.kd_poli
 			LEFT JOIN penjab pj ON pj.kd_pj = r.kd_pj
-			WHERE r.tgl_registrasi BETWEEN ? AND ? AND r.stts <> 'Batal'`
+			WHERE r.tgl_registrasi BETWEEN ? AND ? AND r.stts <> 'Batal'` + sudahTteFilter
 		args := []interface{}{tglAwal, tglAkhir}
 		if jenis == "Ralan" || jenis == "Ranap" {
 			query += ` AND r.status_lanjut = ?`
@@ -101,6 +105,14 @@ func getPeruriPerluDiproses(db *sql.DB) gin.HandlerFunc {
 		if kdDokter != "" {
 			query += ` AND IFNULL(dp.kd_dokter, r.kd_dokter) = ?`
 			args = append(args, kdDokter)
+		}
+		if kdPj := strings.TrimSpace(c.Query("kd_pj")); kdPj != "" {
+			query += ` AND r.kd_pj = ?`
+			args = append(args, kdPj)
+		}
+		if sb := c.Query("status_bayar"); sb == "Sudah Bayar" || sb == "Belum Bayar" {
+			query += ` AND r.status_bayar = ?`
+			args = append(args, sb)
 		}
 		if search != "" {
 			like := "%" + search + "%"

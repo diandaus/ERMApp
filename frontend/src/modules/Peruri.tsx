@@ -2,7 +2,9 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
-import { tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhRingkasanTte } from './peruriTteRingkasan';
+import { ModalCariDokter } from '../components/ModalCariDokter';
+import { ModalCariCaraBayar } from '../components/ModalCariCaraBayar';
+import { kdDokterDariNamaRingkasan, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -276,48 +278,182 @@ const filterInputStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' };
 const tdStyle: React.CSSProperties = { padding: '7px 10px', borderBottom: '1px solid #f3f4f6' };
 
+// JenisRawatTabs — switch tab Rawat Jalan / Rawat Inap, pengganti dropdown
+// jenis rawat. Default Rawat Jalan (tab "Semua" sengaja ditiadakan).
+type JenisRawat = 'Ralan' | 'Ranap';
+const JENIS_RAWAT_TABS: { key: JenisRawat; label: string }[] = [
+  { key: 'Ralan', label: 'Rawat Jalan' },
+  { key: 'Ranap', label: 'Rawat Inap' },
+];
+// Gaya tab bergaris bawah PERSIS tab "Daftar Resep Dokter / Detail Rawat
+// Jalan" di PermintaanResep.tsx, ditaruh di atas baris filter.
+const JenisRawatTabs: React.FC<{ value: JenisRawat; onChange: (v: JenisRawat) => void; disabled?: boolean }> = ({ value, onChange, disabled }) => (
+  <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+    {JENIS_RAWAT_TABS.map((t) => {
+      const active = value === t.key;
+      return (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => !active && onChange(t.key)}
+          disabled={disabled}
+          style={{
+            padding: '8px 16px',
+            border: 'none',
+            borderBottom: active ? '2px solid #059669' : '2px solid transparent',
+            background: 'transparent',
+            color: active ? '#059669' : '#6b7280',
+            fontWeight: active ? 600 : 400,
+            fontSize: 13,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {t.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+// StepperIcon — penanda kolom pilihan (pola sama dgn ApotekPenjualan.tsx
+// dll), ditempel absolut di sisi kanan kolom.
+const StepperIcon: React.FC = () => (
+  <div
+    style={{
+      position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+      width: 22, height: 22, borderRadius: '30%', background: '#059669',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', flexShrink: 0,
+    }}
+  >
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
+// FilterSelect — dropdown filter dgn StepperIcon (panah bawaan browser
+// disembunyikan), pola sama dgn PillSelect di ApotekPenjualan.tsx.
+const FilterSelect: React.FC<{
+  value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; lebar?: number;
+}> = ({ value, onChange, options, lebar = 170 }) => (
+  <div style={{ position: 'relative', width: lebar }}>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        ...filterInputStyle, width: '100%', paddingRight: 36, cursor: 'pointer', boxSizing: 'border-box',
+        appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+        color: value ? '#111827' : '#9ca3af',
+      }}
+    >
+      {options.map((o) => <option key={o.value} value={o.value} style={{ color: '#111827' }}>{o.label}</option>)}
+    </select>
+    <StepperIcon />
+  </div>
+);
+
+const STATUS_BAYAR_OPTIONS = [
+  { value: '', label: 'Semua Status Bayar' },
+  { value: 'Sudah Bayar', label: 'Sudah Bayar' },
+  { value: 'Belum Bayar', label: 'Belum Bayar' },
+];
+
+// FilterPilihan — kolom filter yg dipilih lewat modal pencarian (dokter:
+// ModalCariDokter, cara bayar: ModalCariCaraBayar — props keduanya sama).
+// Kosong = placeholder ("Semua ..."); klik kolom → modal.
+type ModalPilihProps = { isOpen: boolean; onClose: () => void; onSelect: (kode: string, nama: string) => void };
+const FilterPilihan: React.FC<{
+  kode: string; nama: string; placeholder: string; lebar?: number;
+  Modal: React.FC<ModalPilihProps>; onChange: (kode: string, nama: string) => void;
+}> = ({ kode, nama, placeholder, lebar = 220, Modal, onChange }) => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          title={kode ? `${nama} (${kode})` : `Klik untuk memilih (${placeholder})`}
+          style={{
+            ...filterInputStyle, position: 'relative', width: lebar, paddingRight: 36, textAlign: 'left', cursor: 'pointer',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box',
+            color: kode ? '#111827' : '#9ca3af',
+          }}
+        >
+          {kode ? nama : placeholder}
+          <StepperIcon />
+        </button>
+      </div>
+      <Modal isOpen={open} onClose={() => setOpen(false)} onSelect={(k, n) => onChange(k, n)} />
+    </>
+  );
+};
+
 const PerluDiprosesSection: React.FC = () => {
   const [tglAwal, setTglAwal] = React.useState(todayStr);
   const [tglAkhir, setTglAkhir] = React.useState(todayStr);
-  const [jenis, setJenis] = React.useState<'Semua' | 'Ralan' | 'Ranap'>('Semua');
+  const [jenis, setJenis] = React.useState<JenisRawat>('Ralan');
   const [kdDokter, setKdDokter] = React.useState('');
+  const [nmDokter, setNmDokter] = React.useState('');
+  const [kdPj, setKdPj] = React.useState('');
+  const [nmPj, setNmPj] = React.useState('');
+  const [statusBayar, setStatusBayar] = React.useState('');
   const [search, setSearch] = React.useState('');
-  const [dokterList, setDokterList] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
   const [rows, setRows] = React.useState<PerluDiprosesRow[]>([]);
   const [tteTersedia, setTteTersedia] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [loaded, setLoaded] = React.useState(false);
   const [error, setError] = React.useState('');
 
-  React.useEffect(() => {
-    fetch('/api/dokter')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setDokterList(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  }, []);
-
-  const handleTampilkan = () => {
+  // Dimuat OTOMATIS (tanpa tombol Tampilkan): saat halaman dibuka & tiap
+  // filter berubah. reqId mencegah respons lama (filter sebelumnya) yg
+  // datang belakangan menimpa hasil filter terbaru.
+  const reqId = React.useRef(0);
+  const muatData = () => {
     if (tglAwal > tglAkhir) {
       setError('Tanggal awal tidak boleh lebih besar dari tanggal akhir');
       return;
     }
+    const id = ++reqId.current;
     setLoading(true);
     setError('');
     const params = new URLSearchParams({ tgl_awal: tglAwal, tgl_akhir: tglAkhir, jenis });
     if (kdDokter) params.set('kd_dokter', kdDokter);
+    if (kdPj) params.set('kd_pj', kdPj);
+    if (statusBayar) params.set('status_bayar', statusBayar);
     if (search.trim()) params.set('search', search.trim());
     fetch(`/api/peruri/perlu-diproses?${params}`)
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
+        if (id !== reqId.current) return;
         if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
         setRows(Array.isArray(data.data) ? data.data : []);
         setDipilih(new Set());
         setTteTersedia(data.tte_tersedia !== false);
         setLoaded(true);
       })
-      .catch((err) => { setRows([]); setError(err instanceof Error ? err.message : 'Terjadi kesalahan'); })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (id !== reqId.current) return;
+        setRows([]);
+        setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+      })
+      .finally(() => { if (id === reqId.current) setLoading(false); });
   };
+
+  // Muat otomatis tiap filter berubah. Kolom cari diberi jeda 400 ms supaya
+  // tidak memanggil server di setiap ketukan huruf; filter lain langsung.
+  const searchPertama = React.useRef(true);
+  React.useEffect(() => {
+    muatData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tglAwal, tglAkhir, jenis, kdDokter, kdPj, statusBayar]);
+  React.useEffect(() => {
+    if (searchPertama.current) { searchPertama.current = false; return; }
+    const t = window.setTimeout(muatData, 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   // Kelompokkan per dokter (urutan dari backend sudah ORDER BY nm_dokter).
   const groups = React.useMemo(() => {
@@ -352,7 +488,8 @@ const PerluDiprosesSection: React.FC = () => {
     try {
       await tandaTanganRingkasanMassal(items, (t) => {
         const key = rowKey(t as PerluDiprosesRow);
-        setRows((prev) => prev.map((x) => (rowKey(x) === key ? { ...x, dok_sudah: x.dok_sudah + 1 } : x)));
+        // Sudah ditandatangani → hilang dari Perlu Diproses (pindah ke Selesai).
+        setRows((prev) => prev.filter((x) => rowKey(x) !== key));
         setDipilih((prev) => { const next = new Set(prev); next.delete(key); return next; });
       });
     } finally {
@@ -383,17 +520,11 @@ const PerluDiprosesSection: React.FC = () => {
     setBusyKey(rowKey(r));
     try {
       const ok = await tandaTanganRingkasan(r);
-      // Sukses → tandai "Sudah" langsung di layar, tanpa memuat ulang daftar.
-      if (ok) setRows((prev) => prev.map((x) => (rowKey(x) === rowKey(r) ? { ...x, dok_sudah: x.dok_sudah + 1 } : x)));
-    } finally {
-      setBusyKey(null);
-    }
-  };
-
-  const handleUnduh = async (r: PerluDiprosesRow) => {
-    setBusyKey(rowKey(r));
-    try {
-      await unduhRingkasanTte(r);
+      // Sukses → baris hilang dari Perlu Diproses (pindah ke submenu Selesai).
+      if (ok) {
+        setRows((prev) => prev.filter((x) => rowKey(x) !== rowKey(r)));
+        setDipilih((prev) => { const next = new Set(prev); next.delete(rowKey(r)); return next; });
+      }
     } finally {
       setBusyKey(null);
     }
@@ -413,27 +544,10 @@ const PerluDiprosesSection: React.FC = () => {
     </button>
   );
 
-  // "Sudah" = dokumen Ringkasan Perawatan baris ini pernah sukses di-TTE
-  // (sisa percobaan gagal berstatus "Belum" tidak membatalkan status ini).
-  const sudahTte = (r: PerluDiprosesRow) => tteTersedia && r.dok_sudah > 0;
-
+  // Ringkasan yg SUDAH ditandatangani tidak dimuat backend lagi (pindah ke
+  // submenu Selesai), jadi semua baris di sini memang belum di-TTE.
   const statusTte = (r: PerluDiprosesRow) => {
     const busy = busyKey === rowKey(r);
-    if (sudahTte(r)) {
-      return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          {tombolLihat(r, busy)}
-          <button type="button" onClick={() => handleUnduh(r)} disabled={busy} title="Unduh dokumen yang sudah ditandatangani (otomatis tersimpan ke Berkas Rawat)" style={ikonBtnStyle(busy)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-          </button>
-          <span style={{ padding: '2px 8px', borderRadius: 999, background: '#d1fae5', color: '#065f46', fontSize: 11.5, fontWeight: 600 }}>Sudah</span>
-        </span>
-      );
-    }
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         {tombolLihat(r, busy)}
@@ -454,35 +568,21 @@ const PerluDiprosesSection: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', minHeight: 0 }}>
+      <JenisRawatTabs value={jenis} onChange={setJenis} disabled={loading} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="date" value={tglAwal} onChange={(e) => setTglAwal(e.target.value)} style={filterInputStyle} />
         <span style={{ fontSize: 13, color: '#6b7280' }}>s/d</span>
         <input type="date" value={tglAkhir} onChange={(e) => setTglAkhir(e.target.value)} style={filterInputStyle} />
-        <select value={jenis} onChange={(e) => setJenis(e.target.value as 'Semua' | 'Ralan' | 'Ranap')} style={filterInputStyle}>
-          <option value="Semua">Semua (Ralan &amp; Ranap)</option>
-          <option value="Ralan">Rawat Jalan</option>
-          <option value="Ranap">Rawat Inap</option>
-        </select>
-        <select value={kdDokter} onChange={(e) => setKdDokter(e.target.value)} style={{ ...filterInputStyle, maxWidth: 260 }}>
-          <option value="">Semua Dokter</option>
-          {dokterList.map((d) => <option key={d.kd_dokter} value={d.kd_dokter}>{d.nm_dokter}</option>)}
-        </select>
+        <FilterPilihan kode={kdDokter} nama={nmDokter} placeholder="Semua Dokter" Modal={ModalCariDokter} onChange={(kd, nm) => { setKdDokter(kd); setNmDokter(nm); }} />
+        <FilterPilihan kode={kdPj} nama={nmPj} placeholder="Semua Cara Bayar" lebar={180} Modal={ModalCariCaraBayar} onChange={(kd, nm) => { setKdPj(kd); setNmPj(nm); }} />
+        <FilterSelect value={statusBayar} onChange={setStatusBayar} options={STATUS_BAYAR_OPTIONS} />
         <input
           type="text"
           placeholder="Cari No.Rawat / No.RM / Nama Pasien..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleTampilkan(); }}
           style={{ ...filterInputStyle, flex: 1, minWidth: 200 }}
         />
-        <button
-          type="button"
-          onClick={handleTampilkan}
-          disabled={loading}
-          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loading ? '#a7f3d0' : '#059669', color: '#fff', fontSize: 13, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
-        >
-          {loading ? 'Memuat...' : 'Tampilkan'}
-        </button>
       </div>
 
       {error && (
@@ -490,13 +590,10 @@ const PerluDiprosesSection: React.FC = () => {
       )}
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {loading ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Memuat...</div>
-        ) : !loaded ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 10 }}>
-            Atur filter lalu klik "Tampilkan" untuk memuat daftar pasien per dokter
-          </div>
+        {!loaded ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>{loading ? 'Memuat...' : ''}</div>
         ) : groups.length === 0 ? (
+          loading ? <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Memuat...</div> :
           !error && <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 10 }}>Tidak ada pasien pada filter ini</div>
         ) : (
           groups.map((g) => (
@@ -506,7 +603,7 @@ const PerluDiprosesSection: React.FC = () => {
                   {g.nm} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.kd})</span>
                 </div>
                 {(() => {
-                  const bisaDipilih = g.items.filter((r) => !sudahTte(r));
+                  const bisaDipilih = g.items;
                   const terpilih = bisaDipilih.filter((r) => dipilih.has(rowKey(r)));
                   const sedangMassal = massalDokter === g.kd;
                   const adaProses = massalDokter !== null || busyKey !== null;
@@ -540,7 +637,6 @@ const PerluDiprosesSection: React.FC = () => {
                     <th style={thStyle}>No. RM</th>
                     <th style={thStyle}>Nama Pasien</th>
                     <th style={thStyle}>Tgl Registrasi</th>
-                    <th style={thStyle}>Jenis</th>
                     <th style={thStyle}>Poli</th>
                     <th style={thStyle}>Cara Bayar</th>
                     <th style={thStyle}>Status TTE</th>
@@ -548,7 +644,7 @@ const PerluDiprosesSection: React.FC = () => {
                         "Pilih Semua" sejajar vertikal dgn checkbox tiap baris. */}
                     <th style={{ ...thStyle, textAlign: 'right' }}>
                       {(() => {
-                        const bisaDipilih = g.items.filter((r) => !sudahTte(r));
+                        const bisaDipilih = g.items;
                         if (bisaDipilih.length === 0) return null;
                         const semua = bisaDipilih.every((r) => dipilih.has(rowKey(r)));
                         return (
@@ -581,14 +677,11 @@ const PerluDiprosesSection: React.FC = () => {
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rkm_medis}</td>
                       <td style={tdStyle}>{r.nm_pasien}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.tgl_registrasi} {r.jam_reg}</td>
-                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.status_lanjut === 'Ranap' ? 'Rawat Inap' : 'Rawat Jalan'}</td>
                       <td style={tdStyle}>{r.nm_poli}</td>
                       <td style={tdStyle}>{r.png_jawab}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{statusTte(r)}</td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>
-                        {!sudahTte(r) && (
-                          <input type="checkbox" checked={dipilih.has(rowKey(r))} disabled={massalDokter !== null} onChange={() => togglePilih(rowKey(r))} />
-                        )}
+                        <input type="checkbox" checked={dipilih.has(rowKey(r))} disabled={massalDokter !== null} onChange={() => togglePilih(rowKey(r))} />
                       </td>
                     </tr>
                   ))}
@@ -603,6 +696,232 @@ const PerluDiprosesSection: React.FC = () => {
         <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
           {new Set(rows.map((r) => r.no_rawat)).size} pasien · {groups.length} dokter
           {!tteTersedia && ' · tabel tracking_dokumen_ttd tidak ditemukan, status TTE tidak bisa dicek'}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// SelesaiSection — submenu "Lihat Dokumen / Selesai": dokumen yg SUDAH
+// ditandatangani (semua jenis: Ringkasan Perawatan, Hasil Lab, Hasil
+// Radiologi, dst — tracking_dokumen_ttd dipakai bersama), dikelompokkan per
+// dokter penandatangan. Data baru dimuat setelah klik "Tampilkan".
+type SelesaiRow = {
+  no_rawat: string; nama_dokumen: string; jenis_dokumen: string; tgl_kirim: string; order_id: string;
+  email_ttd: string; user_pengirim: string; no_rkm_medis: string; nm_pasien: string; status_lanjut: string;
+  kd_dokter: string; nm_dokter: string; png_jawab: string;
+};
+
+const JENIS_DOKUMEN_OPTIONS = ['Semua', 'Ringkasan Perawatan', 'Hasil Lab', 'Hasil Radiologi', 'Lainnya'];
+
+const badgeJenisDokumen: Record<string, { bg: string; fg: string }> = {
+  'Ringkasan Perawatan': { bg: '#dbeafe', fg: '#1e40af' },
+  'Hasil Lab': { bg: '#fef3c7', fg: '#92400e' },
+  'Hasil Radiologi': { bg: '#ede9fe', fg: '#5b21b6' },
+  Lainnya: { bg: '#f3f4f6', fg: '#374151' },
+};
+
+const SelesaiSection: React.FC = () => {
+  const [tglAwal, setTglAwal] = React.useState(todayStr);
+  const [tglAkhir, setTglAkhir] = React.useState(todayStr);
+  const [jenis, setJenis] = React.useState<JenisRawat>('Ralan');
+  const [jenisDokumen, setJenisDokumen] = React.useState('Semua');
+  const [kdDokter, setKdDokter] = React.useState('');
+  const [nmDokter, setNmDokter] = React.useState('');
+  const [kdPj, setKdPj] = React.useState('');
+  const [nmPj, setNmPj] = React.useState('');
+  const [search, setSearch] = React.useState('');
+  const [rows, setRows] = React.useState<SelesaiRow[]>([]);
+  const [tteTersedia, setTteTersedia] = React.useState(true);
+  const [loading, setLoading] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [busyOrder, setBusyOrder] = React.useState<string | null>(null);
+
+  // Dimuat OTOMATIS (tanpa tombol Tampilkan), sama dgn Perlu Diproses:
+  // saat halaman dibuka & tiap filter berubah. reqId mencegah respons lama
+  // menimpa hasil filter terbaru.
+  const reqId = React.useRef(0);
+  const muatData = () => {
+    if (tglAwal > tglAkhir) {
+      setError('Tanggal awal tidak boleh lebih besar dari tanggal akhir');
+      return;
+    }
+    const id = ++reqId.current;
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({ tgl_awal: tglAwal, tgl_akhir: tglAkhir, jenis, jenis_dokumen: jenisDokumen });
+    if (kdDokter) params.set('kd_dokter', kdDokter);
+    if (kdPj) params.set('kd_pj', kdPj);
+    if (search.trim()) params.set('search', search.trim());
+    fetch(`/api/peruri/selesai?${params}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (id !== reqId.current) return;
+        if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
+        setRows(Array.isArray(data.data) ? data.data : []);
+        setTteTersedia(data.tte_tersedia !== false);
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (id !== reqId.current) return;
+        setRows([]);
+        setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+      })
+      .finally(() => { if (id === reqId.current) setLoading(false); });
+  };
+
+  // Muat otomatis tiap filter berubah; kolom cari diberi jeda 400 ms.
+  const searchPertama = React.useRef(true);
+  React.useEffect(() => {
+    muatData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tglAwal, tglAkhir, jenis, jenisDokumen, kdDokter, kdPj]);
+  React.useEffect(() => {
+    if (searchPertama.current) { searchPertama.current = false; return; }
+    const t = window.setTimeout(muatData, 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  // Kelompokkan per dokter penandatangan; email yg tidak cocok dgn data
+  // dokter mana pun dikelompokkan per email-nya.
+  const groups = React.useMemo(() => {
+    const map = new Map<string, { kunci: string; judul: string; sub: string; items: SelesaiRow[] }>();
+    for (const r of rows) {
+      const kunci = r.kd_dokter || `email:${r.email_ttd}`;
+      const g = map.get(kunci) ?? {
+        kunci,
+        judul: r.nm_dokter || r.email_ttd || 'Penandatangan tidak diketahui',
+        sub: r.kd_dokter || (r.email_ttd ? 'email tidak cocok dgn data dokter' : ''),
+        items: [],
+      };
+      g.items.push(r);
+      map.set(kunci, g);
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
+  const handleUnduh = async (r: SelesaiRow) => {
+    setBusyOrder(r.order_id);
+    try {
+      const kdRingkasan = r.jenis_dokumen === 'Ringkasan Perawatan' ? kdDokterDariNamaRingkasan(r.nama_dokumen) : '';
+      // Ringkasan → sekalian simpan ke Berkas Rawat (nama file sama dgn
+      // Perlu Diproses). Lab/Radiologi → hanya diunduh; simpan Berkas Rawat
+      // utk keduanya sudah diatur modal masing2 dgn penamaan sendiri.
+      await unduhDokumenTte(r.order_id, r.nama_dokumen || `${r.order_id}.pdf`,
+        kdRingkasan ? opsiSimpanRingkasan({ no_rawat: r.no_rawat, kd_dokter: kdRingkasan }) : undefined);
+    } finally {
+      setBusyOrder(null);
+    }
+  };
+
+  const formatTglJam = (s: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})/.exec(s);
+    return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}` : s || '-';
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', minHeight: 0 }}>
+      <JenisRawatTabs value={jenis} onChange={setJenis} disabled={loading} />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input type="date" value={tglAwal} onChange={(e) => setTglAwal(e.target.value)} style={filterInputStyle} title="Tanggal kirim dari" />
+        <span style={{ fontSize: 13, color: '#6b7280' }}>s/d</span>
+        <input type="date" value={tglAkhir} onChange={(e) => setTglAkhir(e.target.value)} style={filterInputStyle} title="Tanggal kirim sampai" />
+        <select value={jenisDokumen} onChange={(e) => setJenisDokumen(e.target.value)} style={filterInputStyle}>
+          {JENIS_DOKUMEN_OPTIONS.map((j) => <option key={j} value={j}>{j === 'Semua' ? 'Semua Dokumen' : j}</option>)}
+        </select>
+        <FilterPilihan kode={kdDokter} nama={nmDokter} placeholder="Semua Dokter" Modal={ModalCariDokter} onChange={(kd, nm) => { setKdDokter(kd); setNmDokter(nm); }} />
+        <FilterPilihan kode={kdPj} nama={nmPj} placeholder="Semua Cara Bayar" lebar={180} Modal={ModalCariCaraBayar} onChange={(kd, nm) => { setKdPj(kd); setNmPj(nm); }} />
+        <input
+          type="text"
+          placeholder="Cari No.Rawat / No.RM / Nama Pasien / Dokumen..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ ...filterInputStyle, flex: 1, minWidth: 200 }}
+        />
+      </div>
+
+      {error && (
+        <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{error}</div>
+      )}
+
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!loaded ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>{loading ? 'Memuat...' : ''}</div>
+        ) : !tteTersedia ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 10 }}>
+            Tabel tracking_dokumen_ttd tidak ditemukan di database ini, belum ada riwayat tanda tangan.
+          </div>
+        ) : groups.length === 0 ? (
+          loading ? <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Memuat...</div> :
+          !error && <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 10 }}>Tidak ada dokumen yang sudah ditandatangani pada filter ini</div>
+        ) : (
+          groups.map((g) => (
+            <div key={g.kunci} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ padding: '10px 14px', background: '#ecfdf5', borderBottom: '1px solid #d1fae5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
+                  {g.judul} {g.sub && <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.sub})</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} dokumen</div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <thead style={{ background: '#f9fafb' }}>
+                  <tr>
+                    <th style={thStyle}>No</th>
+                    <th style={thStyle}>Tgl Kirim</th>
+                    <th style={thStyle}>No. Rawat</th>
+                    <th style={thStyle}>No. RM</th>
+                    <th style={thStyle}>Nama Pasien</th>
+                    <th style={thStyle}>Cara Bayar</th>
+                    <th style={thStyle}>Dokumen</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.items.map((r, i) => {
+                    const badge = badgeJenisDokumen[r.jenis_dokumen] || badgeJenisDokumen.Lainnya;
+                    const busy = busyOrder === r.order_id;
+                    return (
+                      <tr key={`${r.order_id}|${i}`} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                        <td style={tdStyle}>{i + 1}</td>
+                        <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatTglJam(r.tgl_kirim)}</td>
+                        <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rawat}</td>
+                        <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rkm_medis || '-'}</td>
+                        <td style={tdStyle}>{r.nm_pasien || '-'}</td>
+                        <td style={tdStyle}>{r.png_jawab || '-'}</td>
+                        <td style={tdStyle}>
+                          <span style={{ padding: '2px 8px', borderRadius: 999, background: badge.bg, color: badge.fg, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.jenis_dokumen}</span>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, wordBreak: 'break-all' }}>{r.nama_dokumen}</div>
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleUnduh(r)}
+                            disabled={busy || !r.order_id}
+                            title={r.jenis_dokumen === 'Ringkasan Perawatan' ? 'Unduh dokumen bertanda tangan (otomatis tersimpan ke Berkas Rawat)' : 'Unduh dokumen bertanda tangan'}
+                            style={{ width: 28, height: 26, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151', cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                              <polyline points="7 10 12 15 17 10"></polyline>
+                              <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))
+        )}
+      </div>
+
+      {loaded && !loading && !error && tteTersedia && (
+        <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
+          {rows.length} dokumen · {groups.length} penandatangan
         </div>
       )}
     </div>
@@ -1141,7 +1460,8 @@ export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
           {activeTab === 'dashboard' && <DashboardSection />}
           {activeTab === 'lihat-dokumen' && <LihatDokumenSection />}
           {activeTab === 'dok-perlu-diproses' && <PerluDiprosesSection />}
-          {activeSubLabel && activeTab !== 'dok-perlu-diproses' && <DalamPengembanganSection title={activeSubLabel} />}
+          {activeTab === 'dok-selesai' && <SelesaiSection />}
+          {activeSubLabel && activeTab !== 'dok-perlu-diproses' && activeTab !== 'dok-selesai' && <DalamPengembanganSection title={activeSubLabel} />}
           {activeTab === 'data-pengguna' && <AkunPeruriView />}
           {activeTab === 'pengaturan' && <PengaturanSection />}
         </div>
