@@ -1,11 +1,12 @@
 import React from 'react';
 import Swal from 'sweetalert2';
 import { AkunPeruriView } from './AkunPeruri';
+import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
 // SatuSehatView — <PeruriView onBack={...}> dibungkus position:fixed inset:0
-// di Bridging.tsx). Tahap ini BARU shell (Dashboard + Lihat Dokumen +
+// di Bridging.tsx). Tahap ini BARU shell (Dashboard + Penyimpanan Berkas Digital +
 // Pengaturan), menu lain menyusul.
 
 // LihatDokumenSection — daftar file dibaca LANGSUNG dari folder server
@@ -35,6 +36,8 @@ const LihatDokumenSection: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [deletingName, setDeletingName] = React.useState<string | null>(null);
+  // Daftar file baru dimuat setelah user klik "Tampilkan" (tidak auto-load).
+  const [loaded, setLoaded] = React.useState(false);
 
   const fetchFiles = React.useCallback(() => {
     setLoading(true);
@@ -47,15 +50,19 @@ const LihatDokumenSection: React.FC = () => {
         if (!res.ok) throw new Error(data.error || 'Gagal memuat daftar file');
         setFiles(Array.isArray(data.files) ? data.files : []);
         setDir(data.dir || '');
+        setLoaded(true);
       })
       .catch((err) => { setFiles([]); setError(err instanceof Error ? err.message : 'Terjadi kesalahan'); })
       .finally(() => setLoading(false));
   }, [folder, search]);
 
+  // Ganti folder → kosongkan daftar lama supaya aksi Hapus tidak salah folder.
   React.useEffect(() => {
-    const t = setTimeout(fetchFiles, 300);
-    return () => clearTimeout(t);
-  }, [fetchFiles]);
+    setLoaded(false);
+    setFiles([]);
+    setDir('');
+    setError('');
+  }, [folder]);
 
   const handleHapus = async (name: string) => {
     const result = await Swal.fire({
@@ -95,6 +102,7 @@ const LihatDokumenSection: React.FC = () => {
           placeholder="Cari nama file..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !loading) fetchFiles(); }}
           style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none' }}
         />
         <button
@@ -103,7 +111,7 @@ const LihatDokumenSection: React.FC = () => {
           disabled={loading}
           style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loading ? '#a7f3d0' : '#059669', color: '#fff', fontSize: 13, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
         >
-          {loading ? 'Memuat...' : 'Refresh'}
+          {loading ? 'Memuat...' : 'Tampilkan'}
         </button>
       </div>
 
@@ -129,6 +137,8 @@ const LihatDokumenSection: React.FC = () => {
           <tbody>
             {loading ? (
               <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Memuat...</td></tr>
+            ) : !loaded && !error ? (
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Klik "Tampilkan" untuk memuat daftar dokumen</td></tr>
             ) : !error && files.length === 0 ? (
               <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Tidak ada file di folder ini</td></tr>
             ) : (
@@ -167,7 +177,7 @@ const LihatDokumenSection: React.FC = () => {
         </table>
       </div>
 
-      {!loading && !error && (
+      {loaded && !loading && !error && (
         <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>{files.length} file</div>
       )}
     </div>
@@ -245,9 +255,287 @@ const DashboardSection: React.FC = () => {
   );
 };
 
-type PeruriTab = 'dashboard' | 'lihat-dokumen' | 'data-pengguna' | 'pengaturan';
+// PerluDiprosesSection — submenu "Lihat Dokumen / Perlu Diproses": semua
+// pasien (reg_periksa) dlm rentang tanggal, dikelompokkan per dokter. Data
+// baru dimuat setelah klik "Tampilkan" (sama pola Penyimpanan Berkas Digital).
+type PerluDiprosesRow = {
+  no_rawat: string; no_rkm_medis: string; nm_pasien: string; tgl_registrasi: string; jam_reg: string;
+  status_lanjut: string; kd_dokter: string; nm_dokter: string; nm_poli: string; png_jawab: string;
+  dok_sudah: number; dok_belum: number;
+};
 
-const MENU: { key: PeruriTab; label: string; icon: React.ReactNode }[] = [
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const filterInputStyle: React.CSSProperties = {
+  padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#fff',
+};
+const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' };
+const tdStyle: React.CSSProperties = { padding: '7px 10px', borderBottom: '1px solid #f3f4f6' };
+
+const PerluDiprosesSection: React.FC = () => {
+  const [tglAwal, setTglAwal] = React.useState(todayStr);
+  const [tglAkhir, setTglAkhir] = React.useState(todayStr);
+  const [jenis, setJenis] = React.useState<'Semua' | 'Ralan' | 'Ranap'>('Semua');
+  const [kdDokter, setKdDokter] = React.useState('');
+  const [search, setSearch] = React.useState('');
+  const [dokterList, setDokterList] = React.useState<{ kd_dokter: string; nm_dokter: string }[]>([]);
+  const [rows, setRows] = React.useState<PerluDiprosesRow[]>([]);
+  const [tteTersedia, setTteTersedia] = React.useState(true);
+  const [loading, setLoading] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/dokter')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDokterList(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  const handleTampilkan = () => {
+    if (tglAwal > tglAkhir) {
+      setError('Tanggal awal tidak boleh lebih besar dari tanggal akhir');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({ tgl_awal: tglAwal, tgl_akhir: tglAkhir, jenis });
+    if (kdDokter) params.set('kd_dokter', kdDokter);
+    if (search.trim()) params.set('search', search.trim());
+    fetch(`/api/peruri/perlu-diproses?${params}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
+        setRows(Array.isArray(data.data) ? data.data : []);
+        setTteTersedia(data.tte_tersedia !== false);
+        setLoaded(true);
+      })
+      .catch((err) => { setRows([]); setError(err instanceof Error ? err.message : 'Terjadi kesalahan'); })
+      .finally(() => setLoading(false));
+  };
+
+  // Kelompokkan per dokter (urutan dari backend sudah ORDER BY nm_dokter).
+  const groups = React.useMemo(() => {
+    const map = new Map<string, { kd: string; nm: string; items: PerluDiprosesRow[] }>();
+    for (const r of rows) {
+      const g = map.get(r.kd_dokter) ?? { kd: r.kd_dokter, nm: r.nm_dokter || r.kd_dokter, items: [] };
+      g.items.push(r);
+      map.set(r.kd_dokter, g);
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
+  // Status "Sudah" = ada dokumen tercatat & semuanya sudah TTE. Selain itu
+  // (belum ada dokumen / masih ada yg belum / tabel tracking tidak ada)
+  // tampilkan tombol Tanda Tangan.
+  const [previewNoRawat, setPreviewNoRawat] = React.useState<string | null>(null);
+
+  // Tombol mata — buka PDF dokumen yg AKAN di-TTE di tab baru, TANPA kirim
+  // apa pun ke Peruri (pola handlePreviewTtd di ModalHasilLabPK.tsx).
+  const handlePreview = async (r: PerluDiprosesRow) => {
+    // Tab dibuka duluan (sinkron dgn klik) supaya tidak diblokir popup blocker.
+    const win = window.open('', '_blank');
+    setPreviewNoRawat(r.no_rawat);
+    try {
+      const { pdfBytes } = await buildDokumenPasienPdf(r.no_rawat);
+      const url = URL.createObjectURL(new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }));
+      if (win) win.location.href = url; else window.open(url, '_blank');
+    } catch (err) {
+      win?.close();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    } finally {
+      setPreviewNoRawat(null);
+    }
+  };
+
+  const tombolLihat = (r: PerluDiprosesRow) => {
+    const busy = previewNoRawat === r.no_rawat;
+    return (
+      <button
+        type="button"
+        onClick={() => handlePreview(r)}
+        disabled={busy}
+        title="Lihat dokumen yang akan di-TTE"
+        style={{ width: 28, height: 26, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151', cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </button>
+    );
+  };
+
+  const sudahTte = (r: PerluDiprosesRow) => tteTersedia && r.dok_sudah > 0 && r.dok_belum === 0;
+
+  const handleTandaTangan = (r: PerluDiprosesRow) => {
+    // TODO: alur TTE per pasien (pilih dokumen → kirim ke Peruri → OTP → signing).
+    Swal.fire({
+      icon: 'info',
+      title: 'Tanda Tangan',
+      html: `Proses tanda tangan untuk <b>${r.nm_pasien}</b> (${r.no_rawat}) masih dalam pengembangan.`,
+      confirmButtonColor: '#059669',
+    });
+  };
+
+  const statusTte = (r: PerluDiprosesRow) => {
+    if (sudahTte(r)) {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {tombolLihat(r)}
+          <span style={{ padding: '2px 8px', borderRadius: 999, background: '#d1fae5', color: '#065f46', fontSize: 11.5, fontWeight: 600 }}>Sudah</span>
+        </span>
+      );
+    }
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {tombolLihat(r)}
+        <button
+          type="button"
+          onClick={() => handleTandaTangan(r)}
+          style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#059669', color: '#fff', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+        >
+          Tanda Tangan
+        </button>
+        {tteTersedia && r.dok_belum > 0 && (
+          <span style={{ fontSize: 11, color: '#92400e' }}>{r.dok_belum} belum{r.dok_sudah > 0 ? ` · ${r.dok_sudah} sudah` : ''}</span>
+        )}
+      </span>
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input type="date" value={tglAwal} onChange={(e) => setTglAwal(e.target.value)} style={filterInputStyle} />
+        <span style={{ fontSize: 13, color: '#6b7280' }}>s/d</span>
+        <input type="date" value={tglAkhir} onChange={(e) => setTglAkhir(e.target.value)} style={filterInputStyle} />
+        <select value={jenis} onChange={(e) => setJenis(e.target.value as 'Semua' | 'Ralan' | 'Ranap')} style={filterInputStyle}>
+          <option value="Semua">Semua (Ralan &amp; Ranap)</option>
+          <option value="Ralan">Rawat Jalan</option>
+          <option value="Ranap">Rawat Inap</option>
+        </select>
+        <select value={kdDokter} onChange={(e) => setKdDokter(e.target.value)} style={{ ...filterInputStyle, maxWidth: 260 }}>
+          <option value="">Semua Dokter</option>
+          {dokterList.map((d) => <option key={d.kd_dokter} value={d.kd_dokter}>{d.nm_dokter}</option>)}
+        </select>
+        <input
+          type="text"
+          placeholder="Cari No.Rawat / No.RM / Nama Pasien..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleTampilkan(); }}
+          style={{ ...filterInputStyle, flex: 1, minWidth: 200 }}
+        />
+        <button
+          type="button"
+          onClick={handleTampilkan}
+          disabled={loading}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: loading ? '#a7f3d0' : '#059669', color: '#fff', fontSize: 13, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
+        >
+          {loading ? 'Memuat...' : 'Tampilkan'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>{error}</div>
+      )}
+
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Memuat...</div>
+        ) : !loaded ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 10 }}>
+            Atur filter lalu klik "Tampilkan" untuk memuat daftar pasien per dokter
+          </div>
+        ) : groups.length === 0 ? (
+          !error && <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 10 }}>Tidak ada pasien pada filter ini</div>
+        ) : (
+          groups.map((g) => (
+            <div key={g.kd} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ padding: '10px 14px', background: '#ecfdf5', borderBottom: '1px solid #d1fae5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
+                  {g.nm} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.kd})</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} pasien</div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <thead style={{ background: '#f9fafb' }}>
+                  <tr>
+                    <th style={thStyle}>No</th>
+                    <th style={thStyle}>No. Rawat</th>
+                    <th style={thStyle}>No. RM</th>
+                    <th style={thStyle}>Nama Pasien</th>
+                    <th style={thStyle}>Tgl Registrasi</th>
+                    <th style={thStyle}>Jenis</th>
+                    <th style={thStyle}>Poli</th>
+                    <th style={thStyle}>Cara Bayar</th>
+                    <th style={thStyle}>Status TTE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.items.map((r, i) => (
+                    <tr key={r.no_rawat} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                      <td style={tdStyle}>{i + 1}</td>
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rawat}</td>
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rkm_medis}</td>
+                      <td style={tdStyle}>{r.nm_pasien}</td>
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.tgl_registrasi} {r.jam_reg}</td>
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.status_lanjut === 'Ranap' ? 'Rawat Inap' : 'Rawat Jalan'}</td>
+                      <td style={tdStyle}>{r.nm_poli}</td>
+                      <td style={tdStyle}>{r.png_jawab}</td>
+                      <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{statusTte(r)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))
+        )}
+      </div>
+
+      {loaded && !loading && !error && (
+        <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
+          {new Set(rows.map((r) => r.no_rawat)).size} pasien · {groups.length} dokter
+          {!tteTersedia && ' · tabel tracking_dokumen_ttd tidak ditemukan, status TTE tidak bisa dicek'}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Placeholder submenu "Lihat Dokumen" — status dokumen TTE (Perlu Diproses/
+// Selesai/Kadaluarsa) belum ada sumber datanya, tampilkan keterangan saja.
+const DalamPengembanganSection: React.FC<{ title: string }> = ({ title }) => (
+  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 40, color: '#6b7280', textAlign: 'center' }}>
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+    </svg>
+    <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{title}</div>
+    <div style={{ fontSize: 13 }}>Fitur ini masih dalam pengembangan.</div>
+  </div>
+);
+
+type PeruriTab = 'dashboard' | 'lihat-dokumen' | 'dok-perlu-diproses' | 'dok-selesai' | 'dok-kadaluarsa' | 'data-pengguna' | 'pengaturan';
+
+type PeruriMenuItem = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  // children ada → item ini cuma toggle buka/tutup submenu, bukan tab.
+  children?: { key: PeruriTab; label: string }[];
+};
+
+const LIHAT_DOKUMEN_SUBMENU: { key: PeruriTab; label: string }[] = [
+  { key: 'dok-perlu-diproses', label: 'Perlu Diproses' },
+  { key: 'dok-selesai', label: 'Selesai' },
+  { key: 'dok-kadaluarsa', label: 'Kadaluarsa' },
+];
+
+const MENU: PeruriMenuItem[] = [
   {
     key: 'dashboard',
     label: 'Dashboard',
@@ -259,8 +547,19 @@ const MENU: { key: PeruriTab; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
-    key: 'lihat-dokumen',
+    key: 'lihat-dokumen-group',
     label: 'Lihat Dokumen',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    ),
+    children: LIHAT_DOKUMEN_SUBMENU,
+  },
+  {
+    key: 'lihat-dokumen',
+    label: 'Penyimpanan Berkas Digital',
     icon: (
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -520,7 +819,16 @@ type PeruriViewProps = {
 
 export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = React.useState<PeruriTab>('dashboard');
-  const activeLabel = [...MENU, SETTINGS_ITEM].find((m) => m.key === activeTab)?.label || '';
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({});
+  const activeLabel = (() => {
+    for (const m of [...MENU, SETTINGS_ITEM] as PeruriMenuItem[]) {
+      if (m.key === activeTab) return m.label;
+      const child = m.children?.find((c) => c.key === activeTab);
+      if (child) return `${m.label} / ${child.label}`;
+    }
+    return '';
+  })();
+  const activeSubLabel = LIHAT_DOKUMEN_SUBMENU.find((c) => c.key === activeTab)?.label;
 
   return (
     <section
@@ -565,12 +873,18 @@ export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
         {/* Menu */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {MENU.map((item) => {
-            const active = activeTab === item.key;
+            const children = item.children;
+            const childActive = !!children?.some((c) => c.key === activeTab);
+            const open = !!openGroups[item.key];
+            const active = !children && activeTab === item.key;
             return (
+              <React.Fragment key={item.key}>
               <button
-                key={item.key}
                 type="button"
-                onClick={() => setActiveTab(item.key)}
+                onClick={() => {
+                  if (children) setOpenGroups((prev) => ({ ...prev, [item.key]: !prev[item.key] }));
+                  else setActiveTab(item.key as PeruriTab);
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -579,8 +893,8 @@ export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
                   borderRadius: 12,
                   border: 'none',
                   background: active ? '#059669' : 'transparent',
-                  color: active ? '#ffffff' : '#6b7280',
-                  fontWeight: 400,
+                  color: active ? '#ffffff' : childActive ? '#059669' : '#6b7280',
+                  fontWeight: childActive ? 600 : 400,
                   fontSize: 13,
                   cursor: 'pointer',
                   textAlign: 'left',
@@ -594,8 +908,39 @@ export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
                 }}
               >
                 {item.icon}
-                {item.label}
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {children && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                )}
               </button>
+              {children && open && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 27 }}>
+                  {children.map((c) => {
+                    const subActive = activeTab === c.key;
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        onClick={() => setActiveTab(c.key)}
+                        style={{
+                          padding: '8px 14px', borderRadius: 10, border: 'none', textAlign: 'left',
+                          background: subActive ? '#059669' : 'transparent',
+                          color: subActive ? '#ffffff' : '#6b7280',
+                          fontSize: 12.5, cursor: 'pointer', transition: 'background 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => { if (!subActive) e.currentTarget.style.background = '#f9fafb'; }}
+                        onMouseLeave={(e) => { if (!subActive) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              </React.Fragment>
             );
           })}
         </nav>
@@ -693,6 +1038,8 @@ export const PeruriView: React.FC<PeruriViewProps> = ({ onBack }) => {
         >
           {activeTab === 'dashboard' && <DashboardSection />}
           {activeTab === 'lihat-dokumen' && <LihatDokumenSection />}
+          {activeTab === 'dok-perlu-diproses' && <PerluDiprosesSection />}
+          {activeSubLabel && activeTab !== 'dok-perlu-diproses' && <DalamPengembanganSection title={activeSubLabel} />}
           {activeTab === 'data-pengguna' && <AkunPeruriView />}
           {activeTab === 'pengaturan' && <PengaturanSection />}
         </div>

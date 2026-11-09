@@ -4083,6 +4083,8 @@ func main() {
 	r.POST("/api/peruri/check-certificate", checkPeruriCertificate(db))
 	r.GET("/api/peruri/dokumen/list", listPeruriDokumen(khanzaCfg))
 	r.DELETE("/api/peruri/dokumen", deletePeruriDokumen(khanzaCfg))
+	r.GET("/api/peruri/perlu-diproses", getPeruriPerluDiproses(db))
+	r.GET("/api/peruri/dokumen-pasien", getPeruriDokumenPasien(db))
 	r.POST("/api/peruri/tracking/kirim", createPeruriTrackingKirim(db))
 	r.GET("/api/peruri/tracking/order-id", getPeruriTrackingOrderID(db))
 	r.POST("/api/peruri/tracking/sukses", updatePeruriTrackingSukses(db))

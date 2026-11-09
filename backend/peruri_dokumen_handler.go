@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// peruri_dokumen_handler.go — "Lihat Dokumen" di Peruri.tsx: daftar/hapus
+// peruri_dokumen_handler.go — "Penyimpanan Berkas Digital" di Peruri.tsx: daftar/hapus
 // file dibaca LANGSUNG dari server webapps (bukan dari tabel DB manapun —
 // ERMApp tidak mencatat riwayat auto-upload TTE di database sendiri, lihat
 // downloadPeruriDocument di peruri_handler.go yg cuma nulis file fisiknya
@@ -238,7 +238,7 @@ func deletePeruriDokumenRemote(webappsCfg KhanzaWebappsConfig, relDir, name stri
 
 // ============================================================================
 // Script PHP yg WAJIB ditaruh manual oleh admin di ROOT webapps (folder yg
-// sama dgn upload.php yg sudah ada di produksi) supaya "Lihat Dokumen" jalan
+// sama dgn upload.php yg sudah ada di produksi) supaya "Penyimpanan Berkas Digital" jalan
 // di mode REMOTE. Tanpa ini, list/hapus mode remote akan gagal dgn pesan
 // "respons tidak valid (kemungkinan script belum terpasang)".
 //
