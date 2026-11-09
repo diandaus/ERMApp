@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 )
 
 // ============================================================================
@@ -35,7 +34,8 @@ import (
 
 func ensureBridgingAntreanQueueTable(db *sql.DB) error {
 	// 0. Bersihkan trigger versi lama (dulu di reg_periksa, sudah tidak dipakai).
-	db.Exec("DROP TRIGGER IF EXISTS trg_after_reg_periksa_insert_antrean_bpjs")
+	// Hanya kalau masih ada — tidak menyentuh reg_periksa kalau sudah bersih.
+	dropTriggerIfExists(db, "trg_after_reg_periksa_insert_antrean_bpjs")
 
 	// 1. Tabel antrian permintaan "Tambah Antrean BPJS" yang perlu diproses.
 	// Kolom *_bpjs (kodepoli_bpjs, kodedokter_bpjs, dst) sengaja sudah
@@ -84,7 +84,6 @@ func ensureBridgingAntreanQueueTable(db *sql.DB) error {
 	// yang sama (belum ada di referensi_mobilejkn_bpjs) — dimasukkan ke
 	// antrian. jeniskunjungan ditentukan dari ada/tidaknya no_rujukan di
 	// SEP: ada rujukan -> 1 (Rujukan FKTP), tidak ada -> 3 (Kontrol).
-	db.Exec("DROP TRIGGER IF EXISTS trg_after_bridging_sep_insert_antrean_bpjs")
 
 	triggerQuery := `
 	CREATE TRIGGER trg_after_bridging_sep_insert_antrean_bpjs
@@ -144,12 +143,8 @@ func ensureBridgingAntreanQueueTable(db *sql.DB) error {
 		END IF;
 	END;
 	`
-	if _, err := db.Exec(triggerQuery); err != nil {
-		log.Printf("Warning: gagal membuat trigger antrean BPJS otomatis (mungkin permission): %v", err)
-		log.Printf("Sistem tetap berjalan, tapi antrean BPJS harus dibuat manual")
-	} else {
-		log.Println("✓ Trigger auto-queue antrean BPJS berhasil dibuat")
-	}
+	// ensureTrigger: tidak DROP+CREATE tiap start (lihat startup_trigger.go).
+	ensureTrigger(db, "trg_after_bridging_sep_insert_antrean_bpjs", triggerQuery)
 
 	return nil
 }

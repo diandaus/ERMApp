@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -64,8 +63,8 @@ func ensureAntrianPoliTable(db *sql.DB) error {
 	}
 
 	// 2. Create trigger untuk auto-insert antrian saat registrasi
-	// Drop trigger jika sudah ada
-	db.Exec("DROP TRIGGER IF EXISTS trg_after_reg_periksa_insert")
+	// Dipasang lewat ensureTrigger (startup_trigger.go) — TIDAK lagi
+	// DROP+CREATE tiap start (insiden lock reg_periksa 2026-11-09).
 
 	triggerQuery := `
 	CREATE TRIGGER trg_after_reg_periksa_insert
@@ -129,14 +128,7 @@ func ensureAntrianPoliTable(db *sql.DB) error {
 		END IF;
 	END;
 	`
-	_, err = db.Exec(triggerQuery)
-	if err != nil {
-		// Jika trigger gagal, log saja tapi tidak fatal
-		log.Printf("Warning: gagal membuat trigger antrian (mungkin permission): %v", err)
-		log.Printf("Sistem tetap berjalan, tapi antrian harus digenerate manual")
-	} else {
-		log.Println("✓ Trigger auto-create antrian berhasil dibuat")
-	}
+	ensureTrigger(db, "trg_after_reg_periksa_insert", triggerQuery)
 
 	return nil
 }

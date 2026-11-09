@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -55,8 +54,6 @@ func ensureAntrianApotekTable(db *sql.DB) error {
 		return fmt.Errorf("gagal create table antrian_apotek: %v", err)
 	}
 
-	// Drop trigger if exists
-	_, _ = db.Exec("DROP TRIGGER IF EXISTS trg_after_resep_insert")
 
 	// Create trigger - auto generate queue when resep is submitted
 	triggerQuery := `
@@ -106,16 +103,8 @@ func ensureAntrianApotekTable(db *sql.DB) error {
 	END;
 	`
 
-	_, err = db.Exec(triggerQuery)
-	if err != nil {
-		log.Printf("Warning: gagal membuat trigger antrian apotek (mungkin permission): %v", err)
-		log.Printf("Sistem tetap berjalan, tapi antrian apotek harus digenerate manual")
-	} else {
-		log.Println("✓ Trigger auto-create antrian apotek berhasil dibuat")
-	}
-
-	// Drop trigger penyerahan if exists
-	_, _ = db.Exec("DROP TRIGGER IF EXISTS trg_after_antriapotek3_insert")
+	// ensureTrigger: tidak DROP+CREATE tiap start (lihat startup_trigger.go).
+	ensureTrigger(db, "trg_after_resep_insert", triggerQuery)
 
 	// Trigger fires when Khanza Java clicks "Penyerahan" button.
 	// Java does: DELETE FROM antriapotek3; INSERT INTO antriapotek3 VALUES(no_resep,'1',no_rawat)
@@ -177,12 +166,7 @@ func ensureAntrianApotekTable(db *sql.DB) error {
 	END;
 	`
 
-	_, err = db.Exec(triggerPenyerahanQuery)
-	if err != nil {
-		log.Printf("Warning: gagal membuat trigger penyerahan apotek: %v", err)
-	} else {
-		log.Println("✓ Trigger auto-call penyerahan apotek berhasil dibuat")
-	}
+	ensureTrigger(db, "trg_after_antriapotek3_insert", triggerPenyerahanQuery)
 
 	return nil
 }
