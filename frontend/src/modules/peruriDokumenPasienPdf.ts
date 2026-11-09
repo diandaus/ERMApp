@@ -283,7 +283,7 @@ export async function buildDokumenPasienPdf(noRawat: string, opts: { namaPengesa
   ], data.prosedur);
 
   // ── SOAP ──
-  if (data.soap?.length) sectionTitle('Catatan Perkembangan (SOAP)');
+  if (data.soap?.length) sectionTitle('Pemeriksaan (SOAP)');
   (data.soap || []).forEach((s) => {
     ensure(50);
     draw(`${formatTgl(s.tgl_perawatan)} ${s.jam_rawat || ''}  |  ${s.jenis === 'Ranap' ? 'Rawat Inap' : 'Rawat Jalan'}  |  ${s.nama_petugas || s.nip || '-'}`, MARGIN + 6, 9, true);

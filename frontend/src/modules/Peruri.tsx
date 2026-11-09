@@ -2,7 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
-import { tandaTanganRingkasan, unduhRingkasanTte } from './peruriTteRingkasan';
+import { tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhRingkasanTte } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -311,6 +311,7 @@ const PerluDiprosesSection: React.FC = () => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
         setRows(Array.isArray(data.data) ? data.data : []);
+        setDipilih(new Set());
         setTteTersedia(data.tte_tersedia !== false);
         setLoaded(true);
       })
@@ -336,6 +337,28 @@ const PerluDiprosesSection: React.FC = () => {
   // muncul di beberapa kartu dokter, masing2 dokumen & TTE sendiri).
   const rowKey = (r: PerluDiprosesRow) => `${r.no_rawat}|${r.kd_dokter}`;
   const [busyKey, setBusyKey] = React.useState<string | null>(null);
+  // Pilihan utk TTE massal (per kartu dokter — 1 OTP berlaku per dokter).
+  const [dipilih, setDipilih] = React.useState<Set<string>>(new Set());
+  const [massalDokter, setMassalDokter] = React.useState<string | null>(null);
+
+  const togglePilih = (key: string) => setDipilih((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  const handleTandaTanganMassal = async (items: PerluDiprosesRow[], kdDokter: string) => {
+    setMassalDokter(kdDokter);
+    try {
+      await tandaTanganRingkasanMassal(items, (t) => {
+        const key = rowKey(t as PerluDiprosesRow);
+        setRows((prev) => prev.map((x) => (rowKey(x) === key ? { ...x, dok_sudah: x.dok_sudah + 1 } : x)));
+        setDipilih((prev) => { const next = new Set(prev); next.delete(key); return next; });
+      });
+    } finally {
+      setMassalDokter(null);
+    }
+  };
 
   // Tombol mata — buka PDF dokumen yg AKAN di-TTE di tab baru, TANPA kirim
   // apa pun ke Peruri (pola handlePreviewTtd di ModalHasilLabPK.tsx). Nama
@@ -482,7 +505,32 @@ const PerluDiprosesSection: React.FC = () => {
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
                   {g.nm} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.kd})</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} pasien</div>
+                {(() => {
+                  const bisaDipilih = g.items.filter((r) => !sudahTte(r));
+                  const terpilih = bisaDipilih.filter((r) => dipilih.has(rowKey(r)));
+                  const sedangMassal = massalDokter === g.kd;
+                  const adaProses = massalDokter !== null || busyKey !== null;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} pasien</div>
+                      {bisaDipilih.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleTandaTanganMassal(terpilih, g.kd)}
+                          disabled={terpilih.length === 0 || adaProses}
+                          title="Tanda tangani semua dokumen yang dicentang (cukup 1x OTP)"
+                          style={{
+                            padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
+                            background: terpilih.length === 0 || adaProses ? '#a7f3d0' : '#059669', color: '#fff',
+                            cursor: terpilih.length === 0 || adaProses ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {sedangMassal ? 'Memproses...' : `Tanda Tangan Terpilih (${terpilih.length})`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                 <thead style={{ background: '#f9fafb' }}>
@@ -496,11 +544,38 @@ const PerluDiprosesSection: React.FC = () => {
                     <th style={thStyle}>Poli</th>
                     <th style={thStyle}>Cara Bayar</th>
                     <th style={thStyle}>Status TTE</th>
+                    {/* Kolom pilih: header & baris SAMA2 rata kanan supaya checkbox
+                        "Pilih Semua" sejajar vertikal dgn checkbox tiap baris. */}
+                    <th style={{ ...thStyle, textAlign: 'right' }}>
+                      {(() => {
+                        const bisaDipilih = g.items.filter((r) => !sudahTte(r));
+                        if (bisaDipilih.length === 0) return null;
+                        const semua = bisaDipilih.every((r) => dipilih.has(rowKey(r)));
+                        return (
+                          <label
+                            title="Pilih semua yang belum ditandatangani"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: massalDokter !== null ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            Pilih Semua
+                            <input
+                              type="checkbox"
+                              checked={semua}
+                              disabled={massalDokter !== null}
+                              onChange={() => setDipilih((prev) => {
+                                const next = new Set(prev);
+                                bisaDipilih.forEach((r) => (semua ? next.delete(rowKey(r)) : next.add(rowKey(r))));
+                                return next;
+                              })}
+                            />
+                          </label>
+                        );
+                      })()}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {g.items.map((r, i) => (
-                    <tr key={r.no_rawat} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                    <tr key={r.no_rawat} style={{ background: dipilih.has(rowKey(r)) ? '#ecfdf5' : i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                       <td style={tdStyle}>{i + 1}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rawat}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rkm_medis}</td>
@@ -510,6 +585,11 @@ const PerluDiprosesSection: React.FC = () => {
                       <td style={tdStyle}>{r.nm_poli}</td>
                       <td style={tdStyle}>{r.png_jawab}</td>
                       <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{statusTte(r)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>
+                        {!sudahTte(r) && (
+                          <input type="checkbox" checked={dipilih.has(rowKey(r))} disabled={massalDokter !== null} onChange={() => togglePilih(rowKey(r))} />
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

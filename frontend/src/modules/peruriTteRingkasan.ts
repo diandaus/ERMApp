@@ -120,9 +120,102 @@ const getEmailDokter = async (t: RingkasanTarget): Promise<string> => {
   return data.email as string;
 };
 
-// tandaTanganRingkasan — balikin true kalau dokumen berhasil ditandatangani
-// (caller lalu menandai baris jadi "Sudah"), false kalau batal/gagal (error
-// sudah ditampilkan ke user di sini).
+// pastikanSesiOtp — sesi OTP Peruri berlaku 24 jam per email dokter
+// (tracking_tte_session). Masih aktif → langsung lanjut; kalau tidak →
+// Get OTP + dialog input + Validate. SATU OTP ini dipakai utk semua
+// dokumen berikutnya (signingSession cukup kirim orderId — Peruri sendiri
+// yg mengaitkan sesi dgn email). 'batal' = user menutup dialog OTP.
+async function pastikanSesiOtp(email: string): Promise<'aktif' | 'baru' | 'batal'> {
+  const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
+  const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
+  if (sessionRes.ok && sessionData.valid) return 'aktif';
+
+  const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+  let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+  if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+
+  hideProcessing();
+  const otpCode = await showOtpDialog(email, async () => {
+    const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+    const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
+    if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+    tokenSession = newTokenSession;
+  });
+  if (!otpCode) return 'batal';
+
+  showProcessing('Memverifikasi OTP, mohon tunggu...');
+  await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+  return 'baru';
+}
+
+// Error yg berarti sesi OTP tidak berlaku lagi — di mode massal, dokumen
+// berikutnya PASTI ikut gagal, jadi proses dihentikan.
+const isErrorSesi = (msg: string) => /^\[(01|4026)\]/.test(msg) || /sesi otp|otp|session|expired/i.test(msg);
+
+// kirimDanTandaTangan — 1 dokumen: buat PDF → Send Document → tracking
+// "Belum" → Signing → tracking "Sudah". TANPA dialog (dipakai mode satuan
+// & massal); gagal → throw Error dgn pesan yg sudah diterjemahkan.
+async function kirimDanTandaTangan(t: RingkasanTarget, email: string): Promise<string> {
+  const { pdfBytes, signBox } = await buildDokumenPasienPdf(t.no_rawat, { namaPengesah: t.nm_dokter });
+  const namaDokumen = namaDokumenRingkasan(t);
+
+  const form = new FormData();
+  form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), namaDokumen);
+  form.append('email', email);
+  form.append('isVisualSign', 'YES');
+  form.append('lowerLeftX', String(signBox.lowerLeftX));
+  form.append('lowerLeftY', String(signBox.lowerLeftY));
+  form.append('upperRightX', String(signBox.upperRightX));
+  form.append('upperRightY', String(signBox.upperRightY));
+  form.append('page', signBox.page);
+  form.append('certificateLevel', 'NOT_CERTIFIED');
+  form.append('varLocation', 'Sigli');
+  form.append('varReason', 'Signed');
+  form.append('teraImage', 'QR-DETECSI');
+  form.append('orderType', 'INDIVIDUAL');
+
+  const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
+  const sendData = await sendRes.json().catch(() => ({}));
+  if (!sendRes.ok) throw new Error(sendData.error || 'Gagal mengirim dokumen ke Peruri');
+  if (sendData.response && typeof sendData.response === 'object' && 'resultCode' in sendData.response && sendData.response.resultCode !== '0') {
+    throw new Error(`[${sendData.response.resultCode}] ${sendData.response.resultDesc || 'Send Document gagal'}`);
+  }
+  const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
+  if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
+
+  // Catat ke tracking_dokumen_ttd (status "Belum") — best-effort, sama dgn
+  // modal Lab. Baris inilah yg dibaca kolom Status TTE di Perlu Diproses.
+  try {
+    await fetch('/api/peruri/tracking/kirim', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ no_rawat: t.no_rawat, nama_dokumen: namaDokumen, order_id: orderId, user_pengirim: getCurrentUserNip(), email_ttd: email }),
+    });
+  } catch { /* non-blocking */ }
+
+  try {
+    await peruriPost('/api/peruri/signing', { orderId });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    const code = msg.match(/^\[([^\]]+)\]/)?.[1];
+    if (code && code in PERURI_SIGNING_ERROR_MAP) throw new Error(`[${code}] ${PERURI_SIGNING_ERROR_MAP[code]}`);
+    if (/otp|session|expired/i.test(msg)) {
+      throw new Error('Masa berlaku sesi OTP sudah habis di sisi Peruri. Silakan klik Tanda Tangan lagi untuk meminta OTP baru.');
+    }
+    throw err;
+  }
+
+  try {
+    await fetch('/api/peruri/tracking/sukses', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId }),
+    });
+  } catch { /* non-blocking */ }
+  return String(orderId);
+}
+
+// tandaTanganRingkasan — 1 dokumen. Balikin true kalau berhasil (caller lalu
+// menandai baris jadi "Sudah"), false kalau batal/gagal (error sudah
+// ditampilkan ke user di sini).
 export async function tandaTanganRingkasan(t: RingkasanTarget): Promise<boolean> {
   const konfirmasi = await Swal.fire({
     icon: 'question',
@@ -135,96 +228,22 @@ export async function tandaTanganRingkasan(t: RingkasanTarget): Promise<boolean>
   });
   if (!konfirmasi.isConfirmed) return false;
 
-  showProcessing('Menyiapkan & mengirim dokumen ke Peruri, mohon tunggu...');
+  showProcessing('Memeriksa sesi tanda tangan, mohon tunggu...');
   try {
     const email = await getEmailDokter(t);
-    const { pdfBytes, signBox } = await buildDokumenPasienPdf(t.no_rawat, { namaPengesah: t.nm_dokter });
-    const namaDokumen = namaDokumenRingkasan(t);
+    const sesi = await pastikanSesiOtp(email);
+    if (sesi === 'batal') return false;
 
-    const form = new FormData();
-    form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), namaDokumen);
-    form.append('email', email);
-    form.append('isVisualSign', 'YES');
-    form.append('lowerLeftX', String(signBox.lowerLeftX));
-    form.append('lowerLeftY', String(signBox.lowerLeftY));
-    form.append('upperRightX', String(signBox.upperRightX));
-    form.append('upperRightY', String(signBox.upperRightY));
-    form.append('page', signBox.page);
-    form.append('certificateLevel', 'NOT_CERTIFIED');
-    form.append('varLocation', 'Sigli');
-    form.append('varReason', 'Signed');
-    form.append('teraImage', 'QR-DETECSI');
-    form.append('orderType', 'INDIVIDUAL');
-
-    const sendRes = await fetch('/api/peruri/send-document-tmp', { method: 'POST', body: form });
-    const sendData = await sendRes.json().catch(() => ({}));
-    if (!sendRes.ok) throw new Error(sendData.error || 'Gagal mengirim dokumen ke Peruri');
-    if (sendData.response && typeof sendData.response === 'object' && 'resultCode' in sendData.response && sendData.response.resultCode !== '0') {
-      throw new Error(`[${sendData.response.resultCode}] ${sendData.response.resultDesc || 'Send Document gagal'}`);
-    }
-    const orderId = sendData?.response?.data?.orderId || sendData?.response?.orderId;
-    if (!orderId) throw new Error('Peruri tidak mengembalikan orderId: ' + JSON.stringify(sendData.response));
-
-    // Catat ke tracking_dokumen_ttd (status "Belum") — best-effort, sama dgn
-    // modal Lab. Baris inilah yg dibaca kolom Status TTE di Perlu Diproses.
-    try {
-      await fetch('/api/peruri/tracking/kirim', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ no_rawat: t.no_rawat, nama_dokumen: namaDokumen, order_id: orderId, user_pengirim: getCurrentUserNip(), email_ttd: email }),
-      });
-    } catch { /* non-blocking */ }
-
-    showProcessing(`Dokumen berhasil terkirim ke Peruri.<br/>Order ID: <b>${escapeHtml(String(orderId))}</b><br/><span style="font-size:12px;color:#6b7280;">Melanjutkan proses tanda tangan...</span>`);
-    await new Promise((resolve) => window.setTimeout(resolve, 1200));
-
-    const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
-    const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
-    const sesiDipakaiUlang = sessionRes.ok && !!sessionData.valid;
-
-    if (!sesiDipakaiUlang) {
-      const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
-      let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
-      if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
-
-      hideProcessing();
-      const otpCode = await showOtpDialog(email, async () => {
-        const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
-        const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
-        if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
-        tokenSession = newTokenSession;
-      });
-      if (!otpCode) return false;
-
-      showProcessing('Memverifikasi OTP & menandatangani dokumen, mohon tunggu...');
-      await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
-    } else {
-      showProcessing('Sesi OTP masih aktif, menandatangani dokumen, mohon tunggu...');
-    }
-
-    try {
-      await peruriPost('/api/peruri/signing', { orderId });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      const code = msg.match(/^\[([^\]]+)\]/)?.[1];
-      if (code && code in PERURI_SIGNING_ERROR_MAP) throw new Error(`[${code}] ${PERURI_SIGNING_ERROR_MAP[code]}`);
-      if (/otp|session|expired/i.test(msg)) {
-        throw new Error('Masa berlaku sesi OTP sudah habis di sisi Peruri. Silakan klik Tanda Tangan lagi untuk meminta OTP baru.');
-      }
-      throw err;
-    }
-
-    try {
-      await fetch('/api/peruri/tracking/sukses', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId }),
-      });
-    } catch { /* non-blocking */ }
+    showProcessing(sesi === 'aktif'
+      ? 'Sesi OTP masih aktif, mengirim & menandatangani dokumen, mohon tunggu...'
+      : 'Mengirim & menandatangani dokumen, mohon tunggu...');
+    const orderId = await kirimDanTandaTangan(t, email);
     hideProcessing();
 
     await Swal.fire({
       icon: 'success', title: 'Berhasil ditandatangani',
-      html: `Ringkasan Perawatan berhasil ditandatangani oleh <b>${escapeHtml(t.nm_dokter)}</b> (${escapeHtml(email)}).<br/>Order ID: <b>${escapeHtml(String(orderId))}</b>`
-        + (sesiDipakaiUlang ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
+      html: `Ringkasan Perawatan berhasil ditandatangani oleh <b>${escapeHtml(t.nm_dokter)}</b> (${escapeHtml(email)}).<br/>Order ID: <b>${escapeHtml(orderId)}</b>`
+        + (sesi === 'aktif' ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
     });
     return true;
   } catch (err) {
@@ -232,6 +251,77 @@ export async function tandaTanganRingkasan(t: RingkasanTarget): Promise<boolean>
     Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     return false;
   }
+}
+
+// tandaTanganRingkasanMassal — banyak dokumen milik SATU dokter, 1x klik &
+// paling banyak 1x OTP: sesi OTP dipastikan dulu, lalu tiap dokumen dikirim
+// & ditandatangani BERURUTAN (1 per 1). Dokumen yg gagal dilewati & dicatat
+// alasannya; kalau error-nya soal sesi OTP, sisa dokumen dihentikan (pasti
+// ikut gagal). onBerhasil dipanggil per dokumen sukses → baris langsung
+// berubah "Sudah" di layar tanpa menunggu semua selesai.
+export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onBerhasil: (t: RingkasanTarget) => void): Promise<void> {
+  if (targets.length === 0) return;
+  const dokter = targets[0];
+  if (targets.some((t) => t.kd_dokter !== dokter.kd_dokter)) {
+    Swal.fire({ icon: 'warning', title: 'Peringatan', text: 'Tanda tangan massal hanya bisa untuk dokumen milik satu dokter yang sama.' });
+    return;
+  }
+
+  const konfirmasi = await Swal.fire({
+    icon: 'question',
+    title: `Tanda Tangan ${targets.length} Dokumen?`,
+    html: `<b>${targets.length}</b> Ringkasan Perawatan akan dikirim ke Peruri dan ditandatangani oleh <b>${escapeHtml(dokter.nm_dokter)}</b>.<br/><small style="color:#6b7280;">Cukup 1x OTP untuk semua dokumen.</small>`,
+    showCancelButton: true,
+    confirmButtonText: 'Lanjutkan',
+    cancelButtonText: 'Batal',
+    confirmButtonColor: '#059669',
+  });
+  if (!konfirmasi.isConfirmed) return;
+
+  showProcessing('Memeriksa sesi tanda tangan, mohon tunggu...');
+  let email: string;
+  try {
+    email = await getEmailDokter(dokter);
+    if ((await pastikanSesiOtp(email)) === 'batal') return;
+  } catch (err) {
+    hideProcessing();
+    Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    return;
+  }
+
+  let berhasil = 0;
+  const gagal: { t: RingkasanTarget; alasan: string }[] = [];
+  let dihentikan = 0;
+  for (let i = 0; i < targets.length; i++) {
+    const t = targets[i];
+    showProcessing(`Menandatangani dokumen <b>${i + 1}</b> dari <b>${targets.length}</b><br/>${escapeHtml(t.nm_pasien)} <span style="color:#6b7280;">(${escapeHtml(t.no_rawat)})</span>`
+      + `<br/><span style="font-size:12px;color:#6b7280;">Berhasil: ${berhasil} · Gagal: ${gagal.length}</span>`);
+    try {
+      await kirimDanTandaTangan(t, email);
+      berhasil++;
+      onBerhasil(t);
+    } catch (err) {
+      const alasan = err instanceof Error ? err.message : 'Terjadi kesalahan';
+      gagal.push({ t, alasan });
+      if (isErrorSesi(alasan)) {
+        dihentikan = targets.length - i - 1;
+        break;
+      }
+    }
+  }
+  hideProcessing();
+
+  const daftarGagal = gagal.map((g) => `<li><b>${escapeHtml(g.t.nm_pasien)}</b> (${escapeHtml(g.t.no_rawat)}): ${escapeHtml(g.alasan)}</li>`).join('');
+  await Swal.fire({
+    icon: gagal.length === 0 ? 'success' : berhasil === 0 ? 'error' : 'warning',
+    title: gagal.length === 0 ? 'Semua dokumen berhasil ditandatangani' : 'Selesai dengan catatan',
+    html: `<div style="text-align:left;font-size:13.5px;">
+        <div>Berhasil: <b style="color:#059669;">${berhasil}</b> dari ${targets.length} dokumen</div>
+        ${gagal.length ? `<div style="margin-top:6px;">Gagal: <b style="color:#dc2626;">${gagal.length}</b></div><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;max-height:180px;overflow:auto;">${daftarGagal}</ul>` : ''}
+        ${dihentikan ? `<div style="margin-top:8px;color:#92400e;">${dihentikan} dokumen sisanya tidak diproses karena sesi OTP berakhir. Klik Tanda Tangan Terpilih lagi untuk melanjutkan dengan OTP baru.</div>` : ''}
+      </div>`,
+    confirmButtonColor: '#059669',
+  });
 }
 
 // unduhRingkasanTte — ambil dokumen yg SUDAH ditandatangani dari Peruri
