@@ -2042,12 +2042,12 @@ func main() {
 				END as status
 			FROM pasien p
 			LEFT JOIN penjab pj ON p.kd_pj = pj.kd_pj
-			WHERE p.no_rkm_medis LIKE ? OR p.nm_pasien LIKE ? OR p.no_ktp LIKE ? OR p.alamat LIKE ?
+			WHERE p.no_rkm_medis LIKE ? OR p.nm_pasien LIKE ? OR p.no_ktp LIKE ? OR p.alamat LIKE ? OR p.no_peserta LIKE ?
 			ORDER BY p.no_rkm_medis DESC
 			LIMIT ?
 		`
 
-		rows, err := db.Query(query, searchPattern, searchPattern, searchPattern, searchPattern, limit)
+		rows, err := db.Query(query, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

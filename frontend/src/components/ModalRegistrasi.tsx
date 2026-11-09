@@ -1,7 +1,6 @@
 import React from 'react';
 import { ModalCariDokter } from './ModalCariDokter';
 import { ModalCariPoli } from './ModalCariPoli';
-import { ModalCariCaraBayar } from './ModalCariCaraBayar';
 import { ModalCariPasien } from './ModalCariPasien';
 import { localDateStr } from '../utils/date';
 
@@ -29,6 +28,17 @@ type PatientBrief = {
   tgl_lahir: string;
 };
 
+// StepperIcon — pengganti panah dropdown native pada <select>, sama dgn
+// TriaseStepperIcon di ModalInputTriase.tsx.
+const StepperIcon: React.FC = () => (
+  <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, background: '#1AB1E5', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 8.5 12 3.5 7 8.5"></polyline>
+      <polyline points="7 15.5 12 20.5 17 15.5"></polyline>
+    </svg>
+  </div>
+);
+
 interface ModalRegistrasiProps {
   isOpen: boolean;
   onClose: () => void;
@@ -36,6 +46,22 @@ interface ModalRegistrasiProps {
 }
 
 export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClose, onSuccess }) => {
+  // mounted/visible — animasi slide-in dari kanan, PERSIS pola
+  // ModalInputTriase.tsx: mounted tetap true selama animasi keluar (300ms)
+  // berjalan, supaya panel tidak langsung hilang begitu isOpen jadi false.
+  const [mounted, setMounted] = React.useState(false);
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    if (isOpen) {
+      setMounted(true);
+      const t = setTimeout(() => setVisible(true), 10);
+      return () => clearTimeout(t);
+    }
+    setVisible(false);
+    const t = setTimeout(() => setMounted(false), 300);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+
   // Form input states
   const [noReg, setNoReg] = React.useState<string>('');
   const [autoNoReg, setAutoNoReg] = React.useState<boolean>(true);
@@ -83,7 +109,6 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
   // Modal states
   const [showModalDokter, setShowModalDokter] = React.useState<boolean>(false);
   const [showModalPoli, setShowModalPoli] = React.useState<boolean>(false);
-  const [showModalCaraBayar, setShowModalCaraBayar] = React.useState<boolean>(false);
   const [showModalPasien, setShowModalPasien] = React.useState<boolean>(false);
 
   // Auto-update current time
@@ -256,12 +281,45 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
       if (!res.ok) {
         throw new Error('Gagal mengambil data pasien');
       }
-      const data: PatientBrief = await res.json();
+      const data: PatientBrief & { no_peserta?: string } = await res.json();
       setPatient(data);
+      // No. Ka ikut terisi dari data pasien kalau belum diisi user.
+      if (data.no_peserta) setNoKartu(prev => prev || data.no_peserta || '');
     } catch (e) {
       setPatientError(e instanceof Error ? e.message : 'Terjadi kesalahan');
     } finally {
       setPatientLoading(false);
+    }
+  };
+
+  // Cari pasien dari No. Kartu (pasien.no_peserta) — kalau nomor yg diketik
+  // ada di data pasien, No. RM/nama/penanggung jawab terisi otomatis, sama
+  // dgn memilih pasien lewat ModalCariPasien. Cuma jalan kalau BELUM ada
+  // pasien terpilih: kalau sudah ada, ketikan di No. Ka dianggap koreksi
+  // nomor kartu pasien itu (ikut tersimpan saat registrasi), bukan pencarian.
+  const fetchPatientByNoKartu = async (no: string) => {
+    if (!no || patient || noRkmMedis.trim()) return;
+    try {
+      const res = await fetch(`/api/pendaftaran/pasien/list?search=${encodeURIComponent(no)}&limit=20`);
+      if (!res.ok) return;
+      const list = await res.json();
+      const found = Array.isArray(list) ? list.find((p: { no_peserta?: string }) => (p.no_peserta || '').trim() === no) : null;
+      if (!found) return;
+      setNoRkmMedis(found.no_rkm_medis);
+      setPatient({
+        no_rkm_medis: found.no_rkm_medis,
+        nm_pasien: found.nm_pasien,
+        alamat: found.alamat,
+        jk: found.jk,
+        tgl_lahir: found.tgl_lahir
+      });
+      setPatientError(null);
+      setPJawab(found.namakeluarga || '');
+      setHubunganPj(found.keluarga || '');
+      setAlmtPj(found.alamatpj || '');
+      setStatusDaftar(found.status || 'Baru');
+    } catch (err) {
+      console.error('Error mencari pasien dari No. Kartu:', err);
     }
   };
 
@@ -358,81 +416,47 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
     }
   };
 
-  if (!isOpen) return null;
+  if (!mounted) return null;
 
   return (
+    <>
+    {/* Panel slide-in dari kanan, PERSIS pola ResepModal.tsx (overlay fixed
+        + panel anchor kanan full-height 50vw, header + tombol close bulat,
+        body scrollable, footer sticky), ganti dari versi lama (dialog card
+        mengambang di tengah, radius 20/16). */}
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: 20
-      }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', zIndex: 1000, opacity: visible ? 1 : 0, transition: 'opacity 0.3s ease' }}
       onClick={onClose}
     >
-      {/* Modal Content */}
       <div
         style={{
-          background: '#F3F4F6',
-          borderRadius: 20,
-          //padding default untuk semua modal
-          padding: '35px 8px 8px 8px',
-          position: 'relative',
-          maxWidth: 1000,
-          width: '85%',
-          maxHeight: '90vh',
-          overflowY: 'auto'
+          position: 'absolute', top: 0, right: 0, bottom: 0, width: '50vw', maxWidth: '90vw',
+          background: '#ffffff', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+          display: 'flex', flexDirection: 'column',
+          transform: visible ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 0.3s ease',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: 12,
-            right: 16,
-            background: 'transparent',
-            border: 'none',
-            fontSize: 24,
-            cursor: 'pointer',
-            color: '#6b7280',
-            padding: 0,
-            lineHeight: 1
-          }}
-        >
-          ×
-        </button>
-
-        {/* Header Title */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: '12px 20px',
-          color: '#000000',
-          fontSize: 13,
-          fontWeight: 400
-        }}>
-          Input Pendaftaran Baru
+        {/* Header */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{ fontSize: 13, color: '#000000' }}>Input Pendaftaran Baru</div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 28, height: 28, borderRadius: '50%', border: '1px solid #e5e7eb',
+              background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: 0,
+              flexShrink: 0,
+            }}
+          >
+            &times;
+          </button>
         </div>
 
-        {/* White Card Content */}
-        <div style={{
-          background: '#ffffff',
-          borderRadius: 16,
-          border: '1px solid #d1d5db',
-          padding: '12px 12px 12px 12px',
-        }}>
+        {/* Body — scrollable */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20, minHeight: 0 }}>
           {/* Success Message */}
           {successMsg && (
             <div style={{
@@ -462,111 +486,331 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <form id="form-registrasi" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-            {/* 2 Column Layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {/* 1 kolom — panel cuma 50vw, 2 kolom lama jadi terlalu sempit */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               {/* LEFT COLUMN */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* 1. No. Reg */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                    No. Reg. :
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* 1. No. Reg + No. Rawat + Tgl. Reg + Jam — sebaris */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                  <div style={{ flex: '0 0 110px', minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>No. Reg. :</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        type="text"
+                        value={noReg}
+                        onChange={(e) => !autoNoReg && setNoReg(e.target.value)}
+                        readOnly={autoNoReg}
+                        placeholder="001"
+                        title={autoNoReg ? 'Auto: berdasarkan poli + dokter' : 'Manual'}
+                        style={{ flex: 1, width: '100%', padding: '8px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', minWidth: 0, background: autoNoReg ? '#f3f4f6' : '#fff', color: autoNoReg ? '#6b7280' : '#111827' }}
+                      />
+                      <input
+                        type="checkbox"
+                        checked={autoNoReg}
+                        onChange={(e) => setAutoNoReg(e.target.checked)}
+                        title="Centang untuk generate otomatis berdasarkan poli + dokter"
+                        style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>No. Rawat :</label>
                     <input
                       type="text"
-                      value={noReg}
-                      onChange={(e) => !autoNoReg && setNoReg(e.target.value)}
-                      readOnly={autoNoReg}
-                      placeholder="001"
-                      title={autoNoReg ? 'Auto: berdasarkan poli + dokter' : 'Manual'}
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none',
-                        background: autoNoReg ? '#f3f4f6' : '#fff',
-                        color: autoNoReg ? '#6b7280' : '#111827',
-                      }}
-                    />
-                    <input
-                      type="checkbox"
-                      checked={autoNoReg}
-                      onChange={(e) => setAutoNoReg(e.target.checked)}
-                      title="Centang untuk generate otomatis berdasarkan poli + dokter"
-                      style={{ width: 18, height: 18, cursor: 'pointer' }}
+                      value={noRawat}
+                      onChange={(e) => setNoRawat(e.target.value)}
+                      placeholder="2024/01/01/000001"
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', minWidth: 0 }}
                     />
                   </div>
-                </div>
 
-                {/* 2. No. Rawat */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                    No. Rawat :
-                  </label>
-                  <input
-                    type="text"
-                    value={noRawat}
-                    onChange={(e) => setNoRawat(e.target.value)}
-                    placeholder="2024/01/01/000001"
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 12,
-                      border: '1px solid #d1d5db',
-                      fontSize: 13,
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
-                {/* 3. Tgl. Reg + Jam */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                    Tgl. Reg. :
-                  </label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ flex: '0 0 auto', minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Tgl. Reg. :</label>
                     <input
                       type="date"
                       value={tglReg}
                       onChange={(e) => setTglReg(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', minWidth: 0 }}
+                    />
+                  </div>
+
+                  <div style={{ flex: '0 0 auto', minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>Jam :</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        type="time"
+                        value={jamReg}
+                        onChange={(e) => {
+                          setJamReg(e.target.value);
+                          setUseAutoTime(false);
+                        }}
+                        step="1"
+                        style={{ padding: '8px 10px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', boxSizing: 'border-box', minWidth: 0 }}
+                      />
+                      <input
+                        type="checkbox"
+                        checked={useAutoTime}
+                        onChange={(e) => setUseAutoTime(e.target.checked)}
+                        style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
+                        title="Gunakan waktu saat ini"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* 1. No. Rekam Medik */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                    No.Rekam Medik :
+                  </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="text"
+                      value={noRkmMedis}
+                      onChange={(e) => setNoRkmMedis(e.target.value)}
+                      onBlur={() => fetchPatient(noRkmMedis.trim())}
+                      placeholder="No. RM"
+                      style={{
+                        width: '30%',
+                        padding: '8px 10px',
+                        borderRadius: 4,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        outline: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={patient?.nm_pasien || ''}
+                      readOnly
+                      placeholder="Nama Pasien"
                       style={{
                         flex: 1,
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
-                        outline: 'none'
+                        outline: 'none',
+                        background: '#f9fafb',
+                        color: '#374151'
                       }}
                     />
-                    <span style={{ fontSize: 11, color: '#374151', whiteSpace: 'nowrap' }}>Jam :</span>
-                    <input
-                      type="time"
-                      value={jamReg}
-                      onChange={(e) => {
-                        setJamReg(e.target.value);
-                        setUseAutoTime(false);
-                      }}
-                      step="1"
+                    <button
+                      type="button"
+                      onClick={() => setShowModalPasien(true)}
                       style={{
+                        padding: '8px 12px',
+                        borderRadius: 4,
+                        border: '1px solid #d1d5db',
+                        background: '#fff',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Cari pasien"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
+                        <g stroke="none" strokeWidth="1" fill="none" fillRule="evenodd">
+                          <g transform="translate(-258.000000, -933.000000)" fill="#000000">
+                            <path d="M269,944 C269.001,943.445 268.555,942.999 268,943 C267.445,943.001 267.001,943.445 267,944 L267,951 C267,951.555 267.445,952.001 268,952 L275,952 C275.555,951.999 275.999,951.556 276,951 C276.001,950.444 275.555,949.999 275,950 L270.509,950 L285.293,935.217 C285.684,934.826 285.684,934.192 285.293,933.802 C284.902,933.412 284.269,933.412 283.879,933.802 L269,948.681 L269,944 L269,944 Z M284,946 L284,957 C284,958.087 283.086,959 282,959 L261.935,959.033 C260.848,959.033 259.967,958.152 259.967,957.065 L260,937 C260,935.913 260.914,935 262,935 L273,935 L273,933 L262,933 C259.827,933 258,935.221 258,937.394 L258,957.065 C258,959.238 259.762,961 261.935,961 L281.606,961 C283.779,961 286,959.173 286,957 L286,946 L284,946 L284,946 Z"></path>
+                          </g>
+                        </g>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Penanggung Jawab & Hubungan (sebaris) */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* Penanggung Jawab */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                      Penanggung Jawab :
+                    </label>
+                    <input
+                      type="text"
+                      value={pJawab}
+                      onChange={(e) => setPJawab(e.target.value)}
+                      placeholder="Nama penanggung jawab"
+                      style={{
+                        width: '100%',
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  {/* Hubungan */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                      Hubungan :
+                    </label>
+                    <input
+                      type="text"
+                      value={hubunganPj}
+                      onChange={(e) => setHubunganPj(e.target.value)}
+                      placeholder="Hubungan"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: 4,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Alamat P.J. & Status (sebaris) */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* Alamat P.J. */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                      Alamat P.J. :
+                    </label>
+                    <input
+                      type="text"
+                      value={almtPj}
+                      onChange={(e) => setAlmtPj(e.target.value)}
+                      placeholder="Alamat penanggung jawab"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: 4,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                      Status :
+                    </label>
+                    <input
+                      type="text"
+                      value={statusDaftar}
+                      onChange={(e) => setStatusDaftar(e.target.value)}
+                      placeholder="Status"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: 4,
+                        border: '1px solid #d1d5db',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Jenis Bayar & No. Ka (sebaris) */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* Jenis Bayar */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                      Jenis Bayar :
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        value={kdPj}
+                        onChange={(e) => {
+                          setKdPj(e.target.value);
+                          setNmPj(penjab.find(p => p.kd_pj === e.target.value)?.nm_pj || '');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 30px 8px 10px',
+                          borderRadius: 4,
+                          border: '1px solid #d1d5db',
+                          fontSize: 13,
+                          outline: 'none',
+                          background: '#fff',
+                          color: '#111827',
+                          boxSizing: 'border-box',
+                          appearance: 'none',
+                          WebkitAppearance: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {penjab.length === 0 && <option value="">Memuat...</option>}
+                        {penjab.map(p => <option key={p.kd_pj} value={p.kd_pj}>{p.nm_pj}</option>)}
+                      </select>
+                      <StepperIcon />
+                    </div>
+                  </div>
+
+                  {/* No. Ka */}
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                      No. Ka :
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        type="text"
+                        value={noKartu}
+                        onChange={(e) => setNoKartu(e.target.value)}
+                        onBlur={() => fetchPatientByNoKartu(noKartu.trim())}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            fetchPatientByNoKartu(noKartu.trim());
+                          }
+                        }}
+                        placeholder="Nomor kartu"
+                        style={{
+                          flex: 1,
+                          padding: '8px 10px',
+                          borderRadius: 4,
+                          border: '1px solid #d1d5db',
+                          fontSize: 13,
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 8. Asal Rujukan */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
+                    Asal Rujukan :
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={asalRujukan}
+                      onChange={(e) => setAsalRujukan(e.target.value)}
+                      placeholder="Asal rujukan pasien"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '8px 30px 8px 10px',
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
                         outline: 'none'
                       }}
                     />
-                    <input
-                      type="checkbox"
-                      checked={useAutoTime}
-                      onChange={(e) => setUseAutoTime(e.target.checked)}
-                      style={{ width: 18, height: 18, cursor: 'pointer' }}
-                      title="Gunakan waktu saat ini"
-                    />
+                    <StepperIcon />
                   </div>
                 </div>
 
@@ -588,7 +832,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       style={{
                         width: '28%',
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
                         outline: 'none'
@@ -602,7 +846,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       style={{
                         flex: 1,
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
                         outline: 'none',
@@ -615,7 +859,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       onClick={() => setShowModalDokter(true)}
                       style={{
                         padding: '8px 12px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         background: '#fff',
                         cursor: 'pointer',
@@ -655,7 +899,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       style={{
                         width: '23%',
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
                         outline: 'none'
@@ -669,7 +913,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       style={{
                         flex: 1,
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
                         outline: 'none',
@@ -685,7 +929,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       style={{
                         width: '27%',
                         padding: '8px 10px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         fontSize: 13,
                         outline: 'none',
@@ -698,7 +942,7 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                       onClick={() => setShowModalPoli(true)}
                       style={{
                         padding: '8px 12px',
-                        borderRadius: 12,
+                        borderRadius: 4,
                         border: '1px solid #d1d5db',
                         background: '#fff',
                         cursor: 'pointer',
@@ -720,351 +964,24 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
                   </div>
                 </div>
               </div>
-
-              {/* RIGHT COLUMN */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* 1. No. Rekam Medik */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                    No.Rekam Medik :
-                  </label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      type="text"
-                      value={noRkmMedis}
-                      onChange={(e) => setNoRkmMedis(e.target.value)}
-                      onBlur={() => fetchPatient(noRkmMedis.trim())}
-                      placeholder="No. RM"
-                      style={{
-                        width: '30%',
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      value={patient?.nm_pasien || ''}
-                      readOnly
-                      placeholder="Nama Pasien"
-                      style={{
-                        flex: 1,
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none',
-                        background: '#f9fafb',
-                        color: '#374151'
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowModalPasien(true)}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        background: '#fff',
-                        cursor: 'pointer',
-                        fontSize: 13,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title="Cari pasien"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
-                        <g stroke="none" strokeWidth="1" fill="none" fillRule="evenodd">
-                          <g transform="translate(-258.000000, -933.000000)" fill="#000000">
-                            <path d="M269,944 C269.001,943.445 268.555,942.999 268,943 C267.445,943.001 267.001,943.445 267,944 L267,951 C267,951.555 267.445,952.001 268,952 L275,952 C275.555,951.999 275.999,951.556 276,951 C276.001,950.444 275.555,949.999 275,950 L270.509,950 L285.293,935.217 C285.684,934.826 285.684,934.192 285.293,933.802 C284.902,933.412 284.269,933.412 283.879,933.802 L269,948.681 L269,944 L269,944 Z M284,946 L284,957 C284,958.087 283.086,959 282,959 L261.935,959.033 C260.848,959.033 259.967,958.152 259.967,957.065 L260,937 C260,935.913 260.914,935 262,935 L273,935 L273,933 L262,933 C259.827,933 258,935.221 258,937.394 L258,957.065 C258,959.238 259.762,961 261.935,961 L281.606,961 C283.779,961 286,959.173 286,957 L286,946 L284,946 L284,946 Z"></path>
-                          </g>
-                        </g>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. Penanggung Jawab & Hubungan (sebaris) */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {/* Penanggung Jawab */}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                      Penanggung Jawab :
-                    </label>
-                    <input
-                      type="text"
-                      value={pJawab}
-                      onChange={(e) => setPJawab(e.target.value)}
-                      placeholder="Nama penanggung jawab"
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* Hubungan */}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                      Hubungan :
-                    </label>
-                    <input
-                      type="text"
-                      value={hubunganPj}
-                      onChange={(e) => setHubunganPj(e.target.value)}
-                      placeholder="Hubungan"
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* 3. Alamat P.J. & Status (sebaris) */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {/* Alamat P.J. */}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                      Alamat P.J. :
-                    </label>
-                    <input
-                      type="text"
-                      value={almtPj}
-                      onChange={(e) => setAlmtPj(e.target.value)}
-                      placeholder="Alamat penanggung jawab"
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* Status */}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                      Status :
-                    </label>
-                    <input
-                      type="text"
-                      value={statusDaftar}
-                      onChange={(e) => setStatusDaftar(e.target.value)}
-                      placeholder="Status"
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* 4. Jenis Bayar & No. Ka (sebaris) */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {/* Jenis Bayar */}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                      Jenis Bayar :
-                    </label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        type="text"
-                        value={nmPj}
-                        readOnly
-                        placeholder="Jenis pembayaran"
-                        style={{
-                          flex: 1,
-                          padding: '8px 10px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                          fontSize: 13,
-                          outline: 'none',
-                          background: '#f9fafb',
-                          color: '#374151'
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowModalCaraBayar(true)}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                          background: '#fff',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="Pilih jenis bayar"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
-                          <g stroke="none" strokeWidth="1" fill="none" fillRule="evenodd">
-                            <g transform="translate(-258.000000, -933.000000)" fill="#000000">
-                              <path d="M269,944 C269.001,943.445 268.555,942.999 268,943 C267.445,943.001 267.001,943.445 267,944 L267,951 C267,951.555 267.445,952.001 268,952 L275,952 C275.555,951.999 275.999,951.556 276,951 C276.001,950.444 275.555,949.999 275,950 L270.509,950 L285.293,935.217 C285.684,934.826 285.684,934.192 285.293,933.802 C284.902,933.412 284.269,933.412 283.879,933.802 L269,948.681 L269,944 L269,944 Z M284,946 L284,957 C284,958.087 283.086,959 282,959 L261.935,959.033 C260.848,959.033 259.967,958.152 259.967,957.065 L260,937 C260,935.913 260.914,935 262,935 L273,935 L273,933 L262,933 C259.827,933 258,935.221 258,937.394 L258,957.065 C258,959.238 259.762,961 261.935,961 L281.606,961 C283.779,961 286,959.173 286,957 L286,946 L284,946 L284,946 Z"></path>
-                            </g>
-                          </g>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* No. Ka */}
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                      No. Ka :
-                    </label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        type="text"
-                        value={noKartu}
-                        onChange={(e) => setNoKartu(e.target.value)}
-                        placeholder="Nomor kartu"
-                        style={{
-                          flex: 1,
-                          padding: '8px 10px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                          fontSize: 13,
-                          outline: 'none'
-                        }}
-                      />
-                      <button
-                        type="button"
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 12,
-                          border: '1px solid #d1d5db',
-                          background: '#fff',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="Edit nomor kartu"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
-                          <g stroke="none" strokeWidth="1" fill="none" fillRule="evenodd">
-                            <g transform="translate(-258.000000, -933.000000)" fill="#000000">
-                              <path d="M269,944 C269.001,943.445 268.555,942.999 268,943 C267.445,943.001 267.001,943.445 267,944 L267,951 C267,951.555 267.445,952.001 268,952 L275,952 C275.555,951.999 275.999,951.556 276,951 C276.001,950.444 275.555,949.999 275,950 L270.509,950 L285.293,935.217 C285.684,934.826 285.684,934.192 285.293,933.802 C284.902,933.412 284.269,933.412 283.879,933.802 L269,948.681 L269,944 L269,944 Z M284,946 L284,957 C284,958.087 283.086,959 282,959 L261.935,959.033 C260.848,959.033 259.967,958.152 259.967,957.065 L260,937 C260,935.913 260.914,935 262,935 L273,935 L273,933 L262,933 C259.827,933 258,935.221 258,937.394 L258,957.065 C258,959.238 259.762,961 261.935,961 L281.606,961 C283.779,961 286,959.173 286,957 L286,946 L284,946 L284,946 Z"></path>
-                            </g>
-                          </g>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 8. Asal Rujukan */}
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, marginBottom: 4, color: '#374151', fontWeight: 500 }}>
-                    Asal Rujukan :
-                  </label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      type="text"
-                      value={asalRujukan}
-                      onChange={(e) => setAsalRujukan(e.target.value)}
-                      placeholder="Asal rujukan pasien"
-                      style={{
-                        flex: 1,
-                        padding: '8px 10px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        fontSize: 13,
-                        outline: 'none'
-                      }}
-                    />
-                    <button
-                      type="button"
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: 12,
-                        border: '1px solid #d1d5db',
-                        background: '#fff',
-                        cursor: 'pointer',
-                        fontSize: 13,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title="Pilih asal rujukan"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
-                        <g stroke="none" strokeWidth="1" fill="none" fillRule="evenodd">
-                          <g transform="translate(-258.000000, -933.000000)" fill="#000000">
-                            <path d="M269,944 C269.001,943.445 268.555,942.999 268,943 C267.445,943.001 267.001,943.445 267,944 L267,951 C267,951.555 267.445,952.001 268,952 L275,952 C275.555,951.999 275.999,951.556 276,951 C276.001,950.444 275.555,949.999 275,950 L270.509,950 L285.293,935.217 C285.684,934.826 285.684,934.192 285.293,933.802 C284.902,933.412 284.269,933.412 283.879,933.802 L269,948.681 L269,944 L269,944 Z M284,946 L284,957 C284,958.087 283.086,959 282,959 L261.935,959.033 C260.848,959.033 259.967,958.152 259.967,957.065 L260,937 C260,935.913 260.914,935 262,935 L273,935 L273,933 L262,933 C259.827,933 258,935.221 258,937.394 L258,957.065 C258,959.238 259.762,961 261.935,961 L281.606,961 C283.779,961 286,959.173 286,957 L286,946 L284,946 L284,946 Z"></path>
-                          </g>
-                        </g>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Submit Button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: '#dc2626',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 500
-                }}
-              >
-                Tutup
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: saving ? '#9ca3af' : '#2563eb',
-                  color: '#ffffff',
-                  cursor: saving ? 'default' : 'pointer',
-                  fontSize: 12,
-                  fontWeight: 500
-                }}
-              >
-                {saving ? 'Menyimpan...' : 'Simpan'}
-              </button>
-            </div>
           </form>
         </div>
+
+        {/* Footer — sticky, di luar area scroll body */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: 16, borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <button
+            type="submit"
+            form="form-registrasi"
+            disabled={saving}
+            style={{ flex: 1, padding: '12px 16px', borderRadius: 2, border: 'none', background: saving ? '#9ca3af' : '#1AB1E5', color: '#ffffff', cursor: saving ? 'default' : 'pointer', fontSize: 14, fontWeight: 400 }}
+          >
+            {saving ? 'Menyimpan...' : 'Simpan'}
+          </button>
+        </div>
       </div>
+    </div>
 
       {/* Modal Pilih Dokter */}
       <ModalCariDokter
@@ -1083,16 +1000,6 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
         onSelect={(kode, nama) => {
           setSelectedPoli(kode);
           setNmPoli(nama);
-        }}
-      />
-
-      {/* Modal Pilih Cara Bayar */}
-      <ModalCariCaraBayar
-        isOpen={showModalCaraBayar}
-        onClose={() => setShowModalCaraBayar(false)}
-        onSelect={(kode, nama) => {
-          setKdPj(kode);
-          setNmPj(nama);
         }}
       />
 
@@ -1118,6 +1025,6 @@ export const ModalRegistrasi: React.FC<ModalRegistrasiProps> = ({ isOpen, onClos
           setNoKartu(pasien.no_peserta || '');
         }}
       />
-    </div>
+    </>
   );
 };
