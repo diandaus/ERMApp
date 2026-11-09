@@ -2,6 +2,7 @@ import React from 'react';
 import Swal from 'sweetalert2';
 import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
+import { tandaTanganRingkasan, unduhRingkasanTte } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -331,77 +332,98 @@ const PerluDiprosesSection: React.FC = () => {
   // Status "Sudah" = ada dokumen tercatat & semuanya sudah TTE. Selain itu
   // (belum ada dokumen / masih ada yg belum / tabel tracking tidak ada)
   // tampilkan tombol Tanda Tangan.
-  const [previewNoRawat, setPreviewNoRawat] = React.useState<string | null>(null);
+  // Baris diidentifikasi no_rawat + kd_dokter (pasien ranap dgn >1 DPJP
+  // muncul di beberapa kartu dokter, masing2 dokumen & TTE sendiri).
+  const rowKey = (r: PerluDiprosesRow) => `${r.no_rawat}|${r.kd_dokter}`;
+  const [busyKey, setBusyKey] = React.useState<string | null>(null);
 
   // Tombol mata — buka PDF dokumen yg AKAN di-TTE di tab baru, TANPA kirim
-  // apa pun ke Peruri (pola handlePreviewTtd di ModalHasilLabPK.tsx).
+  // apa pun ke Peruri (pola handlePreviewTtd di ModalHasilLabPK.tsx). Nama
+  // penanda tangan = dokter baris ini, sama dgn yg nanti dikirim ke Peruri.
   const handlePreview = async (r: PerluDiprosesRow) => {
     // Tab dibuka duluan (sinkron dgn klik) supaya tidak diblokir popup blocker.
     const win = window.open('', '_blank');
-    setPreviewNoRawat(r.no_rawat);
+    setBusyKey(rowKey(r));
     try {
-      const { pdfBytes } = await buildDokumenPasienPdf(r.no_rawat);
+      const { pdfBytes } = await buildDokumenPasienPdf(r.no_rawat, { namaPengesah: r.nm_dokter });
       const url = URL.createObjectURL(new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }));
       if (win) win.location.href = url; else window.open(url, '_blank');
     } catch (err) {
       win?.close();
       Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
-      setPreviewNoRawat(null);
+      setBusyKey(null);
     }
   };
 
-  const tombolLihat = (r: PerluDiprosesRow) => {
-    const busy = previewNoRawat === r.no_rawat;
-    return (
-      <button
-        type="button"
-        onClick={() => handlePreview(r)}
-        disabled={busy}
-        title="Lihat dokumen yang akan di-TTE"
-        style={{ width: 28, height: 26, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151', cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
-          <circle cx="12" cy="12" r="3"></circle>
-        </svg>
-      </button>
-    );
+  const handleTandaTangan = async (r: PerluDiprosesRow) => {
+    setBusyKey(rowKey(r));
+    try {
+      const ok = await tandaTanganRingkasan(r);
+      // Sukses → tandai "Sudah" langsung di layar, tanpa memuat ulang daftar.
+      if (ok) setRows((prev) => prev.map((x) => (rowKey(x) === rowKey(r) ? { ...x, dok_sudah: x.dok_sudah + 1 } : x)));
+    } finally {
+      setBusyKey(null);
+    }
   };
 
-  const sudahTte = (r: PerluDiprosesRow) => tteTersedia && r.dok_sudah > 0 && r.dok_belum === 0;
-
-  const handleTandaTangan = (r: PerluDiprosesRow) => {
-    // TODO: alur TTE per pasien (pilih dokumen → kirim ke Peruri → OTP → signing).
-    Swal.fire({
-      icon: 'info',
-      title: 'Tanda Tangan',
-      html: `Proses tanda tangan untuk <b>${r.nm_pasien}</b> (${r.no_rawat}) masih dalam pengembangan.`,
-      confirmButtonColor: '#059669',
-    });
+  const handleUnduh = async (r: PerluDiprosesRow) => {
+    setBusyKey(rowKey(r));
+    try {
+      await unduhRingkasanTte(r);
+    } finally {
+      setBusyKey(null);
+    }
   };
+
+  const ikonBtnStyle = (busy: boolean): React.CSSProperties => ({
+    width: 28, height: 26, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151',
+    cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+  });
+
+  const tombolLihat = (r: PerluDiprosesRow, busy: boolean) => (
+    <button type="button" onClick={() => handlePreview(r)} disabled={busy} title="Lihat dokumen yang akan di-TTE" style={ikonBtnStyle(busy)}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    </button>
+  );
+
+  // "Sudah" = dokumen Ringkasan Perawatan baris ini pernah sukses di-TTE
+  // (sisa percobaan gagal berstatus "Belum" tidak membatalkan status ini).
+  const sudahTte = (r: PerluDiprosesRow) => tteTersedia && r.dok_sudah > 0;
 
   const statusTte = (r: PerluDiprosesRow) => {
+    const busy = busyKey === rowKey(r);
     if (sudahTte(r)) {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          {tombolLihat(r)}
+          {tombolLihat(r, busy)}
+          <button type="button" onClick={() => handleUnduh(r)} disabled={busy} title="Unduh dokumen yang sudah ditandatangani (otomatis tersimpan ke Berkas Rawat)" style={ikonBtnStyle(busy)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
           <span style={{ padding: '2px 8px', borderRadius: 999, background: '#d1fae5', color: '#065f46', fontSize: 11.5, fontWeight: 600 }}>Sudah</span>
         </span>
       );
     }
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        {tombolLihat(r)}
+        {tombolLihat(r, busy)}
         <button
           type="button"
           onClick={() => handleTandaTangan(r)}
-          style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#059669', color: '#fff', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+          disabled={busy}
+          style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: busy ? '#a7f3d0' : '#059669', color: '#fff', fontSize: 11.5, fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer' }}
         >
-          Tanda Tangan
+          {busy ? 'Memproses...' : 'Tanda Tangan'}
         </button>
         {tteTersedia && r.dok_belum > 0 && (
-          <span style={{ fontSize: 11, color: '#92400e' }}>{r.dok_belum} belum{r.dok_sudah > 0 ? ` · ${r.dok_sudah} sudah` : ''}</span>
+          <span style={{ fontSize: 11, color: '#92400e' }} title="Dokumen pernah dikirim ke Peruri tapi belum selesai ditandatangani">pernah dikirim, belum TTD</span>
         )}
       </span>
     );

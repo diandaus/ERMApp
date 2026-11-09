@@ -20,6 +20,15 @@ import (
 // Status TTE diambil dari tracking_dokumen_ttd KALAU tabelnya ada (tabel ini
 // ada di produksi tapi TIDAK ada di DB dev — lihat peruri_tracking_handler.go),
 // kalau tidak ada kolom jumlah dokumen dikembalikan 0 dan tte_tersedia=false.
+//
+// Yg dihitung HANYA dokumen Ringkasan Perawatan milik baris ini (per pasien
+// per dokter, nama = namaDokumenRingkasan) — BUKAN semua dokumen TTE
+// no_rawat tsb. Kalau dihitung semua, pasien yg hasil Lab/Radiologi-nya
+// sudah di-TTE ikut tampil "Sudah" padahal ringkasannya belum.
+
+// namaDokumenRingkasanSQL — HARUS sama persis dgn namaDokumenRingkasan()
+// di frontend (modules/Peruri.tsx): Ringkasan_Perawatan_<no_rawat tanpa
+// "/">_<kd_dokter>.pdf
 
 type peruriPerluDiprosesRow struct {
 	NoRawat       string `json:"no_rawat"`
@@ -65,9 +74,10 @@ func getPeruriPerluDiproses(db *sql.DB) gin.HandlerFunc {
 		tteTersedia := trackingDokumenTtdExists(db)
 		tteCols := `0, 0`
 		if tteTersedia {
+			namaDok := `CONCAT('Ringkasan_Perawatan_', REPLACE(r.no_rawat, '/', ''), '_', IFNULL(dp.kd_dokter, r.kd_dokter), '.pdf')`
 			tteCols = `
-				(SELECT COUNT(*) FROM tracking_dokumen_ttd t WHERE t.no_rawat = r.no_rawat AND t.status_ttd = 'Sudah'),
-				(SELECT COUNT(*) FROM tracking_dokumen_ttd t WHERE t.no_rawat = r.no_rawat AND t.status_ttd <> 'Sudah')`
+				(SELECT COUNT(*) FROM tracking_dokumen_ttd t WHERE t.no_rawat = r.no_rawat AND t.nama_dokumen = ` + namaDok + ` AND t.status_ttd = 'Sudah'),
+				(SELECT COUNT(*) FROM tracking_dokumen_ttd t WHERE t.no_rawat = r.no_rawat AND t.nama_dokumen = ` + namaDok + ` AND t.status_ttd <> 'Sudah')`
 		}
 
 		query := `

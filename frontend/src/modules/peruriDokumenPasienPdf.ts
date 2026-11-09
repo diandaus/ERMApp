@@ -60,7 +60,9 @@ const formatTgl = (s: string) => {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : s || '-';
 };
 
-export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes: Uint8Array; data: DokumenPasienData; signBox: SignBox; namaPengesah: string }> {
+// opts.namaPengesah — nama dokter yg AKAN menandatangani (dokter baris di
+// Perlu Diproses). Kosong → DPJP (ranap) / dokter registrasi.
+export async function buildDokumenPasienPdf(noRawat: string, opts: { namaPengesah?: string } = {}): Promise<{ pdfBytes: Uint8Array; data: DokumenPasienData; signBox: SignBox; namaPengesah: string }> {
   const [dataRes, settingsRes] = await Promise.all([
     fetch(`/api/peruri/dokumen-pasien?no_rawat=${encodeURIComponent(noRawat)}`),
     fetch('/api/admin/settings'),
@@ -364,14 +366,25 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
   }
 
   // ── Blok tanda tangan + tag "#A#" (halaman terakhir, di bawah konten) ──
-  const pengesah = sanitize(ranap && dpjpNama ? dpjpNama : p.nm_dokter || '-');
+  const pengesah = sanitize(opts.namaPengesah || (ranap && dpjpNama ? dpjpNama : p.nm_dokter) || '-');
   const now = new Date();
   const kotaTgl = sanitize(`${settings.kota_rs ? `${settings.kota_rs}, ` : ''}${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`);
   // Tumpukan visual: kota/tgl (tagY+46) s/d nama (tagY-32) ≈ 120pt.
   ensure(125);
-  // Blok di sisi KANAN: titik tengah kotak stample ≈ 80pt dari margin kanan
-  // (boxCenterX = trunc(tagX - 15) + 20 ≈ tagX + 5).
-  const tagX = Math.trunc(PAGE_W - MARGIN - 85);
+  // Blok di sisi KANAN. Semua elemen (kota/tgl, label, #A#, kotak stample,
+  // nama) di-center pd SATU sumbu X. Normalnya sumbu ≈ 80pt dari margin
+  // kanan; kalau ada teks yg lebih lebar (mis. nama dokter + gelar panjang),
+  // SELURUH blok digeser ke kiri secukupnya supaya teks terlebar tetap muat
+  // — jadi semuanya tetap center satu sama lain.
+  const LABEL_TTD = 'Dokter Penanggung Jawab';
+  const lebarMaks = Math.max(
+    font.widthOfTextAtSize(kotaTgl, 9),
+    font.widthOfTextAtSize(LABEL_TTD, 9),
+    fontBold.widthOfTextAtSize(pengesah, 9),
+  );
+  const sumbuX = Math.min(PAGE_W - MARGIN - 80, PAGE_W - MARGIN - lebarMaks / 2);
+  // boxCenterX = trunc(tagX - 15) + 20 = tagX + 5 (tagX integer).
+  const tagX = Math.trunc(sumbuX - 5);
   const tagY = y - 75;
   const centeredX = Math.trunc(tagX - SIGN_BOX_WIDTH / 2 + 5);
   const centeredY = Math.trunc(tagY - SIGN_BOX_HEIGHT / 2);
@@ -386,15 +399,12 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
   const nameY = blockCenterY - SIGN_BOX_HEIGHT / 2 - 12;
   const centerAt = (t: string, cx: number, yy: number, size = 9, bold = false) => {
     const f = bold ? fontBold : font;
-    const w = f.widthOfTextAtSize(t, size);
-    // Teks panjang (mis. nama dokter + gelar) jangan sampai lewat margin kanan.
-    const x = Math.min(cx - w / 2, PAGE_W - MARGIN - w);
-    page.drawText(t, { x, y: yy, size, font: f });
+    page.drawText(t, { x: cx - f.widthOfTextAtSize(t, size) / 2, y: yy, size, font: f });
   };
   centerAt(kotaTgl, boxCenterX, labelY + 14);
-  centerAt('Dokter Penanggung Jawab', boxCenterX, labelY);
+  centerAt(LABEL_TTD, boxCenterX, labelY);
   // Area SIGN_BOX TIDAK digambar apa pun — stample ditempel Peruri sendiri.
-  page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
+  page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) }); // posisi tag = dasar SIGN_BOX, jangan di-center
   centerAt(pengesah, boxCenterX, nameY, 9, true);
 
   // Footer legal + nomor halaman (semua halaman).
