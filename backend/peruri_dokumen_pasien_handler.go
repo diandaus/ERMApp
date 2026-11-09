@@ -137,51 +137,51 @@ func getPeruriDokumenPasien(db *sql.DB) gin.HandlerFunc {
 			"tindakan": section("Tindakan", `
 				SELECT t.* FROM (
 					SELECT x.no_rawat, DATE_FORMAT(x.tgl_perawatan, '%Y-%m-%d') AS tgl, TIME_FORMAT(x.jam_rawat, '%H:%i') AS jam,
-						j.nm_perawatan, d.nm_dokter AS pelaksana
-					FROM rawat_jl_dr x LEFT JOIN jns_perawatan j ON j.kd_jenis_prw = x.kd_jenis_prw LEFT JOIN dokter d ON d.kd_dokter = x.kd_dokter
+						j.nm_perawatan, x.biaya_rawat AS biaya
+					FROM rawat_jl_dr x LEFT JOIN jns_perawatan j ON j.kd_jenis_prw = x.kd_jenis_prw
 					WHERE x.no_rawat = ?
 					UNION ALL
 					SELECT x.no_rawat, DATE_FORMAT(x.tgl_perawatan, '%Y-%m-%d'), TIME_FORMAT(x.jam_rawat, '%H:%i'),
-						j.nm_perawatan, pg.nama
-					FROM rawat_jl_pr x LEFT JOIN jns_perawatan j ON j.kd_jenis_prw = x.kd_jenis_prw LEFT JOIN pegawai pg ON pg.nik = x.nip
+						j.nm_perawatan, x.biaya_rawat
+					FROM rawat_jl_pr x LEFT JOIN jns_perawatan j ON j.kd_jenis_prw = x.kd_jenis_prw
 					WHERE x.no_rawat = ?
 					UNION ALL
 					SELECT x.no_rawat, DATE_FORMAT(x.tgl_perawatan, '%Y-%m-%d'), TIME_FORMAT(x.jam_rawat, '%H:%i'),
-						j.nm_perawatan, CONCAT(IFNULL(d.nm_dokter, ''), ' / ', IFNULL(pg.nama, ''))
+						j.nm_perawatan, x.biaya_rawat
 					FROM rawat_jl_drpr x LEFT JOIN jns_perawatan j ON j.kd_jenis_prw = x.kd_jenis_prw
-						LEFT JOIN dokter d ON d.kd_dokter = x.kd_dokter LEFT JOIN pegawai pg ON pg.nik = x.nip
+						LEFT JOIN dokter d ON d.kd_dokter = x.kd_dokter
 					WHERE x.no_rawat = ?
 					UNION ALL
 					SELECT x.no_rawat, DATE_FORMAT(x.tgl_perawatan, '%Y-%m-%d'), TIME_FORMAT(x.jam_rawat, '%H:%i'),
-						j.nm_perawatan, d.nm_dokter
-					FROM rawat_inap_dr x LEFT JOIN jns_perawatan_inap j ON j.kd_jenis_prw = x.kd_jenis_prw LEFT JOIN dokter d ON d.kd_dokter = x.kd_dokter
+						j.nm_perawatan, x.biaya_rawat
+					FROM rawat_inap_dr x LEFT JOIN jns_perawatan_inap j ON j.kd_jenis_prw = x.kd_jenis_prw
 					WHERE x.no_rawat = ?
 					UNION ALL
 					SELECT x.no_rawat, DATE_FORMAT(x.tgl_perawatan, '%Y-%m-%d'), TIME_FORMAT(x.jam_rawat, '%H:%i'),
-						j.nm_perawatan, pg.nama
-					FROM rawat_inap_pr x LEFT JOIN jns_perawatan_inap j ON j.kd_jenis_prw = x.kd_jenis_prw LEFT JOIN pegawai pg ON pg.nik = x.nip
+						j.nm_perawatan, x.biaya_rawat
+					FROM rawat_inap_pr x LEFT JOIN jns_perawatan_inap j ON j.kd_jenis_prw = x.kd_jenis_prw
 					WHERE x.no_rawat = ?
 					UNION ALL
 					SELECT x.no_rawat, DATE_FORMAT(x.tgl_perawatan, '%Y-%m-%d'), TIME_FORMAT(x.jam_rawat, '%H:%i'),
-						j.nm_perawatan, CONCAT(IFNULL(d.nm_dokter, ''), ' / ', IFNULL(pg.nama, ''))
+						j.nm_perawatan, x.biaya_rawat
 					FROM rawat_inap_drpr x LEFT JOIN jns_perawatan_inap j ON j.kd_jenis_prw = x.kd_jenis_prw
-						LEFT JOIN dokter d ON d.kd_dokter = x.kd_dokter LEFT JOIN pegawai pg ON pg.nik = x.nip
+						LEFT JOIN dokter d ON d.kd_dokter = x.kd_dokter
 					WHERE x.no_rawat = ?
 				) t ORDER BY t.tgl, t.jam`),
 			"obat": section("Obat", `
 				SELECT DATE_FORMAT(o.tgl_perawatan, '%Y-%m-%d') AS tgl, TIME_FORMAT(o.jam, '%H:%i') AS jam,
-					b.nama_brng, o.jml, b.kode_sat, o.status
+					b.nama_brng, o.jml, b.kode_sat, o.total
 				FROM detail_pemberian_obat o LEFT JOIN databarang b ON b.kode_brng = o.kode_brng
 				WHERE o.no_rawat = ? ORDER BY o.tgl_perawatan, o.jam`),
 			"lab": section("Laboratorium", `
 				SELECT DATE_FORMAT(l.tgl_periksa, '%Y-%m-%d') AS tgl, TIME_FORMAT(l.jam, '%H:%i') AS jam,
-					j.nm_perawatan, d.nm_dokter
+					j.nm_perawatan, d.nm_dokter, l.biaya
 				FROM periksa_lab l LEFT JOIN jns_perawatan_lab j ON j.kd_jenis_prw = l.kd_jenis_prw
 				LEFT JOIN dokter d ON d.kd_dokter = l.kd_dokter
 				WHERE l.no_rawat = ? ORDER BY l.tgl_periksa, l.jam`),
 			"radiologi": section("Radiologi", `
 				SELECT DATE_FORMAT(rd.tgl_periksa, '%Y-%m-%d') AS tgl, TIME_FORMAT(rd.jam, '%H:%i') AS jam,
-					j.nm_perawatan, d.nm_dokter
+					j.nm_perawatan, d.nm_dokter, rd.biaya
 				FROM periksa_radiologi rd LEFT JOIN jns_perawatan_radiologi j ON j.kd_jenis_prw = rd.kd_jenis_prw
 				LEFT JOIN dokter d ON d.kd_dokter = rd.kd_dokter
 				WHERE rd.no_rawat = ? ORDER BY rd.tgl_periksa, rd.jam`),

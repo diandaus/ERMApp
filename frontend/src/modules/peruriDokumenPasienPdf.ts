@@ -50,6 +50,11 @@ const sanitize = (s: string | undefined | null) =>
 // Nilai dianggap kosong kalau ""/spasi/"-" (Khanza sering isi "-" utk kosong).
 const ada = (v: string | undefined | null) => !!v && v.trim() !== '' && v.trim() !== '-';
 
+const formatRupiah = (v: string) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? `Rp ${Math.round(n).toLocaleString('id-ID')}` : v || '-';
+};
+
 const formatTgl = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
   return m ? `${m[3]}-${m[2]}-${m[1]}` : s || '-';
@@ -188,14 +193,20 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
     y -= 20;
   };
 
-  type Col = { label: string; width: number; get: (r: Row, i: number) => string };
-  const table = (cols: Col[], rows: Row[]) => {
+  type Col = { label: string; width: number; get: (r: Row, i: number) => string; align?: 'right' };
+  // reserveAfter: ruang yg harus tersisa setelah baris TERAKHIR (mis. baris
+  // total) supaya total tidak terpisah sendirian ke halaman berikutnya.
+  const table = (cols: Col[], rows: Row[], reserveAfter = 0) => {
     const size = 8.5;
     const lineH = 10.5;
     const drawHeader = () => {
       page.drawLine({ start: { x: MARGIN, y: y + 10 }, end: { x: PAGE_W - MARGIN, y: y + 10 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
       let x = MARGIN;
-      for (const c of cols) { page.drawText(c.label, { x: x + 3, y, size, font: fontBold }); x += c.width; }
+      for (const c of cols) {
+        const lx = c.align === 'right' ? x + c.width - 3 - fontBold.widthOfTextAtSize(c.label, size) : x + 3;
+        page.drawText(c.label, { x: lx, y, size, font: fontBold });
+        x += c.width;
+      }
       y -= 4;
       page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
       y -= lineH;
@@ -205,21 +216,39 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
     rows.forEach((r, i) => {
       const cells = cols.map((c) => wrap(c.get(r, i) || '-', c.width - 6, size));
       const h = Math.max(...cells.map((l) => l.length)) * lineH;
-      if (y - h < BOTTOM) { newPage(); y -= 10; drawHeader(); }
+      const need = h + (i === rows.length - 1 ? reserveAfter : 0);
+      if (y - need < BOTTOM) { newPage(); y -= 10; drawHeader(); }
       let x = MARGIN;
       cells.forEach((lines, ci) => {
-        lines.forEach((ln, li) => page.drawText(ln, { x: x + 3, y: y - li * lineH, size, font }));
+        const right = cols[ci].align === 'right';
+        lines.forEach((ln, li) => page.drawText(ln, {
+          x: right ? x + cols[ci].width - 3 - font.widthOfTextAtSize(ln, size) : x + 3,
+          y: y - li * lineH, size, font,
+        }));
         x += cols[ci].width;
       });
       y -= h + 2;
     });
     y -= 8;
   };
+  // Baris total di bawah tabel terakhir (garis + label & nominal rata kanan).
+  const totalRow = (label: string, nominal: string) => {
+    const size = 8.5;
+    y += 8; // batalkan jarak bawah tabel, total menempel ke tabel
+    if (y - 16 < BOTTOM) newPage();
+    page.drawLine({ start: { x: MARGIN, y: y + 8 }, end: { x: PAGE_W - MARGIN, y: y + 8 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+    y -= 3;
+    const right = PAGE_W - MARGIN - 3;
+    const nomW = fontBold.widthOfTextAtSize(nominal, size);
+    page.drawText(nominal, { x: right - nomW, y, size, font: fontBold });
+    page.drawText(label, { x: right - nomW - 20 - fontBold.widthOfTextAtSize(label, size), y, size, font: fontBold });
+    y -= 18;
+  };
   // Seksi tabel HANYA digambar kalau ada datanya (seksi kosong disembunyikan).
-  const seksiTabel = (title: string, cols: Col[], rows: Row[] | undefined) => {
+  const seksiTabel = (title: string, cols: Col[], rows: Row[] | undefined, reserveAfter = 0) => {
     if (!rows?.length) return;
     sectionTitle(title);
-    table(cols, rows);
+    table(cols, rows, reserveAfter);
   };
 
   // ── Kamar (ranap) ──
@@ -284,26 +313,46 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
   seksiTabel('Tindakan', [
     { label: 'No', width: 25, get: (_r, i) => String(i + 1) },
     { label: 'Tanggal', width: 85, get: (r) => `${formatTgl(r.tgl)} ${r.jam || ''}` },
-    { label: 'Tindakan', width: CONTENT_W - 270, get: (r) => r.nm_perawatan },
-    { label: 'Pelaksana', width: 160, get: (r) => r.pelaksana },
+    { label: 'Tindakan', width: CONTENT_W - 220, get: (r) => r.nm_perawatan },
+    { label: 'Biaya', width: 110, get: (r) => formatRupiah(r.biaya), align: 'right' },
   ], data.tindakan);
 
   seksiTabel('Pemberian Obat', [
     { label: 'No', width: 25, get: (_r, i) => String(i + 1) },
     { label: 'Tanggal', width: 85, get: (r) => `${formatTgl(r.tgl)} ${r.jam || ''}` },
-    { label: 'Nama Obat', width: CONTENT_W - 230, get: (r) => r.nama_brng },
+    { label: 'Nama Obat', width: CONTENT_W - 290, get: (r) => r.nama_brng },
     { label: 'Jumlah', width: 70, get: (r) => `${r.jml} ${r.kode_sat || ''}` },
-    { label: 'Status', width: 50, get: (r) => r.status },
-  ], data.obat);
+    { label: 'Harga', width: 110, get: (r) => formatRupiah(r.total), align: 'right' },
+  ], data.obat, 20);
+  if (data.obat?.length) {
+    const totalObat = data.obat.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+    totalRow('Total Biaya Obat', formatRupiah(String(totalObat)));
+  }
 
   const penunjangCols: Col[] = [
     { label: 'No', width: 25, get: (_r, i) => String(i + 1) },
     { label: 'Tanggal', width: 85, get: (r) => `${formatTgl(r.tgl)} ${r.jam || ''}` },
-    { label: 'Pemeriksaan', width: CONTENT_W - 270, get: (r) => r.nm_perawatan },
-    { label: 'Dokter', width: 160, get: (r) => r.nm_dokter },
+    { label: 'Pemeriksaan', width: CONTENT_W - 360, get: (r) => r.nm_perawatan },
+    { label: 'Dokter', width: 140, get: (r) => r.nm_dokter },
+    { label: 'Biaya', width: 110, get: (r) => formatRupiah(r.biaya), align: 'right' },
   ];
   seksiTabel('Pemeriksaan Laboratorium', penunjangCols, data.lab);
   seksiTabel('Pemeriksaan Radiologi', penunjangCols, data.radiologi);
+
+  // ── TOTAL BIAYA (baris akhir isi dokumen) — tindakan + obat + lab +
+  // radiologi, yaitu bagian yg memang menampilkan harga. Format angka mengikuti contoh user
+  // ("107,930": pemisah ribuan koma, tanpa "Rp").
+  const sumOf = (rows: Row[] | undefined, key: string) => (rows || []).reduce((t, r) => t + (Number(r[key]) || 0), 0);
+  const totalBiaya = sumOf(data.tindakan, 'biaya') + sumOf(data.obat, 'total') + sumOf(data.lab, 'biaya') + sumOf(data.radiologi, 'biaya');
+  if (data.tindakan?.length || data.obat?.length || data.lab?.length || data.radiologi?.length) {
+    ensure(30);
+    y -= 4;
+    page.drawLine({ start: { x: MARGIN, y: y + 12 }, end: { x: PAGE_W - MARGIN, y: y + 12 }, thickness: 1, color: rgb(0, 0, 0) });
+    const nominal = Math.round(totalBiaya).toLocaleString('en-US');
+    page.drawText('TOTAL BIAYA', { x: MARGIN, y, size: 10, font: fontBold });
+    page.drawText(nominal, { x: PAGE_W - MARGIN - fontBold.widthOfTextAtSize(nominal, 10), y, size: 10, font: fontBold });
+    y -= 20;
+  }
 
   if (data.peringatan?.length) {
     ensure(30);
@@ -320,7 +369,9 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
   const kotaTgl = sanitize(`${settings.kota_rs ? `${settings.kota_rs}, ` : ''}${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`);
   // Tumpukan visual: kota/tgl (tagY+46) s/d nama (tagY-32) ≈ 120pt.
   ensure(125);
-  const tagX = MARGIN + 60;
+  // Blok di sisi KANAN: titik tengah kotak stample ≈ 80pt dari margin kanan
+  // (boxCenterX = trunc(tagX - 15) + 20 ≈ tagX + 5).
+  const tagX = Math.trunc(PAGE_W - MARGIN - 85);
   const tagY = y - 75;
   const centeredX = Math.trunc(tagX - SIGN_BOX_WIDTH / 2 + 5);
   const centeredY = Math.trunc(tagY - SIGN_BOX_HEIGHT / 2);
@@ -335,7 +386,10 @@ export async function buildDokumenPasienPdf(noRawat: string): Promise<{ pdfBytes
   const nameY = blockCenterY - SIGN_BOX_HEIGHT / 2 - 12;
   const centerAt = (t: string, cx: number, yy: number, size = 9, bold = false) => {
     const f = bold ? fontBold : font;
-    page.drawText(t, { x: cx - f.widthOfTextAtSize(t, size) / 2, y: yy, size, font: f });
+    const w = f.widthOfTextAtSize(t, size);
+    // Teks panjang (mis. nama dokter + gelar) jangan sampai lewat margin kanan.
+    const x = Math.min(cx - w / 2, PAGE_W - MARGIN - w);
+    page.drawText(t, { x, y: yy, size, font: f });
   };
   centerAt(kotaTgl, boxCenterX, labelY + 14);
   centerAt('Dokter Penanggung Jawab', boxCenterX, labelY);
