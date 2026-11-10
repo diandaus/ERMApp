@@ -4,7 +4,7 @@ import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
 import { ModalCariDokter } from '../components/ModalCariDokter';
 import { ModalCariCaraBayar } from '../components/ModalCariCaraBayar';
-import { kdDokterDariNamaRingkasan, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte } from './peruriTteRingkasan';
+import { kdDokterDariNamaRingkasan, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -390,16 +390,38 @@ const FilterPilihan: React.FC<{
   );
 };
 
+// useFilterTersimpan — state filter yg BERTAHAN saat pindah submenu (komponen
+// submenu di-unmount saat ditinggal, jadi state React biasa ikut hilang).
+// Disimpan di sessionStorage: bertahan selama tab browser terbuka, hilang
+// saat tab ditutup. Akses storage dibungkus try/catch (bisa diblokir
+// browser/mode privat) — kalau gagal, perilakunya sama spt useState biasa.
+function useFilterTersimpan<T>(kunci: string, awal: T | (() => T)): [T, (v: T) => void] {
+  const [nilai, setNilai] = React.useState<T>(() => {
+    try {
+      const raw = window.sessionStorage.getItem(kunci);
+      if (raw !== null) return JSON.parse(raw) as T;
+    } catch { /* abaikan */ }
+    return typeof awal === 'function' ? (awal as () => T)() : awal;
+  });
+  const simpan = React.useCallback((v: T) => {
+    setNilai(v);
+    try { window.sessionStorage.setItem(kunci, JSON.stringify(v)); } catch { /* abaikan */ }
+  }, [kunci]);
+  return [nilai, simpan];
+}
+
 const PerluDiprosesSection: React.FC = () => {
-  const [tglAwal, setTglAwal] = React.useState(todayStr);
-  const [tglAkhir, setTglAkhir] = React.useState(todayStr);
-  const [jenis, setJenis] = React.useState<JenisRawat>('Ralan');
-  const [kdDokter, setKdDokter] = React.useState('');
-  const [nmDokter, setNmDokter] = React.useState('');
-  const [kdPj, setKdPj] = React.useState('');
-  const [nmPj, setNmPj] = React.useState('');
-  const [statusBayar, setStatusBayar] = React.useState('');
-  const [search, setSearch] = React.useState('');
+  // Filter disimpan (useFilterTersimpan) → tidak tereset saat pindah ke
+  // submenu lain lalu kembali ke Perlu Diproses.
+  const [tglAwal, setTglAwal] = useFilterTersimpan('peruri.perlu.tglAwal', todayStr);
+  const [tglAkhir, setTglAkhir] = useFilterTersimpan('peruri.perlu.tglAkhir', todayStr);
+  const [jenis, setJenis] = useFilterTersimpan<JenisRawat>('peruri.perlu.jenis', 'Ralan');
+  const [kdDokter, setKdDokter] = useFilterTersimpan('peruri.perlu.kdDokter', '');
+  const [nmDokter, setNmDokter] = useFilterTersimpan('peruri.perlu.nmDokter', '');
+  const [kdPj, setKdPj] = useFilterTersimpan('peruri.perlu.kdPj', '');
+  const [nmPj, setNmPj] = useFilterTersimpan('peruri.perlu.nmPj', '');
+  const [statusBayar, setStatusBayar] = useFilterTersimpan('peruri.perlu.statusBayar', '');
+  const [search, setSearch] = useFilterTersimpan('peruri.perlu.search', '');
   const [rows, setRows] = React.useState<PerluDiprosesRow[]>([]);
   const [tteTersedia, setTteTersedia] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
@@ -427,7 +449,7 @@ const PerluDiprosesSection: React.FC = () => {
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (id !== reqId.current) return;
-        if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
+        if (!res.ok) throw new Error(data.error || `Gagal memuat data (HTTP ${res.status})`);
         setRows(Array.isArray(data.data) ? data.data : []);
         setDipilih(new Set());
         setTteTersedia(data.tte_tersedia !== false);
@@ -722,21 +744,26 @@ const badgeJenisDokumen: Record<string, { bg: string; fg: string }> = {
 };
 
 const SelesaiSection: React.FC = () => {
-  const [tglAwal, setTglAwal] = React.useState(todayStr);
-  const [tglAkhir, setTglAkhir] = React.useState(todayStr);
-  const [jenis, setJenis] = React.useState<JenisRawat>('Ralan');
-  const [jenisDokumen, setJenisDokumen] = React.useState('Semua');
-  const [kdDokter, setKdDokter] = React.useState('');
-  const [nmDokter, setNmDokter] = React.useState('');
-  const [kdPj, setKdPj] = React.useState('');
-  const [nmPj, setNmPj] = React.useState('');
-  const [search, setSearch] = React.useState('');
+  // Filter disimpan (useFilterTersimpan) → tidak tereset saat pindah ke
+  // submenu lain lalu kembali ke Selesai. Kunci terpisah dari Perlu Diproses.
+  const [tglAwal, setTglAwal] = useFilterTersimpan('peruri.selesai.tglAwal', todayStr);
+  const [tglAkhir, setTglAkhir] = useFilterTersimpan('peruri.selesai.tglAkhir', todayStr);
+  const [jenis, setJenis] = useFilterTersimpan<JenisRawat>('peruri.selesai.jenis', 'Ralan');
+  const [jenisDokumen, setJenisDokumen] = useFilterTersimpan('peruri.selesai.jenisDokumen', 'Semua');
+  const [kdDokter, setKdDokter] = useFilterTersimpan('peruri.selesai.kdDokter', '');
+  const [nmDokter, setNmDokter] = useFilterTersimpan('peruri.selesai.nmDokter', '');
+  const [kdPj, setKdPj] = useFilterTersimpan('peruri.selesai.kdPj', '');
+  const [nmPj, setNmPj] = useFilterTersimpan('peruri.selesai.nmPj', '');
+  const [search, setSearch] = useFilterTersimpan('peruri.selesai.search', '');
   const [rows, setRows] = React.useState<SelesaiRow[]>([]);
   const [tteTersedia, setTteTersedia] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [loaded, setLoaded] = React.useState(false);
   const [error, setError] = React.useState('');
   const [busyOrder, setBusyOrder] = React.useState<string | null>(null);
+  // Pilihan utk Unduh Terpilih (kunci = order_id, unik per dokumen).
+  const [dipilih, setDipilih] = React.useState<Set<string>>(new Set());
+  const [massalKunci, setMassalKunci] = React.useState<string | null>(null);
 
   // Dimuat OTOMATIS (tanpa tombol Tampilkan), sama dgn Perlu Diproses:
   // saat halaman dibuka & tiap filter berubah. reqId mencegah respons lama
@@ -758,8 +785,9 @@ const SelesaiSection: React.FC = () => {
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (id !== reqId.current) return;
-        if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
+        if (!res.ok) throw new Error(data.error || `Gagal memuat data (HTTP ${res.status})`);
         setRows(Array.isArray(data.data) ? data.data : []);
+        setDipilih(new Set());
         setTteTersedia(data.tte_tersedia !== false);
         setLoaded(true);
       })
@@ -802,17 +830,47 @@ const SelesaiSection: React.FC = () => {
     return Array.from(map.values());
   }, [rows]);
 
+  // Ringkasan → sekalian simpan ke Berkas Rawat. Lab/Radiologi → hanya
+  // diunduh; simpan Berkas Rawat utk keduanya sudah diatur modal masing2
+  // dgn penamaan sendiri.
+  const opsiSimpan = (r: SelesaiRow) => {
+    if (r.jenis_dokumen !== 'Ringkasan Perawatan') return undefined;
+    return opsiSimpanRingkasan({ no_rawat: r.no_rawat, kd_dokter: kdDokterDariNamaRingkasan(r.nama_dokumen) });
+  };
+
   const handleUnduh = async (r: SelesaiRow) => {
     setBusyOrder(r.order_id);
     try {
-      const kdRingkasan = r.jenis_dokumen === 'Ringkasan Perawatan' ? kdDokterDariNamaRingkasan(r.nama_dokumen) : '';
-      // Ringkasan → sekalian simpan ke Berkas Rawat (nama file sama dgn
-      // Perlu Diproses). Lab/Radiologi → hanya diunduh; simpan Berkas Rawat
-      // utk keduanya sudah diatur modal masing2 dgn penamaan sendiri.
-      await unduhDokumenTte(r.order_id, r.nama_dokumen || `${r.order_id}.pdf`,
-        kdRingkasan ? opsiSimpanRingkasan({ no_rawat: r.no_rawat, kd_dokter: kdRingkasan }) : undefined);
+      await unduhDokumenTte(r.order_id, r.nama_dokumen || `${r.order_id}.pdf`, opsiSimpan(r));
     } finally {
       setBusyOrder(null);
+    }
+  };
+
+  const togglePilih = (orderId: string) => setDipilih((prev) => {
+    const next = new Set(prev);
+    if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
+    return next;
+  });
+
+  // Unduh Terpilih — 1x klik, diproses 1 per 1 (unduh + upload Berkas Rawat
+  // utk Ringkasan). Pilihan dikosongkan setelah selesai.
+  const handleUnduhMassal = async (items: SelesaiRow[], kunciGrup: string) => {
+    setMassalKunci(kunciGrup);
+    try {
+      await unduhDokumenTteMassal(items.map((r) => ({
+        orderId: r.order_id,
+        namaFile: r.nama_dokumen || `${r.order_id}.pdf`,
+        label: `${r.nm_pasien || '-'} (${r.no_rawat}) · ${r.jenis_dokumen}`,
+        simpanKeBerkas: opsiSimpan(r),
+      })));
+      setDipilih((prev) => {
+        const next = new Set(prev);
+        items.forEach((r) => next.delete(r.order_id));
+        return next;
+      });
+    } finally {
+      setMassalKunci(null);
     }
   };
 
@@ -863,7 +921,31 @@ const SelesaiSection: React.FC = () => {
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
                   {g.judul} {g.sub && <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.sub})</span>}
                 </div>
-                <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} dokumen</div>
+                {(() => {
+                  const bisaDipilih = g.items.filter((r) => r.order_id);
+                  const terpilih = bisaDipilih.filter((r) => dipilih.has(r.order_id));
+                  const adaProses = massalKunci !== null || busyOrder !== null;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} dokumen</div>
+                      {bisaDipilih.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleUnduhMassal(terpilih, g.kunci)}
+                          disabled={terpilih.length === 0 || adaProses}
+                          title="Unduh semua dokumen yang dicentang satu per satu (Ringkasan sekalian disimpan ke Berkas Rawat)"
+                          style={{
+                            padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
+                            background: terpilih.length === 0 || adaProses ? '#a7f3d0' : '#059669', color: '#fff',
+                            cursor: terpilih.length === 0 || adaProses ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {massalKunci === g.kunci ? 'Memproses...' : `Unduh Terpilih (${terpilih.length})`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                 <thead style={{ background: '#f9fafb' }}>
@@ -876,6 +958,33 @@ const SelesaiSection: React.FC = () => {
                     <th style={thStyle}>Cara Bayar</th>
                     <th style={thStyle}>Dokumen</th>
                     <th style={{ ...thStyle, textAlign: 'center' }}>Aksi</th>
+                    {/* Kolom pilih: header & baris rata kanan supaya checkbox
+                        "Pilih Semua" sejajar vertikal dgn checkbox tiap baris. */}
+                    <th style={{ ...thStyle, textAlign: 'right' }}>
+                      {(() => {
+                        const bisaDipilih = g.items.filter((r) => r.order_id);
+                        if (bisaDipilih.length === 0) return null;
+                        const semua = bisaDipilih.every((r) => dipilih.has(r.order_id));
+                        return (
+                          <label
+                            title="Pilih semua dokumen di kartu ini"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: massalKunci !== null ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            Pilih Semua
+                            <input
+                              type="checkbox"
+                              checked={semua}
+                              disabled={massalKunci !== null}
+                              onChange={() => setDipilih((prev) => {
+                                const next = new Set(prev);
+                                bisaDipilih.forEach((r) => (semua ? next.delete(r.order_id) : next.add(r.order_id)));
+                                return next;
+                              })}
+                            />
+                          </label>
+                        );
+                      })()}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -883,7 +992,7 @@ const SelesaiSection: React.FC = () => {
                     const badge = badgeJenisDokumen[r.jenis_dokumen] || badgeJenisDokumen.Lainnya;
                     const busy = busyOrder === r.order_id;
                     return (
-                      <tr key={`${r.order_id}|${i}`} style={{ background: i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
+                      <tr key={`${r.order_id}|${i}`} style={{ background: dipilih.has(r.order_id) ? '#ecfdf5' : i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                         <td style={tdStyle}>{i + 1}</td>
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatTglJam(r.tgl_kirim)}</td>
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rawat}</td>
@@ -908,6 +1017,11 @@ const SelesaiSection: React.FC = () => {
                               <line x1="12" y1="15" x2="12" y2="3"></line>
                             </svg>
                           </button>
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>
+                          {r.order_id && (
+                            <input type="checkbox" checked={dipilih.has(r.order_id)} disabled={massalKunci !== null} onChange={() => togglePilih(r.order_id)} />
+                          )}
                         </td>
                       </tr>
                     );

@@ -324,52 +324,61 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
   });
 }
 
-// unduhDokumenTte — unduh dokumen yg SUDAH ditandatangani dari Peruri
-// berdasarkan orderId (dipakai juga submenu Selesai utk semua jenis
-// dokumen). simpanKeBerkas diisi → backend sekalian menyimpan ke Berkas
-// Rawat sbg <prefix><no_rawat>_<no_order>_signed.pdf; kosong → hanya diunduh.
-export async function unduhDokumenTte(
-  orderId: string,
-  namaFile: string,
-  simpanKeBerkas?: { no_rawat: string; no_order: string; prefix: string },
-): Promise<void> {
+type OpsiSimpanBerkas = { no_rawat: string; no_order: string; prefix: string };
+
+// ambilDokumenTte — inti unduh 1 dokumen TANPA dialog: ambil dari Peruri
+// (download-document) → simpan ke komputer user → backend sekalian
+// upload ke Berkas Rawat kalau simpanKeBerkas diisi. Gagal ambil → throw;
+// gagal upload → TIDAK throw (dokumen tetap terunduh), dilaporkan lewat
+// uploadError supaya caller bisa menampilkannya.
+async function ambilDokumenTte(orderId: string, namaFile: string, simpanKeBerkas?: OpsiSimpanBerkas): Promise<{ uploaded: boolean; uploadError: string }> {
+  const res = await fetch('/api/peruri/download-document', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId, ...(simpanKeBerkas || {}) }),
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(resData.error || `Gagal mengunduh dokumen (HTTP ${res.status})`);
+  const upstream = resData.response;
+  if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
+    throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || 'Download Document gagal'}`);
+  }
+  const data = upstream?.data || upstream || {};
+  const base64Doc: string | undefined = data.base64Document || data.document || data.file || data.base64;
+  if (!base64Doc) throw new Error('Peruri tidak mengembalikan isi dokumen yang dikenali.');
+
+  const byteChars = atob(base64Doc);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `TTE_${namaFile}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Revoke ditunda: di mode massal klik unduh beruntun, revoke langsung
+  // bisa membatalkan unduhan yg belum sempat dimulai browser.
+  window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+  return { uploaded: !!resData.uploaded_to_berkasrawat, uploadError: resData.upload_error || '' };
+}
+
+// unduhDokumenTte — 1 dokumen, dgn dialog proses & hasil (dipakai tombol
+// Unduh per baris di Selesai dan unduhRingkasanTte). simpanKeBerkas diisi →
+// sekalian upload ke Berkas Rawat; kosong → hanya diunduh.
+export async function unduhDokumenTte(orderId: string, namaFile: string, simpanKeBerkas?: OpsiSimpanBerkas): Promise<void> {
   showProcessing('Mengunduh dokumen dari Peruri, mohon tunggu...');
   try {
-    const res = await fetch('/api/peruri/download-document', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId, ...(simpanKeBerkas || {}) }),
-    });
-    const resData = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(resData.error || 'Gagal mengunduh dokumen');
-    const upstream = resData.response;
-    if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
-      throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || 'Download Document gagal'}`);
-    }
-    const data = upstream?.data || upstream || {};
-    const base64Doc: string | undefined = data.base64Document || data.document || data.file || data.base64;
-    if (!base64Doc) throw new Error('Peruri tidak mengembalikan isi dokumen yang dikenali.');
-
-    const byteChars = atob(base64Doc);
-    const bytes = new Uint8Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `TTE_${namaFile}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const { uploaded, uploadError } = await ambilDokumenTte(orderId, namaFile, simpanKeBerkas);
     hideProcessing();
-
     if (!simpanKeBerkas) {
       Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen bertanda tangan berhasil diunduh.', timer: 1800, showConfirmButton: false });
-    } else if (resData.uploaded_to_berkasrawat) {
+    } else if (uploaded) {
       Swal.fire({ icon: 'success', title: 'Berhasil', text: 'Dokumen terunduh & otomatis tersimpan ke Berkas Rawat.', timer: 2000, showConfirmButton: false });
     } else {
       Swal.fire({
         icon: 'warning', title: 'Simpan ke Berkas Rawat gagal',
-        text: `Dokumen berhasil diunduh ke komputer, tapi GAGAL otomatis tersimpan ke Berkas Rawat${resData.upload_error ? `: ${resData.upload_error}` : '.'}`,
+        text: `Dokumen berhasil diunduh ke komputer, tapi GAGAL otomatis tersimpan ke Berkas Rawat${uploadError ? `: ${uploadError}` : '.'}`,
       });
     }
   } catch (err) {
@@ -378,10 +387,67 @@ export async function unduhDokumenTte(
   }
 }
 
-// opsiSimpanRingkasan — lokasi simpan Berkas Rawat utk Ringkasan Perawatan:
-// Ringkasan_Perawatan_<no_rawat>_<kd_dokter>_signed.pdf
+// unduhDokumenTteMassal — banyak dokumen, 1x klik: diproses BERURUTAN 1 per
+// 1 (ambil dari Peruri → unduh ke komputer → upload ke Berkas Rawat utk yg
+// punya simpanKeBerkas). Yg gagal dilewati, dirangkum di akhir.
+export type ItemUnduh = { orderId: string; namaFile: string; label: string; simpanKeBerkas?: OpsiSimpanBerkas };
+export async function unduhDokumenTteMassal(items: ItemUnduh[]): Promise<void> {
+  if (items.length === 0) return;
+  const konfirmasi = await Swal.fire({
+    icon: 'question',
+    title: `Unduh ${items.length} Dokumen?`,
+    html: `<b>${items.length}</b> dokumen bertanda tangan akan diunduh satu per satu dari Peruri.`
+      + (items.some((it) => it.simpanKeBerkas) ? '<br/><small style="color:#6b7280;">Ringkasan Perawatan sekalian disimpan ke Berkas Rawat.</small>' : '')
+      + '<br/><small style="color:#6b7280;">Kalau browser menanyakan izin mengunduh banyak file, pilih <b>Izinkan</b>.</small>',
+    showCancelButton: true,
+    confirmButtonText: 'Lanjutkan',
+    cancelButtonText: 'Batal',
+    confirmButtonColor: '#059669',
+  });
+  if (!konfirmasi.isConfirmed) return;
+
+  let berhasil = 0;
+  const gagal: { label: string; alasan: string }[] = [];
+  const gagalUpload: { label: string; alasan: string }[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    showProcessing(`Mengunduh dokumen <b>${i + 1}</b> dari <b>${items.length}</b><br/>${escapeHtml(it.label)}`
+      + `<br/><span style="font-size:12px;color:#6b7280;">Berhasil: ${berhasil} · Gagal: ${gagal.length}</span>`);
+    try {
+      const { uploaded, uploadError } = await ambilDokumenTte(it.orderId, it.namaFile, it.simpanKeBerkas);
+      berhasil++;
+      if (it.simpanKeBerkas && !uploaded) gagalUpload.push({ label: it.label, alasan: uploadError || 'tidak diketahui' });
+      // Jeda singkat antar unduhan supaya browser tidak menggabung/menolak
+      // klik unduh beruntun.
+      await new Promise((r) => window.setTimeout(r, 400));
+    } catch (err) {
+      gagal.push({ label: it.label, alasan: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    }
+  }
+  hideProcessing();
+
+  const li = (xs: { label: string; alasan: string }[]) => xs.map((x) => `<li><b>${escapeHtml(x.label)}</b>: ${escapeHtml(x.alasan)}</li>`).join('');
+  await Swal.fire({
+    icon: gagal.length === 0 && gagalUpload.length === 0 ? 'success' : berhasil === 0 ? 'error' : 'warning',
+    title: gagal.length === 0 && gagalUpload.length === 0 ? 'Semua dokumen berhasil diunduh' : 'Selesai dengan catatan',
+    html: `<div style="text-align:left;font-size:13.5px;">
+        <div>Berhasil diunduh: <b style="color:#059669;">${berhasil}</b> dari ${items.length} dokumen</div>
+        ${gagal.length ? `<div style="margin-top:6px;">Gagal diunduh: <b style="color:#dc2626;">${gagal.length}</b></div><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;max-height:150px;overflow:auto;">${li(gagal)}</ul>` : ''}
+        ${gagalUpload.length ? `<div style="margin-top:6px;">Terunduh tapi gagal disimpan ke Berkas Rawat: <b style="color:#92400e;">${gagalUpload.length}</b></div><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;max-height:150px;overflow:auto;">${li(gagalUpload)}</ul>` : ''}
+      </div>`,
+    confirmButtonColor: '#059669',
+  });
+}
+
+// opsiSimpanRingkasan — nama file di Berkas Rawat utk Ringkasan Perawatan:
+// RiwayatPerawatan_<no_rawat, "/"→"_">_signed.pdf
+// (mis. RiwayatPerawatan_2026_11_09_000051_signed.pdf). Backend menyusunnya
+// sbg prefix + no_rawat + "_signed.pdf" (no_order kosong → tanpa kode
+// dokter). Catatan: nama ini per no_rawat, jadi pasien ranap dgn >1 DPJP
+// yg masing2 tanda tangan akan saling menimpa file — yg terakhir diunduh.
+// Nama dokumen di tracking_dokumen_ttd (namaDokumenRingkasan) TIDAK berubah.
 export const opsiSimpanRingkasan = (t: Pick<RingkasanTarget, 'no_rawat' | 'kd_dokter'>) =>
-  ({ no_rawat: t.no_rawat, no_order: t.kd_dokter, prefix: 'Ringkasan_Perawatan_' });
+  ({ no_rawat: t.no_rawat, no_order: '', prefix: 'RiwayatPerawatan_' });
 
 // kdDokterDariNamaRingkasan — kebalikan namaDokumenRingkasan (dipakai
 // submenu Selesai, yg cuma punya nama_dokumen dari tracking).
