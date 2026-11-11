@@ -367,18 +367,15 @@ export async function buildDokumenPasienPdf(noRawat: string, opts: { namaPengesa
 
   // ── Blok tanda tangan + tag "#A#" (halaman terakhir, di bawah konten) ──
   const pengesah = sanitize(opts.namaPengesah || (ranap && dpjpNama ? dpjpNama : p.nm_dokter) || '-');
-  const now = new Date();
-  const kotaTgl = sanitize(`${settings.kota_rs ? `${settings.kota_rs}, ` : ''}${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`);
-  // Tumpukan visual: kota/tgl (tagY+46) s/d nama (tagY-32) ≈ 120pt.
+  // Tumpukan visual: label (tagY+32) s/d nama (tagY-32) ≈ 110pt.
   ensure(125);
-  // Blok di sisi KANAN. Semua elemen (kota/tgl, label, #A#, kotak stample,
+  // Blok di sisi KANAN. Semua elemen (label, #A#, kotak stample,
   // nama) di-center pd SATU sumbu X. Normalnya sumbu ≈ 80pt dari margin
   // kanan; kalau ada teks yg lebih lebar (mis. nama dokter + gelar panjang),
   // SELURUH blok digeser ke kiri secukupnya supaya teks terlebar tetap muat
   // — jadi semuanya tetap center satu sama lain.
   const LABEL_TTD = 'Dokter Penanggung Jawab';
   const lebarMaks = Math.max(
-    font.widthOfTextAtSize(kotaTgl, 9),
     font.widthOfTextAtSize(LABEL_TTD, 9),
     fontBold.widthOfTextAtSize(pengesah, 9),
   );
@@ -401,7 +398,6 @@ export async function buildDokumenPasienPdf(noRawat: string, opts: { namaPengesa
     const f = bold ? fontBold : font;
     page.drawText(t, { x: cx - f.widthOfTextAtSize(t, size) / 2, y: yy, size, font: f });
   };
-  centerAt(kotaTgl, boxCenterX, labelY + 14);
   centerAt(LABEL_TTD, boxCenterX, labelY);
   // Area SIGN_BOX TIDAK digambar apa pun — stample ditempel Peruri sendiri.
   page.drawText('#A#', { x: tagX, y: tagY, size: 7, font, color: rgb(0.6, 0.6, 0.6) }); // posisi tag = dasar SIGN_BOX, jangan di-center
