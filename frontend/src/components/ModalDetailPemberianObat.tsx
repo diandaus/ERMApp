@@ -30,10 +30,28 @@ type DetailRow = {
   no_faktur: string;
 };
 
+// Resep Pulang (/api/resep-pulang) — ikut dijumlahkan ke kolom Obat di
+// Klaim INACBG, jadi ditampilkan juga di sini spy totalnya sama.
+type ResepPulangRow = {
+  nama_brng: string;
+  dosis: string;
+  jml: number;
+  harga: number;
+  total: number;
+  tanggal: string;
+  jam: string;
+};
+
+const fmtTgl = (t: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : t || '-';
+};
+
 const formatAngka = (n: number): string => Math.round(n || 0).toLocaleString('en-US');
 
 export const ModalDetailPemberianObat: React.FC<ModalDetailPemberianObatProps> = ({ noRawat, onClose }) => {
   const [rows, setRows] = React.useState<DetailRow[]>([]);
+  const [resepPulang, setResepPulang] = React.useState<ResepPulangRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
 
@@ -47,10 +65,15 @@ export const ModalDetailPemberianObat: React.FC<ModalDetailPemberianObatProps> =
       try {
         setLoading(true);
         setError('');
-        const res = await fetch(`/api/detail-pemberian-obat/${noRawat}`);
+        const [res, resRp] = await Promise.all([
+          fetch(`/api/detail-pemberian-obat/${noRawat}`),
+          fetch(`/api/resep-pulang/${noRawat}`),
+        ]);
         if (!res.ok) throw new Error('Gagal memuat data pemberian obat');
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
+        const dataRp = resRp.ok ? await resRp.json() : [];
+        setResepPulang(Array.isArray(dataRp) ? [...dataRp].reverse() : []);
       } catch (err: any) {
         setError(err.message || 'Gagal memuat data');
       } finally {
@@ -60,7 +83,9 @@ export const ModalDetailPemberianObat: React.FC<ModalDetailPemberianObatProps> =
     load();
   }, [noRawat]);
 
-  const totalBiaya = rows.reduce((sum, r) => sum + (r.total || 0), 0);
+  const totalObat = rows.reduce((sum, r) => sum + (r.total || 0), 0);
+  const totalResepPulang = resepPulang.reduce((sum, r) => sum + (r.total || 0), 0);
+  const totalBiaya = totalObat + totalResepPulang;
 
   const columns: { key: keyof DetailRow; label: string; align?: 'right' }[] = [
     { key: 'tgl_beri', label: 'Tgl.Beri' },
@@ -140,13 +165,13 @@ export const ModalDetailPemberianObat: React.FC<ModalDetailPemberianObatProps> =
           {loading && <div style={{ textAlign: 'center', padding: 40, color: '#6b7280', fontSize: 12 }}>Memuat...</div>}
           {error && <div style={{ color: '#dc2626', padding: 12, fontSize: 12 }}>{error}</div>}
 
-          {!loading && !error && rows.length === 0 && (
+          {!loading && !error && rows.length === 0 && resepPulang.length === 0 && (
             <div style={{ textAlign: 'center', padding: 20, color: '#9ca3af', fontSize: 12 }}>
               Tidak ada data pemberian obat untuk nomor rawat: {noRawat}
             </div>
           )}
 
-          {!loading && !error && rows.length > 0 && (
+          {!loading && !error && (rows.length > 0 || resepPulang.length > 0) && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <tbody>
                 {rows.map((row, index) => (
@@ -161,6 +186,36 @@ export const ModalDetailPemberianObat: React.FC<ModalDetailPemberianObatProps> =
                     ))}
                   </tr>
                 ))}
+                {resepPulang.length > 0 && (
+                  <>
+                    {rows.length > 0 && (
+                      <tr>
+                        <td style={{ ...tdStyle, fontWeight: 600 }} colSpan={5}>Total Obat &amp; BHP</td>
+                        <td style={{ ...tdStyle, fontWeight: 600, textAlign: 'right' }}>{formatAngka(totalObat)}</td>
+                        <td style={tdStyle}></td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td style={{ ...tdStyle, fontWeight: 700, paddingTop: 10 }} colSpan={7}>Resep Pulang</td>
+                    </tr>
+                    {resepPulang.map((r, i) => (
+                      <tr key={`rp-${i}`}>
+                        <td style={tdStyle}>{fmtTgl(r.tanggal)}</td>
+                        <td style={tdStyle}>{r.jam || '-'}</td>
+                        <td style={tdStyle}>{`${r.nama_brng}${r.dosis ? ` ${r.dosis}` : ''}`}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatAngka(r.jml)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatAngka(r.harga)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatAngka(r.total)}</td>
+                        <td style={tdStyle}>-</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ ...tdStyle, fontWeight: 600 }} colSpan={5}>Total Resep Pulang</td>
+                      <td style={{ ...tdStyle, fontWeight: 600, textAlign: 'right' }}>{formatAngka(totalResepPulang)}</td>
+                      <td style={tdStyle}></td>
+                    </tr>
+                  </>
+                )}
                 <tr style={totalRowStyle}>
                   <td style={{ ...tdStyle, fontWeight: 700, fontSize: 13 }} colSpan={5}>TOTAL BIAYA</td>
                   <td style={{ ...tdStyle, fontWeight: 700, fontSize: 13, textAlign: 'right' }}>{formatAngka(totalBiaya)}</td>

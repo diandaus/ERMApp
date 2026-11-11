@@ -225,7 +225,9 @@ func getDetailPemberianObat(db *sql.DB) gin.HandlerFunc {
 			INNER JOIN reg_periksa ON dpo.no_rawat = reg_periksa.no_rawat
 			INNER JOIN pasien ON reg_periksa.no_rkm_medis = pasien.no_rkm_medis
 			LEFT JOIN bangsal ON dpo.kd_bangsal = bangsal.kd_bangsal
-			WHERE dpo.no_rawat = ? AND dpo.status = 'Ranap'
+			-- Tanpa filter status: obat IGD/Ralan (no_rawat sama) ikut, sama
+			-- dgn kolom Obat di Klaim INACBG & Billing Ranap Khanza.
+			WHERE dpo.no_rawat = ?
 			ORDER BY dpo.tgl_perawatan, dpo.jam, databarang.nama_brng
 		`
 
