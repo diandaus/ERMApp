@@ -111,17 +111,20 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 					kamar_inap.diagnosa_awal,
 					''
 				) AS diagnosa,
+				-- Obat/Lab/Radiologi TANPA filter status: Billing Ranap Khanza
+				-- (default chkRalan+chkRanap) ikut menagihkan item Ralan/IGD
+				-- yg no_rawat-nya sama.
 				COALESCE((
 					SELECT %s FROM detail_pemberian_obat dpo
-					WHERE dpo.no_rawat = kamar_inap.no_rawat AND dpo.status = 'Ranap'
+					WHERE dpo.no_rawat = kamar_inap.no_rawat
 				), 0) AS biaya_obat,
 				COALESCE((
 					SELECT SUM(pl.biaya) FROM periksa_lab pl
-					WHERE pl.no_rawat = kamar_inap.no_rawat AND pl.status = 'Ranap'
+					WHERE pl.no_rawat = kamar_inap.no_rawat
 				), 0) AS biaya_lab,
 				COALESCE((
 					SELECT SUM(pr.biaya) FROM periksa_radiologi pr
-					WHERE pr.no_rawat = kamar_inap.no_rawat AND pr.status = 'Ranap'
+					WHERE pr.no_rawat = kamar_inap.no_rawat
 				), 0) AS biaya_radiologi,
 				(
 					COALESCE((
@@ -159,9 +162,16 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 					+ COALESCE((SELECT SUM(rid.biaya_rawat) FROM rawat_inap_dr rid WHERE rid.no_rawat = kamar_inap.no_rawat), 0)
 					+ COALESCE((SELECT SUM(rip.biaya_rawat) FROM rawat_inap_pr rip WHERE rip.no_rawat = kamar_inap.no_rawat), 0)
 					+ COALESCE((SELECT SUM(ridp.biaya_rawat) FROM rawat_inap_drpr ridp WHERE ridp.no_rawat = kamar_inap.no_rawat), 0)
-					+ COALESCE((SELECT %s FROM detail_pemberian_obat dpo WHERE dpo.no_rawat = kamar_inap.no_rawat AND dpo.status = 'Ranap'), 0)
-					+ COALESCE((SELECT SUM(pl.biaya) FROM periksa_lab pl WHERE pl.no_rawat = kamar_inap.no_rawat AND pl.status = 'Ranap'), 0)
-					+ COALESCE((SELECT SUM(pr.biaya) FROM periksa_radiologi pr WHERE pr.no_rawat = kamar_inap.no_rawat AND pr.status = 'Ranap'), 0)
+					-- Ralan (IGD sebelum masuk kamar, no_rawat sama) + Resep Pulang —
+					-- ikut ditagihkan di Billing Ranap Khanza (DlgBilingRanap default
+					-- chkRalan & chkRanap tercentang, prosesResepPulang).
+					+ COALESCE((SELECT SUM(rjd.biaya_rawat) FROM rawat_jl_dr rjd WHERE rjd.no_rawat = kamar_inap.no_rawat), 0)
+					+ COALESCE((SELECT SUM(rjdp.biaya_rawat) FROM rawat_jl_drpr rjdp WHERE rjdp.no_rawat = kamar_inap.no_rawat), 0)
+					+ COALESCE((SELECT SUM(rjp.biaya_rawat) FROM rawat_jl_pr rjp WHERE rjp.no_rawat = kamar_inap.no_rawat), 0)
+					+ COALESCE((SELECT SUM(rp.total) FROM resep_pulang rp WHERE rp.no_rawat = kamar_inap.no_rawat), 0)
+					+ COALESCE((SELECT %s FROM detail_pemberian_obat dpo WHERE dpo.no_rawat = kamar_inap.no_rawat), 0)
+					+ COALESCE((SELECT SUM(pl.biaya) FROM periksa_lab pl WHERE pl.no_rawat = kamar_inap.no_rawat), 0)
+					+ COALESCE((SELECT SUM(pr.biaya) FROM periksa_radiologi pr WHERE pr.no_rawat = kamar_inap.no_rawat), 0)
 				) AS billing,
 				COALESCE(klaim_inacbg.klaim_inacbg, 0) AS klaim_inacbg
 			FROM kamar_inap

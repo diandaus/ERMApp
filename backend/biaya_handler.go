@@ -400,6 +400,42 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 			var subtotal float64
 			var rowsOut []BillingRow
 
+			// Tindakan RALAN (mis. IGD sebelum pasien masuk kamar) — no_rawat
+			// SAMA dgn ranap. Khanza DlgBilingRanap default chkRalan=true →
+			// rawat_jl_dr/drpr/pr ikut ditagihkan per kategori, ditaruh
+			// SEBELUM tindakan ranap (urutan prosesCariTindakan).
+			for _, q := range []string{
+				`SELECT jns_perawatan.nm_perawatan, MAX(rawat_jl_dr.biaya_rawat), COUNT(*), SUM(rawat_jl_dr.biaya_rawat)
+				FROM rawat_jl_dr
+				INNER JOIN jns_perawatan ON rawat_jl_dr.kd_jenis_prw = jns_perawatan.kd_jenis_prw
+				WHERE rawat_jl_dr.no_rawat = ? AND jns_perawatan.kd_kategori = ?
+				GROUP BY rawat_jl_dr.kd_jenis_prw`,
+				`SELECT jns_perawatan.nm_perawatan, MAX(rawat_jl_drpr.biaya_rawat), COUNT(*), SUM(rawat_jl_drpr.biaya_rawat)
+				FROM rawat_jl_drpr
+				INNER JOIN jns_perawatan ON rawat_jl_drpr.kd_jenis_prw = jns_perawatan.kd_jenis_prw
+				WHERE rawat_jl_drpr.no_rawat = ? AND jns_perawatan.kd_kategori = ?
+				GROUP BY rawat_jl_drpr.kd_jenis_prw`,
+				`SELECT jns_perawatan.nm_perawatan, jns_perawatan.total_byrpr, COUNT(*), (jns_perawatan.total_byrpr * COUNT(*))
+				FROM rawat_jl_pr
+				INNER JOIN jns_perawatan ON rawat_jl_pr.kd_jenis_prw = jns_perawatan.kd_jenis_prw
+				WHERE rawat_jl_pr.no_rawat = ? AND jns_perawatan.kd_kategori = ?
+				GROUP BY rawat_jl_pr.kd_jenis_prw`,
+			} {
+				rr, err := db.Query(q, noRawat, kat.kd)
+				if err != nil {
+					continue
+				}
+				for rr.Next() {
+					var nm string
+					var unit, jml, total float64
+					if rr.Scan(&nm, &unit, &jml, &total) == nil {
+						rowsOut = append(rowsOut, BillingRow{NmPerawatan: nm, Pemisah: ":", Biaya: unit, Jumlah: jml, TotalBiaya: total})
+						subtotal += total
+					}
+				}
+				rr.Close()
+			}
+
 			drRows, _ := db.Query(`
 				SELECT jns_perawatan_inap.nm_perawatan, MAX(rawat_inap_dr.biaya_rawat), COUNT(*), SUM(rawat_inap_dr.biaya_rawat)
 				FROM rawat_inap_dr
@@ -477,7 +513,7 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 			SELECT jns_perawatan_lab.nm_perawatan, MAX(periksa_lab.biaya), COUNT(*), SUM(periksa_lab.biaya)
 			FROM periksa_lab
 			INNER JOIN jns_perawatan_lab ON periksa_lab.kd_jenis_prw = jns_perawatan_lab.kd_jenis_prw
-			WHERE periksa_lab.no_rawat = ? AND periksa_lab.status = 'Ranap'
+			WHERE periksa_lab.no_rawat = ?
 			GROUP BY periksa_lab.kd_jenis_prw
 		`, noRawat)
 		if err == nil {
@@ -510,7 +546,7 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 			SELECT jns_perawatan_radiologi.nm_perawatan, MAX(periksa_radiologi.biaya), COUNT(*), SUM(periksa_radiologi.biaya)
 			FROM periksa_radiologi
 			INNER JOIN jns_perawatan_radiologi ON periksa_radiologi.kd_jenis_prw = jns_perawatan_radiologi.kd_jenis_prw
-			WHERE periksa_radiologi.no_rawat = ? AND periksa_radiologi.status = 'Ranap'
+			WHERE periksa_radiologi.no_rawat = ?
 			GROUP BY periksa_radiologi.kd_jenis_prw
 		`, noRawat)
 		if err == nil {
@@ -559,7 +595,7 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 			FROM detail_pemberian_obat
 			INNER JOIN databarang ON detail_pemberian_obat.kode_brng = databarang.kode_brng
 			INNER JOIN jenis ON databarang.kdjns = jenis.kdjns
-			WHERE detail_pemberian_obat.no_rawat = ? AND detail_pemberian_obat.status = 'Ranap'
+			WHERE detail_pemberian_obat.no_rawat = ?
 			GROUP BY databarang.kode_brng, detail_pemberian_obat.h_beli
 			ORDER BY jenis.nama
 		`, noRawat)
@@ -572,7 +608,7 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 			FROM detail_pemberian_obat
 			INNER JOIN databarang ON detail_pemberian_obat.kode_brng = databarang.kode_brng
 			INNER JOIN jenis ON databarang.kdjns = jenis.kdjns
-			WHERE detail_pemberian_obat.no_rawat = ? AND detail_pemberian_obat.status = 'Ranap'
+			WHERE detail_pemberian_obat.no_rawat = ?
 			GROUP BY databarang.kode_brng, detail_pemberian_obat.biaya_obat
 			ORDER BY jenis.nama
 		`, noRawat)
@@ -597,6 +633,41 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 			obatRows.Close()
 			if subtotal > 0 {
 				addSubtotal("Obat & BHP", subtotal)
+			}
+		}
+	}
+
+	// Resep Pulang — prosesResepPulang() di DlgBilingRanap: harga jual dari
+	// resep_pulang (nama + dosis), ditaruh setelah Obat & BHP. Ikut
+	// sembunyi kalau kategori "Obat & BHP" dimatikan di pengaturan preview.
+	if !hidden["Obat & BHP"] && !hidden["Resep Pulang"] {
+		rpRows, err := db.Query(`
+			SELECT databarang.nama_brng, IFNULL(resep_pulang.dosis, ''), resep_pulang.harga,
+				resep_pulang.jml_barang, resep_pulang.total
+			FROM resep_pulang
+			INNER JOIN databarang ON resep_pulang.kode_brng = databarang.kode_brng
+			WHERE resep_pulang.no_rawat = ?
+			ORDER BY databarang.nama_brng
+		`, noRawat)
+		if err == nil {
+			var subtotal float64
+			hasRP := false
+			for rpRows.Next() {
+				var nm, dosis string
+				var harga, jml, total float64
+				if rpRows.Scan(&nm, &dosis, &harga, &jml, &total) != nil {
+					continue
+				}
+				if !hasRP {
+					items = append(items, BillingRow{No: "Resep Pulang", NmPerawatan: ":"})
+					hasRP = true
+				}
+				addItem(strings.TrimSpace(nm+" "+dosis), harga, jml, 0, total)
+				subtotal += total
+			}
+			rpRows.Close()
+			if subtotal > 0 {
+				addSubtotal("Resep Pulang", subtotal)
 			}
 		}
 	}
