@@ -117,6 +117,12 @@ func getKlaimInacbgList(db *sql.DB) gin.HandlerFunc {
 				COALESCE((
 					SELECT %s FROM detail_pemberian_obat dpo
 					WHERE dpo.no_rawat = kamar_inap.no_rawat
+				), 0)
+				-- + Resep Pulang (harga jual resep_pulang.total), sama dgn
+				-- bagian "Resep Pulang" di Billing Ranap Khanza.
+				+ COALESCE((
+					SELECT SUM(rp.total) FROM resep_pulang rp
+					WHERE rp.no_rawat = kamar_inap.no_rawat
 				), 0) AS biaya_obat,
 				COALESCE((
 					SELECT SUM(pl.biaya) FROM periksa_lab pl
