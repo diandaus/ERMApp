@@ -125,31 +125,53 @@ const getEmailDokter = async (t: RingkasanTarget): Promise<string> => {
 // Get OTP + dialog input + Validate. SATU OTP ini dipakai utk semua
 // dokumen berikutnya (signingSession cukup kirim orderId — Peruri sendiri
 // yg mengaitkan sesi dgn email). 'batal' = user menutup dialog OTP.
-// paksa=true → lewati cek sesi & selalu minta OTP baru (tombol "OTP" di
-// header dokter, mis. setelah salah input OTP).
-async function pastikanSesiOtp(email: string, paksa = false): Promise<'aktif' | 'baru' | 'batal'> {
-  if (!paksa) {
-    const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
-    const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
-    if (sessionRes.ok && sessionData.valid) return 'aktif';
-  }
+// tokenSession OTP yg SUDAH diminta tapi belum berhasil divalidasi, per
+// email dokter. Disimpan supaya tombol "OTP" di header dokter bisa membuka
+// dialog lagi & memvalidasi KODE YG SUDAH TERKIRIM (mis. dokter salah
+// ketik) tanpa meminta OTP baru. sessionStorage → tetap ada setelah reload.
+const OTP_PENDING_KEY = 'peruri.otpPending';
+const bacaOtpPending = (): Record<string, string> => {
+  try { return JSON.parse(sessionStorage.getItem(OTP_PENDING_KEY) || '{}') || {}; } catch { return {}; }
+};
+const simpanOtpPending = (email: string, token: string | null) => {
+  try {
+    const m = bacaOtpPending();
+    if (token) m[email] = token; else delete m[email];
+    sessionStorage.setItem(OTP_PENDING_KEY, JSON.stringify(m));
+  } catch { /* abaikan */ }
+};
 
-  const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
-  let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
-  if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
-
+// Dialog OTP + Validate memakai tokenSession yg ada. Tombol "kirim ulang"
+// di dialog tetap meminta OTP baru (token pending ikut diganti). Gagal
+// validasi → token TETAP disimpan supaya bisa dicoba lagi lewat tombol OTP.
+async function inputDanValidasiOtp(email: string, tokenAwal: string): Promise<'baru' | 'batal'> {
+  let tokenSession = tokenAwal;
+  simpanOtpPending(email, tokenSession);
   hideProcessing();
   const otpCode = await showOtpDialog(email, async () => {
     const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
     const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
     if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
     tokenSession = newTokenSession;
+    simpanOtpPending(email, tokenSession);
   });
   if (!otpCode) return 'batal';
 
   showProcessing('Memverifikasi OTP, mohon tunggu...');
   await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+  simpanOtpPending(email, null);
   return 'baru';
+}
+
+async function pastikanSesiOtp(email: string): Promise<'aktif' | 'baru' | 'batal'> {
+  const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
+  const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
+  if (sessionRes.ok && sessionData.valid) return 'aktif';
+
+  const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+  const tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+  if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
+  return inputDanValidasiOtp(email, tokenSession);
 }
 
 // Error yg berarti sesi OTP tidak berlaku lagi — di mode massal, dokumen
@@ -218,13 +240,22 @@ async function kirimDanTandaTangan(t: RingkasanTarget, email: string): Promise<s
 }
 
 // inputUlangOtp — tombol "OTP" di header grup dokter (Perlu Diproses):
-// minta OTP baru & validasi ulang TANPA cek sesi lama. Dipakai kalau dokter
-// salah memasukkan OTP / sesi tersimpan tapi ditolak Peruri.
+// masukkan ULANG kode OTP yg SUDAH terkirim ke email dokter (mis. salah
+// ketik), memakai tokenSession yg tersimpan — TIDAK meminta OTP baru.
 export async function inputUlangOtp(dokter: Pick<RingkasanTarget, 'kd_dokter' | 'nm_dokter'>): Promise<boolean> {
-  showProcessing('Meminta OTP baru, mohon tunggu...');
+  showProcessing('Memeriksa OTP, mohon tunggu...');
   try {
     const email = await getEmailDokter(dokter as RingkasanTarget);
-    const sesi = await pastikanSesiOtp(email, true);
+    const token = bacaOtpPending()[email];
+    if (!token) {
+      hideProcessing();
+      await Swal.fire({
+        icon: 'info', title: 'Belum ada OTP',
+        html: `Belum ada OTP yang menunggu dimasukkan untuk <b>${escapeHtml(dokter.nm_dokter)}</b>.<br/>Klik <b>Tanda Tangan</b> pada salah satu pasien untuk meminta OTP.`,
+      });
+      return false;
+    }
+    const sesi = await inputDanValidasiOtp(email, token);
     hideProcessing();
     if (sesi === 'batal') return false;
     await Swal.fire({

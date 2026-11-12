@@ -620,32 +620,37 @@ const PerluDiprosesSection: React.FC = () => {
         ) : (
           groups.map((g) => (
             <div key={g.kd} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
-              <div style={{ padding: '10px 14px', background: '#ecfdf5', borderBottom: '1px solid #d1fae5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ padding: '10px 14px', background: '#ecfdf5', borderBottom: '1px solid #d1fae5', display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center' }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
                   {g.nm} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.kd})</span>
                 </div>
+                {(() => {
+                  const adaProses = massalDokter !== null || busyKey !== null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => inputUlangOtp({ kd_dokter: g.kd, nm_dokter: g.nm })}
+                      disabled={adaProses}
+                      title="Masukkan ulang OTP yang sudah terkirim ke email (mis. setelah salah input)"
+                      style={{
+                        padding: '5px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${adaProses ? '#a7f3d0' : '#059669'}`, background: '#fff',
+                        color: adaProses ? '#a7f3d0' : '#059669',
+                        cursor: adaProses ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      OTP
+                    </button>
+                  );
+                })()}
                 {(() => {
                   const bisaDipilih = g.items;
                   const terpilih = bisaDipilih.filter((r) => dipilih.has(rowKey(r)));
                   const sedangMassal = massalDokter === g.kd;
                   const adaProses = massalDokter !== null || busyKey !== null;
                   return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end' }}>
                       <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} pasien</div>
-                      <button
-                        type="button"
-                        onClick={() => inputUlangOtp({ kd_dokter: g.kd, nm_dokter: g.nm })}
-                        disabled={adaProses}
-                        title="Minta & masukkan OTP baru (mis. setelah salah input OTP)"
-                        style={{
-                          padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                          border: '1px solid #059669', background: '#fff', color: adaProses ? '#a7f3d0' : '#059669',
-                          borderColor: adaProses ? '#a7f3d0' : '#059669',
-                          cursor: adaProses ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        OTP
-                      </button>
                       {bisaDipilih.length > 0 && (
                         <button
                           type="button"
