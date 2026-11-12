@@ -125,53 +125,65 @@ const getEmailDokter = async (t: RingkasanTarget): Promise<string> => {
 // Get OTP + dialog input + Validate. SATU OTP ini dipakai utk semua
 // dokumen berikutnya (signingSession cukup kirim orderId — Peruri sendiri
 // yg mengaitkan sesi dgn email). 'batal' = user menutup dialog OTP.
-// tokenSession OTP yg SUDAH diminta tapi belum berhasil divalidasi, per
-// email dokter. Disimpan supaya tombol "OTP" di header dokter bisa membuka
-// dialog lagi & memvalidasi KODE YG SUDAH TERKIRIM (mis. dokter salah
-// ketik) tanpa meminta OTP baru. sessionStorage → tetap ada setelah reload.
-const OTP_PENDING_KEY = 'peruri.otpPending';
-const bacaOtpPending = (): Record<string, string> => {
-  try { return JSON.parse(sessionStorage.getItem(OTP_PENDING_KEY) || '{}') || {}; } catch { return {}; }
+// OTP SALAH INPUT — per kd_dokter disimpan {email, tokenSession} HANYA
+// kalau Validate OTP gagal (dokter salah ketik). Tombol "OTP" di header
+// dokter (Perlu Diproses) cuma tampil utk dokter yg ada di sini, lalu
+// dipakai memvalidasi ulang KODE YG SUDAH TERKIRIM tanpa minta OTP baru.
+// Validasi berhasil → dihapus (tombol hilang). sessionStorage → tetap ada
+// setelah reload; perubahan diumumkan lewat event OTP_SALAH_EVENT.
+const OTP_SALAH_KEY = 'peruri.otpSalah';
+export const OTP_SALAH_EVENT = 'peruri-otp-salah';
+type OtpSalah = Record<string, { email: string; token: string }>;
+const bacaOtpSalah = (): OtpSalah => {
+  try { return JSON.parse(sessionStorage.getItem(OTP_SALAH_KEY) || '{}') || {}; } catch { return {}; }
 };
-const simpanOtpPending = (email: string, token: string | null) => {
+const simpanOtpSalah = (kd: string, data: { email: string; token: string } | null) => {
   try {
-    const m = bacaOtpPending();
-    if (token) m[email] = token; else delete m[email];
-    sessionStorage.setItem(OTP_PENDING_KEY, JSON.stringify(m));
+    const m = bacaOtpSalah();
+    if (data) m[kd] = data; else delete m[kd];
+    sessionStorage.setItem(OTP_SALAH_KEY, JSON.stringify(m));
   } catch { /* abaikan */ }
+  window.dispatchEvent(new Event(OTP_SALAH_EVENT));
 };
+export const kdDokterOtpSalah = (): string[] => Object.keys(bacaOtpSalah());
 
 // Dialog OTP + Validate memakai tokenSession yg ada. Tombol "kirim ulang"
-// di dialog tetap meminta OTP baru (token pending ikut diganti). Gagal
-// validasi → token TETAP disimpan supaya bisa dicoba lagi lewat tombol OTP.
-async function inputDanValidasiOtp(email: string, tokenAwal: string): Promise<'baru' | 'batal'> {
+// di dialog tetap meminta OTP baru. Validate gagal → dicatat sbg OTP salah
+// (tombol OTP muncul), lalu error dilempar ke pemanggil spt biasa.
+async function inputDanValidasiOtp(kd: string, email: string, tokenAwal: string): Promise<'baru' | 'batal'> {
   let tokenSession = tokenAwal;
-  simpanOtpPending(email, tokenSession);
   hideProcessing();
   const otpCode = await showOtpDialog(email, async () => {
     const resendResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
     const newTokenSession = resendResp?.data?.tokenSession || resendResp?.tokenSession;
     if (!newTokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
     tokenSession = newTokenSession;
-    simpanOtpPending(email, tokenSession);
   });
   if (!otpCode) return 'batal';
 
   showProcessing('Memverifikasi OTP, mohon tunggu...');
-  await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
-  simpanOtpPending(email, null);
+  try {
+    await peruriPost('/api/peruri/validate-otp', { email, tokenSession, otpCode, duration: '1440' });
+  } catch (err) {
+    simpanOtpSalah(kd, { email, token: tokenSession });
+    throw err;
+  }
+  simpanOtpSalah(kd, null);
   return 'baru';
 }
 
-async function pastikanSesiOtp(email: string): Promise<'aktif' | 'baru' | 'batal'> {
+async function pastikanSesiOtp(kd: string, email: string): Promise<'aktif' | 'baru' | 'batal'> {
   const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
   const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
-  if (sessionRes.ok && sessionData.valid) return 'aktif';
+  if (sessionRes.ok && sessionData.valid) {
+    if (kd in bacaOtpSalah()) simpanOtpSalah(kd, null);
+    return 'aktif';
+  }
 
   const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
   const tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
   if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession: ' + JSON.stringify(otpResp));
-  return inputDanValidasiOtp(email, tokenSession);
+  return inputDanValidasiOtp(kd, email, tokenSession);
 }
 
 // Error yg berarti sesi OTP tidak berlaku lagi — di mode massal, dokumen
@@ -245,17 +257,17 @@ async function kirimDanTandaTangan(t: RingkasanTarget, email: string): Promise<s
 export async function inputUlangOtp(dokter: Pick<RingkasanTarget, 'kd_dokter' | 'nm_dokter'>): Promise<boolean> {
   showProcessing('Memeriksa OTP, mohon tunggu...');
   try {
-    const email = await getEmailDokter(dokter as RingkasanTarget);
-    const token = bacaOtpPending()[email];
-    if (!token) {
+    const simpanan = bacaOtpSalah()[dokter.kd_dokter];
+    const email = simpanan?.email || await getEmailDokter(dokter as RingkasanTarget);
+    if (!simpanan) {
       hideProcessing();
       await Swal.fire({
-        icon: 'info', title: 'Belum ada OTP',
-        html: `Belum ada OTP yang menunggu dimasukkan untuk <b>${escapeHtml(dokter.nm_dokter)}</b>.<br/>Klik <b>Tanda Tangan</b> pada salah satu pasien untuk meminta OTP.`,
+        icon: 'info', title: 'Tidak ada OTP salah',
+        html: `Tidak ada OTP yang perlu dimasukkan ulang untuk <b>${escapeHtml(dokter.nm_dokter)}</b>.`,
       });
       return false;
     }
-    const sesi = await inputDanValidasiOtp(email, token);
+    const sesi = await inputDanValidasiOtp(dokter.kd_dokter, email, simpanan.token);
     hideProcessing();
     if (sesi === 'batal') return false;
     await Swal.fire({
@@ -288,7 +300,7 @@ export async function tandaTanganRingkasan(t: RingkasanTarget): Promise<boolean>
   showProcessing('Memeriksa sesi tanda tangan, mohon tunggu...');
   try {
     const email = await getEmailDokter(t);
-    const sesi = await pastikanSesiOtp(email);
+    const sesi = await pastikanSesiOtp(t.kd_dokter, email);
     if (sesi === 'batal') return false;
 
     showProcessing(sesi === 'aktif'
@@ -339,7 +351,7 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
   let email: string;
   try {
     email = await getEmailDokter(dokter);
-    if ((await pastikanSesiOtp(email)) === 'batal') return;
+    if ((await pastikanSesiOtp(dokter.kd_dokter, email)) === 'batal') return;
   } catch (err) {
     hideProcessing();
     Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });

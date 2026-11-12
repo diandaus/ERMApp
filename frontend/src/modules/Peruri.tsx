@@ -4,7 +4,7 @@ import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
 import { ModalCariDokter } from '../components/ModalCariDokter';
 import { ModalCariCaraBayar } from '../components/ModalCariCaraBayar';
-import { inputUlangOtp, kdDokterDariNamaRingkasan, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
+import { OTP_SALAH_EVENT, inputUlangOtp, kdDokterDariNamaRingkasan, kdDokterOtpSalah, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -417,6 +417,13 @@ const PerluDiprosesSection: React.FC = () => {
   const [tglAkhir, setTglAkhir] = useFilterTersimpan('peruri.perlu.tglAkhir', todayStr);
   const [jenis, setJenis] = useFilterTersimpan<JenisRawat>('peruri.perlu.jenis', 'Ralan');
   const [kdDokter, setKdDokter] = useFilterTersimpan('peruri.perlu.kdDokter', '');
+  // Dokter yg OTP-nya salah input → tombol "OTP" di header grupnya tampil.
+  const [otpSalah, setOtpSalah] = React.useState<string[]>(() => kdDokterOtpSalah());
+  React.useEffect(() => {
+    const segarkan = () => setOtpSalah(kdDokterOtpSalah());
+    window.addEventListener(OTP_SALAH_EVENT, segarkan);
+    return () => window.removeEventListener(OTP_SALAH_EVENT, segarkan);
+  }, []);
   const [nmDokter, setNmDokter] = useFilterTersimpan('peruri.perlu.nmDokter', '');
   const [kdPj, setKdPj] = useFilterTersimpan('peruri.perlu.kdPj', '');
   const [nmPj, setNmPj] = useFilterTersimpan('peruri.perlu.nmPj', '');
@@ -624,7 +631,7 @@ const PerluDiprosesSection: React.FC = () => {
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
                   {g.nm} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: 12 }}>({g.kd})</span>
                 </div>
-                {(() => {
+                {!otpSalah.includes(g.kd) ? <div /> : (() => {
                   const adaProses = massalDokter !== null || busyKey !== null;
                   return (
                     <button
