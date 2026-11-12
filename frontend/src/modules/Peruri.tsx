@@ -4,7 +4,7 @@ import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
 import { ModalCariDokter } from '../components/ModalCariDokter';
 import { ModalCariCaraBayar } from '../components/ModalCariCaraBayar';
-import { kdDokterDariNamaRingkasan, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
+import { inputUlangOtp, kdDokterDariNamaRingkasan, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -632,6 +632,20 @@ const PerluDiprosesSection: React.FC = () => {
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} pasien</div>
+                      <button
+                        type="button"
+                        onClick={() => inputUlangOtp({ kd_dokter: g.kd, nm_dokter: g.nm })}
+                        disabled={adaProses}
+                        title="Minta & masukkan OTP baru (mis. setelah salah input OTP)"
+                        style={{
+                          padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                          border: '1px solid #059669', background: '#fff', color: adaProses ? '#a7f3d0' : '#059669',
+                          borderColor: adaProses ? '#a7f3d0' : '#059669',
+                          cursor: adaProses ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        OTP
+                      </button>
                       {bisaDipilih.length > 0 && (
                         <button
                           type="button"

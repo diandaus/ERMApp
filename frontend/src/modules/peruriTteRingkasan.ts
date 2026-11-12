@@ -125,10 +125,14 @@ const getEmailDokter = async (t: RingkasanTarget): Promise<string> => {
 // Get OTP + dialog input + Validate. SATU OTP ini dipakai utk semua
 // dokumen berikutnya (signingSession cukup kirim orderId — Peruri sendiri
 // yg mengaitkan sesi dgn email). 'batal' = user menutup dialog OTP.
-async function pastikanSesiOtp(email: string): Promise<'aktif' | 'baru' | 'batal'> {
-  const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
-  const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
-  if (sessionRes.ok && sessionData.valid) return 'aktif';
+// paksa=true → lewati cek sesi & selalu minta OTP baru (tombol "OTP" di
+// header dokter, mis. setelah salah input OTP).
+async function pastikanSesiOtp(email: string, paksa = false): Promise<'aktif' | 'baru' | 'batal'> {
+  if (!paksa) {
+    const sessionRes = await fetch(`/api/peruri/session-status?email=${encodeURIComponent(email)}`);
+    const sessionData = await sessionRes.json().catch(() => ({ valid: false }));
+    if (sessionRes.ok && sessionData.valid) return 'aktif';
+  }
 
   const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
   let tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
@@ -211,6 +215,28 @@ async function kirimDanTandaTangan(t: RingkasanTarget, email: string): Promise<s
     });
   } catch { /* non-blocking */ }
   return String(orderId);
+}
+
+// inputUlangOtp — tombol "OTP" di header grup dokter (Perlu Diproses):
+// minta OTP baru & validasi ulang TANPA cek sesi lama. Dipakai kalau dokter
+// salah memasukkan OTP / sesi tersimpan tapi ditolak Peruri.
+export async function inputUlangOtp(dokter: Pick<RingkasanTarget, 'kd_dokter' | 'nm_dokter'>): Promise<boolean> {
+  showProcessing('Meminta OTP baru, mohon tunggu...');
+  try {
+    const email = await getEmailDokter(dokter as RingkasanTarget);
+    const sesi = await pastikanSesiOtp(email, true);
+    hideProcessing();
+    if (sesi === 'batal') return false;
+    await Swal.fire({
+      icon: 'success', title: 'OTP berhasil diverifikasi',
+      html: `Sesi tanda tangan <b>${escapeHtml(dokter.nm_dokter)}</b> (${escapeHtml(email)}) aktif selama 24 jam.`,
+    });
+    return true;
+  } catch (err) {
+    hideProcessing();
+    Swal.fire({ icon: 'error', title: 'OTP gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    return false;
+  }
 }
 
 // tandaTanganRingkasan — 1 dokumen. Balikin true kalau berhasil (caller lalu
