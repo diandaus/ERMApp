@@ -36,6 +36,12 @@ type peruriSelesaiRow struct {
 	KdDokter     string `json:"kd_dokter"`
 	NmDokter     string `json:"nm_dokter"`
 	PngJawab     string `json:"png_jawab"`
+	// Dokter registrasi (reg_periksa.kd_dokter) — penanda tangan dokumen
+	// lama Khanza Desktop "RiwayatPerawatan_" (RMRiwayatPerawatan.java
+	// memakai dokter registrasi & email pegawai, kd dokter tidak ada di
+	// nama file) → dipakai Tanda Tangan Ulang dari ERMApp.
+	KdDokterReg string `json:"kd_dokter_reg"`
+	NmDokterReg string `json:"nm_dokter_reg"`
 }
 
 // jenisDokumenSQL — HARUS sinkron dgn awalan nama dokumen di frontend:
@@ -43,6 +49,7 @@ type peruriSelesaiRow struct {
 // (ModalHasilLabPK.tsx), Radiologi_ (ModalHasilRadiologi.tsx).
 const jenisDokumenSQL = `CASE
 	WHEN t.nama_dokumen LIKE 'Ringkasan\_Perawatan\_%' THEN 'Ringkasan Perawatan'
+	WHEN t.nama_dokumen LIKE 'RiwayatPerawatan\_%' THEN 'Ringkasan Perawatan'
 	WHEN t.nama_dokumen LIKE 'Hasil\_Lab\_%' THEN 'Hasil Lab'
 	WHEN t.nama_dokumen LIKE 'Radiologi\_%' THEN 'Hasil Radiologi'
 	ELSE 'Lainnya' END`
@@ -79,6 +86,7 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 					IFNULL(r.no_rkm_medis, '') AS no_rkm_medis, IFNULL(p.nm_pasien, '') AS nm_pasien,
 					IFNULL(r.status_lanjut, '') AS status_lanjut,
 					IFNULL(r.kd_pj, '') AS kd_pj, IFNULL(pj.png_jawab, '') AS png_jawab,
+					IFNULL(r.kd_dokter, '') AS kd_dokter_reg,
 					IFNULL(` + kdDokterSQL + `, '') AS kd_dokter
 				FROM tracking_dokumen_ttd t
 				LEFT JOIN reg_periksa r ON r.no_rawat = t.no_rawat
@@ -93,6 +101,14 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 							AND t2.status_ttd = 'Sudah'
 							AND (t2.tgl_kirim > t.tgl_kirim OR (t2.tgl_kirim = t.tgl_kirim AND t2.order_id > t.order_id))
 					)
+					-- Dokumen lama Khanza "RiwayatPerawatan_<no_rawat>.pdf" yg
+					-- sudah ditandatangani ULANG dari ERMApp (nama baru
+					-- Ringkasan_Perawatan_...) → versi lama disembunyikan.
+					AND NOT (t.nama_dokumen LIKE 'RiwayatPerawatan\_%' AND EXISTS (
+						SELECT 1 FROM tracking_dokumen_ttd t3
+						WHERE t3.no_rawat = t.no_rawat AND t3.nama_dokumen LIKE 'Ringkasan\_Perawatan\_%'
+							AND t3.status_ttd = 'Sudah' AND t3.tgl_kirim > t.tgl_kirim
+					))
 			) x`
 		args := []interface{}{tglAwal, tglAkhir}
 
@@ -122,8 +138,10 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 			query += ` WHERE ` + strings.Join(where, ` AND `)
 		}
 		query = `SELECT y.no_rawat, y.nama_dokumen, y.jenis_dokumen, y.tgl_kirim, y.order_id, y.email_ttd, y.user_pengirim,
-				y.no_rkm_medis, y.nm_pasien, y.status_lanjut, y.kd_dokter, IFNULL(d.nm_dokter, ''), y.png_jawab
+				y.no_rkm_medis, y.nm_pasien, y.status_lanjut, y.kd_dokter, IFNULL(d.nm_dokter, ''), y.png_jawab,
+				y.kd_dokter_reg, IFNULL(dr.nm_dokter, '')
 			FROM (` + query + `) y LEFT JOIN dokter d ON d.kd_dokter = y.kd_dokter
+			LEFT JOIN dokter dr ON dr.kd_dokter = y.kd_dokter_reg
 			ORDER BY IFNULL(d.nm_dokter, y.email_ttd), y.tgl_kirim DESC LIMIT 5000`
 
 		rows, err := db.Query(query, args...)
@@ -137,7 +155,8 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 		for rows.Next() {
 			var r peruriSelesaiRow
 			if err := rows.Scan(&r.NoRawat, &r.NamaDokumen, &r.JenisDokumen, &r.TglKirim, &r.OrderID, &r.EmailTtd,
-				&r.UserPengirim, &r.NoRkmMedis, &r.NmPasien, &r.StatusLanjut, &r.KdDokter, &r.NmDokter, &r.PngJawab); err != nil {
+				&r.UserPengirim, &r.NoRkmMedis, &r.NmPasien, &r.StatusLanjut, &r.KdDokter, &r.NmDokter, &r.PngJawab,
+				&r.KdDokterReg, &r.NmDokterReg); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca data: " + err.Error()})
 				return
 			}

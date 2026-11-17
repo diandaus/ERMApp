@@ -4,7 +4,7 @@ import { AkunPeruriView } from './AkunPeruri';
 import { buildDokumenPasienPdf } from './peruriDokumenPasienPdf';
 import { ModalCariDokter } from '../components/ModalCariDokter';
 import { ModalCariCaraBayar } from '../components/ModalCariCaraBayar';
-import { OTP_SALAH_EVENT, inputUlangOtp, kdDokterDariNamaRingkasan, kdDokterOtpSalah, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
+import { type RingkasanTarget, OTP_SALAH_EVENT, inputUlangOtp, kdDokterDariNamaRingkasan, kdDokterOtpSalah, opsiSimpanRingkasan, tandaTanganRingkasan, tandaTanganRingkasanMassal, unduhDokumenTte, unduhDokumenTteMassal } from './peruriTteRingkasan';
 
 // Peruri.tsx — shell sidebar modul Bridging Peruri (integrasi TTE/e-meterai
 // PERURI), dibuka fullscreen dari Bridging.tsx (persis pola BridgingBpjsView/
@@ -758,6 +758,22 @@ type SelesaiRow = {
   no_rawat: string; nama_dokumen: string; jenis_dokumen: string; tgl_kirim: string; order_id: string;
   email_ttd: string; user_pengirim: string; no_rkm_medis: string; nm_pasien: string; status_lanjut: string;
   kd_dokter: string; nm_dokter: string; png_jawab: string;
+  kd_dokter_reg: string; nm_dokter_reg: string;
+};
+
+// Target Tanda Tangan Ulang dari baris Selesai (null = tidak bisa):
+// - "Ringkasan_Perawatan_<norawat>_<kd>.pdf" (ERMApp) → kd dari nama file.
+// - "RiwayatPerawatan_<no_rawat>.pdf" (Khanza Desktop, RMRiwayatPerawatan
+//   .java) → dokter registrasi, sama dgn yg dipakai Khanza saat itu.
+// Hasilnya ditulis ke Berkas Rawat dgn nama SAMA (RiwayatPerawatan_
+// <no_rawat>_signed.pdf) → file lama otomatis tertimpa versi baru.
+const targetTtdUlang = (r: SelesaiRow): RingkasanTarget | null => {
+  const kdNama = kdDokterDariNamaRingkasan(r.nama_dokumen);
+  if (kdNama) return { no_rawat: r.no_rawat, kd_dokter: kdNama, nm_dokter: r.nm_dokter || kdNama, nm_pasien: r.nm_pasien };
+  if (/^RiwayatPerawatan_/.test(r.nama_dokumen) && r.kd_dokter_reg) {
+    return { no_rawat: r.no_rawat, kd_dokter: r.kd_dokter_reg, nm_dokter: r.nm_dokter_reg || r.kd_dokter_reg, nm_pasien: r.nm_pasien };
+  }
+  return null;
 };
 
 const JENIS_DOKUMEN_OPTIONS = ['Semua', 'Ringkasan Perawatan', 'Hasil Lab', 'Hasil Radiologi', 'Lainnya'];
@@ -884,14 +900,29 @@ const SelesaiSection: React.FC = () => {
   // dikirim sbg order baru; sukses → daftar dimuat ulang (backend hanya
   // menampilkan versi TERBARU per dokumen).
   const handleTandaTanganUlang = async (r: SelesaiRow) => {
-    const kd = kdDokterDariNamaRingkasan(r.nama_dokumen);
-    if (!kd) return;
+    const t = targetTtdUlang(r);
+    if (!t) return;
     setBusyOrder(r.order_id);
     try {
-      const ok = await tandaTanganRingkasan({ no_rawat: r.no_rawat, kd_dokter: kd, nm_dokter: r.nm_dokter || kd, nm_pasien: r.nm_pasien }, true);
+      const ok = await tandaTanganRingkasan(t, true);
       if (ok) muatData();
     } finally {
       setBusyOrder(null);
+    }
+  };
+
+  // Tanda Tangan Ulang Terpilih — baris tercentang yg bisa ditandatangani
+  // ulang, 1 dokter = 1 OTP (tandaTanganRingkasanMassal menolak kalau
+  // dokternya campur). Selesai → daftar dimuat ulang.
+  const handleTandaTanganUlangMassal = async (items: SelesaiRow[], kunciGrup: string) => {
+    const targets = items.map(targetTtdUlang).filter((t): t is RingkasanTarget => t !== null);
+    if (targets.length === 0) return;
+    setMassalKunci(kunciGrup);
+    try {
+      await tandaTanganRingkasanMassal(targets, () => {}, true);
+      muatData();
+    } finally {
+      setMassalKunci(null);
     }
   };
 
@@ -970,6 +1001,26 @@ const SelesaiSection: React.FC = () => {
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>{g.items.length} dokumen</div>
+                      {(() => {
+                        const bisaUlang = terpilih.filter((r) => targetTtdUlang(r) !== null);
+                        if (!g.items.some((r) => targetTtdUlang(r) !== null)) return null;
+                        const mati = bisaUlang.length === 0 || adaProses;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => handleTandaTanganUlangMassal(bisaUlang, g.kunci)}
+                            disabled={mati}
+                            title="Buat ulang PDF dari data terbaru & tanda tangani lagi semua Ringkasan yang dicentang (cukup 1x OTP)"
+                            style={{
+                              padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: '#fff',
+                              border: `1px solid ${mati ? '#a7f3d0' : '#059669'}`, color: mati ? '#a7f3d0' : '#059669',
+                              cursor: mati ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            {`Tanda Tangan Ulang Terpilih (${bisaUlang.length})`}
+                          </button>
+                        );
+                      })()}
                       {bisaDipilih.length > 0 && (
                         <button
                           type="button"
@@ -1046,7 +1097,7 @@ const SelesaiSection: React.FC = () => {
                           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, wordBreak: 'break-all' }}>{r.nama_dokumen}</div>
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {r.jenis_dokumen === 'Ringkasan Perawatan' && kdDokterDariNamaRingkasan(r.nama_dokumen) && (
+                          {targetTtdUlang(r) && (
                             <button
                               type="button"
                               onClick={() => handleTandaTanganUlang(r)}

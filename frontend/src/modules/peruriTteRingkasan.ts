@@ -370,7 +370,7 @@ export async function tandaTanganRingkasan(t: RingkasanTarget, ulang = false): P
 // alasannya; kalau error-nya soal sesi OTP, sisa dokumen dihentikan (pasti
 // ikut gagal). onBerhasil dipanggil per dokumen sukses → baris langsung
 // berubah "Sudah" di layar tanpa menunggu semua selesai.
-export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onBerhasil: (t: RingkasanTarget) => void): Promise<void> {
+export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onBerhasil: (t: RingkasanTarget) => void, ulang = false): Promise<void> {
   if (targets.length === 0) return;
   const dokter = targets[0];
   if (targets.some((t) => t.kd_dokter !== dokter.kd_dokter)) {
@@ -380,8 +380,8 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
 
   const konfirmasi = await Swal.fire({
     icon: 'question',
-    title: `Tanda Tangan ${targets.length} Dokumen?`,
-    html: `<b>${targets.length}</b> Ringkasan Perawatan akan dikirim ke Peruri dan ditandatangani oleh <b>${escapeHtml(dokter.nm_dokter)}</b>.<br/><small style="color:#6b7280;">Cukup 1x OTP untuk semua dokumen.</small>`,
+    title: `Tanda Tangan ${ulang ? 'Ulang ' : ''}${targets.length} Dokumen?`,
+    html: `<b>${targets.length}</b> Ringkasan Perawatan akan ${ulang ? '<b>dibuat ulang dari data terbaru</b>, ' : ''}dikirim ke Peruri dan ditandatangani oleh <b>${escapeHtml(dokter.nm_dokter)}</b>.<br/><small style="color:#6b7280;">Cukup 1x OTP untuk semua dokumen.</small>`,
     showCancelButton: true,
     confirmButtonText: 'Lanjutkan',
     cancelButtonText: 'Batal',
