@@ -879,6 +879,22 @@ const SelesaiSection: React.FC = () => {
     return next;
   });
 
+  // Tanda Tangan Ulang — hanya Ringkasan Perawatan (Lab/Radiologi dibuat &
+  // ditandatangani dari modal masing2). PDF dibuat ulang dari data terbaru,
+  // dikirim sbg order baru; sukses → daftar dimuat ulang (backend hanya
+  // menampilkan versi TERBARU per dokumen).
+  const handleTandaTanganUlang = async (r: SelesaiRow) => {
+    const kd = kdDokterDariNamaRingkasan(r.nama_dokumen);
+    if (!kd) return;
+    setBusyOrder(r.order_id);
+    try {
+      const ok = await tandaTanganRingkasan({ no_rawat: r.no_rawat, kd_dokter: kd, nm_dokter: r.nm_dokter || kd, nm_pasien: r.nm_pasien }, true);
+      if (ok) muatData();
+    } finally {
+      setBusyOrder(null);
+    }
+  };
+
   // Unduh Terpilih — 1x klik, diproses 1 per 1 (unduh + upload Berkas Rawat
   // utk Ringkasan). Pilihan dikosongkan setelah selesai.
   const handleUnduhMassal = async (items: SelesaiRow[], kunciGrup: string) => {
@@ -1029,13 +1045,28 @@ const SelesaiSection: React.FC = () => {
                           <span style={{ padding: '2px 8px', borderRadius: 999, background: badge.bg, color: badge.fg, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.jenis_dokumen}</span>
                           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, wordBreak: 'break-all' }}>{r.nama_dokumen}</div>
                         </td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {r.jenis_dokumen === 'Ringkasan Perawatan' && kdDokterDariNamaRingkasan(r.nama_dokumen) && (
+                            <button
+                              type="button"
+                              onClick={() => handleTandaTanganUlang(r)}
+                              disabled={busy || massalKunci !== null}
+                              title="Buat ulang PDF dari data terbaru lalu tanda tangani lagi"
+                              style={{
+                                padding: '4px 10px', marginRight: 6, borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
+                                background: busy || massalKunci !== null ? '#a7f3d0' : '#059669', color: '#fff',
+                                cursor: busy || massalKunci !== null ? 'default' : 'pointer', verticalAlign: 'middle',
+                              }}
+                            >
+                              {busy ? 'Memproses...' : 'Tanda Tangan Ulang'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleUnduh(r)}
                             disabled={busy || !r.order_id}
                             title={r.jenis_dokumen === 'Ringkasan Perawatan' ? 'Unduh dokumen bertanda tangan (otomatis tersimpan ke Berkas Rawat)' : 'Unduh dokumen bertanda tangan'}
-                            style={{ width: 28, height: 26, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151', cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                            style={{ width: 28, height: 26, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151', cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0, verticalAlign: 'middle' }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>

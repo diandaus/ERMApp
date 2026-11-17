@@ -85,6 +85,14 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 				LEFT JOIN pasien p ON p.no_rkm_medis = r.no_rkm_medis
 				LEFT JOIN penjab pj ON pj.kd_pj = r.kd_pj
 				WHERE t.status_ttd = 'Sudah' AND t.tgl_kirim >= ? AND t.tgl_kirim < DATE_ADD(?, INTERVAL 1 DAY)
+					-- Tanda Tangan Ulang menambah baris BARU dgn nama_dokumen
+					-- yg sama → tampilkan versi TERBARU saja.
+					AND NOT EXISTS (
+						SELECT 1 FROM tracking_dokumen_ttd t2
+						WHERE t2.no_rawat = t.no_rawat AND t2.nama_dokumen = t.nama_dokumen
+							AND t2.status_ttd = 'Sudah'
+							AND (t2.tgl_kirim > t.tgl_kirim OR (t2.tgl_kirim = t.tgl_kirim AND t2.order_id > t.order_id))
+					)
 			) x`
 		args := []interface{}{tglAwal, tglAkhir}
 

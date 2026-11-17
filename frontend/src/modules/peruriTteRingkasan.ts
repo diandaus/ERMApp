@@ -282,14 +282,50 @@ export async function inputUlangOtp(dokter: Pick<RingkasanTarget, 'kd_dokter' | 
   }
 }
 
+// simpanBerkasSetelahTtd — langsung setelah signing sukses: backend ambil
+// PDF bertanda tangan dari Peruri & tulis ke Berkas Rawat
+// (RiwayatPerawatan_<no_rawat>_signed.pdf), TANPA unduh ke komputer user
+// (simpan_saja → isi PDF tidak dikirim balik). Peruri kadang butuh sesaat
+// sebelum dokumen bertanda tangan siap → dicoba s/d 3x dgn jeda 2 detik.
+// Tidak pernah throw: balikin '' kalau tersimpan, atau alasan gagalnya
+// (tanda tangan TETAP sah; bisa diulang lewat Unduh di submenu Selesai).
+async function simpanBerkasSetelahTtd(t: RingkasanTarget, orderId: string): Promise<string> {
+  let alasan = '';
+  for (let percobaan = 1; percobaan <= 3; percobaan++) {
+    if (percobaan > 1) await new Promise((r) => window.setTimeout(r, 2000));
+    try {
+      const res = await fetch('/api/peruri/download-document', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, ...opsiSimpanRingkasan(t), simpan_saja: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { alasan = data.error || `HTTP ${res.status}`; continue; }
+      if (data.uploaded_to_berkasrawat) return '';
+      const rc = data.response?.resultCode;
+      if (rc && rc !== '0') { alasan = `[${rc}] ${data.response?.resultDesc || 'Dokumen belum bisa diambil dari Peruri'}`; continue; }
+      // Dokumen didapat tapi gagal ditulis ke Berkas Rawat → tidak perlu diulang.
+      return data.upload_error || 'Gagal menyimpan ke Berkas Rawat';
+    } catch (err) {
+      alasan = err instanceof Error ? err.message : 'Terjadi kesalahan';
+    }
+  }
+  return alasan || 'Gagal menyimpan ke Berkas Rawat';
+}
+
 // tandaTanganRingkasan — 1 dokumen. Balikin true kalau berhasil (caller lalu
 // menandai baris jadi "Sudah"), false kalau batal/gagal (error sudah
 // ditampilkan ke user di sini).
-export async function tandaTanganRingkasan(t: RingkasanTarget): Promise<boolean> {
+// ulang=true → dipanggil dari submenu Selesai (dokumen pernah ditandatangani):
+// PDF dibuat ULANG dari data terbaru lalu dikirim & ditandatangani lagi
+// sbg order baru; versi lama tetap ada di Peruri, Selesai cuma menampilkan
+// yg terbaru.
+export async function tandaTanganRingkasan(t: RingkasanTarget, ulang = false): Promise<boolean> {
   const konfirmasi = await Swal.fire({
     icon: 'question',
-    title: 'Tanda Tangan Dokumen?',
-    html: `Ringkasan Perawatan <b>${escapeHtml(t.nm_pasien)}</b> (${escapeHtml(t.no_rawat)})<br/>akan dikirim ke Peruri dan ditandatangani oleh <b>${escapeHtml(t.nm_dokter)}</b>.`,
+    title: ulang ? 'Tanda Tangan Ulang?' : 'Tanda Tangan Dokumen?',
+    html: ulang
+      ? `Ringkasan Perawatan <b>${escapeHtml(t.nm_pasien)}</b> (${escapeHtml(t.no_rawat)}) sudah pernah ditandatangani.<br/>Dokumen akan <b>dibuat ulang dari data terbaru</b>, dikirim ke Peruri, dan ditandatangani lagi oleh <b>${escapeHtml(t.nm_dokter)}</b>.`
+      : `Ringkasan Perawatan <b>${escapeHtml(t.nm_pasien)}</b> (${escapeHtml(t.no_rawat)})<br/>akan dikirim ke Peruri dan ditandatangani oleh <b>${escapeHtml(t.nm_dokter)}</b>.`,
     showCancelButton: true,
     confirmButtonText: 'Lanjutkan',
     cancelButtonText: 'Batal',
@@ -307,11 +343,17 @@ export async function tandaTanganRingkasan(t: RingkasanTarget): Promise<boolean>
       ? 'Sesi OTP masih aktif, mengirim & menandatangani dokumen, mohon tunggu...'
       : 'Mengirim & menandatangani dokumen, mohon tunggu...');
     const orderId = await kirimDanTandaTangan(t, email);
+    showProcessing('Berhasil ditandatangani, menyimpan ke Berkas Rawat...');
+    const gagalSimpan = await simpanBerkasSetelahTtd(t, orderId);
     hideProcessing();
 
     await Swal.fire({
-      icon: 'success', title: 'Berhasil ditandatangani',
+      icon: gagalSimpan ? 'warning' : 'success',
+      title: gagalSimpan ? 'Ditandatangani, tapi belum tersimpan' : 'Berhasil ditandatangani',
       html: `Ringkasan Perawatan berhasil ditandatangani oleh <b>${escapeHtml(t.nm_dokter)}</b> (${escapeHtml(email)}).<br/>Order ID: <b>${escapeHtml(orderId)}</b>`
+        + (gagalSimpan
+          ? `<div style="margin-top:8px;color:#92400e;">Gagal otomatis tersimpan ke Berkas Rawat: ${escapeHtml(gagalSimpan)}.<br/>Simpan ulang lewat tombol <b>Unduh</b> di submenu Selesai.</div>`
+          : '<br/>Dokumen otomatis tersimpan ke <b>Berkas Rawat</b>.')
         + (sesi === 'aktif' ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
     });
     return true;
@@ -359,6 +401,8 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
   }
 
   let berhasil = 0;
+  let tersimpan = 0;
+  const gagalSimpan: { t: RingkasanTarget; alasan: string }[] = [];
   const gagal: { t: RingkasanTarget; alasan: string }[] = [];
   let dihentikan = 0;
   for (let i = 0; i < targets.length; i++) {
@@ -366,9 +410,11 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
     showProcessing(`Menandatangani dokumen <b>${i + 1}</b> dari <b>${targets.length}</b><br/>${escapeHtml(t.nm_pasien)} <span style="color:#6b7280;">(${escapeHtml(t.no_rawat)})</span>`
       + `<br/><span style="font-size:12px;color:#6b7280;">Berhasil: ${berhasil} · Gagal: ${gagal.length}</span>`);
     try {
-      await kirimDanTandaTangan(t, email);
+      const orderId = await kirimDanTandaTangan(t, email);
       berhasil++;
       onBerhasil(t);
+      const alasanSimpan = await simpanBerkasSetelahTtd(t, orderId);
+      if (alasanSimpan) gagalSimpan.push({ t, alasan: alasanSimpan }); else tersimpan++;
     } catch (err) {
       const alasan = err instanceof Error ? err.message : 'Terjadi kesalahan';
       gagal.push({ t, alasan });
@@ -380,12 +426,15 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
   }
   hideProcessing();
 
+  const daftarGagalSimpan = gagalSimpan.map((g) => `<li><b>${escapeHtml(g.t.nm_pasien)}</b> (${escapeHtml(g.t.no_rawat)}): ${escapeHtml(g.alasan)}</li>`).join('');
   const daftarGagal = gagal.map((g) => `<li><b>${escapeHtml(g.t.nm_pasien)}</b> (${escapeHtml(g.t.no_rawat)}): ${escapeHtml(g.alasan)}</li>`).join('');
   await Swal.fire({
-    icon: gagal.length === 0 ? 'success' : berhasil === 0 ? 'error' : 'warning',
+    icon: gagal.length === 0 && gagalSimpan.length === 0 ? 'success' : berhasil === 0 ? 'error' : 'warning',
     title: gagal.length === 0 ? 'Semua dokumen berhasil ditandatangani' : 'Selesai dengan catatan',
     html: `<div style="text-align:left;font-size:13.5px;">
         <div>Berhasil: <b style="color:#059669;">${berhasil}</b> dari ${targets.length} dokumen</div>
+        ${berhasil ? `<div style="margin-top:6px;">Tersimpan ke Berkas Rawat: <b style="color:#059669;">${tersimpan}</b> dari ${berhasil}</div>` : ''}
+        ${gagalSimpan.length ? `<div style="margin-top:6px;color:#92400e;">Ditandatangani tapi gagal tersimpan ke Berkas Rawat (simpan ulang lewat Unduh di Selesai):</div><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;max-height:140px;overflow:auto;">${daftarGagalSimpan}</ul>` : ''}
         ${gagal.length ? `<div style="margin-top:6px;">Gagal: <b style="color:#dc2626;">${gagal.length}</b></div><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;max-height:180px;overflow:auto;">${daftarGagal}</ul>` : ''}
         ${dihentikan ? `<div style="margin-top:8px;color:#92400e;">${dihentikan} dokumen sisanya tidak diproses karena sesi OTP berakhir. Klik Tanda Tangan Terpilih lagi untuk melanjutkan dengan OTP baru.</div>` : ''}
       </div>`,

@@ -762,6 +762,11 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 			// ditandatangani yg tersisa).
 			NoOrder string `json:"no_order"`
 			Prefix  string `json:"prefix"`
+			// SimpanSaja — dipakai simpan otomatis ke Berkas Rawat sesaat
+			// setelah tanda tangan (peruriTteRingkasan.ts): isi PDF base64
+			// TIDAK dikirim balik ke browser (hemat bandwidth), cukup
+			// resultCode + status upload.
+			SimpanSaja bool `json:"simpan_saja"`
 		}
 		if err := c.ShouldBindJSON(&reqIn); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -838,6 +843,15 @@ func downloadPeruriDocument(db *sql.DB, webappsCfg KhanzaWebappsConfig) gin.Hand
 					}
 				}
 			}
+		}
+
+		if reqIn.SimpanSaja {
+			ringkas := gin.H{}
+			if m, ok := parsed.(map[string]interface{}); ok {
+				ringkas["resultCode"] = m["resultCode"]
+				ringkas["resultDesc"] = m["resultDesc"]
+			}
+			parsed = ringkas
 		}
 
 		c.JSON(http.StatusOK, gin.H{
