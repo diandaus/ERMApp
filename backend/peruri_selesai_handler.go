@@ -16,8 +16,7 @@ import (
 // dokumen ikut tampil; jenisnya ditebak dari awalan nama_dokumen.
 //
 // Penandatangan dicocokkan dari email_ttd ke dokter.email (tracking tidak
-// menyimpan kd_dokter). Tanggal yg difilter = tgl_kirim (tanggal signing
-// tidak disimpan terpisah; kirim & tanda tangan normalnya di waktu yg sama).
+// menyimpan kd_dokter). Tanggal yg difilter = reg_periksa.tgl_registrasi.
 //
 // tracking_dokumen_ttd TIDAK ada di DB dev → dibalas data kosong +
 // tte_tersedia=false (sama dgn Perlu Diproses).
@@ -36,6 +35,7 @@ type peruriSelesaiRow struct {
 	KdDokter     string `json:"kd_dokter"`
 	NmDokter     string `json:"nm_dokter"`
 	PngJawab     string `json:"png_jawab"`
+	TglReg       string `json:"tgl_registrasi"`
 	// Dokter registrasi (reg_periksa.kd_dokter) — penanda tangan dokumen
 	// lama Khanza Desktop "RiwayatPerawatan_" (RMRiwayatPerawatan.java
 	// memakai dokter registrasi & email pegawai, kd dokter tidak ada di
@@ -87,12 +87,15 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 					IFNULL(r.status_lanjut, '') AS status_lanjut,
 					IFNULL(r.kd_pj, '') AS kd_pj, IFNULL(pj.png_jawab, '') AS png_jawab,
 					IFNULL(r.kd_dokter, '') AS kd_dokter_reg,
+					IFNULL(CONCAT(DATE_FORMAT(r.tgl_registrasi, '%Y-%m-%d'), ' ', TIME_FORMAT(r.jam_reg, '%H:%i:%s')), '') AS tgl_registrasi,
 					IFNULL(` + kdDokterSQL + `, '') AS kd_dokter
 				FROM tracking_dokumen_ttd t
 				LEFT JOIN reg_periksa r ON r.no_rawat = t.no_rawat
 				LEFT JOIN pasien p ON p.no_rkm_medis = r.no_rkm_medis
 				LEFT JOIN penjab pj ON pj.kd_pj = r.kd_pj
-				WHERE t.status_ttd = 'Sudah' AND t.tgl_kirim >= ? AND t.tgl_kirim < DATE_ADD(?, INTERVAL 1 DAY)
+				-- Filter tanggal = TANGGAL REGISTRASI pasien (bukan tgl_kirim),
+				-- spy dokumen bisa dicari per periode kunjungan.
+				WHERE t.status_ttd = 'Sudah' AND r.tgl_registrasi BETWEEN ? AND ?
 					-- Tanda Tangan Ulang menambah baris BARU dgn nama_dokumen
 					-- yg sama → tampilkan versi TERBARU saja.
 					AND NOT EXISTS (
@@ -139,7 +142,7 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 		}
 		query = `SELECT y.no_rawat, y.nama_dokumen, y.jenis_dokumen, y.tgl_kirim, y.order_id, y.email_ttd, y.user_pengirim,
 				y.no_rkm_medis, y.nm_pasien, y.status_lanjut, y.kd_dokter, IFNULL(d.nm_dokter, ''), y.png_jawab,
-				y.kd_dokter_reg, IFNULL(dr.nm_dokter, '')
+				y.kd_dokter_reg, IFNULL(dr.nm_dokter, ''), y.tgl_registrasi
 			FROM (` + query + `) y LEFT JOIN dokter d ON d.kd_dokter = y.kd_dokter
 			LEFT JOIN dokter dr ON dr.kd_dokter = y.kd_dokter_reg
 			ORDER BY IFNULL(d.nm_dokter, y.email_ttd), y.tgl_kirim DESC LIMIT 5000`
@@ -156,7 +159,7 @@ func getPeruriSelesai(db *sql.DB) gin.HandlerFunc {
 			var r peruriSelesaiRow
 			if err := rows.Scan(&r.NoRawat, &r.NamaDokumen, &r.JenisDokumen, &r.TglKirim, &r.OrderID, &r.EmailTtd,
 				&r.UserPengirim, &r.NoRkmMedis, &r.NmPasien, &r.StatusLanjut, &r.KdDokter, &r.NmDokter, &r.PngJawab,
-				&r.KdDokterReg, &r.NmDokterReg); err != nil {
+				&r.KdDokterReg, &r.NmDokterReg, &r.TglReg); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca data: " + err.Error()})
 				return
 			}

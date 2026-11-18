@@ -1867,7 +1867,7 @@ func main() {
 		}
 		defer rows.Close()
 
-		var items []Dokter
+		items := []Dokter{}
 		for rows.Next() {
 			var d Dokter
 			if err := rows.Scan(&d.KdDokter, &d.NmDokter); err != nil {
@@ -1915,7 +1915,7 @@ func main() {
 		}
 		defer rows.Close()
 
-		var items []Penjab
+		items := []Penjab{}
 		for rows.Next() {
 			var p Penjab
 			if err := rows.Scan(&p.KdPj, &p.NmPj); err != nil {

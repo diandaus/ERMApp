@@ -27,8 +27,9 @@ export const ModalCariCaraBayar: React.FC<ModalCariCaraBayarProps> = ({ isOpen, 
       if (!res.ok) {
         throw new Error('Gagal mengambil data cara bayar');
       }
-      const data: CaraBayar[] = await res.json();
-      setCaraBayarList(data);
+      const data = await res.json();
+      // API bisa membalas null (hasil cari kosong) → jangan sampai crash.
+      setCaraBayarList(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Error fetching cara bayar:', e);
       setCaraBayarList([]);

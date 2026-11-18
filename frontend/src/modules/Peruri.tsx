@@ -275,6 +275,27 @@ const todayStr = () => {
 const filterInputStyle: React.CSSProperties = {
   padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 13, outline: 'none', background: '#fff',
 };
+// Tombol Reset Filter — kembalikan semua filter ke bawaan (tanggal hari
+// ini, tab Rawat Jalan, semua dokter/cara bayar, pencarian kosong).
+const ResetFilterButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({ onClick, disabled }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    title="Kembalikan semua filter ke bawaan"
+    style={{
+      ...filterInputStyle, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, whiteSpace: 'nowrap',
+      color: disabled ? '#9ca3af' : '#374151', cursor: disabled ? 'not-allowed' : 'pointer',
+    }}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="1 4 1 10 7 10"></polyline>
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+    </svg>
+    Reset Filter
+  </button>
+);
+
 const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' };
 const tdStyle: React.CSSProperties = { padding: '7px 10px', borderBottom: '1px solid #f3f4f6' };
 
@@ -612,6 +633,13 @@ const PerluDiprosesSection: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...filterInputStyle, flex: 1, minWidth: 200 }}
         />
+        <ResetFilterButton
+          disabled={loading}
+          onClick={() => {
+            setTglAwal(todayStr()); setTglAkhir(todayStr()); setJenis('Ralan');
+            setKdDokter(''); setNmDokter(''); setKdPj(''); setNmPj(''); setStatusBayar(''); setSearch('');
+          }}
+        />
       </div>
 
       {error && (
@@ -758,7 +786,7 @@ type SelesaiRow = {
   no_rawat: string; nama_dokumen: string; jenis_dokumen: string; tgl_kirim: string; order_id: string;
   email_ttd: string; user_pengirim: string; no_rkm_medis: string; nm_pasien: string; status_lanjut: string;
   kd_dokter: string; nm_dokter: string; png_jawab: string;
-  kd_dokter_reg: string; nm_dokter_reg: string;
+  kd_dokter_reg: string; nm_dokter_reg: string; tgl_registrasi: string;
 };
 
 // Target Tanda Tangan Ulang dari baris Selesai (null = tidak bisa):
@@ -956,9 +984,9 @@ const SelesaiSection: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', minHeight: 0 }}>
       <JenisRawatTabs value={jenis} onChange={setJenis} disabled={loading} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input type="date" value={tglAwal} onChange={(e) => setTglAwal(e.target.value)} style={filterInputStyle} title="Tanggal kirim dari" />
+        <input type="date" value={tglAwal} onChange={(e) => setTglAwal(e.target.value)} style={filterInputStyle} title="Tanggal registrasi dari" />
         <span style={{ fontSize: 13, color: '#6b7280' }}>s/d</span>
-        <input type="date" value={tglAkhir} onChange={(e) => setTglAkhir(e.target.value)} style={filterInputStyle} title="Tanggal kirim sampai" />
+        <input type="date" value={tglAkhir} onChange={(e) => setTglAkhir(e.target.value)} style={filterInputStyle} title="Tanggal registrasi sampai" />
         <select value={jenisDokumen} onChange={(e) => setJenisDokumen(e.target.value)} style={filterInputStyle}>
           {JENIS_DOKUMEN_OPTIONS.map((j) => <option key={j} value={j}>{j === 'Semua' ? 'Semua Dokumen' : j}</option>)}
         </select>
@@ -970,6 +998,13 @@ const SelesaiSection: React.FC = () => {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...filterInputStyle, flex: 1, minWidth: 200 }}
+        />
+        <ResetFilterButton
+          disabled={loading}
+          onClick={() => {
+            setTglAwal(todayStr()); setTglAkhir(todayStr()); setJenis('Ralan'); setJenisDokumen('Semua');
+            setKdDokter(''); setNmDokter(''); setKdPj(''); setNmPj(''); setSearch('');
+          }}
         />
       </div>
 
@@ -1044,6 +1079,7 @@ const SelesaiSection: React.FC = () => {
                 <thead style={{ background: '#f9fafb' }}>
                   <tr>
                     <th style={thStyle}>No</th>
+                    <th style={thStyle}>Tgl Registrasi</th>
                     <th style={thStyle}>Tgl Kirim</th>
                     <th style={thStyle}>No. Rawat</th>
                     <th style={thStyle}>No. RM</th>
@@ -1087,6 +1123,7 @@ const SelesaiSection: React.FC = () => {
                     return (
                       <tr key={`${r.order_id}|${i}`} style={{ background: dipilih.has(r.order_id) ? '#ecfdf5' : i % 2 === 0 ? '#ffffff' : '#f9fafb' }}>
                         <td style={tdStyle}>{i + 1}</td>
+                        <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatTglJam(r.tgl_registrasi)}</td>
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{formatTglJam(r.tgl_kirim)}</td>
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rawat}</td>
                         <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{r.no_rkm_medis || '-'}</td>

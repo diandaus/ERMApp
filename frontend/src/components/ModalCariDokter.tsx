@@ -27,8 +27,9 @@ export const ModalCariDokter: React.FC<ModalCariDokterProps> = ({ isOpen, onClos
       if (!res.ok) {
         throw new Error('Gagal mengambil data dokter');
       }
-      const data: Dokter[] = await res.json();
-      setDokterList(data);
+      const data = await res.json();
+      // API bisa membalas null (hasil cari kosong) → jangan sampai crash.
+      setDokterList(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Error fetching dokter:', e);
       setDokterList([]);
