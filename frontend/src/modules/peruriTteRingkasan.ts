@@ -302,7 +302,7 @@ async function simpanBerkasSetelahTtd(t: RingkasanTarget, orderId: string): Prom
       if (!res.ok) { alasan = data.error || `HTTP ${res.status}`; continue; }
       if (data.uploaded_to_berkasrawat) return '';
       const rc = data.response?.resultCode;
-      if (rc && rc !== '0') { alasan = `[${rc}] ${data.response?.resultDesc || 'Dokumen belum bisa diambil dari Peruri'}`; continue; }
+      if (rc && rc !== '0') { alasan = pesanDownloadPeruri(rc, data.response?.resultDesc); continue; }
       // Dokumen didapat tapi gagal ditulis ke Berkas Rawat → tidak perlu diulang.
       return data.upload_error || 'Gagal menyimpan ke Berkas Rawat';
     } catch (err) {
@@ -442,6 +442,16 @@ export async function tandaTanganRingkasanMassal(targets: RingkasanTarget[], onB
   });
 }
 
+// Pesan error Download Document Peruri yg perlu penjelasan ke user.
+// BP-01 "Gagal generate base64" = Peruri tidak bisa menyediakan file utk
+// orderId tsb (belum benar2 ditandatangani / sudah kedaluwarsa di Peruri).
+const pesanDownloadPeruri = (rc: string, desc?: string) => {
+  if (rc === 'BP-01') {
+    return `[BP-01] Peruri tidak bisa menyediakan file dokumen ini (${desc || 'Gagal generate base64'}). Biasanya karena dokumen belum selesai ditandatangani atau sudah kedaluwarsa di Peruri. Gunakan "Tanda Tangan Ulang" untuk membuat versi baru.`;
+  }
+  return `[${rc}] ${desc || 'Download Document gagal'}`;
+};
+
 type OpsiSimpanBerkas = { no_rawat: string; no_order: string; prefix: string };
 
 // ambilDokumenTte — inti unduh 1 dokumen TANPA dialog: ambil dari Peruri
@@ -458,7 +468,7 @@ async function ambilDokumenTte(orderId: string, namaFile: string, simpanKeBerkas
   if (!res.ok) throw new Error(resData.error || `Gagal mengunduh dokumen (HTTP ${res.status})`);
   const upstream = resData.response;
   if (upstream && typeof upstream === 'object' && 'resultCode' in upstream && upstream.resultCode !== '0') {
-    throw new Error(`[${upstream.resultCode}] ${upstream.resultDesc || 'Download Document gagal'}`);
+    throw new Error(pesanDownloadPeruri(upstream.resultCode, upstream.resultDesc));
   }
   const data = upstream?.data || upstream || {};
   const base64Doc: string | undefined = data.base64Document || data.document || data.file || data.base64;
