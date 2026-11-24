@@ -26,10 +26,11 @@ type displayJadwalDokter struct {
 }
 
 type displayKamarKelas struct {
-	Kelas  string `json:"kelas"`
-	Total  int    `json:"total"`
-	Isi    int    `json:"isi"`
-	Kosong int    `json:"kosong"`
+	Kelas     string `json:"kelas"`
+	NamaKamar string `json:"nama_kamar"` // diisi khusus Kelas Utama (ICU, NICU, ...)
+	Total     int    `json:"total"`
+	Isi       int    `json:"isi"`
+	Kosong    int    `json:"kosong"`
 }
 
 var hariKerjaKhanza = map[time.Weekday]string{
@@ -64,14 +65,22 @@ func getDisplayInformasi(db *sql.DB) gin.HandlerFunc {
 		rows.Close()
 
 		// Satu query (bukan 3 query per kelas spt PHP) — hasilnya sama.
+		// KHUSUS Kelas Utama dipecah per nama kamar/bangsal (mis. ICU 5 bed,
+		// NICU 3 bed) supaya ruang intensif terlihat terpisah; kelas lain
+		// tetap digabung per kelas spt PHP.
 		kamar := []displayKamarKelas{}
 		if kr, err := db.Query(`
-			SELECT kelas, COUNT(*), SUM(status = 'ISI'), SUM(status = 'KOSONG')
-			FROM kamar WHERE statusdata = '1'
-			GROUP BY kelas ORDER BY kelas`); err == nil {
+			SELECT k.kelas,
+				IF(k.kelas = 'Kelas Utama', IFNULL(b.nm_bangsal, ''), '') AS nama_kamar,
+				COUNT(*), SUM(k.status = 'ISI'), SUM(k.status = 'KOSONG')
+			FROM kamar k
+			LEFT JOIN bangsal b ON b.kd_bangsal = k.kd_bangsal
+			WHERE k.statusdata = '1'
+			GROUP BY k.kelas, nama_kamar
+			ORDER BY k.kelas, nama_kamar`); err == nil {
 			for kr.Next() {
 				var k displayKamarKelas
-				if kr.Scan(&k.Kelas, &k.Total, &k.Isi, &k.Kosong) == nil {
+				if kr.Scan(&k.Kelas, &k.NamaKamar, &k.Total, &k.Isi, &k.Kosong) == nil {
 					kamar = append(kamar, k)
 				}
 			}

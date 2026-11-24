@@ -8,7 +8,8 @@ import { DisplayFrame, displayTd, displayTh, type TarifKamar } from '../componen
 // dgn Display Jadwal Operasi. Dibuka lewat #display-informasi tanpa login.
 
 type JadwalDokter = { nm_dokter: string; nm_poli: string; jam_mulai: string; jam_selesai: string };
-type KamarKelas = { kelas: string; total: number; isi: number; kosong: number };
+// nama_kamar diisi khusus Kelas Utama (ICU, NICU, ...) — dipecah per ruang.
+type KamarKelas = { kelas: string; nama_kamar?: string; total: number; isi: number; kosong: number };
 
 const POLL_MS = 5000;
 const PAGE_SIZE = 9;
@@ -144,8 +145,17 @@ export const DisplayLayananInformasiView: React.FC = () => {
             </thead>
             <tbody>
               {kamar.map((k) => (
-                <tr key={k.kelas}>
-                  <td style={{ ...displayTd, fontWeight: 600 }}>{k.kelas}</td>
+                <tr key={`${k.kelas}-${k.nama_kamar || ''}`}>
+                  <td style={{ ...displayTd, fontWeight: 600 }}>
+                    {k.nama_kamar ? (
+                      <>
+                        {k.nama_kamar}
+                        <div style={{ fontSize: 15, fontWeight: 400, color: '#8A9190' }}>{k.kelas}</div>
+                      </>
+                    ) : (
+                      k.kelas
+                    )}
+                  </td>
                   <td style={{ ...displayTd, ...center }}>{k.total}</td>
                   <td style={{ ...displayTd, ...center }}>
                     <span style={{ display: 'inline-block', minWidth: 44, padding: '4px 12px', borderRadius: 999, background: '#FEE2E2', color: '#991B1B', fontWeight: 700 }}>{k.isi}</span>
