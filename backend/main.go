@@ -4317,6 +4317,8 @@ func main() {
 
 	// === Kamar Operasi (OK) — Jadwal Operasi ===
 	r.GET("/api/booking-operasi/list", getBookingOperasiList(db))
+	r.GET("/api/display/jadwal-operasi", getDisplayJadwalOperasi(db))
+	r.GET("/api/display/informasi", getDisplayInformasi(db))
 	r.PUT("/api/booking-operasi/update", updateBookingOperasi(db))
 
 	// === Dashboard ===

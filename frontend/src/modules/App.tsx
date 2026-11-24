@@ -17,6 +17,8 @@ import { IGDKView } from './IGDK';
 import { DisplayAntrianView } from './DisplayAntrian';
 import { DisplayAntrianPoliView } from './DisplayAntrianPoli';
 import { DisplayAntrianApotekView } from './DisplayAntrianApotek';
+import { DisplayJadwalOperasiView } from './DisplayJadwalOperasi';
+import { DisplayLayananInformasiView } from './DisplayLayananInformasi';
 import { AntrianDashboardView } from './AntrianDashboard';
 import { DisplaySettingsView } from './DisplaySettings';
 import { AddUserModal } from '../components/AddUserModal';
@@ -502,6 +504,12 @@ export const App: React.FC = () => {
     }
     if (displayType === 'apotek') {
       return <DisplayAntrianApotekView />;
+    }
+    if (displayType === 'operasi') {
+      return <DisplayJadwalOperasiView />;
+    }
+    if (displayType === 'informasi') {
+      return <DisplayLayananInformasiView />;
     }
     // For other display types, use generic DisplayAntrianView for now
     return <DisplayAntrianView type={displayType} />;
