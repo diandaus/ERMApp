@@ -3,8 +3,8 @@ import '../services/api_client.dart';
 import '../services/api_config.dart';
 import '../services/riwayat_perawatan_service.dart';
 
-const _kBorder = Color(0xFFE5E7EB);
-const _kGreen = Color(0xFF059669);
+const _kBorder = Color(0xFFE6E8E8);
+const _kGreen = Color(0xFF04C99E);
 const _kText = TextStyle(fontSize: 12, color: Color(0xFF111827));
 const _kMuted = TextStyle(fontSize: 12, color: Color(0xFF6B7280));
 
@@ -187,7 +187,7 @@ class _RiwayatPerawatanScreenState extends State<RiwayatPerawatanScreen> {
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(999)),
+                    decoration: BoxDecoration(color: const Color(0xFFEBFAED), borderRadius: BorderRadius.circular(999)),
                     child: Text(_s(k, 'status_lanjut'), style: const TextStyle(fontSize: 11, color: _kGreen)),
                   ),
                   const SizedBox(width: 6),
@@ -231,7 +231,7 @@ class _RiwayatPerawatanScreenState extends State<RiwayatPerawatanScreen> {
       columnWidths: {for (var i = 0; i < flex.length; i++) i: FlexColumnWidth(flex[i].toDouble())},
       children: [
         TableRow(
-          decoration: const BoxDecoration(color: Color(0xFFF9FAFB)),
+          decoration: const BoxDecoration(color: Color(0xFFF4F5F5)),
           children: [for (final h in headers) Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5), child: Text(h, style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))))],
         ),
         for (final r in rows) TableRow(children: [for (final c in r) Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5), child: Text(c, style: _kText))]),
@@ -292,7 +292,7 @@ class _RiwayatPerawatanScreenState extends State<RiwayatPerawatanScreen> {
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 6),
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(4)),
+            decoration: BoxDecoration(color: const Color(0xFFF4F5F5), borderRadius: BorderRadius.circular(4)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

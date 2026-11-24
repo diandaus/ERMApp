@@ -5,7 +5,8 @@ import '../services/api_client.dart';
 import '../services/resep_ranap_service.dart';
 import '../widgets/resep_input_panel.dart';
 
-const kBorder = Color(0xFFE5E7EB);
+const kBorder = Color(0xFFE6E8E8);
+const kCardBorder = Color(0xFFCFD1D1); // border kartu/tabel tegas, sama dgn Jadwal Obat
 
 /// ResepTab — Riwayat Resep Rawat Inap, padanan (read-only dulu) dari
 /// ResepTab.tsx (web, dipakai lewat prop isRanap). Endpoint SAMA PERSIS
@@ -148,14 +149,15 @@ class _ResepTabState extends State<ResepTab> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: ElevatedButton.icon(
             onPressed: _openInput,
-            icon: const Icon(Icons.add, size: 16, color: Colors.white),
-            label: const Text('Input Resep', style: TextStyle(fontSize: 13)),
+            icon: const Icon(Icons.add, size: 20, color: Colors.white),
+            label: const Text('Input Resep', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
+              backgroundColor: const Color(0xFF04C99E),
               foregroundColor: Colors.white,
               elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
           ),
         ),
@@ -170,7 +172,7 @@ class _ResepTabState extends State<ResepTab> {
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)))))
+              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(fontSize: 13, color: Color(0xFFDC2626)))))
               : _list.isEmpty
                   ? ListView(
                       padding: const EdgeInsets.all(24),
@@ -178,9 +180,9 @@ class _ResepTabState extends State<ResepTab> {
                         SizedBox(height: 60),
                         Icon(Icons.medication_outlined, size: 40, color: Color(0xFF9CA3AF)),
                         SizedBox(height: 12),
-                        Center(child: Text('Belum Ada Permintaan Resep', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF374151)))),
+                        Center(child: Text('Belum Ada Permintaan Resep', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF282A2A)))),
                         SizedBox(height: 4),
-                        Center(child: Text('Belum ada permintaan resep untuk pasien ini.', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)), textAlign: TextAlign.center)),
+                        Center(child: Text('Belum ada permintaan resep untuk pasien ini.', style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)), textAlign: TextAlign.center)),
                       ],
                     )
                   : ListView.builder(
@@ -217,13 +219,13 @@ class _ResepCard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: flat ? Colors.white : null, border: Border.all(color: flat || belum ? kBorder : const Color(0xFFD1FAE5)), borderRadius: BorderRadius.circular(flat ? 4 : 8)),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)), // tanpa border (sama dgn tab Tindakan)
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder))),
             child: Row(
               children: [
@@ -233,19 +235,19 @@ class _ResepCard extends StatelessWidget {
                     spacing: 10,
                     runSpacing: 4,
                     children: [
-                      Text(resep.noResep.isEmpty ? '-' : resep.noResep, style: const TextStyle(fontSize: 12, color: Color(0xFF374151))),
-                      Text('${_fmtTgl(resep.tglPeresepan)} ${resep.jamPeresepan}', style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-                      if (resep.nmDokter.isNotEmpty) Text(resep.nmDokter, style: const TextStyle(fontSize: 12, color: Color(0xFF7C3AED))),
+                      Text(resep.noResep.isEmpty ? '-' : resep.noResep, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF282A2A))),
+                      Text('${_fmtTgl(resep.tglPeresepan)} ${resep.jamPeresepan}', style: const TextStyle(fontSize: 15, color: Color(0xFF4B5150))),
+                      if (resep.nmDokter.isNotEmpty) Text(resep.nmDokter, style: const TextStyle(fontSize: 15, color: Color(0xFF7C3AED))),
                       if (retur)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(999)),
-                          child: const Text('Retur', style: TextStyle(fontSize: 11, color: Color(0xFF991B1B))),
+                          child: const Text('Retur', style: TextStyle(fontSize: 13, color: Color(0xFF991B1B))),
                         ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: belum ? const Color(0xFFFEF3C7) : const Color(0xFFD1FAE5), borderRadius: BorderRadius.circular(999)),
-                        child: Text(belum ? 'Belum Terlayani' : 'Sudah Terlayani', style: TextStyle(fontSize: 11, color: belum ? const Color(0xFF92400E) : const Color(0xFF065F46))),
+                        child: Text(belum ? 'Belum Terlayani' : 'Sudah Terlayani', style: TextStyle(fontSize: 13, color: belum ? const Color(0xFF92400E) : const Color(0xFF065F46))),
                       ),
                     ],
                   ),
@@ -256,7 +258,7 @@ class _ResepCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -278,8 +280,8 @@ class _ResepCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('NON RACIKAN', style: TextStyle(fontSize: 11, color: Color(0xFF2563EB), letterSpacing: 0.4)),
-        const SizedBox(height: 6),
+        const Text('NON RACIKAN', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF2563EB), letterSpacing: 0.8)),
+        const SizedBox(height: 10),
         _resepTable(
           headers: const ['Nama Obat', 'Jml', 'Aturan Pakai'],
           rows: items
@@ -304,13 +306,12 @@ class _ResepCard extends StatelessWidget {
       if (rc.jmlDr > 0) '${rc.jmlDr} bungkus',
     ];
     return Container(
-      padding: const EdgeInsets.only(top: 8),
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: kBorder))),
+      padding: const EdgeInsets.only(top: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(headerParts.join('  ·  '), style: const TextStyle(fontSize: 11, color: Color(0xFF7C3AED), letterSpacing: 0.4)),
-          const SizedBox(height: 4),
+          Text(headerParts.join('  ·  '), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF7C3AED), letterSpacing: 0.4)),
+          const SizedBox(height: 10),
           _resepTable(
             headers: const ['Nama Obat', 'Kps', 'Jml'],
             rows: rc.detail
@@ -327,39 +328,45 @@ class _ResepCard extends StatelessWidget {
   }
 
   // Tombol aksi header kartu — flat & nempel satu sama lain, sama dgn web.
-  Widget _actionButton(String label, Color color, VoidCallback onPressed) => InkWell(
-        onTap: onPressed,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          color: color,
-          child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.white)),
+  Widget _actionButton(String label, Color color, VoidCallback onPressed) => Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
+            child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+          ),
         ),
       );
 
   Widget _resepTable({required List<String> headers, required List<List<String>> rows, Color? col2Color}) {
+    // Model tabel sama dgn tab Tindakan: garis atas header + garis antar
+    // baris, tanpa garis vertikal/bingkai; header abu tebal.
     return Table(
-      border: TableBorder.all(color: kBorder, width: 1),
+      border: const TableBorder(top: BorderSide(color: kBorder), horizontalInside: BorderSide(color: kBorder)),
       columnWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(1), 2: FlexColumnWidth(2)},
       children: [
         TableRow(
-          decoration: BoxDecoration(color: flat ? Colors.white : const Color(0xFFF9FAFB)),
-          children: headers.map((h) => _tableCell(h, color: const Color(0xFF6B7280))).toList(),
+          decoration: BoxDecoration(color: Colors.white),
+          children: headers.map((h) => _tableCell(h, color: const Color(0xFF5F6665), bold: true)).toList(),
         ),
         for (final row in rows)
           TableRow(
             children: [
-              _tableCell(row[0], color: const Color(0xFF374151)),
-              _tableCell(row[1], color: const Color(0xFF6B7280)),
-              _tableCell(row[2], color: col2Color ?? const Color(0xFF6B7280)),
+              _tableCell(row[0], color: const Color(0xFF282A2A)),
+              _tableCell(row[1], color: const Color(0xFF4B5150)),
+              _tableCell(row[2], color: col2Color ?? const Color(0xFF4B5150)),
             ],
           ),
       ],
     );
   }
 
-  Widget _tableCell(String text, {required Color color}) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(text, style: TextStyle(fontSize: 11, color: color)),
+  Widget _tableCell(String text, {required Color color, bool bold = false}) => Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: bold ? 12 : 16),
+        child: Text(text, style: TextStyle(fontSize: 15, color: color, fontWeight: bold ? FontWeight.w600 : FontWeight.w400)),
       );
 
   String _fmtTgl(String tgl) {

@@ -3,7 +3,8 @@ import '../models/lab_item.dart';
 import '../models/ranap_patient.dart';
 import '../services/lab_service.dart';
 
-const kBorder = Color(0xFFE5E7EB);
+const kBorder = Color(0xFFE6E8E8);
+const kCardBorder = Color(0xFFCFD1D1); // border kartu/tabel tegas, sama dgn Jadwal Obat
 
 /// LabTab — Laboratorium Rawat Inap (read-only dulu, sama pola dgn
 /// ResepTab), padanan LabTab.tsx (web): Riwayat Permintaan (PK/PA yg
@@ -78,7 +79,7 @@ class _LabTabState extends State<LabTab> {
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)))))
+              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(fontSize: 13, color: Color(0xFFDC2626)))))
               : (_pending.isEmpty && _hasil.isEmpty)
                   ? ListView(
                       padding: const EdgeInsets.all(24),
@@ -86,22 +87,22 @@ class _LabTabState extends State<LabTab> {
                         SizedBox(height: 60),
                         Icon(Icons.science_outlined, size: 40, color: Color(0xFF9CA3AF)),
                         SizedBox(height: 12),
-                        Center(child: Text('Belum Ada Data Laboratorium', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF374151)))),
+                        Center(child: Text('Belum Ada Data Laboratorium', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF282A2A)))),
                         SizedBox(height: 4),
-                        Center(child: Text('Belum ada permintaan atau hasil laboratorium untuk pasien ini.', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)), textAlign: TextAlign.center)),
+                        Center(child: Text('Belum ada permintaan atau hasil laboratorium untuk pasien ini.', style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)), textAlign: TextAlign.center)),
                       ],
                     )
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
                         if (_pending.isNotEmpty) ...[
-                          const Text('Riwayat Permintaan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          const Text('Riwayat Permintaan', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF282A2A))),
                           const SizedBox(height: 8),
                           ..._pending.map((it) => _PermintaanCard(item: it, flat: widget.flat)),
                           const SizedBox(height: 16),
                         ],
                         if (_hasil.isNotEmpty) ...[
-                          const Text('Hasil Periksa Laboratorium', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          const Text('Hasil Periksa Laboratorium', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF282A2A))),
                           const SizedBox(height: 8),
                           ..._hasil.map((it) => _HasilCard(item: it, flat: widget.flat)),
                         ],
@@ -122,7 +123,7 @@ class _PermintaanCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: flat ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(flat ? 4 : 8)),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: kCardBorder), borderRadius: BorderRadius.circular(6)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -134,17 +135,17 @@ class _PermintaanCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(color: pk ? const Color(0xFFE0F2FE) : const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(999)),
-                child: Text(pk ? 'LAB PK' : 'LAB PA', style: TextStyle(fontSize: 11, color: pk ? const Color(0xFF0891B2) : const Color(0xFF7C3AED))),
+                child: Text(pk ? 'LAB PK' : 'LAB PA', style: TextStyle(fontSize: 13, color: pk ? const Color(0xFF0891B2) : const Color(0xFF7C3AED))),
               ),
-              Text('No. Permintaan: ${item.noorder}', style: const TextStyle(fontSize: 12, color: Color(0xFF374151))),
+              Text('No. Permintaan: ${item.noorder}', style: const TextStyle(fontSize: 13, color: Color(0xFF282A2A))),
             ],
           ),
           const SizedBox(height: 4),
-          Text('${_fmtTgl(item.tglPermintaan)} ${item.jamPermintaan}', style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-          Text(item.nmDokter.isEmpty ? '-' : item.nmDokter, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+          Text('${_fmtTgl(item.tglPermintaan)} ${item.jamPermintaan}', style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
+          Text(item.nmDokter.isEmpty ? '-' : item.nmDokter, style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
           const SizedBox(height: 8),
-          Text('Diagnosis: ${item.diagnosaKlinis.isEmpty ? '-' : item.diagnosaKlinis}', style: const TextStyle(fontSize: 12)),
-          if (item.informasiTambahan.isNotEmpty) Text('Info Tambahan: ${item.informasiTambahan}', style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+          Text('Diagnosis: ${item.diagnosaKlinis.isEmpty ? '-' : item.diagnosaKlinis}', style: const TextStyle(fontSize: 13)),
+          if (item.informasiTambahan.isNotEmpty) Text('Info Tambahan: ${item.informasiTambahan}', style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
           if (item.detailPemeriksaan.isNotEmpty) ...[
             const Padding(padding: EdgeInsets.only(top: 10, bottom: 6), child: Divider(height: 1, color: kBorder)),
             Wrap(
@@ -154,7 +155,7 @@ class _PermintaanCard extends StatelessWidget {
                   .map((d) => Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(color: const Color(0xFFE0F2FE), border: Border.all(color: const Color(0xFF1AB1E5)), borderRadius: BorderRadius.circular(999)),
-                        child: Text(d.nmPerawatan.isEmpty ? d.kdJenisPrw : d.nmPerawatan, style: const TextStyle(fontSize: 12, color: Color(0xFF0891B2))),
+                        child: Text(d.nmPerawatan.isEmpty ? d.kdJenisPrw : d.nmPerawatan, style: const TextStyle(fontSize: 13, color: Color(0xFF0891B2))),
                       ))
                   .toList(),
             ),
@@ -183,14 +184,14 @@ class _HasilCard extends StatelessWidget {
     final pk = item.kategori == 'pk';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: flat ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(flat ? 4 : 8)),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: kCardBorder), borderRadius: BorderRadius.circular(6)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: flat ? null : const Color(0xFFF9FAFB), border: const Border(bottom: BorderSide(color: kBorder))),
+            decoration: BoxDecoration(color: Colors.white, border: const Border(bottom: BorderSide(color: kBorder))),
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
@@ -199,31 +200,31 @@ class _HasilCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(color: pk ? const Color(0xFFE0F2FE) : const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(999)),
-                  child: Text(pk ? 'LAB PK' : 'LAB PA', style: TextStyle(fontSize: 10, color: pk ? const Color(0xFF0891B2) : const Color(0xFF7C3AED))),
+                  child: Text(pk ? 'LAB PK' : 'LAB PA', style: TextStyle(fontSize: 13, color: pk ? const Color(0xFF0891B2) : const Color(0xFF7C3AED))),
                 ),
-                Text(item.nmPerawatan, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF111827))),
-                Text('${_fmtTgl(item.tglPeriksa)} ${item.jam}', style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
+                Text(item.nmPerawatan, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF282A2A))),
+                Text('${_fmtTgl(item.tglPeriksa)} ${item.jam}', style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
               ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.all(10),
             child: item.detail.isEmpty
-                ? const Text('Belum ada hasil detail', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF), fontStyle: FontStyle.italic))
+                ? const Text('Belum ada hasil detail', style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF), fontStyle: FontStyle.italic))
                 : Table(
                     border: TableBorder.all(color: kBorder, width: 1),
                     columnWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(2), 2: FlexColumnWidth(2), 3: FlexColumnWidth(2)},
                     children: [
                       TableRow(
-                        decoration: BoxDecoration(color: flat ? Colors.white : const Color(0xFFF9FAFB)),
-                        children: ['Pemeriksaan', 'Hasil', 'Nilai Rujukan', 'Keterangan'].map((h) => _cell(h, color: const Color(0xFF6B7280))).toList(),
+                        decoration: BoxDecoration(color: Colors.white),
+                        children: ['Pemeriksaan', 'Hasil', 'Nilai Rujukan', 'Keterangan'].map((h) => _cell(h, color: const Color(0xFF282A2A), bold: true)).toList(),
                       ),
                       for (final d in item.detail)
                         TableRow(children: [
-                          _cell(d.pemeriksaan.isEmpty ? '-' : d.pemeriksaan, color: const Color(0xFF374151)),
-                          _cell('${d.nilai.isEmpty ? '-' : d.nilai} ${d.satuan}'.trim(), color: const Color(0xFF111827)),
-                          _cell('${d.nilaiRujukan.isEmpty ? '-' : d.nilaiRujukan} ${d.satuan}'.trim(), color: const Color(0xFF6B7280)),
-                          _cell(d.keterangan.isEmpty ? '-' : d.keterangan, color: const Color(0xFF6B7280)),
+                          _cell(d.pemeriksaan.isEmpty ? '-' : d.pemeriksaan, color: const Color(0xFF282A2A)),
+                          _cell('${d.nilai.isEmpty ? '-' : d.nilai} ${d.satuan}'.trim(), color: const Color(0xFF282A2A)),
+                          _cell('${d.nilaiRujukan.isEmpty ? '-' : d.nilaiRujukan} ${d.satuan}'.trim(), color: const Color(0xFF4B5150)),
+                          _cell(d.keterangan.isEmpty ? '-' : d.keterangan, color: const Color(0xFF4B5150)),
                         ]),
                     ],
                   ),
@@ -233,9 +234,9 @@ class _HasilCard extends StatelessWidget {
     );
   }
 
-  Widget _cell(String text, {required Color color}) => Padding(
+  Widget _cell(String text, {required Color color, bool bold = false}) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        child: Text(text, style: TextStyle(fontSize: 11, color: color)),
+        child: Text(text, style: TextStyle(fontSize: 13, color: color, fontWeight: bold ? FontWeight.w600 : FontWeight.w400)),
       );
 
   String _fmtTgl(String tgl) {

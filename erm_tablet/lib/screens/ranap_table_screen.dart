@@ -6,9 +6,11 @@ import '../models/ranap_patient.dart';
 import '../services/dokter_service.dart';
 import '../services/ranap_service.dart';
 import 'pasien_detail_landscape_screen.dart';
+import '../theme/app_theme.dart';
+import '../widgets/modal_tengah.dart';
 
-const kBorder = Color(0xFFE5E7EB);
-const kSidebarGreen = Color(0xFF059669);
+const kBorder = kLine;
+const kSidebarGreen = kPrimary;
 
 /// RanapTableScreen — versi LANDSCAPE dari daftar pasien Rawat Inap,
 /// gaya tabel data (padanan contoh referensi user: "Doctors List" —
@@ -25,7 +27,11 @@ class RanapTableScreen extends StatefulWidget {
   final AppUser user;
   final VoidCallback onLogout;
   final String searchQuery;
-  const RanapTableScreen({super.key, required this.user, required this.onLogout, this.searchQuery = ''});
+  const RanapTableScreen(
+      {super.key,
+      required this.user,
+      required this.onLogout,
+      this.searchQuery = ''});
 
   @override
   State<RanapTableScreen> createState() => _RanapTableScreenState();
@@ -46,7 +52,10 @@ class _RanapTableScreenState extends State<RanapTableScreen> {
   String _filterDpjp = '';
   List<DokterOption> _dokterList = [];
 
-  bool get _filterActive => _filterTglDari != null || _filterTglSampai != null || _filterDpjp.trim().isNotEmpty;
+  bool get _filterActive =>
+      _filterTglDari != null ||
+      _filterTglSampai != null ||
+      _filterDpjp.trim().isNotEmpty;
 
   List<RanapPatient> get _filteredList {
     final q = widget.searchQuery.trim().toLowerCase();
@@ -54,12 +63,25 @@ class _RanapTableScreenState extends State<RanapTableScreen> {
       if (_filterTglDari != null || _filterTglSampai != null) {
         final tgl = DateTime.tryParse(p.tglMasuk);
         if (tgl == null) return false;
-        if (_filterTglDari != null && tgl.isBefore(DateTime(_filterTglDari!.year, _filterTglDari!.month, _filterTglDari!.day))) return false;
-        if (_filterTglSampai != null && tgl.isAfter(DateTime(_filterTglSampai!.year, _filterTglSampai!.month, _filterTglSampai!.day, 23, 59, 59))) return false;
+        if (_filterTglDari != null &&
+            tgl.isBefore(DateTime(_filterTglDari!.year, _filterTglDari!.month,
+                _filterTglDari!.day))) return false;
+        if (_filterTglSampai != null &&
+            tgl.isAfter(DateTime(
+                _filterTglSampai!.year,
+                _filterTglSampai!.month,
+                _filterTglSampai!.day,
+                23,
+                59,
+                59))) return false;
       }
-      if (_filterDpjp.trim().isNotEmpty && !p.nmDokter.toLowerCase().contains(_filterDpjp.trim().toLowerCase())) return false;
+      if (_filterDpjp.trim().isNotEmpty &&
+          !p.nmDokter.toLowerCase().contains(_filterDpjp.trim().toLowerCase()))
+        return false;
       if (q.isNotEmpty) {
-        final haystack = '${p.noRkmMedis} ${p.nmPasien} ${p.nmDokter} ${p.kamar} ${p.diagnosaAwal} ${p.pngJawab}'.toLowerCase();
+        final haystack =
+            '${p.noRkmMedis} ${p.nmPasien} ${p.nmDokter} ${p.kamar} ${p.diagnosaAwal} ${p.pngJawab}'
+                .toLowerCase();
         if (!haystack.contains(q)) return false;
       }
       return true;
@@ -101,31 +123,19 @@ class _RanapTableScreenState extends State<RanapTableScreen> {
     }
   }
 
-  /// _openFilterPanel — panel geser dari kanan, lebar 20% layar, per
-  /// arahan user. Isi: rentang Tanggal Masuk (Dari/Sampai) + DPJP.
+  /// _openFilterPanel — modal di tengah (gaya modal Input Tindakan):
+  /// header ✕ + "Filter", Reset & Terapkan di kanan atas. Isi: rentang
+  /// Tanggal Masuk (Dari/Sampai) + DPJP.
   Future<void> _openFilterPanel() async {
-    final result = await showGeneralDialog<_FilterResult>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Filter',
-      barrierColor: Colors.black38,
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, _, __) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.2,
-            height: double.infinity,
-            child: _FilterPanel(initialDari: _filterTglDari, initialSampai: _filterTglSampai, initialDpjp: _filterDpjp, dokterList: _dokterList),
-          ),
-        );
-      },
-      transitionBuilder: (context, anim, __, child) {
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
-          child: child,
-        );
-      },
+    final result = await showModalTengah<_FilterResult>(
+      context,
+      label: 'Filter',
+      widthFactor: 0.45,
+      builder: (_) => _FilterPanel(
+          initialDari: _filterTglDari,
+          initialSampai: _filterTglSampai,
+          initialDpjp: _filterDpjp,
+          dokterList: _dokterList),
     );
     if (result == null || !mounted) return;
     setState(() {
@@ -137,51 +147,81 @@ class _RanapTableScreenState extends State<RanapTableScreen> {
 
   void _openDetail(RanapPatient patient) {
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => PasienDetailLandscapeScreen(user: widget.user, patient: patient),
+      builder: (_) =>
+          PasienDetailLandscapeScreen(user: widget.user, patient: patient),
     ));
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFF9FAFB),
+      color: const Color(0xFFF4F5F5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          // Toolbar putih MENEMPEL di bawah navbar (gaya referensi): tinggi
+          // 48 = sejajar baris "Menu" di sidebar, tombol datar dipisah garis
+          // vertikal, tab aktif teks tosca + garis bawah tosca.
+          Container(
+            height: 48,
+            decoration: const BoxDecoration(color: Colors.white),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _loading
+                          ? 'Pasien Rawat Inap'
+                          : 'Pasien Rawat Inap (${_filteredList.length})',
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: kText),
+                    ),
+                  ),
+                ),
                 const Spacer(),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'belum-pulang', label: Text('Belum Pulang', style: TextStyle(fontSize: 12))),
-                    ButtonSegment(value: 'sudah-pulang', label: Text('Sudah Pulang', style: TextStyle(fontSize: 12))),
-                  ],
-                  selected: {_status},
-                  onSelectionChanged: (s) {
-                    setState(() => _status = s.first);
+                _StatusDropdown(
+                  value: _status,
+                  onChanged: (v) {
+                    if (v == _status) return;
+                    setState(() => _status = v);
                     _load();
                   },
                 ),
-                const SizedBox(width: 8),
-                _FilterButton(active: _filterActive, onPressed: _openFilterPanel),
-                const SizedBox(width: 8),
-                IconButton(icon: const Icon(Icons.refresh), tooltip: 'Muat ulang', onPressed: _load),
+                _BarButton(
+                  icon: Icons.filter_alt_outlined,
+                  label: 'Filter',
+                  active: _filterActive,
+                  onTap: _openFilterPanel,
+                ),
+                _BarButton(
+                    icon: Icons.refresh, tooltip: 'Muat ulang', onTap: _load),
               ],
             ),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              padding: const EdgeInsets.all(16),
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))))
+                      ? Center(
+                          child: Text(_error!,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Color(0xFFDC2626))))
                       : _filteredList.isEmpty
-                          ? const Center(child: Text('Tidak ada pasien', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))))
-                          : _PatientTable(list: _filteredList, onTapRow: _openDetail, showTglPulang: _status == 'sudah-pulang'),
+                          ? const Center(
+                              child: Text('Tidak ada pasien',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Color(0xFF9CA3AF))))
+                          : _PatientTable(
+                              list: _filteredList,
+                              onTapRow: _openDetail,
+                              showTglPulang: _status == 'sudah-pulang'),
             ),
           ),
         ],
@@ -190,19 +230,113 @@ class _RanapTableScreenState extends State<RanapTableScreen> {
   }
 }
 
-class _FilterButton extends StatelessWidget {
-  final bool active;
-  final VoidCallback onPressed;
-  const _FilterButton({required this.active, required this.onPressed});
+const _kBarDivider = Border(left: BorderSide(color: kBorder));
+
+/// Satu tombol dropdown status pulang (gaya "Jenis Order" di referensi):
+/// teks tosca + panah ▼, pilihan Belum/Sudah Pulang muncul di menu.
+class _StatusDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _StatusDropdown({required this.value, required this.onChanged});
+
+  static const _opsi = {
+    'belum-pulang': 'Belum Pulang',
+    'sudah-pulang': 'Sudah Pulang'
+  };
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(Icons.filter_alt_outlined, size: 16, color: active ? kSidebarGreen : const Color(0xFF6B7280)),
-      label: Text('Filter', style: TextStyle(fontSize: 12, color: active ? kSidebarGreen : const Color(0xFF374151))),
-      style: OutlinedButton.styleFrom(side: BorderSide(color: active ? kSidebarGreen : kBorder)),
+    return PopupMenuButton<String>(
+      tooltip: 'Status pasien',
+      onSelected: onChanged,
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: const BorderSide(color: kBorder)),
+      itemBuilder: (_) => _opsi.entries
+          .map((e) => PopupMenuItem<String>(
+                value: e.key,
+                child: Row(
+                  children: [
+                    SizedBox(
+                        width: 22,
+                        child: e.key == value
+                            ? const Icon(Icons.check,
+                                size: 18, color: kPrimaryDark)
+                            : null),
+                    const SizedBox(width: 6),
+                    Text(e.value,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: e.key == value
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: e.key == value ? kPrimaryDark : kText)),
+                  ],
+                ),
+              ))
+          .toList(),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 190),
+        padding: const EdgeInsets.symmetric(horizontal: 22),
+        decoration: const BoxDecoration(border: _kBarDivider),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_opsi[value] ?? value,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: kPrimaryDark)),
+            const SizedBox(width: 6),
+            const Icon(Icons.arrow_drop_down, size: 26, color: kPrimaryDark),
+          ],
+        ),
+      ),
     );
+  }
+}
+
+/// Tombol datar di toolbar (Filter, Muat ulang) — dipisah garis vertikal.
+class _BarButton extends StatelessWidget {
+  final IconData icon;
+  final String? label;
+  final String? tooltip;
+  final bool active;
+  final VoidCallback onTap;
+  const _BarButton(
+      {required this.icon,
+      this.label,
+      this.tooltip,
+      this.active = false,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? kPrimaryDark : kText;
+    final child = InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: label == null ? 16 : 20),
+        decoration: const BoxDecoration(border: _kBarDivider),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            if (label != null) ...[
+              const SizedBox(width: 8),
+              Text(label!,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                      color: color)),
+            ],
+          ],
+        ),
+      ),
+    );
+    return tooltip == null ? child : Tooltip(message: tooltip!, child: child);
   }
 }
 
@@ -222,7 +356,11 @@ class _FilterPanel extends StatefulWidget {
   final DateTime? initialSampai;
   final String initialDpjp;
   final List<DokterOption> dokterList;
-  const _FilterPanel({required this.initialDari, required this.initialSampai, required this.initialDpjp, required this.dokterList});
+  const _FilterPanel(
+      {required this.initialDari,
+      required this.initialSampai,
+      required this.initialDpjp,
+      required this.dokterList});
 
   @override
   State<_FilterPanel> createState() => _FilterPanelState();
@@ -246,150 +384,179 @@ class _FilterPanelState extends State<_FilterPanel> {
   }
 
   Future<void> _pickDari() async {
-    final picked = await showDatePicker(context: context, initialDate: _tglDari ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+    final picked = await showDatePicker(
+        context: context,
+        initialDate: _tglDari ?? DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100));
     if (picked != null) setState(() => _tglDari = picked);
   }
 
   Future<void> _pickSampai() async {
-    final picked = await showDatePicker(context: context, initialDate: _tglSampai ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+    final picked = await showDatePicker(
+        context: context,
+        initialDate: _tglSampai ?? DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100));
     if (picked != null) setState(() => _tglSampai = picked);
+  }
+
+  void _reset() {
+    setState(() {
+      _tglDari = null;
+      _tglSampai = null;
+      _dpjpText = '';
+      _dpjpFieldCtrl?.clear();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      elevation: 8,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ModalTengahHeader(
+          title: 'Filter',
+          secondaryLabel: 'Reset',
+          onSecondary: _reset,
+          actionLabel: 'Terapkan',
+          onAction: () => Navigator.of(context).pop(_FilterResult(
+              tglDari: _tglDari, tglSampai: _tglSampai, dpjp: _dpjpText)),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(child: Text('Filter', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF111827)))),
-                  IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.of(context).pop(), padding: EdgeInsets.zero, constraints: const BoxConstraints(), visualDensity: VisualDensity.compact),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Text('Tanggal Masuk', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-              const SizedBox(height: 8),
-              _dateField('Dari', _tglDari, _pickDari, onClear: _tglDari == null ? null : () => setState(() => _tglDari = null)),
-              const SizedBox(height: 8),
-              _dateField('Sampai', _tglSampai, _pickSampai, onClear: _tglSampai == null ? null : () => setState(() => _tglSampai = null)),
-              const SizedBox(height: 20),
-              const Text('DPJP', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-              const SizedBox(height: 8),
-              // Autocomplete — optionsBuilder balikin SEMUA dokter begitu
-              // query kosong (bukan cuma stlh mulai mengetik), jadi begitu
-              // kolom ini difokuskan langsung tampil combobox berisi semua
-              // dokter, per arahan user.
-              Autocomplete<DokterOption>(
-                initialValue: TextEditingValue(text: _dpjpText),
-                displayStringForOption: (d) => d.nmDokter,
-                optionsBuilder: (TextEditingValue tev) {
-                  final q = tev.text.trim().toLowerCase();
-                  if (q.isEmpty) return widget.dokterList;
-                  return widget.dokterList.where((d) => d.nmDokter.toLowerCase().contains(q));
-                },
-                onSelected: (d) => setState(() => _dpjpText = d.nmDokter),
-                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                  _dpjpFieldCtrl = controller;
-                  return TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    onChanged: (v) => _dpjpText = v,
-                    decoration: const InputDecoration(isDense: true, hintText: 'Nama dokter...', border: OutlineInputBorder()),
-                    style: const TextStyle(fontSize: 13),
-                  );
-                },
-                // Lebar daftar combobox DISAMAKAN dgn lebar kolom cari
-                // (panel filter dikurangi padding 16 kiri-kanan) — default
-                // Autocomplete tidak otomatis mengikuti lebar field.
-                optionsViewBuilder: (context, onSelected, options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(6),
-                      child: SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.2 - 32,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 240),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            itemCount: options.length,
-                            itemBuilder: (context, i) {
-                              final opt = options.elementAt(i);
-                              return InkWell(
-                                onTap: () => onSelected(opt),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  child: Text(opt.nmDokter, style: const TextStyle(fontSize: 13)),
-                                ),
-                              );
-                            },
+                  const ModalLabel('Tanggal Masuk'),
+                  _dateField('Dari', _tglDari, _pickDari,
+                      onClear: _tglDari == null
+                          ? null
+                          : () => setState(() => _tglDari = null)),
+                  const SizedBox(height: 8),
+                  _dateField('Sampai', _tglSampai, _pickSampai,
+                      onClear: _tglSampai == null
+                          ? null
+                          : () => setState(() => _tglSampai = null)),
+                  const SizedBox(height: 24),
+                  const ModalLabel('DPJP'),
+                  // Autocomplete — optionsBuilder balikin SEMUA dokter begitu
+                  // query kosong (bukan cuma stlh mulai mengetik), jadi begitu
+                  // kolom ini difokuskan langsung tampil combobox berisi semua
+                  // dokter, per arahan user.
+                  Autocomplete<DokterOption>(
+                    initialValue: TextEditingValue(text: _dpjpText),
+                    displayStringForOption: (d) => d.nmDokter,
+                    optionsBuilder: (TextEditingValue tev) {
+                      final q = tev.text.trim().toLowerCase();
+                      if (q.isEmpty) return widget.dokterList;
+                      return widget.dokterList
+                          .where((d) => d.nmDokter.toLowerCase().contains(q));
+                    },
+                    onSelected: (d) => setState(() => _dpjpText = d.nmDokter),
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                      _dpjpFieldCtrl = controller;
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        onChanged: (v) => _dpjpText = v,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: 'Nama dokter...',
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide:
+                                  const BorderSide(color: Color(0xFFCFD1D1))),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: const BorderSide(
+                                  color: kPrimary, width: 1.5)),
+                        ),
+                        style: const TextStyle(fontSize: 15),
+                      );
+                    },
+                    // Lebar daftar combobox DISAMAKAN dgn lebar kolom cari
+                    // (panel filter dikurangi padding 16 kiri-kanan) — default
+                    // Autocomplete tidak otomatis mengikuti lebar field.
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            width: box.maxWidth - 48,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 240),
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: options.length,
+                                itemBuilder: (context, i) {
+                                  final opt = options.elementAt(i);
+                                  return InkWell(
+                                    onTap: () => onSelected(opt),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 10),
+                                      child: Text(opt.nmDokter,
+                                          style: const TextStyle(fontSize: 15)),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        setState(() {
-                          _tglDari = null;
-                          _tglSampai = null;
-                          _dpjpText = '';
-                          _dpjpFieldCtrl?.clear();
-                        });
-                      },
-                      child: const Text('Reset'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(_FilterResult(tglDari: _tglDari, tglSampai: _tglSampai, dpjp: _dpjpText)),
-                      style: ElevatedButton.styleFrom(backgroundColor: kSidebarGreen, foregroundColor: Colors.white),
-                      child: const Text('Terapkan'),
-                    ),
+                      );
+                    },
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _dateField(String label, DateTime? value, VoidCallback onTap, {VoidCallback? onClear}) {
+  Widget _dateField(String label, DateTime? value, VoidCallback onTap,
+      {VoidCallback? onClear}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(
+            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(4)),
         child: Row(
           children: [
-            Icon(Icons.calendar_today_outlined, size: 14, color: const Color(0xFF6B7280)),
+            Icon(Icons.calendar_today_outlined,
+                size: 14, color: const Color(0xFF6B7280)),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                value == null ? label : DateFormat('d MMM yyyy', 'id_ID').format(value),
-                style: TextStyle(fontSize: 12, color: value == null ? const Color(0xFF9CA3AF) : const Color(0xFF111827)),
+                value == null
+                    ? label
+                    : DateFormat('d MMM yyyy', 'id_ID').format(value),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: value == null
+                        ? const Color(0xFF9CA3AF)
+                        : const Color(0xFF111827)),
               ),
             ),
             if (onClear != null)
-              InkWell(onTap: onClear, child: const Icon(Icons.close, size: 14, color: Color(0xFF9CA3AF))),
+              InkWell(
+                  onTap: onClear,
+                  child: const Icon(Icons.close,
+                      size: 14, color: Color(0xFF9CA3AF))),
           ],
         ),
       ),
@@ -401,9 +568,20 @@ class _PatientTable extends StatelessWidget {
   final List<RanapPatient> list;
   final void Function(RanapPatient) onTapRow;
   final bool showTglPulang;
-  const _PatientTable({required this.list, required this.onTapRow, required this.showTglPulang});
+  const _PatientTable(
+      {required this.list,
+      required this.onTapRow,
+      required this.showTglPulang});
 
-  static const _headersBase = ['No. RM', 'Nama Pasien', 'Kamar', 'Diagnosa', 'DPJP', 'Jenis Bayar', 'Tgl Masuk'];
+  static const _headersBase = [
+    'No. RM',
+    'Nama Pasien',
+    'Kamar',
+    'Diagnosa',
+    'DPJP',
+    'Jenis Bayar',
+    'Tgl Masuk'
+  ];
   static const _flexBase = [1, 3, 2, 2, 2, 2, 2];
   // Jenis Bayar & Tgl Masuk dipersempit jadi lebar tetap (bukan flex lagi)
   // — cukup ±11-12 karakter, per arahan user.
@@ -418,21 +596,30 @@ class _PatientTable extends StatelessWidget {
     final headers = [..._headersBase, if (showTglPulang) 'Tgl Pulang'];
     final flex = [..._flexBase, if (showTglPulang) 2];
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
+      // Tanpa border & tanpa bayangan — batas cukup dari kontras putih vs latar abu.
+      decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(6)),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
+          // Header tabel putih, teks tebal gelap + garis bawah (gaya referensi).
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFFF9FAFB),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: kBorder))),
             child: Row(
               children: List.generate(headers.length, (i) {
                 final label = Text(
                   headers[i],
-                  textAlign: _rightAlignedHeaders.contains(headers[i]) ? TextAlign.right : TextAlign.left,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
+                  textAlign: _rightAlignedHeaders.contains(headers[i])
+                      ? TextAlign.right
+                      : TextAlign.left,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: kText),
                 );
-                if (_narrowHeaders.contains(headers[i])) return SizedBox(width: narrowColWidth, child: label);
+                if (_narrowHeaders.contains(headers[i]))
+                  return SizedBox(width: narrowColWidth, child: label);
                 return Expanded(flex: flex[i], child: label);
               }),
             ),
@@ -445,8 +632,13 @@ class _PatientTable extends StatelessWidget {
               // ke baris pertama jauh lebih lebar drpd antar baris lainnya.
               padding: EdgeInsets.zero,
               itemCount: list.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: kBorder),
-              itemBuilder: (context, i) => _PatientRow(patient: list[i], even: i % 2 == 0, onTap: () => onTapRow(list[i]), showTglPulang: showTglPulang),
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, color: kBorder),
+              itemBuilder: (context, i) => _PatientRow(
+                  patient: list[i],
+                  even: i % 2 == 0,
+                  onTap: () => onTapRow(list[i]),
+                  showTglPulang: showTglPulang),
             ),
           ),
         ],
@@ -460,19 +652,28 @@ class _PatientRow extends StatelessWidget {
   final bool even;
   final VoidCallback onTap;
   final bool showTglPulang;
-  const _PatientRow({required this.patient, required this.even, required this.onTap, required this.showTglPulang});
+  const _PatientRow(
+      {required this.patient,
+      required this.even,
+      required this.onTap,
+      required this.showTglPulang});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        color: even ? Colors.white : const Color(0xFFFAFAFA),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        // Tanpa zebra — semua baris putih, dipisah garis tipis (gaya referensi).
+        color: Colors.white,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(flex: 1, child: Text(patient.noRkmMedis, style: const TextStyle(fontSize: 12, color: Color(0xFF374151)))),
+            Expanded(
+                flex: 1,
+                child: Text(patient.noRkmMedis,
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF374151)))),
             Expanded(
               flex: 3,
               child: Row(
@@ -480,8 +681,10 @@ class _PatientRow extends StatelessWidget {
                   Container(
                     width: 34,
                     height: 34,
-                    decoration: const BoxDecoration(color: Color(0xFFEFF6FF), shape: BoxShape.circle),
-                    child: const Icon(Icons.person, size: 18, color: Color(0xFF2563EB)),
+                    decoration: const BoxDecoration(
+                        color: kPrimarySoft, shape: BoxShape.circle),
+                    child:
+                        const Icon(Icons.person, size: 18, color: kPrimaryDark),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -489,20 +692,69 @@ class _PatientRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(patient.nmPasien, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111827)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(patient.umur, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                        Text(patient.nmPasien,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF111827)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        Text(patient.umur,
+                            style: const TextStyle(
+                                fontSize: 11, color: Color(0xFF9CA3AF))),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            Expanded(flex: 2, child: Text(patient.kamar, style: const TextStyle(fontSize: 12, color: Color(0xFF374151)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            Expanded(flex: 2, child: Text(patient.diagnosaAwal.isEmpty ? '-' : patient.diagnosaAwal, style: const TextStyle(fontSize: 12, color: Color(0xFF374151)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            Expanded(flex: 2, child: Text(patient.nmDokter, style: const TextStyle(fontSize: 12, color: Color(0xFF374151)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            SizedBox(width: _PatientTable.narrowColWidth, child: Text(patient.pngJawab.isEmpty ? '-' : patient.pngJawab, style: const TextStyle(fontSize: 12, color: Color(0xFF374151)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            SizedBox(width: _PatientTable.narrowColWidth, child: Text(patient.tglMasuk, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            if (showTglPulang) SizedBox(width: _PatientTable.narrowColWidth, child: Text(patient.tglKeluar.isEmpty ? '-' : patient.tglKeluar, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            Expanded(
+                flex: 2,
+                child: Text(patient.kamar,
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis)),
+            Expanded(
+                flex: 2,
+                child: Text(
+                    patient.diagnosaAwal.isEmpty ? '-' : patient.diagnosaAwal,
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis)),
+            Expanded(
+                flex: 2,
+                child: Text(patient.nmDokter,
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis)),
+            SizedBox(
+                width: _PatientTable.narrowColWidth,
+                child: Text(patient.pngJawab.isEmpty ? '-' : patient.pngJawab,
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis)),
+            SizedBox(
+                width: _PatientTable.narrowColWidth,
+                child: Text(patient.tglMasuk,
+                    textAlign: TextAlign.right,
+                    style:
+                        const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis)),
+            if (showTglPulang)
+              SizedBox(
+                  width: _PatientTable.narrowColWidth,
+                  child: Text(
+                      patient.tglKeluar.isEmpty ? '-' : patient.tglKeluar,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF6B7280)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),

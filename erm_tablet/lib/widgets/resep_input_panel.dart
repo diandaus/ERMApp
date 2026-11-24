@@ -6,10 +6,11 @@ import '../services/api_client.dart';
 import '../services/resep_ranap_service.dart';
 import '../services/soap_history_service.dart';
 import '../services/soap_ralan_service.dart';
+import '../theme/app_theme.dart' show kPrimary, kPrimaryDark, kText;
 
-const _kBorder = Color(0xFFE5E7EB);
+const _kBorder = Color(0xFFE6E8E8);
 const _kInputBorder = Color(0xFFD1D5DB);
-const _kGreen = Color(0xFF059669);
+const _kGreen = Color(0xFF04C99E);
 
 // Default kalau kolomnya dibiarkan kosong (bukan diblok wajib isi) —
 // nilai & perilaku PERSIS ResepModal.tsx.
@@ -628,48 +629,25 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
       child: Builder(
         builder: (context) => Scaffold(
           backgroundColor: Colors.white,
+          // top:false — navbar tosca sendiri yg menutup area status bar.
           body: SafeArea(
+            top: false,
+            bottom: false, // tombol bawah menempel ke dasar layar, sama dgn "Riwayat Pasien"
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildHeader(),
-                const Divider(height: 1, color: _kBorder),
                 Expanded(
                   child: Stack(
                     children: [
                       ListView(
-                        // Ruang bawah ekstra di tab Racikan spy baris terakhir
-                        // tidak tertutup tombol mengambang Template Resep.
-                        padding: EdgeInsets.fromLTRB(20, 20, 20, _tab == 1 ? 64 : 20),
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                         children: [
                           _buildTabs(),
                           const SizedBox(height: 16),
                           if (_tab == 0) ..._buildNonRacikan() else ..._buildRacikanTab(),
                         ],
                       ),
-                      // Tombol mengambang "Template Resep" — cuma tab Racikan,
-                      // tetap di tempat walau isi di atasnya digulir, persis
-                      // di atas tombol Riwayat Resep.
-                      if (_tab == 1)
-                        Positioned(
-                          left: 16,
-                          bottom: 12,
-                          child: Material(
-                            color: Colors.white,
-                            elevation: 4,
-                            child: InkWell(
-                              onTap: _openTemplate,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(border: Border.all(color: _kGreen)),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [Icon(Icons.bookmark_border, size: 14, color: _kGreen), SizedBox(width: 6), Text('Template Resep', style: TextStyle(fontSize: 12, color: _kGreen))],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -680,22 +658,49 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
                     decoration: BoxDecoration(color: const Color(0xFFFEE2E2), border: Border.all(color: const Color(0xFFFCA5A5)), borderRadius: BorderRadius.circular(2)),
                     child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B))),
                   ),
-                const Divider(height: 1, color: _kBorder),
-                Padding(
-                  padding: const EdgeInsets.all(16),
+                // Tab Racikan: baris aksi putih di atas tombol Simpan (gaya
+                // referensi kasir) — Template Resep | + Tambah Racikan, dipisah
+                // garis vertikal, garis tipis di atasnya.
+                if (_tab == 1)
+                  Container(
+                    height: 56,
+                    decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: _kBorder))),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _aksiRacikan(Icons.bookmark_border, 'Template Resep', _saving ? null : _openTemplate)),
+                        const VerticalDivider(width: 1, thickness: 1, color: _kBorder),
+                        Expanded(child: _aksiRacikan(Icons.add, 'Tambah Racikan', _saving ? null : _tambahRacikan)),
+                      ],
+                    ),
+                  ),
+                // Tombol bawah gaya "Riwayat Pasien" di sidebar: bar penuh
+                // setinggi 64 menempel ke dasar panel, tanpa sudut membulat,
+                // ikon + teks putih kiri, › kanan.
+                SizedBox(
+                  height: 64,
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      ElevatedButton(
-                        onPressed: _saving ? null : _openRiwayat,
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4B5563), foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
-                        child: const Text('Riwayat Resep', style: TextStyle(fontSize: 14)),
-                      ),
-                      const SizedBox(width: 8),
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: _saving ? null : _submit,
-                          style: ElevatedButton.styleFrom(backgroundColor: _kGreen, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)), padding: const EdgeInsets.symmetric(vertical: 14)),
-                          child: Text(_saving ? 'Menyimpan...' : 'Simpan', style: const TextStyle(fontSize: 14)),
+                        flex: 2,
+                        child: _barButton(
+                          color: const Color(0xFF4B5563),
+                          icon: Icons.history,
+                          label: 'Riwayat Resep',
+                          onTap: _saving ? null : _openRiwayat,
+                          arrowLeft: true,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: _barButton(
+                          color: kPrimary,
+                          icon: Icons.save_outlined,
+                          label: _saving ? 'Menyimpan...' : 'Simpan',
+                          // Nonaktif (abu) selama belum ada obat dimasukkan.
+                          onTap: _saving || !_adaObat ? null : _submit,
+                          nonaktifAbu: !_adaObat,
                         ),
                       ),
                     ],
@@ -709,38 +714,66 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
     );
   }
 
-  /// Header — breadcrumb pasien (No. Rawat | No. RM | Nama | Umur | Berat
-  /// Badan) + tombol tutup bulat.
-  Widget _buildHeader() {
-    final parts = [widget.noRawat, widget.noRkmMedis, widget.nmPasien, widget.umur, if (_beratBadan.isNotEmpty) 'Berat Badan : $_beratBadan kg'].where((v) => v.isNotEmpty).join('  |  ');
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+  /// Ada minimal 1 obat (non racikan, atau di salah satu racikan).
+  bool get _adaObat => _lines.isNotEmpty || _racikan.any((r) => r.detail.isNotEmpty);
+
+  Widget _aksiRacikan(IconData icon, String label, VoidCallback? onTap) {
+    final color = onTap == null ? const Color(0xFF9CA3AF) : kPrimaryDark;
+    return InkWell(
+      onTap: onTap,
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.person_outline, size: 16, color: _kGreen),
-          const SizedBox(width: 6),
-          Expanded(child: Text(parts, style: const TextStyle(fontSize: 12, color: Colors.black))),
-          if (widget.editResep != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(6)),
-              child: Text('Edit Resep ${widget.editResep!.noResep}', style: const TextStyle(fontSize: 12, color: Color(0xFF92400E))),
-            ),
-          ],
-          const SizedBox(width: 10),
-          InkWell(
-            onTap: () => Navigator.of(context).pop(),
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, border: Border.all(color: _kBorder)),
-              child: const Icon(Icons.close, size: 16, color: Color(0xFF6B7280)),
-            ),
-          ),
+          Icon(icon, size: 22, color: color),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
+    );
+  }
+
+  Widget _barButton({required Color color, required IconData icon, required String label, VoidCallback? onTap, bool arrowLeft = false, bool nonaktifAbu = false}) {
+    // nonaktifAbu: gaya nonaktif ala tombol "Bayar" referensi — latar abu
+    // muda, ikon & teks abu (bukan sekadar warna asli dipudarkan).
+    final abu = nonaktifAbu && onTap == null;
+    final fg = abu ? const Color(0xFFA3A8A8) : Colors.white;
+    return Material(
+      color: abu ? const Color(0xFFDADDDD) : (onTap == null ? color.withValues(alpha: 0.6) : color),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            // arrowLeft: ‹ di kiri (panel Riwayat Resep terbuka dari kiri).
+            children: [
+              if (arrowLeft) ...[Icon(Icons.chevron_left, color: fg, size: 24), const SizedBox(width: 6)],
+              Icon(icon, color: fg, size: 22),
+              const SizedBox(width: 10),
+              Expanded(child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: fg))),
+              if (!arrowLeft) Icon(Icons.chevron_right, color: fg, size: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Header — navbar tosca (tema ERM Tablet): avatar putih, nama pasien +
+  /// pil info (No. Rawat · No. RM · umur · BB), badge Edit, tombol tutup.
+  Widget _buildHeader() {
+    final info = [widget.noRawat, 'No. RM ${widget.noRkmMedis}', widget.umur, if (_beratBadan.isNotEmpty) 'BB $_beratBadan kg']
+        .where((v) => v.trim().isNotEmpty).join(' · ');
+    return _navbarTosca(
+      context,
+      title: widget.nmPasien,
+      subtitle: info,
+      trailing: widget.editResep == null
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: kPrimaryDark, borderRadius: BorderRadius.circular(6)),
+              child: Text('Edit Resep ${widget.editResep!.noResep}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+            ),
     );
   }
 
@@ -757,25 +790,16 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
           decoration: BoxDecoration(color: selected ? _kGreen : Colors.white, border: Border.all(color: _kGreen)),
-          child: Text(label, style: TextStyle(fontSize: 12, color: selected ? Colors.white : _kGreen)),
+          child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? Colors.white : _kGreen)),
         ),
       );
     }
 
     return Row(
       children: [
+        // Sudut siku (radius 0) per arahan user.
         tab(0, 'Non Racikan (${_lines.length})'),
         tab(1, 'Racikan (${_racikan.where((r) => r.detail.isNotEmpty).length})'),
-        const Spacer(),
-        if (_tab == 1)
-          InkWell(
-            onTap: _tambahRacikan,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              color: Colors.black,
-              child: const Text('+ Tambah Racikan', style: TextStyle(fontSize: 12, color: Colors.white)),
-            ),
-          ),
       ],
     );
   }
@@ -821,7 +845,7 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
 
   Widget _tableHeader(List<Widget> cells) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: const BoxDecoration(color: Color(0xFFF9FAFB), border: Border(bottom: BorderSide(color: _kBorder))),
+        decoration: const BoxDecoration(color: Color(0xFFF4F5F5), border: Border(bottom: BorderSide(color: _kBorder))),
         child: Row(children: cells),
       );
 
@@ -1430,7 +1454,7 @@ Future<T?> _showLeftPanel<T>(BuildContext context, Widget child) {
     transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (context, _, __) => Align(
       alignment: Alignment.centerLeft,
-      child: FractionallySizedBox(widthFactor: 0.5, heightFactor: 1, child: Material(color: Colors.white, elevation: 12, child: SafeArea(child: child))),
+      child: FractionallySizedBox(widthFactor: 0.5, heightFactor: 1, child: Material(color: Colors.white, elevation: 12, child: SafeArea(top: false, child: child))),
     ),
     transitionBuilder: (context, anim, __, child) => SlideTransition(
       position: Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
@@ -1439,25 +1463,57 @@ Future<T?> _showLeftPanel<T>(BuildContext context, Widget child) {
   );
 }
 
-Widget _leftPanelHeader(BuildContext context, String title) => Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _kBorder))),
-      child: Row(
-        children: [
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 12, color: Colors.black))),
-          InkWell(
-            onTap: () => Navigator.of(context).pop(),
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, border: Border.all(color: _kBorder)),
-              child: const Icon(Icons.close, size: 16, color: Color(0xFF6B7280)),
-            ),
+Widget _leftPanelHeader(BuildContext context, String title, {String subtitle = ''}) => _navbarTosca(context, title: title, subtitle: subtitle);
+
+/// Navbar tosca panel/modal resep — sama gaya dgn navbar layar pasien:
+/// latar tosca menutup status bar, avatar putih, judul putih tebal, pil
+/// info putih, tombol tutup putih di kanan.
+Widget _navbarTosca(BuildContext context, {required String title, String subtitle = '', Widget? trailing}) {
+  final top = MediaQuery.of(context).padding.top;
+  // Tinggi isi TETAP 60 (+ status bar) — sama persis dgn navbar layar
+  // pemeriksaan (_NavbarRalan / _NavbarPasien: height 60).
+  return Container(
+    color: kPrimary,
+    height: top + 60,
+    padding: EdgeInsets.fromLTRB(16, top, 12, 0),
+    child: Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          child: const Icon(Icons.person, size: 24, color: kPrimaryDark),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
+                  child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: kText)),
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
-    );
+        ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing],
+        const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'Tutup',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close, color: Colors.white, size: 24),
+        ),
+      ],
+    ),
+  );
+}
 
 Widget _leftPanelEmpty(String title, String subtitle) => Container(
       width: double.infinity,
@@ -1485,7 +1541,7 @@ Widget _gridTable({required List<double> widths, required List<Widget> header, r
     columnWidths: {for (var i = 0; i < widths.length; i++) i: widths[i] > 0 ? FixedColumnWidth(widths[i]) : const FlexColumnWidth()},
     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
     children: [
-      TableRow(decoration: const BoxDecoration(color: Color(0xFFF9FAFB)), children: [for (final h in header) Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5), child: h)]),
+      TableRow(decoration: const BoxDecoration(color: Color(0xFFF4F5F5)), children: [for (final h in header) Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5), child: h)]),
       for (final r in rows) TableRow(children: [for (final c in r) Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5), child: c)]),
     ],
   );
@@ -1544,7 +1600,7 @@ class _RiwayatResepPanelState extends State<_RiwayatResepPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _leftPanelHeader(context, 'Riwayat Resep  |  ${widget.noRkmMedis}  |  ${widget.nmPasien}'),
+        _leftPanelHeader(context, 'Riwayat Resep', subtitle: '${widget.nmPasien} · No. RM ${widget.noRkmMedis}'),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())

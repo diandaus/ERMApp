@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/rad_service.dart';
 import '../services/tindakan_service.dart';
+import '../theme/app_theme.dart' show kPrimary, kText;
 
-const _kBorder = Color(0xFFE5E7EB);
+const _kBorder = Color(0xFFE6E8E8);
 const _kInputBorder = Color(0xFFD1D5DB);
-const _kGreen = Color(0xFF059669);
+const _kGreen = Color(0xFF04C99E);
+const _kFieldBorder = Color(0xFFCFD1D1);
 
-/// showTindakanInputPanel — modal Input Tindakan Rawat Jalan, geser dari
-/// kanan selebar 50% layar (sama pola dgn modal Input Resep). Balikin true
+/// showTindakanInputPanel — modal Input Tindakan Rawat Jalan di TENGAH
+/// layar (header: tombol X + judul, tombol SIMPAN bar penuh). Balikin true
 /// kalau ada tindakan yg tersimpan.
 Future<bool> showTindakanInputPanel(
   BuildContext context, {
@@ -27,17 +29,23 @@ Future<bool> showTindakanInputPanel(
     barrierLabel: 'Input Tindakan',
     barrierColor: Colors.black54,
     transitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (context, _, __) => Align(
-      alignment: Alignment.centerRight,
-      child: FractionallySizedBox(
-        widthFactor: 0.5,
-        heightFactor: 1,
-        child: _TindakanInputPanel(noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, kdPj: kdPj, userNip: userNip),
+    // Gaya referensi "Pilih Jenis Order": modal di tengah HORIZONTAL, siku
+    // (radius 0), menempel tepat di bawah status bar sampai dasar layar,
+    // lebar 64% — header modal sejajar dgn navbar halaman di belakangnya.
+    pageBuilder: (context, _, __) => Padding(
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: FractionallySizedBox(
+          widthFactor: 0.64,
+          heightFactor: 1,
+          child: _TindakanInputPanel(noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, kdPj: kdPj, userNip: userNip),
+        ),
       ),
     ),
-    transitionBuilder: (context, anim, __, child) => SlideTransition(
-      position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
-      child: child,
+    transitionBuilder: (context, anim, __, child) => FadeTransition(
+      opacity: anim,
+      child: ScaleTransition(scale: Tween<double>(begin: 0.96, end: 1).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)), child: child),
     ),
   );
   return saved == true;
@@ -237,73 +245,83 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
     Navigator.of(context).pop(true);
   }
 
+  // Kolom input gaya referensi: tinggi 44 (sama dgn tombol switch tab),
+  // radius 6, border abu #CFD1D1, fokus tosca.
   InputDecoration _deco({String? hint}) => InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+        hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: _kInputBorder)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: _kInputBorder)),
+        constraints: const BoxConstraints(minHeight: 44),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: _kFieldBorder)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: _kFieldBorder)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: _kGreen, width: 1.5)),
       );
 
+  // Label form gaya referensi ("JENIS ORDER"): 13, KAPITAL, renggang, semibold.
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Text.rich(
-          TextSpan(text: text, children: const [TextSpan(text: ' *', style: TextStyle(color: Color(0xFFEF4444)))]),
-          style: const TextStyle(fontSize: 12, color: Color(0xFF374151)),
+          TextSpan(text: text.toUpperCase(), children: const [TextSpan(text: ' *', style: TextStyle(color: Color(0xFFEF4444)))]),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.8, color: kText),
         ),
       );
 
   @override
   Widget build(BuildContext context) {
-    final breadcrumb = [widget.noRawat, widget.noRkmMedis, widget.nmPasien, widget.umur].where((v) => v.isNotEmpty).join('  |  ');
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.person_outline, size: 16, color: _kGreen),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(breadcrumb, style: const TextStyle(fontSize: 12, color: Colors.black))),
-                  const SizedBox(width: 10),
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    customBorder: const CircleBorder(),
+    final bisaSimpan = !_saving && _selected.isNotEmpty;
+    return Material(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header setinggi navbar (60): X + judul kiri, blok "Simpan"
+          // tosca menempel di pojok kanan atas (abu = belum ada tindakan).
+          Container(
+            height: 60,
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _kBorder))),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Tutup',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, size: 26, color: kText),
+                ),
+                const SizedBox(width: 4),
+                const Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Input Tindakan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: kText)),
+                  ),
+                ),
+                Material(
+                  color: bisaSimpan ? kPrimary : const Color(0xFFDADDDD),
+                  child: InkWell(
+                    onTap: bisaSimpan ? _submit : null,
                     child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, border: Border.all(color: _kBorder)),
-                      child: const Icon(Icons.close, size: 16, color: Color(0xFF6B7280)),
+                      width: 170,
+                      alignment: Alignment.center,
+                      child: Text(
+                        _saving ? 'Menyimpan...' : 'Simpan',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: bisaSimpan ? Colors.white : const Color(0xFFA3A8A8)),
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(height: 1, color: _kBorder),
-            Expanded(child: ListView(padding: const EdgeInsets.all(20), children: _buildBody())),
-            if (_error != null)
-              Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), border: Border.all(color: const Color(0xFFFCA5A5)), borderRadius: BorderRadius.circular(2)),
-                child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B))),
-              ),
-            const Divider(height: 1, color: _kBorder),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: _saving ? null : _submit,
-                style: ElevatedButton.styleFrom(backgroundColor: _kGreen, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)), padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: Text(_saving ? 'Menyimpan...' : 'Simpan Tindakan', style: const TextStyle(fontSize: 14)),
-              ),
+          ),
+          Expanded(child: ListView(padding: const EdgeInsets.all(20), children: _buildBody())),
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), border: Border.all(color: const Color(0xFFFCA5A5)), borderRadius: BorderRadius.circular(6)),
+              child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B))),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -311,25 +329,42 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
   List<Widget> _buildBody() {
     final query = _searchCtrl.text.trim();
     return [
-      // Tab Penanganan — button group flat, sama dgn tab modal Resep.
+      // Tab Penanganan — switch gaya referensi ("Tunai | Nontunai"):
+      // tinggi 44, satu bingkai tosca radius 6, segmen aktif terisi tosca
+      // teks putih, segmen lain putih teks gelap.
       Align(
         alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < _penangananLabels.length; i++)
-              InkWell(
-                onTap: () => setState(() {
-                  _penanganan = i;
-                  _error = null;
-                }),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: _penanganan == i ? _kGreen : Colors.white, border: Border.all(color: _kGreen)),
-                  child: Text(_penangananLabels[i], style: TextStyle(fontSize: 12, color: _penanganan == i ? Colors.white : _kGreen)),
+        child: Container(
+          height: 44,
+          // Isi segmen di-clip ke radius 6; garis bingkai digambar di
+          // foregroundDecoration (lapisan PALING ATAS) supaya tidak tertimpa
+          // latar segmen — sebelumnya sudut kanan tampak "putus".
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+          foregroundDecoration: BoxDecoration(border: Border.all(color: _kGreen, width: 1.5), borderRadius: BorderRadius.circular(6)),
+          clipBehavior: Clip.antiAlias,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < _penangananLabels.length; i++)
+                InkWell(
+                  onTap: () => setState(() {
+                    _penanganan = i;
+                    _error = null;
+                  }),
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    alignment: Alignment.center,
+                    color: _penanganan == i ? _kGreen : Colors.white,
+                    child: Text(
+                      _penangananLabels[i],
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _penanganan == i ? Colors.white : kText),
+                    ),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
       const SizedBox(height: 16),
@@ -348,37 +383,40 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
       const SizedBox(height: 12),
       // Tabel tindakan terpilih — ketuk baris/centang utk menghapusnya.
       Container(
-        decoration: BoxDecoration(border: Border.all(color: _kInputBorder), borderRadius: BorderRadius.circular(4)),
+        // Tabel tindakan terpilih — font 15 (sama dgn daftar hasil cari),
+        // header tebal, baris min. 52, border abu radius 6.
+        decoration: BoxDecoration(border: Border.all(color: _kFieldBorder), borderRadius: BorderRadius.circular(6)),
         clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             Container(
-              color: const Color(0xFFF3F4F6),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              color: const Color(0xFFF4F5F5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               child: const Row(
                 children: [
-                  SizedBox(width: 30, child: Text('P', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Color(0xFF374151)))),
-                  SizedBox(width: 90, child: Text('Kode', style: TextStyle(fontSize: 12, color: Color(0xFF374151)))),
-                  Expanded(child: Text('Nama Tindakan', style: TextStyle(fontSize: 12, color: Color(0xFF374151)))),
-                  SizedBox(width: 110, child: Text('Tarif', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: Color(0xFF374151)))),
+                  SizedBox(width: 40, child: Text('P', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kText))),
+                  SizedBox(width: 120, child: Text('Kode', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kText))),
+                  Expanded(child: Text('Nama Tindakan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kText))),
+                  SizedBox(width: 130, child: Text('Tarif', textAlign: TextAlign.right, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kText))),
                 ],
               ),
             ),
             if (_selected.isEmpty)
-              const Padding(padding: EdgeInsets.all(16), child: Text('Belum ada tindakan dipilih', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))))
+              const Padding(padding: EdgeInsets.all(18), child: Text('Belum ada tindakan dipilih', style: TextStyle(fontSize: 16, color: Color(0xFF9CA3AF))))
             else
               for (final item in _selected)
                 InkWell(
                   onTap: () => _toggle(item),
                   child: Container(
-                    decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFF3F4F6)))),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                    constraints: const BoxConstraints(minHeight: 52),
+                    decoration: const BoxDecoration(border: Border(top: BorderSide(color: _kBorder))),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Row(
                       children: [
-                        const SizedBox(width: 30, child: Icon(Icons.check_box, size: 16, color: _kGreen)),
-                        SizedBox(width: 90, child: Text('${item['kd_jenis_prw'] ?? ''}', style: const TextStyle(fontSize: 12))),
-                        Expanded(child: Text('${item['nm_perawatan'] ?? ''}', style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        SizedBox(width: 110, child: Text(_rupiah(_tarif(item)), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),
+                        const SizedBox(width: 40, child: Icon(Icons.check_box, size: 24, color: _kGreen)),
+                        SizedBox(width: 120, child: Text('${item['kd_jenis_prw'] ?? ''}', style: const TextStyle(fontSize: 16, color: Color(0xFF6B7271)))),
+                        Expanded(child: Text('${item['nm_perawatan'] ?? ''}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, height: 1.3, color: kText), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                        SizedBox(width: 130, child: Text(_rupiah(_tarif(item)), textAlign: TextAlign.right, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kText))),
                       ],
                     ),
                   ),
@@ -393,7 +431,7 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
     if (_petugasNip.isNotEmpty && !_pilihPetugas) {
       return Container(
         padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
-        decoration: BoxDecoration(color: const Color(0xFFECFDF5), border: Border.all(color: _kGreen), borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: const Color(0xFFEBFAED), border: Border.all(color: _kGreen), borderRadius: BorderRadius.circular(4)),
         child: Row(
           children: [
             Expanded(child: Text('$_petugasNip - $_petugasNama', style: const TextStyle(fontSize: 12))),
@@ -451,36 +489,57 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
   }
 
   /// Hasil pencarian — daftar bercentang (bisa pilih banyak sekaligus),
-  /// tampil tepat di bawah kolom cari selama ada ketikan.
+  /// tampil tepat di bawah kolom cari selama ada ketikan. Ukuran disetel
+  /// utk jari di tablet: baris min. 52 (seluruh baris bisa diketuk), nama
+  /// 15 (maks 2 baris, kata yg dicari ditebalkan), kode 12 abu di bawah
+  /// nama, tarif 14 tebal di kanan, centang 24; tanpa zebra, garis tipis
+  /// antar baris, baris terpilih latar mint.
   Widget _buildResults() {
     return Container(
       margin: const EdgeInsets.only(top: 4),
-      constraints: const BoxConstraints(maxHeight: 300),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 12, offset: Offset(0, 6))]),
+      constraints: const BoxConstraints(maxHeight: 420),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: _kFieldBorder), borderRadius: BorderRadius.circular(6), boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 12, offset: Offset(0, 6))]),
       clipBehavior: Clip.antiAlias,
       child: _searching
-          ? const Padding(padding: EdgeInsets.all(16), child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))))
+          ? const Padding(padding: EdgeInsets.all(16), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
           : _results.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('Tidak ada hasil pencarian', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))))
-              : ListView.builder(
+              ? const Padding(padding: EdgeInsets.all(16), child: Text('Tidak ada hasil pencarian', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Color(0xFF6B7280))))
+              : ListView.separated(
                   padding: EdgeInsets.zero,
                   shrinkWrap: true,
                   itemCount: _results.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: _kBorder),
                   itemBuilder: (context, i) {
                     final item = _results[i];
                     final selected = _isSelected(item);
                     return InkWell(
                       onTap: () => _toggle(item),
                       child: Container(
-                        color: selected ? const Color(0xFFECFDF5) : (i.isEven ? const Color(0xFFF9FAFB) : Colors.white),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        constraints: const BoxConstraints(minHeight: 52),
+                        color: selected ? const Color(0xFFEBFAED) : Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         child: Row(
                           children: [
-                            Icon(selected ? Icons.check_box : Icons.check_box_outline_blank, size: 18, color: selected ? _kGreen : const Color(0xFF9CA3AF)),
-                            const SizedBox(width: 10),
-                            Expanded(child: Text('${item['nm_perawatan'] ?? ''}', style: const TextStyle(fontSize: 12, color: Color(0xFF111827)), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                            const SizedBox(width: 8),
-                            Text('${item['kd_jenis_prw'] ?? ''} • ${_rupiah(_tarif(item))}', style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
+                            Icon(selected ? Icons.check_box : Icons.check_box_outline_blank, size: 24, color: selected ? _kGreen : const Color(0xFF9CA3AF)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text.rich(
+                                    _sorot('${item['nm_perawatan'] ?? ''}', _searchCtrl.text.trim()),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, height: 1.3, color: kText),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text('${item['kd_jenis_prw'] ?? ''}', style: const TextStyle(fontSize: 12, color: Color(0xFF8A9190))),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(_rupiah(_tarif(item)), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kText)),
                           ],
                         ),
                       ),
@@ -488,5 +547,25 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
                   },
                 ),
     );
+  }
+
+  /// Tebalkan bagian [text] yg cocok dgn [query] (tanpa beda huruf besar/kecil).
+  TextSpan _sorot(String text, String query) {
+    if (query.isEmpty) return TextSpan(text: text);
+    final lower = text.toLowerCase();
+    final q = query.toLowerCase();
+    final spans = <TextSpan>[];
+    var start = 0;
+    while (true) {
+      final idx = lower.indexOf(q, start);
+      if (idx < 0) {
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
+      spans.add(TextSpan(text: text.substring(idx, idx + q.length), style: const TextStyle(fontWeight: FontWeight.w800)));
+      start = idx + q.length;
+    }
+    return TextSpan(children: spans);
   }
 }

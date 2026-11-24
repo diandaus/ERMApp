@@ -5,7 +5,7 @@ import 'landscape_shell.dart';
 import 'poli_screen.dart';
 import 'ranap_list_screen.dart';
 
-const kPrimary = Color(0xFF2563EB);
+const kPrimary = Color(0xFF04B58E);
 
 /// MainShell — shell utama app ini setelah login. UI-nya SENGAJA beda
 /// antara portrait & landscape (per arahan user):
@@ -43,14 +43,21 @@ class _MainShellState extends State<MainShell> {
         title: 'Saya',
         icon: Icons.person_outline,
         extraActions: [
-          Text(widget.user.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-          Text(widget.user.role, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+          Text(widget.user.fullName,
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF374151))),
+          Text(widget.user.role,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: () => confirmLogout(context, widget.onLogout),
             icon: const Icon(Icons.logout, size: 16, color: Color(0xFFDC2626)),
-            label: const Text('Keluar', style: TextStyle(color: Color(0xFFDC2626))),
-            style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFFECACA))),
+            label: const Text('Keluar',
+                style: TextStyle(color: Color(0xFFDC2626))),
+            style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFFECACA))),
           ),
         ],
       ),
@@ -58,16 +65,58 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: tabs),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: kPrimary), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.emergency_outlined), selectedIcon: Icon(Icons.emergency, color: kPrimary), label: 'IGD'),
-          NavigationDestination(icon: Icon(Icons.bed_outlined), selectedIcon: Icon(Icons.bed, color: kPrimary), label: 'Ranap'),
-          NavigationDestination(icon: Icon(Icons.local_hospital_outlined), selectedIcon: Icon(Icons.local_hospital, color: kPrimary), label: 'Poli'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: kPrimary), label: 'Saya'),
-        ],
+      // Navbar bawah putih (garis tipis di atas). Hanya tab AKTIF yg hijau
+      // (ikon terisi + teks tebal + pil mint); lainnya abu.
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFFE6E8E8)))),
+        child: NavigationBarTheme(
+          data: NavigationBarThemeData(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            indicatorColor: const Color(0xFFEBFAED),
+            iconTheme: WidgetStateProperty.resolveWith((s) => IconThemeData(
+                color: s.contains(WidgetState.selected)
+                    ? kPrimary
+                    : const Color(0xFF6B7271),
+                size: 24)),
+            labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
+                  fontSize: 13,
+                  fontWeight: s.contains(WidgetState.selected)
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                  color: s.contains(WidgetState.selected)
+                      ? kPrimary
+                      : const Color(0xFF6B7271),
+                )),
+          ),
+          child: NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: (i) => setState(() => _index = i),
+            destinations: const [
+              NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home, color: kPrimary),
+                  label: 'Home'),
+              NavigationDestination(
+                  icon: Icon(Icons.emergency_outlined),
+                  selectedIcon: Icon(Icons.emergency, color: kPrimary),
+                  label: 'IGD'),
+              NavigationDestination(
+                  icon: Icon(Icons.bed_outlined),
+                  selectedIcon: Icon(Icons.bed, color: kPrimary),
+                  label: 'Ranap'),
+              NavigationDestination(
+                  icon: Icon(Icons.local_hospital_outlined),
+                  selectedIcon: Icon(Icons.local_hospital, color: kPrimary),
+                  label: 'Poli'),
+              NavigationDestination(
+                  icon: Icon(Icons.person_outline),
+                  selectedIcon: Icon(Icons.person, color: kPrimary),
+                  label: 'Saya'),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -83,13 +132,16 @@ void confirmLogout(BuildContext context, VoidCallback onLogout) {
       title: const Text('Keluar?'),
       content: const Text('Anda akan keluar dari aplikasi.'),
       actions: [
-        TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Batal')),
+        TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Batal')),
         TextButton(
           onPressed: () {
             Navigator.of(ctx).pop();
             onLogout();
           },
-          child: const Text('Keluar', style: TextStyle(color: Color(0xFFDC2626))),
+          child:
+              const Text('Keluar', style: TextStyle(color: Color(0xFFDC2626))),
         ),
       ],
     ),

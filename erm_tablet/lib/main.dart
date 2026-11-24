@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'theme/app_theme.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'models/app_user.dart';
 import 'screens/login_screen.dart';
@@ -50,11 +51,7 @@ class _ErmTabletAppState extends State<ErmTabletApp> {
     return MaterialApp(
       title: 'ERM Tablet',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF2563EB),
-        scaffoldBackgroundColor: const Color(0xFFF9FAFB),
-      ),
+      theme: buildAppTheme(),
       home: _checkingSession
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : _user == null

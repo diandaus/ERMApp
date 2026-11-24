@@ -5,7 +5,7 @@ import '../services/api_client.dart';
 import '../services/tindakan_service.dart';
 import '../widgets/tindakan_input_panel.dart';
 
-const kBorder = Color(0xFFE5E7EB);
+const kBorder = Color(0xFFE6E8E8);
 
 /// TindakanTab — Tindakan Rawat Inap (read-only dulu, sama pola dgn
 /// ResepTab/LabTab/RadTab), padanan TindakanTab.tsx (web, isRanap=true):
@@ -133,14 +133,15 @@ class _TindakanTabState extends State<TindakanTab> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: ElevatedButton.icon(
             onPressed: _openInput,
-            icon: const Icon(Icons.add, size: 16, color: Colors.white),
-            label: const Text('Input Tindakan', style: TextStyle(fontSize: 13)),
+            icon: const Icon(Icons.add, size: 20, color: Colors.white),
+            label: const Text('Input Tindakan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
+              backgroundColor: const Color(0xFF04C99E),
               foregroundColor: Colors.white,
               elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
           ),
         ),
@@ -171,23 +172,12 @@ class _TindakanTabState extends State<TindakanTab> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        if (_data.tindakanDokter.isNotEmpty) ...[
-                          const Text('Tindakan Dokter', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
-                          _dokterTable(_data.tindakanDokter),
-                          const SizedBox(height: 16),
-                        ],
-                        if (_data.tindakanParamedis.isNotEmpty) ...[
-                          const Text('Tindakan Perawat', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
-                          _paramedisTable(_data.tindakanParamedis, drpr: false),
-                          const SizedBox(height: 16),
-                        ],
-                        if (_data.tindakanDokterParamedis.isNotEmpty) ...[
-                          const Text('Tindakan Dokter & Perawat', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
-                          _paramedisTable(_data.tindakanDokterParamedis, drpr: true),
-                        ],
+                        if (_data.tindakanDokter.isNotEmpty)
+                          _sectionCard('Tindakan Dokter', _dokterTable(_data.tindakanDokter)),
+                        if (_data.tindakanParamedis.isNotEmpty)
+                          _sectionCard('Tindakan Perawat', _paramedisTable(_data.tindakanParamedis, drpr: false)),
+                        if (_data.tindakanDokterParamedis.isNotEmpty)
+                          _sectionCard('Tindakan Dokter & Perawat', _paramedisTable(_data.tindakanDokterParamedis, drpr: true)),
                       ],
                     ),
     );
@@ -198,13 +188,13 @@ class _TindakanTabState extends State<TindakanTab> {
       decoration: _tableBox,
       clipBehavior: Clip.antiAlias,
       child: Table(
-        border: TableBorder.symmetric(inside: const BorderSide(color: kBorder)),
+        border: const TableBorder(top: BorderSide(color: kBorder), horizontalInside: BorderSide(color: kBorder)),
         columnWidths: {0: const FlexColumnWidth(3), 1: const FlexColumnWidth(2), if (widget.ralan) 2: const FixedColumnWidth(_aksiWidth)},
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
-            decoration: BoxDecoration(color: widget.ralan ? Colors.white : const Color(0xFFF3F4F6)),
-            children: [_cell('Perawatan/Tindakan', color: const Color(0xFF374151)), _cell('Biaya', color: const Color(0xFF374151)), if (widget.ralan) _cell('Aksi', color: const Color(0xFF374151), align: TextAlign.center)],
+            decoration: const BoxDecoration(color: Colors.white),
+            children: [_cell('Perawatan/Tindakan', color: const Color(0xFF5F6665), bold: true), _cell('Biaya', color: const Color(0xFF5F6665), bold: true, align: TextAlign.right), if (widget.ralan) _cell('Aksi', color: const Color(0xFF5F6665), bold: true, align: TextAlign.center)],
           ),
           for (final it in items)
             TableRow(children: [
@@ -223,15 +213,17 @@ class _TindakanTabState extends State<TindakanTab> {
       decoration: _tableBox,
       clipBehavior: Clip.antiAlias,
       child: Table(
-        border: TableBorder.symmetric(inside: const BorderSide(color: kBorder)),
+        border: const TableBorder(top: BorderSide(color: kBorder), horizontalInside: BorderSide(color: kBorder)),
         columnWidths: {0: const FlexColumnWidth(3), 1: const FlexColumnWidth(2), 2: const FlexColumnWidth(2), if (widget.ralan) 3: const FixedColumnWidth(_aksiWidth)},
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
-            decoration: BoxDecoration(color: widget.ralan ? Colors.white : const Color(0xFFF3F4F6)),
+            decoration: const BoxDecoration(color: Colors.white),
             children: [
-              ...['Perawatan/Tindakan', 'Petugas Yg Menangani', 'Biaya'].map((h) => _cell(h, color: const Color(0xFF374151))),
-              if (widget.ralan) _cell('Aksi', color: const Color(0xFF374151), align: TextAlign.center),
+              _cell('Perawatan/Tindakan', color: const Color(0xFF5F6665), bold: true),
+              _cell('Petugas Yg Menangani', color: const Color(0xFF5F6665), bold: true),
+              _cell('Biaya', color: const Color(0xFF5F6665), bold: true, align: TextAlign.right),
+              if (widget.ralan) _cell('Aksi', color: const Color(0xFF5F6665), bold: true, align: TextAlign.center),
             ],
           ),
           for (final it in items)
@@ -246,29 +238,49 @@ class _TindakanTabState extends State<TindakanTab> {
     );
   }
 
-  static const double _aksiWidth = 76;
+  /// Kartu putih per kelompok — judul ("Tindakan Dokter") DI DALAM kartu,
+  /// tabel di bawahnya; tanpa border, radius 6.
+  Widget _sectionCard(String title, Widget table) => Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)), // tanpa border
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF282A2A))),
+            const SizedBox(height: 12),
+            table,
+          ],
+        ),
+      );
+
+  static const double _aksiWidth = 100;
 
   // Rawat Jalan (latar layar abu): tabel putih radius 4, seragam dgn kartu
   // di tab SOAP/Resep; Rawat Inap tetap gaya lamanya.
-  BoxDecoration get _tableBox => BoxDecoration(color: widget.ralan ? Colors.white : null, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(widget.ralan ? 4 : 8));
+  // Model tabel referensi: tanpa bingkai & garis vertikal, header putih
+  // teks abu tebal, baris dipisah garis horizontal tipis.
+  BoxDecoration get _tableBox => const BoxDecoration(color: Colors.white);
 
   Widget _hapusButton(VoidCallback onPressed) => Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: InkWell(
             onTap: onPressed,
+            borderRadius: BorderRadius.circular(6),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              color: const Color(0xFFEF4444),
-              child: const Text('Hapus', style: TextStyle(fontSize: 11, color: Colors.white)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(6)),
+              child: const Text('Hapus', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
             ),
           ),
         ),
       );
 
-  Widget _cell(String text, {required Color color, TextAlign align = TextAlign.left}) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Text(text, textAlign: align, style: TextStyle(fontSize: 11, color: color)),
+  // Font 15 — tidak lebih besar dari font tab (16); header tebal.
+  Widget _cell(String text, {required Color color, TextAlign align = TextAlign.left, bool bold = false}) => Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: bold ? 12 : 16),
+        child: Text(text, textAlign: align, style: TextStyle(fontSize: 15, fontWeight: bold ? FontWeight.w600 : FontWeight.w400, color: color)),
       );
 
   String _rupiah(num v) {

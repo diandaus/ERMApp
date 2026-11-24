@@ -7,9 +7,13 @@ import '../services/jadwal_obat_service.dart';
 import '../widgets/resep_picker_sheet.dart';
 import '../widgets/right_panel.dart';
 
-const kBorder = Color(0xFFE5E7EB);
-const kPrimary = Color(0xFF2563EB);
-const kHeaderGreen = Color(0xFF059669);
+const kBorder = Color(0xFFE6E8E8);
+const kPrimary = Color(0xFF04B58E);
+const kHeaderGreen = Color(0xFF04C99E);
+// Font tabel lebih jelas (gaya referensi): teks hampir hitam & lebih tebal.
+const kTabelBorder = Color(0xFFCFD1D1);
+const kTeksTegas = Color(0xFF282A2A);
+const kTeksSedang = Color(0xFF3A3D3D);
 
 const Map<String, TandaInfo> kTandaInfo = {
   'V': TandaInfo('Obat sudah diberikan', Color(0xFF166534), Color(0xFFDCFCE7)),
@@ -295,7 +299,7 @@ class _JadwalObatTabState extends State<JadwalObatTab> {
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(6)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -323,7 +327,7 @@ class _JadwalObatTable extends StatelessWidget {
   final void Function(JadwalObatItem item) onHentikan;
   const _JadwalObatTable({required this.aktif, required this.dihentikan, required this.dates, required this.onTapSlot, required this.onHentikan});
 
-  static const double _namaColWidth = 190;
+  static const double _namaColWidth = 230;
   static const double _slotColWidth = 46;
   double get _dateGroupWidth => _slotColWidth * 4;
 
@@ -342,7 +346,10 @@ class _JadwalObatTable extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Container(
               width: tableWidth,
-              decoration: BoxDecoration(border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(8)),
+              // Tabel putih (kontras dgn latar abu), tanpa border — sama dgn tabel Rawat Inap.
+              // Tabel putih + border abu tegas (gaya kartu referensi #CFD1D1).
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: kTabelBorder)),
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -362,14 +369,14 @@ class _JadwalObatTable extends StatelessWidget {
 
   Widget _headerRow1() {
     return Container(
-      decoration: const BoxDecoration(color: Color(0xFFF9FAFB), border: Border(bottom: BorderSide(color: kBorder))),
+      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: kBorder))),
       child: Row(
         children: [
           Container(
             width: _namaColWidth,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             alignment: Alignment.center,
-            child: const Text('Nama Obat', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
+            child: const Text('Nama Obat', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kTeksTegas)),
           ),
           for (final date in dates)
             Container(
@@ -377,7 +384,7 @@ class _JadwalObatTable extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 6),
               alignment: Alignment.center,
               decoration: const BoxDecoration(border: Border(left: BorderSide(color: kBorder))),
-              child: Text(_fmtTglIndo(date), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+              child: Text(_fmtTglIndo(date), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kTeksTegas)),
             ),
         ],
       ),
@@ -386,7 +393,7 @@ class _JadwalObatTable extends StatelessWidget {
 
   Widget _headerRow2() {
     return Container(
-      decoration: const BoxDecoration(color: Color(0xFFF9FAFB), border: Border(bottom: BorderSide(color: kBorder))),
+      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: kBorder))),
       child: Row(
         children: [
           SizedBox(width: _namaColWidth),
@@ -398,7 +405,7 @@ class _JadwalObatTable extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         alignment: Alignment.center,
                         decoration: const BoxDecoration(border: Border(left: BorderSide(color: kBorder))),
-                        child: Text(l, style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
+                        child: Text(l, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kTeksSedang)),
                       ))
                   .toList(),
             ),
@@ -411,8 +418,9 @@ class _JadwalObatTable extends StatelessWidget {
     return Container(
       width: width,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      color: const Color(0xFFF3F4F6),
-      child: const Text('Obat Dihentikan', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+      color: const Color(0xFFF4F5F5),
+      // Gaya label aksi referensi ("Pisah Bayar"): tosca, semi-tebal.
+      child: const Text('Obat Dihentikan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kHeaderGreen)),
     );
   }
 
@@ -435,11 +443,11 @@ class _JadwalObatTable extends StatelessWidget {
                     spacing: 6,
                     runSpacing: 4,
                     children: [
-                      Text(item.namaObat, style: const TextStyle(fontSize: 12, color: Color(0xFF111827))),
+                      Text(item.namaObat, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kTeksTegas)),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(color: const Color(0xFFDBEAFE), borderRadius: BorderRadius.circular(999)),
-                        child: Text(item.frekuensi, style: const TextStyle(fontSize: 9, color: Color(0xFF1E40AF), fontWeight: FontWeight.w600)),
+                        child: Text(item.frekuensi, style: const TextStyle(fontSize: 11, color: Color(0xFF1E40AF), fontWeight: FontWeight.w600)),
                       ),
                     ],
                   ),
@@ -447,7 +455,7 @@ class _JadwalObatTable extends StatelessWidget {
                     const SizedBox(height: 4),
                     InkWell(
                       onTap: () => onHentikan(item),
-                      child: const Text('Hentikan', style: TextStyle(fontSize: 10, color: Color(0xFFDC2626))),
+                      child: const Text('Hentikan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFFDC2626))),
                     ),
                   ],
                 ],
@@ -465,7 +473,7 @@ class _JadwalObatTable extends StatelessWidget {
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(border: Border(left: BorderSide(color: kBorder))),
                       child: slotIndexes.isEmpty
-                          ? const Text('–', style: TextStyle(fontSize: 11, color: Color(0xFFE5E7EB)))
+                          ? const Text('–', style: TextStyle(fontSize: 11, color: Color(0xFFE6E8E8)))
                           : Wrap(
                               alignment: WrapAlignment.center,
                               spacing: 3,

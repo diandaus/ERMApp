@@ -5,9 +5,9 @@ import '../services/api_client.dart';
 import '../services/api_config.dart';
 import '../services/rad_service.dart';
 
-const _kBorder = Color(0xFFE5E7EB);
+const _kBorder = Color(0xFFE6E8E8);
 const _kInputBorder = Color(0xFFD1D5DB);
-const _kGreen = Color(0xFF059669);
+const _kGreen = Color(0xFF04C99E);
 
 /// showUsgInputPanel — modal "Input Hasil Pemeriksaan USG", geser dari
 /// kanan selebar 50% layar (sama pola dgn modal Input Resep). Balikin true

@@ -9,7 +9,7 @@ import 'rad_tab.dart';
 import 'resep_tab.dart';
 import 'tindakan_tab.dart';
 
-const kHeaderGreen = Color(0xFF059669);
+const kHeaderGreen = Color(0xFF04C99E);
 
 /// openJadwalObat — dipisah jadi fungsi top-level (bukan method di
 /// PasienDetailScreen) supaya bisa dipanggil juga dari actions AppBar

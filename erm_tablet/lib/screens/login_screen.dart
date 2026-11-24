@@ -3,7 +3,7 @@ import '../models/app_user.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 
-const kPrimary = Color(0xFF2563EB);
+const kPrimary = Color(0xFF04B58E);
 
 /// Login — padanan LoginView di Auth.tsx (web), pola diadaptasi dari
 /// e_presensi/lib/screens/login_screen.dart. Tidak ada "Daftar" (register)

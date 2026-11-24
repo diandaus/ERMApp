@@ -60,4 +60,38 @@ class SoapRalanService {
     }
     return latest == null ? null : SoapItem.fromJson(latest);
   }
+
+  /// Riwayat SOAPIE pasien per kunjungan — endpoint SAMA dgn modal Riwayat
+  /// SOAPIE web (RiwayatSoapieModal.tsx). [filter]: last5 | all | dateRange
+  /// (pakai [dateFrom]/[dateTo] yyyy-MM-dd) | specific (pakai [noRawat]).
+  static Future<List<SoapieKunjungan>> getRiwayatSoapie(String noRkmMedis,
+      {String filter = 'last5', String dateFrom = '', String dateTo = '', String noRawat = ''}) async {
+    final query = {'filter': filter};
+    if (filter == 'dateRange') {
+      query['date_from'] = dateFrom;
+      query['date_to'] = dateTo;
+    } else if (filter == 'specific') {
+      query['no_rawat'] = noRawat;
+    }
+    final regs = await ApiClient.getJsonArray('/api/pemeriksaan/riwayat-soapie/${Uri.encodeComponent(noRkmMedis)}', query: query);
+    return regs.map((r) {
+      final soapie = r['soapie'];
+      return SoapieKunjungan(
+        noRawat: r['no_rawat'] as String? ?? '',
+        noReg: r['no_reg'] as String? ?? '',
+        tglRegistrasi: r['tgl_registrasi'] as String? ?? '',
+        statusLanjut: r['status_lanjut'] as String? ?? '',
+        soapie: soapie is List ? soapie.whereType<Map<String, dynamic>>().map(SoapItem.fromJson).toList() : const [],
+      );
+    }).toList();
+  }
+}
+
+class SoapieKunjungan {
+  final String noRawat;
+  final String noReg;
+  final String tglRegistrasi;
+  final String statusLanjut;
+  final List<SoapItem> soapie;
+  const SoapieKunjungan({required this.noRawat, required this.noReg, required this.tglRegistrasi, required this.statusLanjut, required this.soapie});
 }

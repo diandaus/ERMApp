@@ -4,8 +4,9 @@ import '../models/ranap_patient.dart';
 import '../models/soap_item.dart';
 import '../services/soap_service.dart';
 
-const kBorder = Color(0xFFE5E7EB);
-const kPrimary = Color(0xFF2563EB);
+const kBorder = Color(0xFFE6E8E8);
+const kPrimary = Color(0xFF04B58E);
+const kPrimaryBtn = Color(0xFF04C99E);
 
 /// PemeriksaanTab — SOAP/CPPT Rawat Inap, padanan tab SOAP/CPPT di
 /// PemeriksaanRanap.tsx (web). Form input + Rincian Riwayat (scrollable),
@@ -259,11 +260,11 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
   Widget _formShell({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Input SOAP/CPPT', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const Text('Input SOAP/CPPT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
           child,
           const SizedBox(height: 14),
@@ -271,7 +272,7 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: _saving ? null : _submit,
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryBtn, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
               child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Simpan SOAP'),
             ),
           ),
@@ -372,19 +373,19 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
 
   Widget _shortField(TextEditingController ctrl, String label, String suffix) => TextField(
         controller: ctrl,
-        decoration: InputDecoration(labelText: label, suffixText: suffix, isDense: true, border: const OutlineInputBorder()),
+        decoration: InputDecoration(labelText: label, labelStyle: const TextStyle(fontSize: 13), suffixText: suffix, isDense: true, border: const OutlineInputBorder()),
         style: const TextStyle(fontSize: 13),
       );
 
   Widget _buildRiwayat() {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: kBorder), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
       constraints: const BoxConstraints(minHeight: 200),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Rincian Riwayat', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const Text('Rincian Riwayat', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           if (_loading)
             const Padding(padding: EdgeInsets.all(16), child: Center(child: Text('Memuat...', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))))
@@ -409,7 +410,7 @@ class _RiwayatCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: const Color(0xFFF4F5F5), borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

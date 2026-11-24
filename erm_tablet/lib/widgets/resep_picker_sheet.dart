@@ -3,7 +3,7 @@ import '../models/resep_ranap_item.dart';
 import '../services/resep_ranap_service.dart';
 import 'right_panel.dart';
 
-const kBorder = Color(0xFFE5E7EB);
+const kBorder = Color(0xFFE6E8E8);
 
 /// Hasil pilihan dari ResepPickerSheet — nama obat + aturan pakai mentah
 /// (dipakai caller utk nebak Frekuensi via [detectFrekuensiFromAturanPakai]).
@@ -164,7 +164,7 @@ class _ResepPickerDialogState extends State<_ResepPickerDialog> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: const BoxDecoration(color: Color(0xFFF9FAFB), border: Border(bottom: BorderSide(color: kBorder))),
+            decoration: const BoxDecoration(color: Color(0xFFF4F5F5), border: Border(bottom: BorderSide(color: kBorder))),
             child: Wrap(
               alignment: WrapAlignment.spaceBetween,
               children: [

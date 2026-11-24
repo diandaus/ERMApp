@@ -3,7 +3,7 @@ import '../models/diagnosa_item.dart';
 import '../models/ranap_patient.dart';
 import '../services/diagnosa_service.dart';
 
-const kBorder = Color(0xFFE5E7EB);
+const kBorder = Color(0xFFE6E8E8);
 
 /// DiagnosaTab — Diagnosa (ICD10) & Prosedur (ICD9) (read-only dulu, sama
 /// pola dgn ResepTab/LabTab/RadTab/TindakanTab), padanan DiagnosaTab.tsx

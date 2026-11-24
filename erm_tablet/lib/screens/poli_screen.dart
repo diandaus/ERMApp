@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+import '../widgets/bar_toolbar.dart';
+import '../widgets/modal_tengah.dart';
 import 'package:intl/intl.dart';
 import '../models/app_user.dart';
 import '../models/dokter_option.dart';
@@ -9,8 +12,8 @@ import '../services/dokter_service.dart';
 import '../services/rawat_jalan_service.dart';
 import 'pemeriksaan_ralan_screen.dart';
 
-const _kBorder = Color(0xFFE5E7EB);
-const _kGreen = Color(0xFF059669);
+const _kBorder = Color(0xFFE6E8E8);
+const _kGreen = Color(0xFF04C99E);
 
 const _kTabPoliToday = 'poli-today';
 const _kTabRujukan = 'rujukan-internal';
@@ -205,22 +208,8 @@ class _PoliScreenState extends State<PoliScreen> {
     );
     final _PoliFilter? result;
     if (widget.landscape) {
-      // Panel geser dari kanan — sama pola dgn filter RanapTableScreen.
-      result = await showGeneralDialog<_PoliFilter>(
-        context: context,
-        barrierDismissible: true,
-        barrierLabel: 'Filter',
-        barrierColor: Colors.black38,
-        transitionDuration: const Duration(milliseconds: 250),
-        pageBuilder: (context, _, __) => Align(
-          alignment: Alignment.centerRight,
-          child: SizedBox(width: 300, height: double.infinity, child: panel),
-        ),
-        transitionBuilder: (context, anim, __, child) => SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
-          child: child,
-        ),
-      );
+      // Modal di tengah — sama dgn filter Rawat Inap & modal Input Tindakan.
+      result = await showModalTengah<_PoliFilter>(context, label: 'Filter', widthFactor: 0.45, builder: (_) => panel);
     } else {
       result = await showModalBottomSheet<_PoliFilter>(
         context: context,
@@ -327,36 +316,40 @@ class _PoliScreenState extends State<PoliScreen> {
     return builder();
   }
 
+  // Landscape — SAMA dgn Rawat Inap: toolbar putih menempel di bawah
+  // navbar (judul + dropdown jenis daftar + Filter + Muat ulang), tabel
+  // putih tanpa border/bayangan, header tebal, baris tanpa zebra.
   Widget _buildLandscape(Widget tabs, List<PoliPatient> list) {
     final showNoReg = _tab == _kTabPoliToday;
+    final nToday = _applyFilter(_poliToday).length;
+    final nRujukan = _applyFilter(_rujukan).length;
     return Container(
-      color: const Color(0xFFF9FAFB),
+      color: kBg,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-            child: Row(
-              children: [
-                tabs,
-                const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: _openFilter,
-                  icon: Icon(Icons.filter_alt_outlined, size: 16, color: _filterActive ? _kGreen : const Color(0xFF6B7280)),
-                  label: Text('Filter', style: TextStyle(fontSize: 12, color: _filterActive ? _kGreen : const Color(0xFF374151))),
-                  style: OutlinedButton.styleFrom(side: BorderSide(color: _filterActive ? _kGreen : _kBorder), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
-                ),
-                const SizedBox(width: 8),
-                IconButton(icon: const Icon(Icons.refresh), tooltip: 'Muat ulang', onPressed: _load),
-              ],
-            ),
+          BarToolbar(
+            title: _loading ? 'Pasien Poliklinik' : 'Pasien Poliklinik (${list.length})',
+            actions: [
+              BarDropdown<String>(
+                value: _tab,
+                tooltip: 'Jenis daftar',
+                options: {
+                  _kTabPoliToday: 'Poli Hari Ini ($nToday)',
+                  _kTabRujukan: 'Rujukan Poli Internal ($nRujukan)',
+                },
+                onChanged: (v) { if (v != _tab) _setTab(v); },
+              ),
+              BarButton(icon: Icons.filter_alt_outlined, label: 'Filter', active: _filterActive, onTap: _openFilter),
+              BarButton(icon: Icons.refresh, tooltip: 'Muat ulang', onTap: _load),
+            ],
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              padding: const EdgeInsets.all(16),
               child: _buildBody(
                 list,
                 () => Container(
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _kBorder)),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                   clipBehavior: Clip.antiAlias,
                   child: Column(
                     children: [
@@ -368,7 +361,7 @@ class _PoliScreenState extends State<PoliScreen> {
                           separatorBuilder: (_, __) => const Divider(height: 1, color: _kBorder),
                           itemBuilder: (context, i) => _TableRow(
                             patient: list[i],
-                            even: i % 2 == 0,
+                            even: true,
                             showNoReg: showNoReg,
                             onOpen: () => _openPemeriksaan(list[i]),
                             onCall: () => _callPatient(list[i]),
@@ -491,7 +484,7 @@ Color _rowColor(PoliPatient p, bool even) {
 const double _wNoReg = 64;
 const double _wWaktu = 84;
 const double _wBayar = 96;
-const double _wNoRawat = 128;
+const double _wNoRawat = 116;
 const double _wStatus = 100;
 
 class _TableHeader extends StatelessWidget {
@@ -500,17 +493,18 @@ class _TableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget label(String text) => Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF6B7280)));
+    Widget label(String text) => Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kText));
+    // Header putih, teks tebal gelap + garis bawah (sama dgn Rawat Inap).
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: const Color(0xFFF9FAFB),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: _kBorder))),
       child: Row(
         children: [
           Expanded(flex: 2, child: label('No. RM')),
-          Expanded(flex: 5, child: label('Nama Pasien')),
+          Expanded(flex: 8, child: label('Nama Pasien')),
           if (showNoReg) SizedBox(width: _wNoReg, child: label('No. Reg')),
-          Expanded(flex: 5, child: label('Dokter')),
-          Expanded(flex: 4, child: label(showNoReg ? 'Poli' : 'Poli Tujuan')),
+          Expanded(flex: 4, child: label('Dokter')),
+          Expanded(flex: 3, child: label(showNoReg ? 'Poli' : 'Poli Tujuan')),
           SizedBox(width: _wWaktu, child: label('Tgl Reg')),
           SizedBox(width: _wBayar, child: label('Cara Bayar')),
           SizedBox(width: _wNoRawat, child: label('No. Rawat')),
@@ -535,32 +529,46 @@ class _TableRow extends StatelessWidget {
     const cell = TextStyle(fontSize: 12, color: Color(0xFF374151));
     final p = patient;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: _rowColor(p, even),
       child: Row(
         children: [
           Expanded(flex: 2, child: Text(p.noRkmMedis, style: cell)),
           Expanded(
-            flex: 5,
+            flex: 8,
             // Ketuk kolom nama -> buka form pemeriksaan fullscreen.
             child: InkWell(
               onTap: onOpen,
               child: Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
-                    Text(p.nmPasien, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111827)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(p.umur, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                    // Avatar bulat mint — sama dgn tabel Rawat Inap.
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: const BoxDecoration(color: kPrimarySoft, shape: BoxShape.circle),
+                      child: const Icon(Icons.person, size: 18, color: kPrimaryDark),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(p.nmPasien, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111827)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(p.umur, style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
           if (showNoReg) SizedBox(width: _wNoReg, child: Align(alignment: Alignment.centerLeft, child: _NoRegButton(noReg: p.noReg, onPressed: onCall))),
-          Expanded(flex: 5, child: Padding(padding: const EdgeInsets.only(right: 8), child: Text(p.nmDokter, style: cell, maxLines: 1, overflow: TextOverflow.ellipsis))),
-          Expanded(flex: 4, child: Padding(padding: const EdgeInsets.only(right: 8), child: Text(p.nmPoli, style: cell, maxLines: 1, overflow: TextOverflow.ellipsis))),
+          Expanded(flex: 4, child: Padding(padding: const EdgeInsets.only(right: 8), child: Text(p.nmDokter, style: cell, maxLines: 1, overflow: TextOverflow.ellipsis))),
+          Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(right: 8), child: Text(p.nmPoli, style: cell, maxLines: 1, overflow: TextOverflow.ellipsis))),
           SizedBox(
             width: _wWaktu,
             child: Column(
@@ -656,15 +664,15 @@ class _NoRegButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        side: const BorderSide(color: Color(0xFF2563EB)),
+        side: const BorderSide(color: Color(0xFF04B58E)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.campaign_outlined, size: 13, color: Color(0xFF2563EB)),
+          const Icon(Icons.campaign_outlined, size: 13, color: Color(0xFF04B58E)),
           const SizedBox(width: 3),
-          Text(noReg, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
+          Text(noReg, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF04B58E))),
         ],
       ),
     );
@@ -751,8 +759,64 @@ class _FilterPanelState extends State<_FilterPanel> {
     });
   }
 
+  void _reset() {
+    final today = DateUtils.dateOnly(DateTime.now());
+    setState(() {
+      _tglDari = today;
+      _tglSampai = today;
+      _kdPoli = '';
+      _kdDokter = '';
+    });
+  }
+
+  void _terapkan() => Navigator.of(context).pop(_PoliFilter(tglDari: _tglDari, tglSampai: _tglSampai, kdPoli: _kdPoli, kdDokter: _kdDokter));
+
+  /// Landscape: modal tengah — header ✕ "Filter", Reset & Terapkan kanan atas.
+  Widget _buildModal() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ModalTengahHeader(title: 'Filter', secondaryLabel: 'Reset', onSecondary: _reset, actionLabel: 'Terapkan', onAction: _terapkan),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ModalLabel('Tanggal Registrasi'),
+                _dateField('Dari', _tglDari, () => _pick(true)),
+                const SizedBox(height: 10),
+                _dateField('Sampai', _tglSampai, () => _pick(false)),
+                const SizedBox(height: 24),
+                const ModalLabel('Poliklinik'),
+                _dropdown(
+                  value: _kdPoli,
+                  allLabel: 'Semua Poliklinik',
+                  options: {for (final p in widget.poliOptions) p.kdPoli: p.nmPoli},
+                  onChanged: (v) => setState(() => _kdPoli = v),
+                ),
+                const SizedBox(height: 24),
+                const ModalLabel('Dokter'),
+                if (widget.user.isDokter)
+                  _lockedDokter()
+                else
+                  _dropdown(
+                    value: _kdDokter,
+                    allLabel: 'Semua Dokter',
+                    options: {for (final d in widget.dokterOptions) d.kdDokter: d.nmDokter},
+                    onChanged: (v) => setState(() => _kdDokter = v),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!widget.sheet) return _buildModal();
     const labelStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151));
     return Material(
       color: Colors.white,
@@ -842,7 +906,7 @@ class _FilterPanelState extends State<_FilterPanel> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: linked ? const Color(0xFFF9FAFB) : const Color(0xFFFEF2F2),
+          color: linked ? const Color(0xFFF4F5F5) : const Color(0xFFFEF2F2),
           border: Border.all(color: linked ? _kBorder : const Color(0xFFFECACA)),
           borderRadius: BorderRadius.circular(4),
         ),

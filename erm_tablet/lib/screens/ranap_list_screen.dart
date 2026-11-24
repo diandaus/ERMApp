@@ -7,8 +7,8 @@ import '../services/dokter_service.dart';
 import '../services/ranap_service.dart';
 import 'pasien_detail_screen.dart';
 
-const kBorder = Color(0xFFE5E7EB);
-const kHeaderGreen = Color(0xFF059669);
+const kBorder = Color(0xFFE6E8E8);
+const kHeaderGreen = Color(0xFF04C99E);
 
 /// RanapListScreen — tab Ranap di MainShell. Daftar pasien penuh 1 layar
 /// (portrait-first, sesuai arahan user) — klik pasien SELALU push ke layar
@@ -158,8 +158,9 @@ class _RanapListScreenState extends State<RanapListScreen> {
   }
 
   Widget _buildListPane() {
+    // Latar halaman abu muda (sama dgn landscape) — kartu pasien putih menonjol.
     return Container(
-      color: Colors.white,
+      color: const Color(0xFFF4F5F5),
       child: Column(
         children: [
           // Header hijau (judul + refresh + kolom cari) — padanan gaya
@@ -222,10 +223,11 @@ class _RanapListScreenState extends State<RanapListScreen> {
             ),
           ),
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder))),
+            decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: kBorder))),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SegmentedButton<String>(
                   segments: const [
