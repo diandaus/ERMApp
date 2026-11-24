@@ -65,19 +65,29 @@ func getDisplayInformasi(db *sql.DB) gin.HandlerFunc {
 		rows.Close()
 
 		// Satu query (bukan 3 query per kelas spt PHP) — hasilnya sama.
-		// KHUSUS Kelas Utama dipecah per nama kamar/bangsal (mis. ICU 5 bed,
-		// NICU 3 bed) supaya ruang intensif terlihat terpisah; kelas lain
-		// tetap digabung per kelas spt PHP.
+		// KHUSUS Kelas Utama: yg ditampilkan HANYA ruang ICU & NICU, dgn
+		// label nama ruangnya ("ICU"/"NICU", bukan "Kelas Utama"); kamar
+		// Kelas Utama lain disembunyikan. Ruang dikenali dari nama bangsal
+		// (atau kode kamar) yg MENGANDUNG "NICU" / "ICU" — NICU dicek dulu
+		// krn "NICU" juga mengandung "ICU". Kelas lain tetap per kelas spt PHP.
 		kamar := []displayKamarKelas{}
 		if kr, err := db.Query(`
-			SELECT k.kelas,
-				IF(k.kelas = 'Kelas Utama', IFNULL(b.nm_bangsal, ''), '') AS nama_kamar,
-				COUNT(*), SUM(k.status = 'ISI'), SUM(k.status = 'KOSONG')
-			FROM kamar k
-			LEFT JOIN bangsal b ON b.kd_bangsal = k.kd_bangsal
-			WHERE k.statusdata = '1'
-			GROUP BY k.kelas, nama_kamar
-			ORDER BY k.kelas, nama_kamar`); err == nil {
+			SELECT x.kelas, x.nama_kamar, COUNT(*), SUM(x.status = 'ISI'), SUM(x.status = 'KOSONG')
+			FROM (
+				SELECT k.kelas, k.status,
+					CASE
+						WHEN k.kelas <> 'Kelas Utama' THEN ''
+						WHEN UPPER(CONCAT(IFNULL(b.nm_bangsal, ''), ' ', k.kd_kamar)) LIKE '%NICU%' THEN 'NICU'
+						WHEN UPPER(CONCAT(IFNULL(b.nm_bangsal, ''), ' ', k.kd_kamar)) LIKE '%ICU%' THEN 'ICU'
+						ELSE NULL
+					END AS nama_kamar
+				FROM kamar k
+				LEFT JOIN bangsal b ON b.kd_bangsal = k.kd_bangsal
+				WHERE k.statusdata = '1'
+			) x
+			WHERE x.nama_kamar IS NOT NULL
+			GROUP BY x.kelas, x.nama_kamar
+			ORDER BY x.kelas = 'Kelas Utama', x.kelas, x.nama_kamar`); err == nil {
 			for kr.Next() {
 				var k displayKamarKelas
 				if kr.Scan(&k.Kelas, &k.NamaKamar, &k.Total, &k.Isi, &k.Kosong) == nil {
