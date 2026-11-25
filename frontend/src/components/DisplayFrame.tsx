@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Kerangka layar display Anjungan & Antrian (Jadwal Operasi, Layanan
-// Informasi, dst): navbar hijau (kiri logo + nama RS, tengah judul, kanan
+// Informasi, dst): navbar hijau (kiri logo RS saja, tengah judul, kanan
 // hari/tanggal + jam berjalan) dan footer hijau running text "Tarif Kamar
 // Umum" — padanan header/footer webapps Khanza (jadwaloperasi.php, bed5.php).
 
@@ -48,12 +48,11 @@ export const DisplayFrame: React.FC<Props> = ({ title, icon, tarif, children }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
           <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', padding: 4 }}>
             {rs.logo ? (
-              <img src={rs.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <img src={rs.logo} alt={rs.nama || 'Logo'} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             ) : (
               <span style={{ fontSize: 30, color: DISPLAY_GREEN_DARK }}>✚</span>
             )}
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rs.nama || 'Rumah Sakit'}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 36, fontWeight: 800, letterSpacing: 0.5 }}>
           {icon}

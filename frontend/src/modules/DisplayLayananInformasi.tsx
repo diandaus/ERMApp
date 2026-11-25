@@ -67,7 +67,6 @@ export const DisplayLayananInformasiView: React.FC = () => {
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 };
   const center: React.CSSProperties = { textAlign: 'center' };
-  const total = kamar.reduce((a, k) => ({ total: a.total + k.total, isi: a.isi + k.isi, kosong: a.kosong + k.kosong }), { total: 0, isi: 0, kosong: 0 });
 
   return (
     <DisplayFrame
@@ -159,14 +158,6 @@ export const DisplayLayananInformasiView: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {kamar.length > 0 && (
-                <tr style={{ background: '#F4F5F5' }}>
-                  <td style={{ ...displayTd, fontWeight: 800 }}>Total</td>
-                  <td style={{ ...displayTd, ...center, fontWeight: 800 }}>{total.total}</td>
-                  <td style={{ ...displayTd, ...center, fontWeight: 800, color: '#991B1B' }}>{total.isi}</td>
-                  <td style={{ ...displayTd, ...center, fontWeight: 800, color: '#166534' }}>{total.kosong}</td>
-                </tr>
-              )}
             </tbody>
           </table>
           {loaded && kamar.length === 0 && (
