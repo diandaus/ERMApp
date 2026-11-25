@@ -72,13 +72,22 @@ func saveCatatanDokter(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
+		// Tanggal catatan = tanggal KUNJUNGAN (reg_periksa.tgl_registrasi),
+		// bukan tanggal hari ini — dokter sering mengisi catatan 1-2 hari
+		// setelah pasien datang, dan catatan harus menempel ke tanggal
+		// kunjungannya. Jam tetap jam saat disimpan.
 		now := time.Now()
-		_, err := db.Exec(
-			`INSERT INTO catatan_perawatan (tanggal, jam, no_rawat, kd_dokter, catatan) VALUES (?, ?, ?, ?, ?)`,
-			now.Format("2006-01-02"), now.Format("15:04:05"), payload.NoRawat, payload.KdDokter, payload.Catatan,
+		res, err := db.Exec(
+			`INSERT INTO catatan_perawatan (tanggal, jam, no_rawat, kd_dokter, catatan)
+			 SELECT tgl_registrasi, ?, no_rawat, ?, ? FROM reg_periksa WHERE no_rawat = ?`,
+			now.Format("15:04:05"), payload.KdDokter, payload.Catatan, payload.NoRawat,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Data kunjungan (no_rawat) tidak ditemukan"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "Catatan dokter berhasil disimpan"})
