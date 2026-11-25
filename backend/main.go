@@ -1014,6 +1014,10 @@ func main() {
 		log.Fatalf("gagal inisialisasi tabel lab_pk_hasil_template: %v", err)
 	}
 
+	if err := ensureTemplateCatatanDokterTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel template_catatan_dokter: %v", err)
+	}
+
 	if err := ensureResepRacikanTemplateTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel resep_racikan_template: %v", err)
 	}
@@ -3565,6 +3569,9 @@ func main() {
 	r.GET("/api/pemeriksaan/catatan-dokter/*no_rawat", getCatatanDokter(db))
 	r.POST("/api/pemeriksaan/catatan-dokter", saveCatatanDokter(db))
 	r.DELETE("/api/pemeriksaan/catatan-dokter", deleteCatatanDokter(db))
+	r.GET("/api/pemeriksaan/template-catatan-dokter", getTemplateCatatanDokter(db))
+	r.POST("/api/pemeriksaan/template-catatan-dokter", createTemplateCatatanDokter(db))
+	r.DELETE("/api/pemeriksaan/template-catatan-dokter/:id", deleteTemplateCatatanDokter(db))
 
 	// Pemeriksaan Rawat Inap endpoints
 	r.GET("/api/pemeriksaan-ranap/*no_rawat", getPemeriksaanRanap(db))

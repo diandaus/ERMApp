@@ -2150,7 +2150,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             )}
 
             {activeTab === 'catatan_dokter' && (
-              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <CatatanDokterTab patient={patient} />
               </div>
             )}
