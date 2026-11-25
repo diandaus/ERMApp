@@ -205,7 +205,42 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan hasil pemeriksaan USG');
-      await Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Hasil pemeriksaan USG berhasil disimpan', timer: 2000, showConfirmButton: false });
+
+      // Foto USG dari Orthanc otomatis diupload ke gambar_radiologi (seksi
+      // "Gambar Radiologi" di tab) — endpoint sama dgn tombol Upload per
+      // foto di ModalHasilRadiologi.tsx; backend menempelkannya ke baris
+      // hasil_radiologi TERBARU no_rawat ini = hasil yg baru disimpan.
+      let fotoOk = 0;
+      const fotoGagal: string[] = [];
+      for (const inst of foto.instances) {
+        try {
+          const up = await fetch('/api/radiologi/upload-foto-orthanc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ noorder, instance_id: inst.id }),
+          });
+          const upData = await up.json().catch(() => ({}));
+          if (!up.ok) throw new Error(upData.error || 'Gagal upload foto');
+          fotoOk++;
+        } catch (e) {
+          fotoGagal.push(e instanceof Error ? e.message : 'Gagal upload foto');
+        }
+      }
+      if (fotoGagal.length > 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Hasil tersimpan',
+          html: `Hasil pemeriksaan USG tersimpan, tetapi ${fotoGagal.length} dari ${foto.instances.length} foto gagal diupload:<br/><small>${fotoGagal.join('<br/>')}</small>`,
+        });
+      } else {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Berhasil!',
+          text: fotoOk > 0 ? `Hasil pemeriksaan USG & ${fotoOk} foto berhasil disimpan` : 'Hasil pemeriksaan USG berhasil disimpan',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
       onSaved();
       handleClose();
     } catch (err) {
