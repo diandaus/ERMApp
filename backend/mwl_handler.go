@@ -124,7 +124,13 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Ambil data order + pasien
+		// Ambil data order + pasien. Tanggal WAJIB diformat di SQL jadi
+		// DICOM DA "YYYYMMDD": koneksi DB pakai parseTime=true, jadi kolom
+		// DATE yg di-Scan ke string datang sbg RFC3339 ("2026-11-11T00:00:00
+		// +07:00") — dulu cuma dibuang "-"-nya -> "20261111T00:00:00+07:00",
+		// DA tidak valid, sehingga query worklist mesin (filter Scheduled
+		// Procedure Step Start Date = hari ini) TIDAK PERNAH cocok & order
+		// tidak muncul di mesin USG/DX.
 		var (
 			noRawat       string
 			tglPermintaan string
@@ -137,11 +143,11 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 		err := db.QueryRow(`
 			SELECT
 				pr.no_rawat,
-				pr.tgl_permintaan,
+				DATE_FORMAT(pr.tgl_permintaan,'%Y%m%d') as tgl,
 				IFNULL(TIME_FORMAT(pr.jam_permintaan,'%H%i%s'),'080000') as jam,
 				IFNULL(rp.no_rkm_medis,'') as no_rkm_medis,
 				IFNULL(p.nm_pasien,'UNKNOWN') as nm_pasien,
-				p.tgl_lahir,
+				DATE_FORMAT(p.tgl_lahir,'%Y%m%d') as tgl_lahir,
 				p.jk
 			FROM permintaan_radiologi pr
 			LEFT JOIN reg_periksa rp ON pr.no_rawat = rp.no_rawat
@@ -185,7 +191,7 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 			steps = append(steps, mwlStep{
 				Modality:                          modalityCode,
 				ScheduledStationAETitle:           "MODALITY",
-				ScheduledProcedureStepStartDate:   strings.ReplaceAll(tglPermintaan, "-", ""),
+				ScheduledProcedureStepStartDate:   tglPermintaan,
 				ScheduledProcedureStepStartTime:   jamPermintaan,
 				ScheduledProcedureStepDescription: nmPerawatan,
 				ScheduledProcedureStepID:          noOrder + "-" + kdJenisPrw,
@@ -209,8 +215,8 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 
 		// Konversi tanggal lahir
 		birthDate := ""
-		if tglLahir.Valid && tglLahir.String != "" && tglLahir.String != "0000-00-00" {
-			birthDate = strings.ReplaceAll(tglLahir.String, "-", "")
+		if tglLahir.Valid && len(tglLahir.String) == 8 && tglLahir.String != "00000000" {
+			birthDate = tglLahir.String
 		}
 
 		accessionNumber := khanzaAccessionNumber(db, noOrder)
@@ -226,6 +232,15 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 		}
 
 		orthanc := newOrthancClient(db)
+
+		// Kirim ulang: hapus dulu entri worklist lama order ini di Orthanc
+		// (kalau ada) supaya tidak dobel di mesin.
+		var oldWorklistID string
+		db.QueryRow(`SELECT IFNULL(worklist_file,'') FROM satu_sehat_mwl_radiologi WHERE noorder=?`, noOrder).Scan(&oldWorklistID)
+		if oldWorklistID != "" && !strings.Contains(oldWorklistID, "/") {
+			orthanc.do("DELETE", "/worklists/"+oldWorklistID, nil)
+		}
+
 		resp, status, err := orthanc.do("POST", "/worklists/create", map[string]interface{}{"Tags": tags})
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal menghubungi Orthanc: " + err.Error()})

@@ -189,14 +189,18 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
           }
         })
       );
-      const toSend = statusChecks.filter((s) => s.status !== 'terkirim');
-      if (toSend.length === 0) {
-        await Swal.fire({ icon: 'info', title: 'Semua sudah terkirim', text: 'Seluruh permintaan USG pending pasien ini sudah ada di Modality Worklist.' });
-        return;
-      }
+      // Yg sudah 'terkirim' TETAP boleh dikirim ulang (entri lama di
+      // Orthanc dihapus & dibuat ulang oleh backend) — mis. entri lama
+      // tidak muncul di mesin USG.
+      const toSend = statusChecks;
+      const sudahTerkirim = statusChecks.every((s) => s.status === 'terkirim');
       const confirm = await Swal.fire({
-        title: `Kirim ${toSend.length} permintaan USG ke Modality Worklist?`,
-        text: 'AccessionNumber & identitas pasien otomatis terisi — tidak perlu diketik ulang manual di mesin USG.',
+        title: sudahTerkirim
+          ? 'Permintaan USG ini sudah pernah dikirim. Kirim ulang ke Modality Worklist?'
+          : `Kirim ${toSend.length} permintaan USG ke Modality Worklist?`,
+        text: sudahTerkirim
+          ? 'Entri worklist lama akan diganti dengan yang baru.'
+          : 'AccessionNumber & identitas pasien otomatis terisi — tidak perlu diketik ulang manual di mesin USG.',
         icon: 'question', showCancelButton: true, confirmButtonText: 'Ya, Kirim', cancelButtonText: 'Batal', confirmButtonColor: '#1AB1E5',
       });
       if (!confirm.isConfirmed) return;
