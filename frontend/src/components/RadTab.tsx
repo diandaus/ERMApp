@@ -251,8 +251,24 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
     }
   };
 
+  // Card Riwayat USG (sidebar) diturunkan setinggi baris tombol (+ margin
+  // 16) supaya sejajar dgn card permintaan pertama — diukur langsung,
+  // ikut menyesuaikan kalau tombol membungkus ke baris kedua.
+  const tombolRowRef = React.useRef<HTMLDivElement>(null);
+  const [tombolRowTinggi, setTombolRowTinggi] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const el = tombolRowRef.current;
+    if (!el || !kategoriUsg) return;
+    const ukur = () => setTombolRowTinggi(el.offsetHeight + 16);
+    ukur();
+    const ro = new ResizeObserver(ukur);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [kategoriUsg]);
+
   return (
-    <div>
+    <div style={kategoriUsg ? { display: 'flex', gap: 16, alignItems: 'flex-start' } : undefined}>
+    <div style={kategoriUsg ? { width: '70%', minWidth: 0 } : undefined}>
 
       {/* Tombol Buat Permintaan — rata kiri, ukuran/gaya PERSIS "Input
           Resep" di ResepTab.tsx (padding 8px 16px, radius 0, fontSize 13)
@@ -260,7 +276,7 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
           4, lebih besar). "Kirim Modality Worklist" cuma muncul di tab
           USG (kategoriUsg) — kirim SEMUA permintaan USG pending pasien
           ini sekaligus ke Orthanc, lihat handleKirimModalityWorklist. */}
-      <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div ref={tombolRowRef} style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           onClick={() => {
             // USG Kandungan: mesin USG ada langsung di poliklinik & dokter
@@ -546,6 +562,80 @@ export const RadTab: React.FC<RadTabProps> = ({ patient, kategoriUsg = false }) 
       )}
 
       <style>{`@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }`}</style>
+    </div>
+
+    {/* Sidebar 30% (khusus tab USG) — card "Riwayat USG Sebelumnya",
+        gaya sama dgn card Riwayat Kunjungan Terakhir di tab SOAP. Klik
+        gambar → membesar (modal Gambar Radiologi yg sama). */}
+    {kategoriUsg && (
+      <div style={{ width: '30%', flexShrink: 0, marginTop: tombolRowTinggi }}>
+        <div style={{ position: 'sticky', top: 0 }}>
+          <RiwayatUsgCard noRawat={patient.no_rawat} onLihatGambar={setGambarModal} />
+        </div>
+      </div>
+    )}
+    </div>
+  );
+};
+
+type RiwayatUsgItem = { no_rawat: string; tgl_periksa: string; jam: string; hasil: string; nm_dokter: string; gambar: string[] };
+
+const RiwayatUsgCard: React.FC<{ noRawat: string; onLihatGambar: (url: string) => void }> = ({ noRawat, onLihatGambar }) => {
+  const [list, setList] = React.useState<RiwayatUsgItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!noRawat) return;
+    let aktif = true;
+    setLoading(true);
+    fetch(`/api/radiologi/usg-riwayat?no_rawat=${encodeURIComponent(noRawat)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (aktif) setList(Array.isArray(d) ? d : []); })
+      .catch(() => { if (aktif) setList([]); })
+      .finally(() => { if (aktif) setLoading(false); });
+    return () => { aktif = false; };
+  }, [noRawat]);
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 0, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 48px)', overflow: 'auto' }}>
+      <div style={{ padding: '10px 16px', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+        <span style={{ fontSize: 12, fontWeight: 400, color: '#111827' }}>Riwayat USG Sebelumnya</span>
+      </div>
+      {loading ? (
+        <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat...</div>
+      ) : list.length === 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '32px 20px', color: '#6b7280' }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
+          <div style={{ fontSize: 12, textAlign: 'center' }}>Belum ada hasil USG sebelumnya</div>
+        </div>
+      ) : (
+        list.map((it, idx) => (
+          <div key={`${it.no_rawat}-${it.tgl_periksa}-${it.jam}`} style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, borderTop: idx > 0 ? '1px solid #e5e7eb' : 'none' }}>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>
+              {it.tgl_periksa} {it.jam}{it.nm_dokter ? ` · ${it.nm_dokter}` : ''}
+            </div>
+            <div style={{ fontSize: 12, color: '#111827', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{it.hasil || '-'}</div>
+            {it.gambar.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {it.gambar.map((lok) => {
+                  const url = khanzaRadiologiUrl(lok);
+                  return (
+                    <img
+                      key={lok}
+                      src={url}
+                      alt="Gambar USG"
+                      title="Klik untuk memperbesar"
+                      onClick={() => onLihatGambar(url)}
+                      style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', background: '#111827', border: '1px solid #e5e7eb', cursor: 'zoom-in', display: 'block' }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 };

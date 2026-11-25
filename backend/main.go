@@ -1016,6 +1016,14 @@ func main() {
 
 	ensureMWLAccessionWidth(db)
 
+	if err := ensureTemplateUsgTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel erm_template_usg: %v", err)
+	}
+
+	if err := ensureMappingPetugasTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel erm_mapping_petugas: %v", err)
+	}
+
 	if err := ensureTemplateCatatanDokterTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel template_catatan_dokter: %v", err)
 	}
@@ -3519,6 +3527,10 @@ func main() {
 
 	// Antrean permintaan radiologi lintas pasien — dipakai mobile quick-view.
 	r.GET("/api/radiologi/list", getPermintaanRadiologiList(db))
+	r.GET("/api/radiologi/usg-riwayat", getUsgRiwayat(db))
+	r.GET("/api/radiologi/template-usg", getTemplateUsg(db))
+	r.POST("/api/radiologi/template-usg", createTemplateUsg(db))
+	r.DELETE("/api/radiologi/template-usg/:id", deleteTemplateUsg(db))
 
 	// Modul Radiologi.tsx (worklist departemen radiologi)
 	r.GET("/api/radiologi/permintaan/:noorder", getPermintaanRadiologiDetail(db))
@@ -3917,6 +3929,9 @@ func main() {
 	r.GET("/api/poli-dokter-mapping/by-poli/:kd_poli", getPoliDokterMappingByPoli(db))
 	r.POST("/api/poli-dokter-mapping", addPoliDokterMapping(db))
 	r.DELETE("/api/poli-dokter-mapping/:id", hapusPoliDokterMapping(db))
+	r.GET("/api/mapping-petugas", getMappingPetugasList(db))
+	r.POST("/api/mapping-petugas", saveMappingPetugas(db))
+	r.DELETE("/api/mapping-petugas/:jenis", deleteMappingPetugas(db))
 
 	// Apotek — Industri Farmasi (master data pabrik/distributor obat)
 	r.GET("/api/apotek/industri-farmasi", getIndustriFarmasiList(db))

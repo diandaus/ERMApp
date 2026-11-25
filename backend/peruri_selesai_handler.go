@@ -46,12 +46,14 @@ type peruriSelesaiRow struct {
 
 // jenisDokumenSQL — HARUS sinkron dgn awalan nama dokumen di frontend:
 // Ringkasan_Perawatan_ (peruriTteRingkasan.ts), Hasil_Lab_
-// (ModalHasilLabPK.tsx), Radiologi_ (ModalHasilRadiologi.tsx).
+// (ModalHasilLabPK.tsx), Radiologi_ (ModalHasilRadiologi.tsx), USG_
+// (ModalInputUSG.tsx).
 const jenisDokumenSQL = `CASE
 	WHEN t.nama_dokumen LIKE 'Ringkasan\_Perawatan\_%' THEN 'Ringkasan Perawatan'
 	WHEN t.nama_dokumen LIKE 'RiwayatPerawatan\_%' THEN 'Ringkasan Perawatan'
 	WHEN t.nama_dokumen LIKE 'Hasil\_Lab\_%' THEN 'Hasil Lab'
 	WHEN t.nama_dokumen LIKE 'Radiologi\_%' THEN 'Hasil Radiologi'
+	WHEN t.nama_dokumen LIKE 'USG\_%' THEN 'Hasil USG'
 	ELSE 'Lainnya' END`
 
 // GET /api/peruri/selesai?tgl_awal=YYYY-MM-DD&tgl_akhir=YYYY-MM-DD

@@ -1,4 +1,5 @@
 import React from 'react';
+import { resolvePetugasDefault } from '../utils/mappingPetugas';
 import Swal from 'sweetalert2';
 
 // ModalHasilLabPA — "Input Data Hasil Periksa Laboratorium PA". Padanan
@@ -130,18 +131,15 @@ export const ModalHasilLabPA: React.FC<Props> = ({ noorder, nip, onClose, onSave
 
   // Petugas default = user yg sedang login (nip) — cari by nip persis
   // (bukan substring) supaya tidak salah ambil petugas lain.
+  // Urutan: Pengaturan > Mapping Petugas (lab_pa) dulu, baru user login.
   React.useEffect(() => {
-    if (!nip) return;
-    (async () => {
-      const res = await fetch(`/api/petugas?search=${encodeURIComponent(nip)}`);
-      if (!res.ok) return;
-      const list: { nip: string; nama: string }[] = await res.json();
-      const match = list.find((p) => p.nip === nip);
-      if (match) {
-        setPetugasNip(match.nip);
-        setPetugasQuery(match.nama);
-      }
-    })();
+    let aktif = true;
+    resolvePetugasDefault('lab_pa', nip).then((p) => {
+      if (!aktif || !p) return;
+      setPetugasNip(p.nip);
+      setPetugasQuery(p.nama);
+    });
+    return () => { aktif = false; };
   }, [nip]);
 
   const updateHasil = (kdJenisPrw: string, patch: Partial<HasilItem>) => {

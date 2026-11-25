@@ -804,12 +804,13 @@ const targetTtdUlang = (r: SelesaiRow): RingkasanTarget | null => {
   return null;
 };
 
-const JENIS_DOKUMEN_OPTIONS = ['Semua', 'Ringkasan Perawatan', 'Hasil Lab', 'Hasil Radiologi', 'Lainnya'];
+const JENIS_DOKUMEN_OPTIONS = ['Semua', 'Ringkasan Perawatan', 'Hasil Lab', 'Hasil Radiologi', 'Hasil USG', 'Lainnya'];
 
 const badgeJenisDokumen: Record<string, { bg: string; fg: string }> = {
   'Ringkasan Perawatan': { bg: '#dbeafe', fg: '#1e40af' },
   'Hasil Lab': { bg: '#fef3c7', fg: '#92400e' },
   'Hasil Radiologi': { bg: '#ede9fe', fg: '#5b21b6' },
+  'Hasil USG': { bg: '#cffafe', fg: '#155e75' },
   Lainnya: { bg: '#f3f4f6', fg: '#374151' },
 };
 
@@ -934,6 +935,26 @@ const SelesaiSection: React.FC = () => {
     try {
       const ok = await tandaTanganRingkasan(t, true);
       if (ok) muatData();
+    } finally {
+      setBusyOrder(null);
+    }
+  };
+
+  // Preview — buka PDF yg AKAN dikirim ulang ke Peruri (dibuat dari data
+  // terbaru, penanda tangan = target Tanda Tangan Ulang) di tab baru,
+  // TANPA kirim apa pun — pola handlePreview di Perlu Diproses.
+  const handlePreviewUlang = async (r: SelesaiRow) => {
+    const t = targetTtdUlang(r);
+    if (!t) return;
+    const win = window.open('', '_blank');
+    setBusyOrder(r.order_id);
+    try {
+      const { pdfBytes } = await buildDokumenPasienPdf(t.no_rawat, { namaPengesah: t.nm_dokter });
+      const url = URL.createObjectURL(new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }));
+      if (win) win.location.href = url; else window.open(url, '_blank');
+    } catch (err) {
+      win?.close();
+      Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
     } finally {
       setBusyOrder(null);
     }
@@ -1134,6 +1155,20 @@ const SelesaiSection: React.FC = () => {
                           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, wordBreak: 'break-all' }}>{r.nama_dokumen}</div>
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {targetTtdUlang(r) && (
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewUlang(r)}
+                              disabled={busy || massalKunci !== null}
+                              title="Lihat PDF yang akan dikirim ke Peruri untuk TTE"
+                              style={{ width: 28, height: 26, marginRight: 6, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: busy ? '#9ca3af' : '#374151', cursor: busy ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0, verticalAlign: 'middle' }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                              </svg>
+                            </button>
+                          )}
                           {targetTtdUlang(r) && (
                             <button
                               type="button"

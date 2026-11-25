@@ -2132,7 +2132,7 @@ export const PemeriksaanView: React.FC<SoapViewProps> = ({ patient, onBack }) =>
             )}
 
             {activeTab === 'usg' && canAccessUsg && (
-              <div style={{ width: '70%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <RadTab patient={patient} kategoriUsg />
               </div>
             )}

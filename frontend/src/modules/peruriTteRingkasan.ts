@@ -195,7 +195,15 @@ const isErrorSesi = (msg: string) => /^\[(01|4026)\]/.test(msg) || /sesi otp|otp
 // & massal); gagal → throw Error dgn pesan yg sudah diterjemahkan.
 async function kirimDanTandaTangan(t: RingkasanTarget, email: string): Promise<string> {
   const { pdfBytes, signBox } = await buildDokumenPasienPdf(t.no_rawat, { namaPengesah: t.nm_dokter });
-  const namaDokumen = namaDokumenRingkasan(t);
+  return kirimPdfDanTandaTangan(pdfBytes, signBox, namaDokumenRingkasan(t), t.no_rawat, email);
+}
+
+type SignBoxTte = { lowerLeftX: number; lowerLeftY: number; upperRightX: number; upperRightY: number; page: string };
+
+// kirimPdfDanTandaTangan — inti generik (PDF apa pun): Send Document →
+// tracking "Belum" → Signing → tracking "Sudah". Dipakai Ringkasan
+// Perawatan (kirimDanTandaTangan) & tandaTanganDokumen (mis. Hasil USG).
+async function kirimPdfDanTandaTangan(pdfBytes: Uint8Array, signBox: SignBoxTte, namaDokumen: string, noRawat: string, email: string): Promise<string> {
 
   const form = new FormData();
   form.append('file', new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }), namaDokumen);
@@ -226,7 +234,7 @@ async function kirimDanTandaTangan(t: RingkasanTarget, email: string): Promise<s
   try {
     await fetch('/api/peruri/tracking/kirim', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ no_rawat: t.no_rawat, nama_dokumen: namaDokumen, order_id: orderId, user_pengirim: getCurrentUserNip(), email_ttd: email }),
+      body: JSON.stringify({ no_rawat: noRawat, nama_dokumen: namaDokumen, order_id: orderId, user_pengirim: getCurrentUserNip(), email_ttd: email }),
     });
   } catch { /* non-blocking */ }
 
@@ -290,13 +298,17 @@ export async function inputUlangOtp(dokter: Pick<RingkasanTarget, 'kd_dokter' | 
 // Tidak pernah throw: balikin '' kalau tersimpan, atau alasan gagalnya
 // (tanda tangan TETAP sah; bisa diulang lewat Unduh di submenu Selesai).
 async function simpanBerkasSetelahTtd(t: RingkasanTarget, orderId: string): Promise<string> {
+  return simpanBerkasOtomatis(opsiSimpanRingkasan(t), orderId);
+}
+
+async function simpanBerkasOtomatis(opsi: OpsiSimpanBerkas, orderId: string): Promise<string> {
   let alasan = '';
   for (let percobaan = 1; percobaan <= 3; percobaan++) {
     if (percobaan > 1) await new Promise((r) => window.setTimeout(r, 2000));
     try {
       const res = await fetch('/api/peruri/download-document', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, ...opsiSimpanRingkasan(t), simpan_saja: true }),
+        body: JSON.stringify({ orderId, ...opsi, simpan_saja: true }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { alasan = data.error || `HTTP ${res.status}`; continue; }
@@ -452,7 +464,7 @@ const pesanDownloadPeruri = (rc: string, desc?: string) => {
   return `[${rc}] ${desc || 'Download Document gagal'}`;
 };
 
-type OpsiSimpanBerkas = { no_rawat: string; no_order: string; prefix: string };
+export type OpsiSimpanBerkas = { no_rawat: string; no_order: string; prefix: string };
 
 // ambilDokumenTte — inti unduh 1 dokumen TANPA dialog: ambil dari Peruri
 // (download-document) → simpan ke komputer user → backend sekalian
@@ -596,5 +608,103 @@ export async function unduhRingkasanTte(t: RingkasanTarget): Promise<void> {
     await unduhDokumenTte(String(lookupData.order_id), namaDokumen, opsiSimpanRingkasan(t));
   } catch (err) {
     Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+  }
+}
+
+// ─── TTE dokumen generik (mis. Hasil USG di ModalInputUSG.tsx) ──────────────
+// Alur SAMA dgn tandaTanganRingkasan: konfirmasi → sesi OTP (24 jam, OTP
+// hanya diminta kalau sesi habis) → Send Document + Signing → simpan
+// OTOMATIS ke Berkas Rawat (tanpa unduh ke komputer).
+export type DokumenTte = {
+  no_rawat: string;
+  kd_dokter: string;
+  nm_dokter: string;
+  // Teks utk dialog, mis. "Hasil Pemeriksaan USG <b>NAMA</b> (no_rawat)".
+  labelHtml: string;
+  // Nama dokumen di tracking_dokumen_ttd (awalan menentukan jenis di Selesai).
+  namaDokumen: string;
+  buatPdf: () => Promise<{ pdfBytes: Uint8Array; signBox: SignBoxTte }>;
+  simpanKeBerkas: OpsiSimpanBerkas;
+};
+
+// Balikin orderId kalau berhasil ditandatangani, null kalau batal/gagal
+// (error sudah ditampilkan di sini).
+export async function tandaTanganDokumen(d: DokumenTte): Promise<string | null> {
+  const konfirmasi = await Swal.fire({
+    icon: 'question',
+    title: 'Tanda Tangan Dokumen?',
+    html: `${d.labelHtml}<br/>akan dikirim ke Peruri dan ditandatangani oleh <b>${escapeHtml(d.nm_dokter)}</b>.`,
+    showCancelButton: true,
+    confirmButtonText: 'Lanjutkan',
+    cancelButtonText: 'Batal',
+    confirmButtonColor: '#059669',
+  });
+  if (!konfirmasi.isConfirmed) return null;
+
+  showProcessing('Memeriksa sesi tanda tangan, mohon tunggu...');
+  try {
+    const email = await getEmailDokter({ no_rawat: d.no_rawat, kd_dokter: d.kd_dokter, nm_dokter: d.nm_dokter, nm_pasien: '' });
+    const sesi = await pastikanSesiOtp(d.kd_dokter, email);
+    if (sesi === 'batal') return null;
+
+    showProcessing(sesi === 'aktif'
+      ? 'Sesi OTP masih aktif, mengirim & menandatangani dokumen, mohon tunggu...'
+      : 'Mengirim & menandatangani dokumen, mohon tunggu...');
+    const { pdfBytes, signBox } = await d.buatPdf();
+    const orderId = await kirimPdfDanTandaTangan(pdfBytes, signBox, d.namaDokumen, d.no_rawat, email);
+    showProcessing('Berhasil ditandatangani, menyimpan ke Berkas Rawat...');
+    const gagalSimpan = await simpanBerkasOtomatis(d.simpanKeBerkas, orderId);
+    hideProcessing();
+
+    await Swal.fire({
+      icon: gagalSimpan ? 'warning' : 'success',
+      title: gagalSimpan ? 'Ditandatangani, tapi belum tersimpan' : 'Berhasil ditandatangani',
+      html: `Dokumen berhasil ditandatangani oleh <b>${escapeHtml(d.nm_dokter)}</b> (${escapeHtml(email)}).<br/>Order ID: <b>${escapeHtml(orderId)}</b>`
+        + (gagalSimpan
+          ? `<div style="margin-top:8px;color:#92400e;">Gagal otomatis tersimpan ke Berkas Rawat: ${escapeHtml(gagalSimpan)}.<br/>Simpan ulang lewat tombol <b>Unduh</b>.</div>`
+          : '<br/>Dokumen otomatis tersimpan ke <b>Berkas Rawat</b>.')
+        + (sesi === 'aktif' ? '<br/><small>(Sesi OTP masih aktif, tidak perlu OTP ulang)</small>' : ''),
+    });
+    return orderId;
+  } catch (err) {
+    hideProcessing();
+    Swal.fire({ icon: 'error', title: 'Gagal!', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    return null;
+  }
+}
+
+// mintaOtpBaru — tombol "OTP": minta kode OTP BARU ke email dokter lalu
+// validasi (perbarui sesi 24 jam) TANPA menandatangani dokumen apa pun —
+// padanan handleMintaOtpUlang di ModalHasilRadiologi.tsx.
+export async function mintaOtpBaru(dokter: { kd_dokter: string; nm_dokter: string }): Promise<boolean> {
+  showProcessing('Mengirim kode OTP, mohon tunggu...');
+  try {
+    const email = await getEmailDokter({ no_rawat: '', kd_dokter: dokter.kd_dokter, nm_dokter: dokter.nm_dokter, nm_pasien: '' });
+    const otpResp = await peruriPost('/api/peruri/get-otp', { email, sendEmail: '1', sendSms: '0', sendWhatsapp: '0' });
+    const tokenSession = otpResp?.data?.tokenSession || otpResp?.tokenSession;
+    if (!tokenSession) throw new Error('Peruri tidak mengembalikan tokenSession');
+    const hasil = await inputDanValidasiOtp(dokter.kd_dokter, email, tokenSession);
+    hideProcessing();
+    if (hasil === 'batal') return false;
+    await Swal.fire({
+      icon: 'success', title: 'Sesi OTP diperbarui',
+      html: `Sesi tanda tangan <b>${escapeHtml(dokter.nm_dokter)}</b> (${escapeHtml(email)}) aktif selama 24 jam.`,
+    });
+    return true;
+  } catch (err) {
+    hideProcessing();
+    Swal.fire({ icon: 'error', title: 'OTP gagal', text: err instanceof Error ? err.message : 'Terjadi kesalahan' });
+    return false;
+  }
+}
+
+// cariOrderIdTte — order_id TERAKHIR dokumen ini di tracking_dokumen_ttd ('' = belum ada).
+export async function cariOrderIdTte(noRawat: string, namaDokumen: string): Promise<string> {
+  try {
+    const res = await fetch(`/api/peruri/tracking/order-id?no_rawat=${encodeURIComponent(noRawat)}&nama_dokumen=${encodeURIComponent(namaDokumen)}`);
+    const data = await res.json().catch(() => ({}));
+    return res.ok && data.order_id ? String(data.order_id) : '';
+  } catch {
+    return '';
   }
 }

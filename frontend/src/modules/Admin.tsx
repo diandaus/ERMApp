@@ -1,4 +1,6 @@
 import React from 'react';
+import { ModalCariPetugas } from '../components/ModalCariPetugas';
+import { JENIS_MAPPING_PETUGAS, type JenisMappingPetugas } from '../utils/mappingPetugas';
 import Swal from 'sweetalert2';
 import { AddUserModal } from '../components/AddUserModal';
 import { ModalCariDokter } from '../components/ModalCariDokter';
@@ -226,7 +228,7 @@ const SET_TARIF_DEFAULT: Record<SetTarifKey, 'Yes' | 'No'> = {
 };
 
 export const AdminView: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif' | 'poli-dokter'>('users');
+  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif' | 'poli-dokter' | 'petugas-mapping'>('users');
   const [users, setUsers] = React.useState<AppUser[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -295,6 +297,17 @@ export const AdminView: React.FC = () => {
   const [showPdmPoliPicker, setShowPdmPoliPicker] = React.useState(false);
   const [showPdmDokterPicker, setShowPdmDokterPicker] = React.useState(false);
   const [savingPoliDokter, setSavingPoliDokter] = React.useState(false);
+
+  // Mapping Petugas — petugas default per jenis input hasil (USG,
+  // Radiologi, Lab PK/PA), dipakai resolvePetugasDefault
+  // (utils/mappingPetugas.ts) di modal2 input hasil.
+  const [petugasMapList, setPetugasMapList] = React.useState<{ jenis: string; nip: string; nama: string }[]>([]);
+  const [loadingPetugasMap, setLoadingPetugasMap] = React.useState(false);
+  const [pmJenis, setPmJenis] = React.useState<JenisMappingPetugas>('usg');
+  const [pmNip, setPmNip] = React.useState('');
+  const [pmNama, setPmNama] = React.useState('');
+  const [showPmPetugasPicker, setShowPmPetugasPicker] = React.useState(false);
+  const [savingPetugasMap, setSavingPetugasMap] = React.useState(false);
 
   // ─── User Management ─────────────────────────────────────────────────────
 
@@ -881,6 +894,61 @@ export const AdminView: React.FC = () => {
     }
   };
 
+  // ─── Mapping Petugas ──────────────────────────────────────────────────────
+
+  const loadPetugasMapping = async () => {
+    setLoadingPetugasMap(true);
+    try {
+      const res = await fetch('/api/mapping-petugas');
+      const data = await res.json();
+      if (res.ok) setPetugasMapList(Array.isArray(data) ? data : []);
+    } catch { /* silent */ } finally {
+      setLoadingPetugasMap(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === 'petugas-mapping') void loadPetugasMapping();
+  }, [activeTab]);
+
+  const handleSimpanPetugasMapping = async () => {
+    if (!pmNip) {
+      Swal.fire({ icon: 'warning', title: 'Pilih petugas dulu', confirmButtonColor: '#2563eb' });
+      return;
+    }
+    setSavingPetugasMap(true);
+    try {
+      const res = await fetch('/api/mapping-petugas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jenis: pmJenis, nip: pmNip }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal simpan mapping');
+      setPmNip(''); setPmNama('');
+      await loadPetugasMapping();
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });
+    } finally {
+      setSavingPetugasMap(false);
+    }
+  };
+
+  const handleHapusPetugasMapping = async (jenis: string, label: string, nama: string) => {
+    const confirm = await Swal.fire({
+      icon: 'warning', title: 'Hapus mapping ini?', text: `${label} — ${nama}`,
+      showCancelButton: true, confirmButtonText: 'Hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626',
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      const res = await fetch(`/api/mapping-petugas/${encodeURIComponent(jenis)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Gagal hapus mapping');
+      await loadPetugasMapping();
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Gagal', text: e instanceof Error ? e.message : 'Terjadi kesalahan', confirmButtonColor: '#2563eb' });
+    }
+  };
+
   // ─── Main Render ──────────────────────────────────────────────────────────
 
   return (
@@ -888,7 +956,7 @@ export const AdminView: React.FC = () => {
       {/* Tab Navigation */}
       <div style={{ marginBottom: 24, borderBottom: '2px solid #e5e7eb' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['users', 'settings', 'bridging', 'set-tarif', 'poli-dokter'] as const).map((tab) => (
+          {(['users', 'settings', 'bridging', 'set-tarif', 'poli-dokter', 'petugas-mapping'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -901,7 +969,7 @@ export const AdminView: React.FC = () => {
                 marginBottom: -2, transition: 'all 0.2s'
               }}
             >
-              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : tab === 'set-tarif' ? 'Set Penggunaan Tarif' : 'Mapping Dokter Poliklinik'}
+              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : tab === 'set-tarif' ? 'Set Penggunaan Tarif' : tab === 'poli-dokter' ? 'Mapping Dokter Poliklinik' : 'Mapping Petugas'}
             </button>
           ))}
         </div>
@@ -1465,6 +1533,100 @@ export const AdminView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Tab: Mapping Petugas — petugas default per jenis input hasil
+          (USG, Radiologi, Lab PK/PA); satu petugas per jenis. */}
+      {activeTab === 'petugas-mapping' && (
+        <div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 24 }}>
+            <div style={{ width: 240 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}>Input Hasil</label>
+              <select
+                value={pmJenis}
+                onChange={(e) => setPmJenis(e.target.value as JenisMappingPetugas)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, color: '#111827' }}
+              >
+                {JENIS_MAPPING_PETUGAS.map((j) => (
+                  <option key={j.jenis} value={j.jenis}>{j.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ width: 240 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: '#374151' }}>Petugas</label>
+              <button
+                type="button"
+                onClick={() => setShowPmPetugasPicker(true)}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 8,
+                  border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13,
+                  color: pmNama ? '#111827' : '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                {pmNama || 'Pilih petugas...'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleSimpanPetugasMapping}
+              disabled={savingPetugasMap}
+              style={{
+                padding: '9px 20px', borderRadius: 8, border: 'none',
+                background: savingPetugasMap ? '#9ca3af' : '#2563eb', color: '#fff',
+                fontSize: 13, fontWeight: 600, cursor: savingPetugasMap ? 'not-allowed' : 'pointer', flexShrink: 0,
+              }}
+            >
+              {savingPetugasMap ? 'Menyimpan...' : 'Simpan'}
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+            Petugas ini otomatis terisi saat membuka form input hasil. Jika belum di-mapping, dipakai akun yang sedang login.
+          </div>
+
+          {loadingPetugasMap ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Memuat...</div>
+          ) : (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', maxWidth: 640 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb' }}>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb' }}>Input Hasil</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb' }}>Nama Petugas</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#111827', borderBottom: '1px solid #e5e7eb' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {JENIS_MAPPING_PETUGAS.map((j, idx) => {
+                    const m = petugasMapList.find((x) => x.jenis === j.jenis);
+                    return (
+                      <tr key={j.jenis} style={{ borderTop: idx === 0 ? 'none' : '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '10px 16px', color: '#374151' }}>{j.label}</td>
+                        <td style={{ padding: '10px 16px', color: m ? '#374151' : '#9ca3af' }}>{m ? (m.nama || m.nip) : 'Belum di-mapping (akun login)'}</td>
+                        <td style={{ padding: '10px 16px' }}>
+                          {m && (
+                            <button
+                              type="button"
+                              onClick={() => handleHapusPetugasMapping(j.jenis, j.label, m.nama || m.nip)}
+                              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
+                            >
+                              Hapus
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <ModalCariPetugas
+        isOpen={showPmPetugasPicker}
+        onClose={() => setShowPmPetugasPicker(false)}
+        onSelect={(nip, nama) => { setPmNip(nip); setPmNama(nama); }}
+      />
 
       <ModalCariPoli
         isOpen={showPdmPoliPicker}
