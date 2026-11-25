@@ -399,7 +399,7 @@ func ensureSatuSehatTables(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS satu_sehat_mwl_radiologi (
 			id INT AUTO_INCREMENT PRIMARY KEY,
 			noorder VARCHAR(20) NOT NULL UNIQUE,
-			accession_number VARCHAR(20) DEFAULT '',
+			accession_number VARCHAR(64) DEFAULT '',
 			worklist_file VARCHAR(500) DEFAULT '',
 			status VARCHAR(20) DEFAULT 'terkirim',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1013,6 +1013,8 @@ func main() {
 	if err := ensureLabPkHasilTemplateTables(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel lab_pk_hasil_template: %v", err)
 	}
+
+	ensureMWLAccessionWidth(db)
 
 	if err := ensureTemplateCatatanDokterTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel template_catatan_dokter: %v", err)

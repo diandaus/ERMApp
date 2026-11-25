@@ -117,24 +117,33 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
   // by No.RM — lihat getDicomPreviewList/dicom_handler.go), foto TIDAK
   // ditampilkan sama sekali — itulah penyebab bug foto rontgen lama pasien
   // nyasar ke order USG baru yg dilaporkan user, dihindari di sini.
-  React.useEffect(() => {
-    (async () => {
-      setLoadingFoto(true);
-      try {
-        const res = await fetch(`/api/satu-sehat/dicom/preview-list/${noorder}`);
-        const data = await res.json();
-        if (res.ok && data.search_mode === 'accession_number') {
-          setFoto({ instances: Array.isArray(data.instances) ? data.instances : [] });
-        } else {
-          setFoto({ instances: [] });
-        }
-      } catch {
+  // Foto bisa masuk SETELAH modal dibuka (mesin USG baru kirim gambar ke
+  // Orthanc saat End Study) — jadi bisa dimuat ulang manual (tombol
+  // "Muat Ulang") & dicek otomatis tiap 10 detik selama masih kosong.
+  const loadFoto = React.useCallback(async (silent = false) => {
+    if (!silent) setLoadingFoto(true);
+    try {
+      const res = await fetch(`/api/satu-sehat/dicom/preview-list/${encodeURIComponent(noorder)}`);
+      const data = await res.json();
+      if (res.ok && data.search_mode === 'accession_number') {
+        setFoto({ instances: Array.isArray(data.instances) ? data.instances : [] });
+      } else if (!silent) {
         setFoto({ instances: [] });
-      } finally {
-        setLoadingFoto(false);
       }
-    })();
+    } catch {
+      if (!silent) setFoto({ instances: [] });
+    } finally {
+      if (!silent) setLoadingFoto(false);
+    }
   }, [noorder]);
+
+  React.useEffect(() => { loadFoto(); }, [loadFoto]);
+
+  React.useEffect(() => {
+    if (loadingFoto || foto.instances.length > 0) return;
+    const t = window.setInterval(() => loadFoto(true), 10000);
+    return () => window.clearInterval(t);
+  }, [loadFoto, loadingFoto, foto.instances.length]);
 
   React.useEffect(() => {
     const t = setTimeout(async () => {
@@ -346,12 +355,22 @@ export const ModalInputUSG: React.FC<ModalInputUSGProps> = ({ patient, noorder, 
                 {/* Foto USG (kiri) + Hasil Pemeriksaan (kanan) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1, minHeight: 260 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 400, color: '#374151' }}>Foto USG (dari Orthanc)</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 400, color: '#374151' }}>Foto USG (dari Orthanc)</span>
+                      <button
+                        type="button"
+                        onClick={() => loadFoto()}
+                        disabled={loadingFoto}
+                        style={{ padding: '2px 8px', border: '1px solid #1AB1E5', background: '#fff', color: '#1AB1E5', borderRadius: 0, fontSize: 11, cursor: loadingFoto ? 'default' : 'pointer' }}
+                      >
+                        Muat Ulang
+                      </button>
+                    </div>
                     <div style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: 4, padding: 10, overflowY: 'auto', background: '#000', minHeight: 240 }}>
                       {loadingFoto ? (
                         <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>Memuat dari Orthanc...</div>
                       ) : foto.instances.length === 0 ? (
-                        <div style={{ padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Belum ada foto USG untuk pemeriksaan ini</div>
+                        <div style={{ padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>Belum ada foto USG untuk pemeriksaan ini — dicek otomatis tiap 10 detik</div>
                       ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
                           {foto.instances.map((inst) => {

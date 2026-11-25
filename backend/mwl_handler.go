@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -257,7 +258,7 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 
 		// Simpan status ke DB — worklist_file skrg nyimpen ID worklist Orthanc
 		// (dulu path file lokal), dipakai lagi utk DELETE /worklists/{id}.
-		db.Exec(`
+		if _, err := db.Exec(`
 			INSERT INTO satu_sehat_mwl_radiologi (noorder, accession_number, worklist_file, status)
 			VALUES (?, ?, ?, 'terkirim')
 			ON DUPLICATE KEY UPDATE
@@ -265,7 +266,9 @@ func sendToMWL(db *sql.DB) gin.HandlerFunc {
 				worklist_file = VALUES(worklist_file),
 				status = 'terkirim',
 				updated_at = NOW()
-		`, noOrder, accessionNumber, created.ID)
+		`, noOrder, accessionNumber, created.ID); err != nil {
+			log.Printf("MWL %s: worklist Orthanc %s dibuat tapi status gagal disimpan: %v", noOrder, created.ID, err)
+		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"message":          "Order berhasil dikirim ke MWL",
@@ -318,4 +321,22 @@ func getKonfigurasi(db *sql.DB, kode, defaultVal string) string {
 		return defaultVal
 	}
 	return val
+}
+
+// ensureMWLAccessionWidth — kolom accession_number dulu VARCHAR(20), padahal
+// ACSN noorder+kd_jenis_prw bisa > 20 (mis. "RAD202611250003RJ.OBG" = 21)
+// -> INSERT status gagal diam2 (strict mode): status MWL tidak pernah
+// 'terkirim' & entri lama tidak terhapus saat kirim ulang. Dilebarkan ke
+// 64 HANYA kalau masih < 64, lewat execDDLWithLockTimeout (tabel milik
+// ERMApp sendiri). Tidak fatal.
+func ensureMWLAccessionWidth(db *sql.DB) {
+	var width sql.NullInt64
+	db.QueryRow(`SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'satu_sehat_mwl_radiologi' AND COLUMN_NAME = 'accession_number'`).Scan(&width)
+	if !width.Valid || width.Int64 >= 64 {
+		return
+	}
+	if err := execDDLWithLockTimeout(db, `ALTER TABLE satu_sehat_mwl_radiologi MODIFY COLUMN accession_number VARCHAR(64) DEFAULT ''`); err != nil {
+		log.Printf("Warning: gagal melebarkan satu_sehat_mwl_radiologi.accession_number: %v", err)
+	}
 }
