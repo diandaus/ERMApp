@@ -5,8 +5,8 @@ type ModalDetailPeriksaLabProps = {
   onClose: () => void;
 };
 
-// Rincian pemeriksaan Laboratorium rawat inap (status='Ranap') di balik
-// kolom "Laboratorium" — Monitoring Biaya Klaim BPJS (KlaimInacbg.tsx).
+// Rincian pemeriksaan Laboratorium (semua status, termasuk lab Ralan/IGD
+// dgn no_rawat sama — sama dgn total kolom) di balik kolom "Laboratorium" — Monitoring Biaya Klaim BPJS (KlaimInacbg.tsx).
 // Desain baris disamakan dgn PreviewBilling.tsx / ModalDetailPemberianObat.tsx
 // (headerless, tdStyle/totalRowStyle bersama).
 type DetailRow = {
@@ -14,6 +14,7 @@ type DetailRow = {
   jam: string;
   nm_perawatan: string;
   biaya: number;
+  status?: string;
 };
 
 const formatAngka = (n: number): string => Math.round(n || 0).toLocaleString('en-US');
@@ -127,7 +128,12 @@ export const ModalDetailPeriksaLab: React.FC<ModalDetailPeriksaLabProps> = ({ no
                   <tr key={index}>
                     <td style={tdStyle}>{row.tgl_periksa || '-'}</td>
                     <td style={tdStyle}>{row.jam || '-'}</td>
-                    <td style={tdStyle}>{row.nm_perawatan || '-'}</td>
+                    <td style={tdStyle}>
+                      {row.nm_perawatan || '-'}
+                      {row.status && row.status !== 'Ranap' && (
+                        <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 999, background: '#fef3c7', color: '#92400e' }}>{row.status}</span>
+                      )}
+                    </td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatAngka(row.biaya)}</td>
                   </tr>
                 ))}

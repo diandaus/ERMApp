@@ -1216,10 +1216,14 @@ type DetailPeriksaLabItem struct {
 	Jam         string  `json:"jam"`
 	NmPerawatan string  `json:"nm_perawatan"`
 	Biaya       float64 `json:"biaya"`
+	Status      string  `json:"status"`
 }
 
-// getDetailPeriksaLab mengambil rincian pemeriksaan lab rawat inap
-// (status='Ranap') untuk satu no_rawat, dipakai modal ModalDetailPeriksaLab.
+// getDetailPeriksaLab mengambil rincian pemeriksaan lab satu no_rawat,
+// dipakai modal ModalDetailPeriksaLab (kolom Laboratorium Klaim INACBG).
+// TANPA filter status — harus sama dgn biaya_lab di klaim_inacbg_handler.go
+// (& Billing Ranap Khanza) yg ikut menagihkan lab Ralan/IGD dgn no_rawat
+// sama. Dulu difilter status='Ranap' sehingga total modal < total kolom.
 func getDetailPeriksaLab(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := c.Param("no_rawat")
@@ -1236,10 +1240,11 @@ func getDetailPeriksaLab(db *sql.DB) gin.HandlerFunc {
 				DATE_FORMAT(pl.tgl_periksa, '%d/%m/%Y') as tgl_periksa,
 				TIME_FORMAT(pl.jam, '%H:%i:%s') as jam,
 				jpl.nm_perawatan,
-				pl.biaya
+				pl.biaya,
+				pl.status
 			FROM periksa_lab pl
 			INNER JOIN jns_perawatan_lab jpl ON pl.kd_jenis_prw = jpl.kd_jenis_prw
-			WHERE pl.no_rawat = ? AND pl.status = 'Ranap'
+			WHERE pl.no_rawat = ?
 			ORDER BY pl.tgl_periksa, pl.jam, jpl.nm_perawatan
 		`
 
@@ -1253,7 +1258,7 @@ func getDetailPeriksaLab(db *sql.DB) gin.HandlerFunc {
 		items := []DetailPeriksaLabItem{}
 		for rows.Next() {
 			var it DetailPeriksaLabItem
-			if err := rows.Scan(&it.TglPeriksa, &it.Jam, &it.NmPerawatan, &it.Biaya); err != nil {
+			if err := rows.Scan(&it.TglPeriksa, &it.Jam, &it.NmPerawatan, &it.Biaya, &it.Status); err != nil {
 				continue
 			}
 			items = append(items, it)
