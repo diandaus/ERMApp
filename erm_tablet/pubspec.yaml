@@ -1,7 +1,7 @@
 name: erm_tablet
 description: "ERM Tablet — app klinis Rawat Inap (daftar pasien, Pemeriksaan SOAP/CPPT, Jadwal Obat) utk tablet, terpisah dari e_presensi (khusus presensi/self-service)."
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ^3.6.1
