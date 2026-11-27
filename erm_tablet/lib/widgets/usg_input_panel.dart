@@ -4,14 +4,16 @@ import 'package:intl/intl.dart';
 import '../services/api_client.dart';
 import '../services/api_config.dart';
 import '../services/rad_service.dart';
+import '../theme/app_theme.dart' show kPrimary, kText, kTextMuted;
 
 const _kBorder = Color(0xFFE6E8E8);
 const _kInputBorder = Color(0xFFD1D5DB);
 const _kGreen = Color(0xFF04C99E);
 
-/// showUsgInputPanel — modal "Input Hasil Pemeriksaan USG", geser dari
-/// kanan selebar 50% layar (sama pola dgn modal Input Resep). Balikin true
-/// kalau hasil tersimpan.
+/// showUsgInputPanel — modal "Input Hasil Pemeriksaan USG", gaya SAMA dgn
+/// modal Input Tindakan: di tengah horizontal, menempel di bawah status bar
+/// sampai dasar layar, header ✕ + judul & blok "Simpan" di pojok kanan atas.
+/// Balikin true kalau hasil tersimpan.
 Future<bool> showUsgInputPanel(
   BuildContext context, {
   required String noorder,
@@ -29,17 +31,20 @@ Future<bool> showUsgInputPanel(
     barrierLabel: 'Input Hasil Pemeriksaan USG',
     barrierColor: Colors.black54,
     transitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (context, _, __) => Align(
-      alignment: Alignment.centerRight,
-      child: FractionallySizedBox(
-        widthFactor: 0.5,
-        heightFactor: 1,
-        child: _UsgInputPanel(noorder: noorder, noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, nmDokter: nmDokter, userNip: userNip),
+    pageBuilder: (context, _, __) => Padding(
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: FractionallySizedBox(
+          widthFactor: 0.64,
+          heightFactor: 1,
+          child: _UsgInputPanel(noorder: noorder, noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, nmDokter: nmDokter, userNip: userNip),
+        ),
       ),
     ),
-    transitionBuilder: (context, anim, __, child) => SlideTransition(
-      position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
-      child: child,
+    transitionBuilder: (context, anim, __, child) => FadeTransition(
+      opacity: anim,
+      child: ScaleTransition(scale: Tween<double>(begin: 0.96, end: 1).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)), child: child),
     ),
   );
   return saved == true;
@@ -268,65 +273,72 @@ class _UsgInputPanelState extends State<_UsgInputPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final breadcrumb = [widget.noRawat, widget.noRkmMedis, widget.nmPasien, widget.umur].where((v) => v.isNotEmpty).map((v) => '  |  $v').join();
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.person_outline, size: 16, color: _kGreen),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(text: 'Input Hasil Pemeriksaan USG', style: const TextStyle(fontWeight: FontWeight.w600), children: [TextSpan(text: breadcrumb, style: const TextStyle(fontWeight: FontWeight.w400))]),
-                      style: const TextStyle(fontSize: 12, color: Colors.black),
-                    ),
+    final info = [widget.noRawat, widget.noRkmMedis, widget.nmPasien, widget.umur].where((v) => v.isNotEmpty).join('  |  ');
+    final bisaSimpan = !_saving && !_loading && _loadError == null;
+    return Material(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header setinggi navbar (60), sama dgn modal Input Tindakan: X +
+          // judul (+ info pasien) kiri, blok "Simpan" tosca pojok kanan atas.
+          Container(
+            height: 60,
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _kBorder))),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Tutup',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, size: 26, color: kText),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Input Hasil USG', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: kText)),
+                      if (info.isNotEmpty)
+                        Text(info, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: kTextMuted)),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    customBorder: const CircleBorder(),
+                ),
+                const SizedBox(width: 12),
+                Material(
+                  color: bisaSimpan ? kPrimary : const Color(0xFFDADDDD),
+                  child: InkWell(
+                    onTap: bisaSimpan ? _submit : null,
                     child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, border: Border.all(color: _kBorder)),
-                      child: const Icon(Icons.close, size: 16, color: Color(0xFF6B7280)),
+                      width: 170,
+                      alignment: Alignment.center,
+                      child: Text(
+                        _saving ? 'Menyimpan...' : 'Simpan',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: bisaSimpan ? Colors.white : const Color(0xFFA3A8A8)),
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(height: 1, color: _kBorder),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _loadError != null
-                      ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_loadError!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)))))
-                      : ListView(padding: const EdgeInsets.all(20), children: _buildBody()),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _loadError != null
+                    ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_loadError!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)))))
+                    : ListView(padding: const EdgeInsets.all(20), children: _buildBody()),
+          ),
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), border: Border.all(color: const Color(0xFFFCA5A5)), borderRadius: BorderRadius.circular(6)),
+              child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B))),
             ),
-            if (_error != null)
-              Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), border: Border.all(color: const Color(0xFFFCA5A5)), borderRadius: BorderRadius.circular(2)),
-                child: Text(_error!, style: const TextStyle(fontSize: 12, color: Color(0xFF991B1B))),
-              ),
-            const Divider(height: 1, color: _kBorder),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: _saving || _loading || _loadError != null ? null : _submit,
-                style: ElevatedButton.styleFrom(backgroundColor: _kGreen, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)), padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: Text(_saving ? 'Menyimpan...' : 'Simpan Hasil Pemeriksaan USG', style: const TextStyle(fontSize: 14)),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }

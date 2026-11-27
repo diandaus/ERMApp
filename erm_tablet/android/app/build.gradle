@@ -42,3 +42,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // FileProvider utk membuka installer APK pembaruan (MainActivity.kt)
+    implementation "androidx.core:core:1.13.1"
+}

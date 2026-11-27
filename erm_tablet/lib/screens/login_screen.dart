@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/instansi_service.dart';
 
 const kPrimary = Color(0xFF04B58E);
 
@@ -18,6 +19,17 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // Logo & nama RS dari Pengaturan Instansi (/api/admin/settings, sama dgn
+  // navbar). Null = belum dimuat / server tak terjangkau -> ikon bawaan.
+  InstansiInfo? _instansi;
+
+  Future<void> _loadInstansi() async {
+    try {
+      final info = await InstansiService.get();
+      if (mounted) setState(() => _instansi = info);
+    } catch (_) {/* offline: tetap ikon & nama bawaan */}
+  }
+
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
@@ -28,6 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    _loadInstansi();
     AuthService.getRememberedUsername().then((u) {
       if (mounted && u != null && u.isNotEmpty) {
         setState(() => _usernameCtrl.text = u);
@@ -66,6 +79,29 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Logo RS (kalau ada) — tanpa lingkaran gradien supaya logo tampil
+  /// utuh; gagal muat / belum ada logo = ikon bawaan.
+  Widget _logo() {
+    final url = _instansi?.logoUrl ?? '';
+    const fallback = SizedBox(
+      width: 64,
+      height: 64,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(colors: [Color(0xFF60A5FA), kPrimary], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        ),
+        child: Icon(Icons.local_hospital_rounded, color: Colors.white, size: 30),
+      ),
+    );
+    if (url.isEmpty) return fallback;
+    return SizedBox(
+      width: 88,
+      height: 88,
+      child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Center(child: fallback)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,19 +137,15 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(colors: [Color(0xFF60A5FA), kPrimary], begin: Alignment.topLeft, end: Alignment.bottomRight),
-            ),
-            child: const Icon(Icons.local_hospital_rounded, color: Colors.white, size: 30),
-          ),
+          _logo(),
           const SizedBox(height: 16),
           const Text('ERM Tablet — Rawat Inap', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF111827))),
           const SizedBox(height: 4),
-          const Text('RUMAH SAKIT ISLAM IBNU SINA SIGLI', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+          Text(
+            (_instansi?.nama ?? '').isEmpty ? 'RUMAH SAKIT ISLAM IBNU SINA SIGLI' : _instansi!.nama,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+          ),
           const SizedBox(height: 28),
           TextField(
             controller: _usernameCtrl,

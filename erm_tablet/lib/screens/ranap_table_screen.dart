@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../models/app_user.dart';
 import '../models/dokter_option.dart';
 import '../models/ranap_patient.dart';
@@ -8,6 +7,7 @@ import '../services/ranap_service.dart';
 import 'pasien_detail_landscape_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/modal_tengah.dart';
+import '../widgets/rentang_tanggal.dart';
 
 const kBorder = kLine;
 const kSidebarGreen = kPrimary;
@@ -383,24 +383,6 @@ class _FilterPanelState extends State<_FilterPanel> {
     _dpjpText = widget.initialDpjp;
   }
 
-  Future<void> _pickDari() async {
-    final picked = await showDatePicker(
-        context: context,
-        initialDate: _tglDari ?? DateTime.now(),
-        firstDate: DateTime(2020),
-        lastDate: DateTime(2100));
-    if (picked != null) setState(() => _tglDari = picked);
-  }
-
-  Future<void> _pickSampai() async {
-    final picked = await showDatePicker(
-        context: context,
-        initialDate: _tglSampai ?? DateTime.now(),
-        firstDate: DateTime(2020),
-        lastDate: DateTime(2100));
-    if (picked != null) setState(() => _tglSampai = picked);
-  }
-
   void _reset() {
     setState(() {
       _tglDari = null;
@@ -431,15 +413,18 @@ class _FilterPanelState extends State<_FilterPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const ModalLabel('Tanggal Masuk'),
-                  _dateField('Dari', _tglDari, _pickDari,
-                      onClear: _tglDari == null
-                          ? null
-                          : () => setState(() => _tglDari = null)),
-                  const SizedBox(height: 8),
-                  _dateField('Sampai', _tglSampai, _pickSampai,
-                      onClear: _tglSampai == null
-                          ? null
-                          : () => setState(() => _tglSampai = null)),
+                  RentangTanggal(
+                    bolehSemua: true,
+                    value: _tglDari == null && _tglSampai == null
+                        ? null
+                        : DateTimeRange(
+                            start: _tglDari ?? _tglSampai!,
+                            end: _tglSampai ?? _tglDari!),
+                    onChanged: (r) => setState(() {
+                      _tglDari = r?.start;
+                      _tglSampai = r?.end;
+                    }),
+                  ),
                   const SizedBox(height: 24),
                   const ModalLabel('DPJP'),
                   // Autocomplete — optionsBuilder balikin SEMUA dokter begitu
@@ -522,44 +507,6 @@ class _FilterPanelState extends State<_FilterPanel> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _dateField(String label, DateTime? value, VoidCallback onTap,
-      {VoidCallback? onClear}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-            border: Border.all(color: kBorder),
-            borderRadius: BorderRadius.circular(4)),
-        child: Row(
-          children: [
-            Icon(Icons.calendar_today_outlined,
-                size: 14, color: const Color(0xFF6B7280)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                value == null
-                    ? label
-                    : DateFormat('d MMM yyyy', 'id_ID').format(value),
-                style: TextStyle(
-                    fontSize: 12,
-                    color: value == null
-                        ? const Color(0xFF9CA3AF)
-                        : const Color(0xFF111827)),
-              ),
-            ),
-            if (onClear != null)
-              InkWell(
-                  onTap: onClear,
-                  child: const Icon(Icons.close,
-                      size: 14, color: Color(0xFF9CA3AF))),
-          ],
-        ),
-      ),
     );
   }
 }

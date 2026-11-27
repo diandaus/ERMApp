@@ -9,12 +9,16 @@ import 'rad_tab.dart' show RadTab;
 import 'resep_tab.dart' show ResepTab;
 import 'tindakan_tab.dart' show TindakanTab;
 import 'riwayat_perawatan_screen.dart' show RiwayatPerawatanScreen;
+import '../services/akses_service.dart';
 import '../theme/app_theme.dart';
 
 const kBorder = kLine;
 const kSidebarGreen = kPrimary;
 
-/// PasienDetailLandscapeScreen — versi LANDSCAPE dari PasienDetailScreen,
+/// PasienDetailLandscapeScreen — layar pemeriksaan Rawat Inap, dipakai
+/// LANDSCAPE & PORTRAIT: portrait = panel Data Pasien jadi drawer kiri
+/// (tombol ☰ sebelum tab), navbar dapat tombol "Riwayat Pasien" (langsung
+/// buka riwayat) sebelum Jadwal Obat; tab & konten sama persis. (Dulu versi LANDSCAPE dari PasienDetailScreen,
 /// per arahan user: info pasien pindah ke SIDEBAR kiri (bukan header
 /// hijau di atas), padanan pola RanapTableScreen vs RanapListScreen
 /// (sengaja file terpisah spy desain portrait yg sudah teriterasi tidak
@@ -31,7 +35,18 @@ class PasienDetailLandscapeScreen extends StatefulWidget {
 }
 
 class _PasienDetailLandscapeScreenState extends State<PasienDetailLandscapeScreen> with SingleTickerProviderStateMixin {
-  static const _tabs = ['SOAP/CPPT', 'RESEP', 'LAB', 'RAD', 'TINDAKAN', 'DIAGNOSA'];
+  // Tab yg dinonaktifkan utk akun ini (Pengaturan > Aplikasi Tablet di
+  // web, kunci 'ranap.*') disembunyikan; label & isi tab memakai syarat
+  // yg sama (lihat TabBarView di build).
+  static bool _on(String k) => AksesService.aktif('ranap.$k');
+  final List<String> _tabs = [
+    if (_on('soap')) 'Soap/CPPT',
+    if (_on('resep')) 'Resep',
+    if (_on('lab')) 'Lab',
+    if (_on('rad')) 'Rad',
+    if (_on('tindakan')) 'Tindakan',
+    if (_on('diagnosa')) 'Diagnosa',
+  ];
   late final TabController _tabController;
 
   @override
@@ -60,56 +75,100 @@ class _PasienDetailLandscapeScreenState extends State<PasienDetailLandscapeScree
     ));
   }
 
+  // Portrait: panel Data Pasien jadi drawer kiri (tombol ☰ sebelum tab).
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _openRiwayat() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RiwayatPerawatanScreen(noRkmMedis: widget.patient.noRkmMedis, nmPasien: widget.patient.nmPasien),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final patient = widget.patient;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     // Tema sama dgn LandscapeShell: navbar tosca selebar layar (kembali +
     // identitas pasien + Jadwal Obat), di bawahnya panel data pasien putih
     // & tab putih yg MENEMPEL di bawah navbar, konten di latar abu.
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: kPrimaryDark,
+      drawer: isLandscape
+          ? null
+          : Drawer(
+              width: 300,
+              backgroundColor: Colors.white,
+              shape: const RoundedRectangleBorder(),
+              child: SafeArea(child: _Sidebar(patient: patient, width: 300, showRiwayat: false)),
+            ),
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            _NavbarPasien(patient: patient, onOpenJadwalObat: _openJadwalObat),
+            _NavbarPasien(
+              patient: patient,
+              onOpenJadwalObat: _openJadwalObat,
+              onRiwayat: isLandscape ? null : _openRiwayat,
+            ),
             Expanded(
               child: Container(
                 color: kBg,
                 child: Row(
                   children: [
-                    _Sidebar(patient: patient),
+                    if (isLandscape) _Sidebar(patient: patient),
+                    if (_tabs.isEmpty)
+                      const Expanded(child: _SemuaTabNonaktif())
+                    else
                     Expanded(
                       child: Column(
                         children: [
+                          // Tab SAMA dgn Pemeriksaan Rawat Jalan: tinggi 44,
+                          // font 16 (aktif tebal tosca), garis bawah 2.
                           Container(
-                            height: 48,
+                            height: 44,
+                            width: double.infinity,
                             color: Colors.white,
-                            child: TabBar(
-                              controller: _tabController,
-                              isScrollable: true,
-                              tabAlignment: TabAlignment.start,
-                              labelColor: kPrimaryDark,
-                              unselectedLabelColor: kText,
-                              indicatorColor: kPrimary,
-                              indicatorWeight: 2.5,
-                              indicatorSize: TabBarIndicatorSize.tab,
-                              dividerColor: Colors.transparent,
-                              labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                              unselectedLabelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-                              tabs: _tabs.map((t) => Tab(text: t)).toList(),
-                            ),
+                            padding: EdgeInsets.only(left: isLandscape ? 8 : 0),
+                            child: Row(children: [
+                              if (!isLandscape)
+                                IconButton(
+                                  tooltip: 'Data Pasien',
+                                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                                  icon: const Icon(Icons.menu, size: 26, color: kText),
+                                ),
+                              Expanded(
+                                child: TabBar(
+                                  controller: _tabController,
+                                  isScrollable: true,
+                                  tabAlignment: TabAlignment.start,
+                                  labelColor: kPrimary,
+                                  unselectedLabelColor: kText,
+                                  indicatorColor: kPrimary,
+                                  indicatorWeight: 2,
+                                  indicatorSize: TabBarIndicatorSize.tab,
+                                  dividerColor: Colors.transparent,
+                                  labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                                  labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                  unselectedLabelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
+                                  tabs: _tabs.map((t) => Tab(height: 44, text: t)).toList(),
+                                ),
+                              ),
+                            ]),
                           ),
                           Expanded(
                             child: TabBarView(
                               controller: _tabController,
                               children: [
-                                PemeriksaanTab(user: widget.user, patient: patient),
-                                ResepTab(patient: patient),
-                                LabTab(patient: patient),
-                                RadTab(patient: patient),
-                                TindakanTab(patient: patient),
-                                DiagnosaTab(patient: patient),
+                                if (_on('soap')) PemeriksaanTab(user: widget.user, patient: patient),
+                                // Input/permintaan Rawat Inap (padanan PemeriksaanRanap.tsx):
+                                // dokter = DPJP kunjungan (patient.kdDokter); tombol
+                                // input hanya muncul kalau DPJP diketahui.
+                                if (_on('resep')) ResepTab(patient: patient, kdDokter: patient.kdDokter),
+                                if (_on('lab')) LabTab(patient: patient, kdDokter: patient.kdDokter, ranap: true),
+                                if (_on('rad')) RadTab(patient: patient, kdDokter: patient.kdDokter, nmDokter: patient.nmDokter),
+                                if (_on('tindakan')) TindakanTab(patient: patient, kdDokter: patient.kdDokter, userNip: widget.user.nip),
+                                if (_on('diagnosa')) DiagnosaTab(patient: patient, bisaInput: true, ranap: true),
                               ],
                             ),
                           ),
@@ -132,7 +191,9 @@ class _PasienDetailLandscapeScreenState extends State<PasienDetailLandscapeScree
 class _NavbarPasien extends StatelessWidget {
   final RanapPatient patient;
   final VoidCallback onOpenJadwalObat;
-  const _NavbarPasien({required this.patient, required this.onOpenJadwalObat});
+  // Diisi (portrait) = tombol "Riwayat Pasien" (langsung buka riwayat).
+  final VoidCallback? onRiwayat;
+  const _NavbarPasien({required this.patient, required this.onOpenJadwalObat, this.onRiwayat});
 
   @override
   Widget build(BuildContext context) {
@@ -160,8 +221,7 @@ class _NavbarPasien extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(patient.nmPasien, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
+                Text(patient.nmPasien, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
                 const SizedBox(height: 3),
                 Row(
                   children: [
@@ -175,6 +235,10 @@ class _NavbarPasien extends StatelessWidget {
               ],
             ),
           ),
+          if (onRiwayat != null) ...[
+            _tombol(Icons.history, 'Riwayat Pasien', onRiwayat!),
+            const SizedBox(width: 10),
+          ],
           Material(
             color: kPrimaryDark,
             borderRadius: BorderRadius.circular(6),
@@ -200,6 +264,23 @@ class _NavbarPasien extends StatelessWidget {
     );
   }
 
+  Widget _tombol(IconData icon, String label, VoidCallback onTap) => Material(
+        color: kPrimaryDark,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(children: [
+              Icon(icon, size: 20, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+            ]),
+          ),
+        ),
+      );
+
   Widget _pil(String text, {Color? dot}) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
@@ -218,14 +299,17 @@ class _NavbarPasien extends StatelessWidget {
 
 class _Sidebar extends StatelessWidget {
   final RanapPatient patient;
-  const _Sidebar({required this.patient});
+  final double width;
+  // false = drawer portrait (Riwayat Pasien sudah ada di navbar).
+  final bool showRiwayat;
+  const _Sidebar({required this.patient, this.width = 250, this.showRiwayat = true});
 
   /// Panel data pasien — putih tanpa border/bayangan, judul "Data Pasien"
   /// setinggi 48 (sejajar baris tab), sama pola dgn sidebar "Menu".
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 250,
+      width: width,
       color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,6 +345,7 @@ class _Sidebar extends StatelessWidget {
           ),
           // Tombol "Riwayat Pasien" — bar tosca penuh MENEMPEL di dasar panel
           // (gaya tombol "Bayar" di referensi): teks putih kiri, › kanan.
+          if (showRiwayat)
           Material(
             color: kPrimary,
             child: InkWell(
@@ -301,4 +386,14 @@ class _Sidebar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Semua tab pemeriksaan dinonaktifkan utk akun ini.
+class _SemuaTabNonaktif extends StatelessWidget {
+  const _SemuaTabNonaktif();
+  @override
+  Widget build(BuildContext context) => const Center(
+        child: Text('Tidak ada tab pemeriksaan yang diaktifkan untuk akun ini.\nHubungi admin (Pengaturan > Aplikasi Tablet).',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: kTextMuted)),
+      );
 }

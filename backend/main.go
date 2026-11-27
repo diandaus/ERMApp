@@ -1016,6 +1016,18 @@ func main() {
 
 	ensureMWLAccessionWidth(db)
 
+	if err := ensureResepPulangRacikanTables(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel resep_pulang_racikan: %v", err)
+	}
+
+	if err := ensureTabletAksesTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel erm_tablet_akses: %v", err)
+	}
+
+	if err := ensureTabletRilisTable(db); err != nil {
+		log.Fatalf("gagal inisialisasi tabel erm_tablet_rilis: %v", err)
+	}
+
 	if err := ensureTemplateUsgTable(db); err != nil {
 		log.Fatalf("gagal inisialisasi tabel erm_template_usg: %v", err)
 	}
@@ -3532,6 +3544,17 @@ func main() {
 	r.POST("/api/radiologi/template-usg", createTemplateUsg(db))
 	r.DELETE("/api/radiologi/template-usg/:id", deleteTemplateUsg(db))
 
+	// Pembaruan aplikasi ERM Tablet (APK diunggah admin, lihat tablet_rilis_handler.go)
+	r.GET("/api/tablet/rilis", getTabletRilisList(db))
+	r.GET("/api/tablet/rilis/terbaru", getTabletRilisTerbaru(db))
+	r.POST("/api/tablet/rilis", createTabletRilis(db))
+	r.DELETE("/api/tablet/rilis/:id", deleteTabletRilis(db))
+
+	// Hak akses ERM Tablet per akun (menu sidebar & tab pemeriksaan yg dinonaktifkan)
+	r.GET("/api/tablet/akses", getTabletAksesList(db))
+	r.GET("/api/tablet/akses/:user_id", getTabletAkses(db))
+	r.PUT("/api/tablet/akses/:user_id", saveTabletAkses(db))
+
 	// Modul Radiologi.tsx (worklist departemen radiologi)
 	r.GET("/api/radiologi/permintaan/:noorder", getPermintaanRadiologiDetail(db))
 	r.POST("/api/radiologi/hasil", saveHasilRadiologi(db))
@@ -4286,6 +4309,10 @@ func main() {
 
 	// Billing Preview endpoint
 	r.GET("/api/billing-preview/*no_rawat", getBillingPreview(db))
+	// Potongan Biaya per kunjungan (tab Billing ERM Tablet) — tabel Khanza pengurangan_biaya
+	r.GET("/api/billing/potongan/*no_rawat", getPotonganBiaya(db))
+	r.POST("/api/billing/potongan", savePotonganBiaya(db))
+	r.DELETE("/api/billing/potongan", deletePotonganBiaya(db))
 	r.GET("/api/detail-pemberian-obat/*no_rawat", getDetailPemberianObat(db))
 	r.GET("/api/detail-periksa-lab/*no_rawat", getDetailPeriksaLab(db))
 

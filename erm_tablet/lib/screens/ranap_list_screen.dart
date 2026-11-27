@@ -5,7 +5,7 @@ import '../models/dokter_option.dart';
 import '../models/ranap_patient.dart';
 import '../services/dokter_service.dart';
 import '../services/ranap_service.dart';
-import 'pasien_detail_screen.dart';
+import 'pasien_detail_landscape_screen.dart';
 
 const kBorder = Color(0xFFE6E8E8);
 const kHeaderGreen = Color(0xFF04C99E);
@@ -125,35 +125,12 @@ class _RanapListScreenState extends State<RanapListScreen> {
     });
   }
 
+  /// Portrait: layar pemeriksaan SAMA dgn landscape (PasienDetailLandscapeScreen
+  /// menyesuaikan orientasi sendiri — panel Data Pasien jadi tombol ⓘ),
+  /// seragam dgn Pemeriksaan Rawat Jalan portrait.
   void _openDetailFullScreen(RanapPatient patient) {
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 44,
-          backgroundColor: kHeaderGreen,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          // Jadwal Obat sejajar tombol back, rata kanan — per arahan
-          // user (sebelumnya di dalam header hijau PasienDetailScreen).
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: OutlinedButton.icon(
-                onPressed: () => openJadwalObat(context, user: widget.user, patient: patient),
-                icon: const Icon(Icons.medication_outlined, size: 16, color: Colors.white),
-                label: const Text('Jadwal Obat', style: TextStyle(fontSize: 12, color: Colors.white)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  side: const BorderSide(color: Colors.white),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ),
-          ],
-        ),
-        body: PasienDetailScreen(user: widget.user, patient: patient),
-      ),
+      builder: (_) => PasienDetailLandscapeScreen(user: widget.user, patient: patient),
     ));
   }
 

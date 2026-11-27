@@ -160,6 +160,12 @@ export const AntreanRsView: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [searchText, setSearchText] = React.useState('');
   const [tglDari, setTglDari] = React.useState(localDateStr());
+  // Rentang s/d — BPJS cuma menerima SATU tanggal per panggilan, jadi
+  // rentang dimuat per tanggal (maks. 31 hari) lalu digabung; progres
+  // ditampilkan selama memuat.
+  const [tglSampai, setTglSampai] = React.useState(localDateStr());
+  const [progresMuat, setProgresMuat] = React.useState<{ done: number; total: number } | null>(null);
+  const [tglGagal, setTglGagal] = React.useState<string[]>([]);
   const [antreanModalInitial, setAntreanModalInitial] = React.useState<Partial<AntreanFormState> | null>(null);
   const [selectedKodeBooking, setSelectedKodeBooking] = React.useState<string | null>(null);
   const [statusMenuFor, setStatusMenuFor] = React.useState<string | null>(null);
@@ -253,22 +259,65 @@ export const AntreanRsView: React.FC = () => {
   // dilakukan di sisi client karena endpoint BPJS-nya tidak punya parameter
   // keyword, cuma tanggal.
   const fetchItems = React.useCallback(async () => {
+    // Daftar tanggal dalam rentang (inklusif), format YYYY-MM-DD lokal.
+    const daftarTgl: string[] = [];
+    const akhir = tglSampai && tglSampai >= tglDari ? tglSampai : tglDari;
+    for (let d = new Date(`${tglDari}T00:00:00`); localDateStr(d) <= akhir; d.setDate(d.getDate() + 1)) {
+      daftarTgl.push(localDateStr(d));
+      if (daftarTgl.length > 31) break;
+    }
+    if (daftarTgl.length > 31) {
+      setError('Rentang tanggal maksimal 31 hari');
+      setItems([]);
+      setSepTerbit(0);
+      return;
+    }
     setLoading(true);
     setError(null);
+    setTglGagal([]);
+    setProgresMuat(daftarTgl.length > 1 ? { done: 0, total: daftarTgl.length } : null);
+    const hasil: Record<string, { rows: PendaftaranRow[]; sep: number }> = {};
+    const gagal: string[] = [];
+    let selesai = 0;
+    const muatSatu = async (tgl: string) => {
+      try {
+        const res = await fetch(`/api/bridging/antrean/pendaftaran-tanggal?tanggal=${tgl}`);
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = String(data.error || '');
+          // Tanggal tanpa antrean = BPJS balas "data tidak ditemukan" — kosong, bukan gagal.
+          if (/tidak ditemukan|tidak ada|kosong/i.test(msg)) { hasil[tgl] = { rows: [], sep: 0 }; return; }
+          throw new Error(msg || 'Gagal mengambil data antrean');
+        }
+        const rows: PendaftaranRow[] = data.pendaftaran?.list ?? [];
+        hasil[tgl] = { rows: Array.isArray(rows) ? rows : [], sep: Number(data.pendaftaran?.sep_terbit) || 0 };
+      } catch (err) {
+        if (daftarTgl.length === 1) throw err;
+        gagal.push(tgl);
+      } finally {
+        selesai++;
+        if (daftarTgl.length > 1) setProgresMuat({ done: selesai, total: daftarTgl.length });
+      }
+    };
     try {
-      const res = await fetch(`/api/bridging/antrean/pendaftaran-tanggal?tanggal=${tglDari}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal mengambil data antrean');
-      const rows: PendaftaranRow[] = data.pendaftaran?.list ?? [];
-      setItems(Array.isArray(rows) ? rows : []);
-      setSepTerbit(Number(data.pendaftaran?.sep_terbit) || 0);
+      // Maks. 4 permintaan bersamaan supaya tidak membebani BPJS.
+      const antre = [...daftarTgl];
+      await Promise.all(Array.from({ length: Math.min(4, antre.length) }, async () => {
+        while (antre.length) await muatSatu(antre.shift()!);
+      }));
+      const urut = daftarTgl.filter((t) => hasil[t]);
+      setItems(urut.flatMap((t) => hasil[t].rows));
+      setSepTerbit(urut.reduce((n, t) => n + hasil[t].sep, 0));
+      setTglGagal(gagal.sort());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
       setItems([]);
+      setSepTerbit(0);
     } finally {
       setLoading(false);
+      setProgresMuat(null);
     }
-  }, [tglDari]);
+  }, [tglDari, tglSampai]);
 
   React.useEffect(() => {
     fetchItems();
@@ -627,14 +676,6 @@ export const AntreanRsView: React.FC = () => {
     }
   };
 
-  const openPendaftaranAktif = () => {
-    setPendaftaranMode('aktif');
-    setShowPendaftaran(true);
-    setPendaftaranRows([]);
-    setPendaftaranError(null);
-    fetchPendaftaran('aktif');
-  };
-
   const openPendaftaranFilter = () => {
     setPendaftaranMode('filter');
     setShowPendaftaran(true);
@@ -654,7 +695,29 @@ export const AntreanRsView: React.FC = () => {
             onChange={(e) => setSearchText(e.target.value)}
             style={{ ...inputStyle, width: 280 }}
           />
-          <input type="date" value={tglDari} onChange={(e) => setTglDari(e.target.value)} style={{ ...inputStyle, width: 150 }} />
+          <input
+            type="date"
+            value={tglDari}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTglDari(v);
+              if (v && tglSampai < v) setTglSampai(v);
+            }}
+            style={{ ...inputStyle, width: 150 }}
+          />
+          <span style={{ fontSize: 13, color: '#6b7280' }}>s/d</span>
+          <input
+            type="date"
+            value={tglSampai}
+            min={tglDari}
+            onChange={(e) => setTglSampai(e.target.value < tglDari ? tglDari : e.target.value)}
+            style={{ ...inputStyle, width: 150 }}
+          />
+          {progresMuat && (
+            <span style={{ fontSize: 12, color: '#2563eb' }}>
+              Memuat {progresMuat.done}/{progresMuat.total} tanggal...
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
@@ -666,13 +729,6 @@ export const AntreanRsView: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={openPendaftaranAktif}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d97706', background: '#ffffff', color: '#d97706', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-          >
-            Antrean Belum Dilayani
-          </button>
-          <button
-            type="button"
             onClick={openPendaftaranFilter}
             style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d97706', background: '#ffffff', color: '#d97706', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
           >
@@ -680,6 +736,12 @@ export const AntreanRsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {tglGagal.length > 0 && (
+        <div style={{ padding: 10, background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, color: '#92400e', fontSize: 13 }}>
+          Sebagian tanggal gagal dimuat dari BPJS ({tglGagal.map((t) => formatTgl(t)).join(', ')}) — data di bawah tidak termasuk tanggal tersebut. Coba muat ulang.
+        </div>
+      )}
 
       {error && (
         <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13 }}>

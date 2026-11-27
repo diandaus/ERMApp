@@ -113,6 +113,40 @@ func resolveKdRacikPulang(db *sql.DB, kdRacik string) string {
 	return "R01"
 }
 
+// ensureResepPulangRacikanTables — tabel racikan Resep Pulang milik ERMApp
+// (Khanza tidak punya racikan di permintaan resep pulang). Dulu dipakai
+// insert/list/delete di file ini TANPA pernah dibuat -> hapus resep pulang
+// & simpan resep pulang berisi racikan selalu error 1146 (table doesn't
+// exist). Kolom mengikuti resep_dokter_racikan(_detail) Khanza; sengaja
+// TANPA foreign key (tidak menyentuh tabel Khanza). CREATE TABLE IF NOT
+// EXISTS saja — tabel baru, tidak ada lock pada tabel yg sedang dipakai.
+func ensureResepPulangRacikanTables(db *sql.DB) error {
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS resep_pulang_racikan (
+			no_resep VARCHAR(14) NOT NULL,
+			no_racik VARCHAR(2) NOT NULL,
+			nama_racik VARCHAR(100) NOT NULL,
+			kd_racik VARCHAR(3) NOT NULL,
+			jml_dr INT NOT NULL,
+			aturan_pakai VARCHAR(150) NOT NULL,
+			keterangan VARCHAR(50) NOT NULL,
+			PRIMARY KEY (no_resep, no_racik)
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1`); err != nil {
+		return err
+	}
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS resep_pulang_racikan_detail (
+			no_resep VARCHAR(14) NOT NULL,
+			no_racik VARCHAR(2) NOT NULL,
+			kode_brng VARCHAR(15) NOT NULL,
+			jml DOUBLE DEFAULT NULL,
+			kandungan VARCHAR(10) DEFAULT NULL,
+			PRIMARY KEY (no_resep, no_racik, kode_brng),
+			KEY kode_brng (kode_brng)
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	return err
+}
+
 func insertRacikanPulang(tx *sql.Tx, db *sql.DB, noPerm string, racikanList []RacikanPulangPayload) error {
 	for i, rac := range racikanList {
 		noRacik := fmt.Sprintf("%02d", i+1)

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/lab_item.dart';
 import '../models/ranap_patient.dart';
 import '../services/lab_service.dart';
+import '../widgets/lab_input_panel.dart';
+import '../widgets/modal_input_kit.dart';
 
 const kBorder = Color(0xFFE6E8E8);
 const kCardBorder = Color(0xFFCFD1D1); // border kartu/tabel tegas, sama dgn Jadwal Obat
@@ -11,14 +13,20 @@ const kCardBorder = Color(0xFFCFD1D1); // border kartu/tabel tegas, sama dgn Jad
 /// masih Pending, blm ada hasil) + Hasil Periksa Laboratorium (PK+PA yg
 /// sudah keluar, digabung & diurutkan tgl terbaru). Endpoint SAMA PERSIS
 /// (/api/lab/riwayat-pk, /api/lab/riwayat-pa, /api/lab/hasil-detail),
-/// tidak ada endpoint baru. Buat Permintaan Lab (ModalInputLab.tsx) BELUM
-/// dibangun di v1 tablet ini — nyusul di fase berikutnya spt Resep.
+/// tidak ada endpoint baru. Tombol "Buat Permintaan Lab" (modal
+/// lab_input_panel.dart, padanan ModalInputLab.tsx) tampil kalau
+/// [kdDokter] diisi (layar pemeriksaan Rawat Jalan).
 class LabTab extends StatefulWidget {
   final RanapPatient patient;
   // true = kartu/tabel putih radius 4 (layar pemeriksaan Rawat Jalan),
   // sama dgn ResepTab(ralan).
   final bool flat;
-  const LabTab({super.key, required this.patient, this.flat = false});
+  // Dokter perujuk & cara bayar kunjungan — diisi = tombol Buat Permintaan.
+  final String kdDokter;
+  final String kdPj;
+  // true = kunjungan Rawat Inap (permintaan_lab.status 'ranap').
+  final bool ranap;
+  const LabTab({super.key, required this.patient, this.flat = false, this.kdDokter = '', this.kdPj = '', this.ranap = false});
 
   @override
   State<LabTab> createState() => _LabTabState();
@@ -72,8 +80,32 @@ class _LabTabState extends State<LabTab> {
     }
   }
 
+  Future<void> _buatPermintaan() async {
+    final p = widget.patient;
+    final noorder = await showLabInputPanel(context, noRawat: p.noRawat, noRkmMedis: p.noRkmMedis, nmPasien: p.nmPasien, umur: p.umur, kdDokter: widget.kdDokter, kdPj: widget.kdPj, statusLanjut: widget.ranap ? 'ranap' : 'ralan');
+    if (noorder == null || !mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Permintaan lab berhasil disimpan — No. $noorder'), backgroundColor: const Color(0xFF16A34A)));
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.kdDokter.isEmpty) return _buildContent();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: KitTabButton(label: 'Buat Permintaan Lab', onPressed: _buatPermintaan),
+        ),
+        Expanded(child: _buildContent()),
+      ],
+    );
+  }
+
+  Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: _load,
       child: _loading

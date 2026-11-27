@@ -5,6 +5,8 @@ import '../services/api_config.dart';
 import '../services/api_client.dart';
 import '../services/rad_service.dart';
 import '../widgets/usg_input_panel.dart';
+import '../widgets/modal_input_kit.dart';
+import '../widgets/rad_input_panel.dart';
 
 const kBorder = Color(0xFFE6E8E8);
 const kCardBorder = Color(0xFFCFD1D1); // border kartu/tabel tegas, sama dgn Jadwal Obat
@@ -25,10 +27,12 @@ class RadTab extends StatefulWidget {
   final String kdDokter;
   final String nmDokter;
   final String userNip;
+  // Cara bayar kunjungan — dipakai modal Buat Permintaan Radiologi.
+  final String kdPj;
   // true = kartu/tabel putih radius 4 (layar pemeriksaan Rawat Jalan),
   // sama dgn ResepTab(ralan).
   final bool flat;
-  const RadTab({super.key, required this.patient, this.flat = false, this.kategoriUsg = false, this.kdDokter = '', this.nmDokter = '', this.userNip = ''});
+  const RadTab({super.key, required this.patient, this.flat = false, this.kategoriUsg = false, this.kdDokter = '', this.nmDokter = '', this.userNip = '', this.kdPj = ''});
 
   @override
   State<RadTab> createState() => _RadTabState();
@@ -140,7 +144,9 @@ class _RadTabState extends State<RadTab> {
 
   /// Kirim permintaan USG pending ke Modality Worklist (Orthanc) spy
   /// AccessionNumber & identitas pasien tidak diketik ulang di mesin USG.
-  /// Yg statusnya sudah 'terkirim' tidak dikirim ulang.
+  /// SAMA dgn handleKirimModalityWorklist di RadTab.tsx (web): yg sudah
+  /// 'terkirim' TETAP boleh dikirim ulang — backend menghapus entri lama
+  /// di Orthanc & membuat ulang (mis. entri lama tidak muncul di mesin).
   Future<void> _kirimModalityWorklist() async {
     setState(() => _sendingMwl = true);
     try {
@@ -150,18 +156,19 @@ class _RadTabState extends State<RadTab> {
         status = await RadService.getMwlStatus(noorder);
       } catch (_) {/* status tak diketahui -> tetap ditawarkan kirim */}
       if (!mounted) return;
-      if (status == 'terkirim') {
-        _toast('Permintaan USG pasien ini sudah ada di Modality Worklist.');
-        return;
-      }
+      final sudahTerkirim = status == 'terkirim';
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Kirim permintaan USG ke Modality Worklist?'),
-          content: const Text('AccessionNumber & identitas pasien otomatis terisi — tidak perlu diketik ulang manual di mesin USG.'),
+          title: Text(sudahTerkirim
+              ? 'Permintaan USG ini sudah pernah dikirim. Kirim ulang ke Modality Worklist?'
+              : 'Kirim permintaan USG ke Modality Worklist?'),
+          content: Text(sudahTerkirim
+              ? 'Entri worklist lama akan diganti dengan yang baru.'
+              : 'AccessionNumber & identitas pasien otomatis terisi — tidak perlu diketik ulang manual di mesin USG.'),
           actions: [
             TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Batal')),
-            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Ya, Kirim')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(sudahTerkirim ? 'Ya, Kirim Ulang' : 'Ya, Kirim')),
           ],
         ),
       );
@@ -173,6 +180,14 @@ class _RadTabState extends State<RadTab> {
     } finally {
       if (mounted) setState(() => _sendingMwl = false);
     }
+  }
+
+  Future<void> _buatPermintaanRad() async {
+    final p = widget.patient;
+    final noorder = await showRadInputPanel(context, noRawat: p.noRawat, noRkmMedis: p.noRkmMedis, nmPasien: p.nmPasien, umur: p.umur, kdDokter: widget.kdDokter, kdPj: widget.kdPj);
+    if (noorder == null || !mounted) return;
+    _toast('Permintaan radiologi berhasil disimpan — No. $noorder');
+    await _load();
   }
 
   Future<void> _batalkan(RadPermintaanItem item) async {
@@ -200,8 +215,21 @@ class _RadTabState extends State<RadTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Tombol aksi baru ada di tab USG; tab Radiologi biasa tetap riwayat.
-    if (!widget.kategoriUsg) return _buildContent();
+    // Tab Radiologi biasa: tombol Buat Permintaan kalau dokter perujuk
+    // diketahui (layar pemeriksaan Rawat Jalan); selain itu riwayat saja.
+    if (!widget.kategoriUsg) {
+      if (widget.kdDokter.isEmpty) return _buildContent();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: KitTabButton(label: 'Buat Permintaan Radiologi', onPressed: _buatPermintaanRad),
+          ),
+          Expanded(child: _buildContent()),
+        ],
+      );
+    }
     const green = Color(0xFF04C99E);
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(2));
     return Column(
@@ -259,7 +287,7 @@ class _RadTabState extends State<RadTab> {
                         if (_pending.isNotEmpty) ...[
                           const Text('Riwayat Permintaan', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF282A2A))),
                           const SizedBox(height: 8),
-                          ..._pending.map((it) => _PermintaanCard(item: it, flat: widget.flat, onBatalkan: widget.kategoriUsg ? () => _batalkan(it) : null)),
+                          ..._pending.map((it) => _PermintaanCard(item: it, flat: widget.flat, onBatalkan: widget.kategoriUsg || widget.kdDokter.isNotEmpty ? () => _batalkan(it) : null)),
                           const SizedBox(height: 16),
                         ],
                         if (_data.pemeriksaan.isNotEmpty) ...[
@@ -333,7 +361,7 @@ class _PermintaanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text('${item.tglPermintaan} ${item.jamPermintaan}'.trim(), style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
+          Text('${_tglTampil(item.tglPermintaan)} ${item.jamPermintaan}'.trim(), style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
           Text(item.nmDokter.isEmpty ? '-' : item.nmDokter, style: const TextStyle(fontSize: 13, color: Color(0xFF4B5150))),
           const SizedBox(height: 8),
           Text('Diagnosis: ${item.diagnosaKlinis.isEmpty ? '-' : item.diagnosaKlinis}', style: const TextStyle(fontSize: 13)),
@@ -482,4 +510,11 @@ class _GambarCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Backend (parseTime=true) mengirim DATE sbg RFC3339
+/// ("2026-11-26T00:00:00+07:00") — tampilkan dd/MM/yyyy saja.
+String _tglTampil(String v) {
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(v);
+  return m == null ? v : '${m[3]}/${m[2]}/${m[1]}';
 }

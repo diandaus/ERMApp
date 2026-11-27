@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bar_toolbar.dart';
 import '../widgets/modal_tengah.dart';
+import '../widgets/rentang_tanggal.dart';
 import 'package:intl/intl.dart';
 import '../models/app_user.dart';
 import '../models/dokter_option.dart';
@@ -745,19 +746,16 @@ class _FilterPanelState extends State<_FilterPanel> {
   late String _kdPoli = widget.initial.kdPoli;
   late String _kdDokter = widget.initial.kdDokter;
 
-  Future<void> _pick(bool dari) async {
-    final picked = await showDatePicker(context: context, initialDate: dari ? _tglDari : _tglSampai, firstDate: DateTime(2020), lastDate: DateTime(2100));
-    if (picked == null) return;
-    setState(() {
-      if (dari) {
-        _tglDari = picked;
-        if (_tglSampai.isBefore(picked)) _tglSampai = picked;
-      } else {
-        _tglSampai = picked;
-        if (_tglDari.isAfter(picked)) _tglDari = picked;
-      }
-    });
-  }
+  Widget _rentang() => RentangTanggal(
+        value: DateTimeRange(start: _tglDari, end: _tglSampai),
+        onChanged: (r) {
+          if (r == null) return;
+          setState(() {
+            _tglDari = r.start;
+            _tglSampai = r.end;
+          });
+        },
+      );
 
   void _reset() {
     final today = DateUtils.dateOnly(DateTime.now());
@@ -784,9 +782,7 @@ class _FilterPanelState extends State<_FilterPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const ModalLabel('Tanggal Registrasi'),
-                _dateField('Dari', _tglDari, () => _pick(true)),
-                const SizedBox(height: 10),
-                _dateField('Sampai', _tglSampai, () => _pick(false)),
+                _rentang(),
                 const SizedBox(height: 24),
                 const ModalLabel('Poliklinik'),
                 _dropdown(
@@ -837,9 +833,7 @@ class _FilterPanelState extends State<_FilterPanel> {
               const SizedBox(height: 20),
               const Text('Tanggal Registrasi', style: labelStyle),
               const SizedBox(height: 8),
-              _dateField('Dari', _tglDari, () => _pick(true)),
-              const SizedBox(height: 8),
-              _dateField('Sampai', _tglSampai, () => _pick(false)),
+              _rentang(),
               const SizedBox(height: 20),
               const Text('Poliklinik', style: labelStyle),
               const SizedBox(height: 8),
@@ -941,25 +935,6 @@ class _FilterPanelState extends State<_FilterPanel> {
               if (e.key.isNotEmpty) DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis)),
           ],
           onChanged: (v) => onChanged(v ?? ''),
-        ),
-      ),
-    );
-  }
-
-  Widget _dateField(String label, DateTime value, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(border: Border.all(color: _kBorder), borderRadius: BorderRadius.circular(4)),
-        child: Row(
-          children: [
-            const Icon(Icons.calendar_today_outlined, size: 14, color: Color(0xFF6B7280)),
-            const SizedBox(width: 8),
-            SizedBox(width: 52, child: Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))),
-            Expanded(child: Text(DateFormat('d MMM yyyy', 'id_ID').format(value), style: const TextStyle(fontSize: 12, color: Color(0xFF111827)))),
-          ],
         ),
       ),
     );

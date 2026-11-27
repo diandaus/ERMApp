@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/akses_service.dart';
 import '../services/instansi_service.dart';
+import '../services/update_service.dart';
 import '../models/app_user.dart';
 import '../widgets/dalam_pengembangan.dart';
 import 'main_shell.dart' show confirmLogout;
+import 'dashboard_screen.dart';
+import 'pengaturan_screen.dart';
 import 'poli_screen.dart';
 import 'ranap_table_screen.dart';
 import '../theme/app_theme.dart';
@@ -15,21 +19,30 @@ const double _kSidebarWidth = 210;
 class _MenuEntry {
   final String label;
   final IconData icon;
-  const _MenuEntry(this.label, this.icon);
+  // Kunci hak akses (AksesService / Pengaturan > Aplikasi Tablet di web).
+  final String akses;
+  const _MenuEntry(this.label, this.icon, this.akses);
 }
+
+/// Index menu yg boleh tampil utk akun ini (urut asli). Index tetap index
+/// ASLI _kLandscapeMenu (= posisi di `pages`), cuma yg nonaktif dilewati.
+List<int> get _menuAktif => [
+      for (var i = 0; i < _kLandscapeMenu.length; i++)
+        if (AksesService.aktif(_kLandscapeMenu[i].akses)) i,
+    ];
 
 /// 8 menu sidebar persis daftar yg diminta user. Baru index 2
 /// (Poliklinik) & 3 (Rawat Inap) yg fitur nyata — sisanya "Dalam
 /// Pengembangan", sama pola dgn portrait (MainShell).
 const List<_MenuEntry> _kLandscapeMenu = [
-  _MenuEntry('Dashboard', Icons.dashboard_outlined),
-  _MenuEntry('IGD', Icons.emergency_outlined),
-  _MenuEntry('Poliklinik', Icons.local_hospital_outlined),
-  _MenuEntry('Rawat Inap', Icons.bed_outlined),
-  _MenuEntry('Farmasi', Icons.medication_outlined),
-  _MenuEntry('Laboratorium', Icons.science_outlined),
-  _MenuEntry('Radiologi', Icons.image_search_outlined),
-  _MenuEntry('Jadwal Operasi', Icons.event_note_outlined),
+  _MenuEntry('Dashboard', Icons.dashboard_outlined, 'menu.dashboard'),
+  _MenuEntry('IGD', Icons.emergency_outlined, 'menu.igd'),
+  _MenuEntry('Poliklinik', Icons.local_hospital_outlined, 'menu.poli'),
+  _MenuEntry('Rawat Inap', Icons.bed_outlined, 'menu.ranap'),
+  _MenuEntry('Farmasi', Icons.medication_outlined, 'menu.farmasi'),
+  _MenuEntry('Laboratorium', Icons.science_outlined, 'menu.lab'),
+  _MenuEntry('Radiologi', Icons.image_search_outlined, 'menu.rad'),
+  _MenuEntry('Jadwal Operasi', Icons.event_note_outlined, 'menu.operasi'),
 ];
 
 /// LandscapeShell — UI khusus orientasi landscape (beda dr portrait/
@@ -48,7 +61,9 @@ class LandscapeShell extends StatefulWidget {
 }
 
 class _LandscapeShellState extends State<LandscapeShell> {
-  int _index = 3; // default buka Rawat Inap — satu-satunya fitur nyata
+  // Halaman awal setelah login = Dashboard; kalau Dashboard dinonaktifkan
+  // utk akun ini -> menu aktif pertama.
+  int _index = _menuAktif.contains(0) ? 0 : (_menuAktif.isEmpty ? 0 : _menuAktif.first);
   // Kolom cari navbar atas — cakupannya ikut tab aktif (skrg cuma Rawat
   // Inap yg punya data nyata utk dicari: No.RM/Nama/Dokter/dst), per
   // arahan user. Query TETAP tersimpan saat pindah tab (tidak direset),
@@ -67,6 +82,30 @@ class _LandscapeShellState extends State<LandscapeShell> {
     _cekInstansi();
     _pingTimer =
         Timer.periodic(const Duration(seconds: 30), (_) => _cekInstansi());
+    if (UpdateService.didukung) {
+      Future.delayed(const Duration(seconds: 3), _cekPembaruan);
+    }
+  }
+
+  /// Sekali saat app dibuka: kalau server punya APK lebih baru, tampilkan
+  /// notifikasi dgn tombol "Lihat" -> Pengaturan > Lainnya. Gagal = diam.
+  Future<void> _cekPembaruan() async {
+    try {
+      final h = await UpdateService.cek();
+      if (!mounted || !h.adaUpdate) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Text('Versi baru ERM Tablet ${h.terbaru!.versi} tersedia'),
+        action: SnackBarAction(
+          label: 'Lihat',
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => PengaturanScreen(
+                  user: widget.user,
+                  onLogout: widget.onLogout,
+                  bukaLainnya: true))),
+        ),
+      ));
+    } catch (_) {/* offline / server lama: abaikan */}
   }
 
   @override
@@ -92,7 +131,7 @@ class _LandscapeShellState extends State<LandscapeShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const DalamPengembanganInline(title: 'Dashboard'),
+      DashboardScreen(user: widget.user),
       const DalamPengembanganInline(title: 'IGD'),
       PoliScreen(
           user: widget.user,
@@ -139,7 +178,11 @@ class _LandscapeShellState extends State<LandscapeShell> {
                       duration: const Duration(milliseconds: 200),
                       padding: EdgeInsets.only(
                           left: _sidebarOpen ? _kSidebarWidth : 0),
-                      child: IndexedStack(index: _index, children: pages),
+                      child: _menuAktif.isEmpty
+                          ? const Center(
+                              child: Text('Tidak ada menu yang diaktifkan untuk akun ini.\nHubungi admin (Pengaturan > Aplikasi Tablet).',
+                                  textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: kTextMuted)))
+                          : IndexedStack(index: _index, children: pages),
                     ),
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 200),
@@ -191,8 +234,9 @@ class _Sidebar extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: EdgeInsets.zero,
-              itemCount: _kLandscapeMenu.length,
-              itemBuilder: (context, i) {
+              itemCount: _menuAktif.length,
+              itemBuilder: (context, n) {
+                final i = _menuAktif[n];
                 final entry = _kLandscapeMenu[i];
                 final isSelected = i == selected;
                 return InkWell(
@@ -382,11 +426,9 @@ class _TopBar extends StatelessWidget {
             onSelected: (v) {
               if (v == 'keluar') confirmLogout(context, onLogout);
               if (v == 'pengaturan') {
-                // Halaman Pengaturan dikembangkan nanti.
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(const SnackBar(
-                      content: Text('Pengaturan — dalam pengembangan')));
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) =>
+                        PengaturanScreen(user: user, onLogout: onLogout)));
               }
             },
             itemBuilder: (_) => [

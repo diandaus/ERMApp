@@ -9,6 +9,9 @@ class RanapPatient {
   final String jk;
   final String kamar;
   final String nmDokter;
+  // DPJP (reg_periksa.kd_dokter) — dokter peresep/perujuk/pelaksana saat
+  // input Resep/Lab/Rad/Tindakan Rawat Inap. '' = tidak diketahui.
+  final String kdDokter;
   final String tglMasuk;
   final String jamMasuk;
   final String tglKeluar; // kosong '' kalau belum pulang
@@ -29,6 +32,7 @@ class RanapPatient {
     required this.jk,
     required this.kamar,
     required this.nmDokter,
+    this.kdDokter = '',
     required this.tglMasuk,
     required this.jamMasuk,
     required this.tglKeluar,
@@ -51,6 +55,7 @@ class RanapPatient {
       jk: json['jk'] as String? ?? '',
       kamar: json['kamar'] as String? ?? '',
       nmDokter: json['nm_dokter'] as String? ?? '',
+      kdDokter: json['kd_dokter'] as String? ?? '',
       tglMasuk: json['tgl_masuk'] as String? ?? '',
       jamMasuk: json['jam_masuk'] as String? ?? '',
       tglKeluar: json['tgl_keluar'] as String? ?? '',

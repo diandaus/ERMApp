@@ -4,10 +4,13 @@ import '../models/app_user.dart';
 import '../models/poli_patient.dart';
 import '../models/ranap_patient.dart';
 import '../models/soap_item.dart';
+import '../services/akses_service.dart';
 import '../services/api_client.dart';
 import '../services/rawat_jalan_service.dart';
 import '../services/soap_history_service.dart';
 import '../services/soap_ralan_service.dart';
+import 'billing_tab.dart' show BillingTab;
+import 'catatan_dokter_tab.dart' show CatatanDokterTab;
 import 'diagnosa_tab.dart' show DiagnosaTab;
 import 'lab_tab.dart' show LabTab;
 import 'rad_tab.dart' show RadTab;
@@ -67,14 +70,20 @@ class _PemeriksaanRalanScreenState extends State<PemeriksaanRalanScreen>
       widget.user.allowedModules.split(',').contains('pemeriksaan-usg');
   // Label huruf awal kapital (gaya referensi Majoo "Main Floor"),
   // singkatan tetap kapital.
+  // Tab yg dinonaktifkan utk akun ini (Pengaturan > Aplikasi Tablet di
+  // web, kunci 'ralan.*') disembunyikan — daftar label & isi tab HARUS
+  // memakai syarat yg sama (lihat TabBarView di build).
+  static bool _on(String k) => AksesService.aktif('ralan.$k');
   late final List<String> _tabs = [
-    'Soap/CPPT',
-    'Resep',
-    if (_canAccessUsg) 'USG',
-    'Tindakan',
-    'Lab',
-    'Rad',
-    'Diagnosa'
+    if (_on('soap')) 'Soap/CPPT',
+    if (_on('resep')) 'Resep',
+    if (_canAccessUsg && _on('usg')) 'USG',
+    if (_on('tindakan')) 'Tindakan',
+    if (_on('lab')) 'Lab',
+    if (_on('rad')) 'Rad',
+    if (_on('diagnosa')) 'Diagnosa',
+    if (_on('catatan')) 'Catatan Dokter',
+    if (_on('billing')) 'Billing',
   ];
   late final TabController _tabController =
       TabController(length: _tabs.length, vsync: this);
@@ -83,7 +92,9 @@ class _PemeriksaanRalanScreenState extends State<PemeriksaanRalanScreen>
   /// "Lanjut Input Resep" setelah simpan SOAP: pindah ke tab Resep &
   /// langsung buka modal Input Resep.
   void _lanjutInputResep() {
-    _tabController.animateTo(_tabs.indexOf('Resep'));
+    final i = _tabs.indexOf('Resep');
+    if (i < 0) return; // tab Resep dinonaktifkan utk akun ini
+    _tabController.animateTo(i);
     _resepOpenRequest.request();
   }
 
@@ -172,6 +183,14 @@ class _PemeriksaanRalanScreenState extends State<PemeriksaanRalanScreen>
                         width: 250,
                         child: _PatientInfo(patient: patient, pasien: _pasien),
                       ),
+                    if (_tabs.isEmpty)
+                      const Expanded(
+                        child: Center(
+                          child: Text('Tidak ada tab pemeriksaan yang diaktifkan untuk akun ini.\nHubungi admin (Pengaturan > Aplikasi Tablet).',
+                              textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: kTextMuted)),
+                        ),
+                      )
+                    else
                     Expanded(
                       child: Column(
                         children: [
@@ -206,31 +225,53 @@ class _PemeriksaanRalanScreenState extends State<PemeriksaanRalanScreen>
                       children: [
                         // Status di sidebar ikut berubah jadi "Sudah" begitu
                         // SOAP tersimpan.
+                        if (_on('soap'))
                         _SoapRalanTab(
                             patient: patient,
                             onStatusChanged: () => setState(() {}),
                             onLanjutResep: _lanjutInputResep),
+                        if (_on('resep'))
                         ResepTab(
                             patient: _asRanap,
                             ralan: true,
                             kdDokter: patient.kdDokter,
                             openRequest: _resepOpenRequest),
-                        if (_canAccessUsg)
+                        if (_canAccessUsg && _on('usg'))
                           RadTab(
                               patient: _asRanap,
                               flat: true, kategoriUsg: true,
                               kdDokter: patient.kdDokter,
                               nmDokter: patient.nmDokter,
                               userNip: widget.user.nip),
+                        if (_on('tindakan'))
                         TindakanTab(
                             patient: _asRanap,
                             ralan: true,
                             kdDokter: patient.kdDokter,
                             kdPj: patient.kdPj,
                             userNip: widget.user.nip),
-                        LabTab(patient: _asRanap, flat: true),
-                        RadTab(patient: _asRanap, flat: true),
-                        DiagnosaTab(patient: _asRanap, flat: true),
+                        if (_on('lab'))
+                        LabTab(
+                            patient: _asRanap,
+                            flat: true,
+                            kdDokter: patient.kdDokter,
+                            kdPj: patient.kdPj),
+                        if (_on('rad'))
+                        RadTab(
+                            patient: _asRanap,
+                            flat: true,
+                            kdDokter: patient.kdDokter,
+                            nmDokter: patient.nmDokter,
+                            kdPj: patient.kdPj),
+                        if (_on('diagnosa'))
+                        DiagnosaTab(
+                            patient: _asRanap, flat: true, bisaInput: true),
+                        if (_on('catatan'))
+                        CatatanDokterTab(
+                            noRawat: patient.noRawat,
+                            kdDokter: patient.kdDokter),
+                        if (_on('billing'))
+                        BillingTab(noRawat: patient.noRawat),
                       ],
                     ),
                   ),

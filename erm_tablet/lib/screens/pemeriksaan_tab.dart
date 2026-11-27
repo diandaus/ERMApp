@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../models/ranap_patient.dart';
 import '../models/soap_item.dart';
+import '../services/api_client.dart';
+import '../services/soap_ralan_service.dart' show soapDateToApi;
 import '../services/soap_service.dart';
+import '../widgets/grafik_ttv_panel.dart';
 
 const kBorder = Color(0xFFE6E8E8);
 const kPrimary = Color(0xFF04B58E);
@@ -53,6 +56,11 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
   final _beratCtrl = TextEditingController();
   final _alergiCtrl = TextEditingController();
   String _kesadaran = 'Compos Mentis';
+  static const _kKesadaran = ['Compos Mentis', 'Apatis', 'Delirium', 'Somnolen', 'Sopor', 'Coma'];
+  // Baris riwayat yg sedang diedit (null = input baru). Tgl/jam baris itu
+  // jadi kunci UPDATE (PUT), sama dgn isEditMode PemeriksaanRanap.tsx.
+  SoapItem? _editing;
+  final _scroll = ScrollController();
   bool _saving = false;
   bool _showDetail = false;
 
@@ -64,6 +72,7 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
 
   @override
   void dispose() {
+    _scroll.dispose();
     _keluhanCtrl.dispose();
     _pemeriksaanCtrl.dispose();
     _penilaianCtrl.dispose();
@@ -114,7 +123,10 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
     }
     setState(() => _saving = true);
     try {
+      final editing = _editing;
       await SoapService.simpan(
+        tglPerawatan: editing == null ? null : soapDateToApi(editing.tglPerawatan),
+        jamRawat: editing == null ? null : _jam(editing.jamRawat),
         noRawat: widget.patient.noRawat,
         nip: widget.user.nip,
         keluhan: _keluhanCtrl.text.trim(),
@@ -152,8 +164,10 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
         _beratCtrl.clear();
         _alergiCtrl.clear();
         _kesadaran = 'Compos Mentis';
+        _editing = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SOAP/CPPT berhasil disimpan'), backgroundColor: Color(0xFF16A34A)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(editing != null ? 'SOAP/CPPT berhasil diupdate' : 'SOAP/CPPT berhasil disimpan'), backgroundColor: const Color(0xFF16A34A)));
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -161,6 +175,115 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Jam selalu HH:MM:SS (padanan normalisasi di PemeriksaanRanap.tsx).
+  String _jam(String jam) => jam.length == 5 ? '$jam:00' : (jam.isEmpty ? '00:00:00' : jam);
+
+  void _fillForm(SoapItem it) {
+    _keluhanCtrl.text = it.keluhan;
+    _pemeriksaanCtrl.text = it.pemeriksaan;
+    _penilaianCtrl.text = it.penilaian;
+    _planningCtrl.text = it.rtl;
+    _instruksiCtrl.text = it.instruksi;
+    _evaluasiCtrl.text = it.evaluasi;
+    _tensiCtrl.text = it.tensi;
+    _suhuCtrl.text = it.suhuTubuh;
+    _nadiCtrl.text = it.nadi;
+    _respirasiCtrl.text = it.respirasi;
+    _spo2Ctrl.text = it.spo2;
+    _gcsCtrl.text = it.gcs;
+    _tinggiCtrl.text = it.tinggi;
+    _beratCtrl.text = it.berat;
+    _alergiCtrl.text = it.alergi;
+    _kesadaran = _kKesadaran.contains(it.kesadaran) ? it.kesadaran : _kKesadaran.first;
+    // Vital sign terisi -> buka bagian Vital Sign (portrait) supaya terlihat.
+    if ([it.tensi, it.suhuTubuh, it.nadi, it.respirasi, it.spo2, it.gcs, it.tinggi, it.berat, it.alergi].any((v) => v.isNotEmpty)) {
+      _showDetail = true;
+    }
+    if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  void _clearForm() {
+    setState(() {
+      for (final c in [_keluhanCtrl, _pemeriksaanCtrl, _penilaianCtrl, _planningCtrl, _instruksiCtrl, _evaluasiCtrl, _tensiCtrl, _suhuCtrl, _nadiCtrl, _respirasiCtrl, _spo2Ctrl, _gcsCtrl, _tinggiCtrl, _beratCtrl, _alergiCtrl]) {
+        c.clear();
+      }
+      _kesadaran = 'Compos Mentis';
+      _editing = null;
+    });
+  }
+
+  void _openGrafikTtv() {
+    final p = widget.patient;
+    showGrafikTtvPanel(context,
+        riwayat: _riwayat,
+        subtitle: [p.noRawat, p.noRkmMedis, p.nmPasien, p.umur].where((v) => v.isNotEmpty).join('  |  '));
+  }
+
+  void _edit(SoapItem it) => setState(() {
+        _fillForm(it);
+        _editing = it;
+      });
+
+  void _copy(SoapItem it) {
+    setState(() {
+      _fillForm(it);
+      _editing = null;
+    });
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Data SOAP berhasil di-copy ke form'), backgroundColor: Color(0xFF16A34A)));
+  }
+
+  Future<void> _hapus(SoapItem it) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yakin ingin menghapus?'),
+        content: Text('Data SOAP ${it.tglPerawatan} ${it.jamRawat} akan dihapus secara permanen.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Ya, Hapus', style: TextStyle(color: Color(0xFFDC2626)))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await SoapService.hapus(noRawat: widget.patient.noRawat, tglPerawatan: soapDateToApi(it.tglPerawatan), jamRawat: _jam(it.jamRawat));
+      if (!mounted) return;
+      if (identical(_editing, it)) _clearForm();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SOAP berhasil dihapus'), backgroundColor: Color(0xFF16A34A)));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e is ApiException ? e.message : 'Gagal menghapus SOAP'), backgroundColor: const Color(0xFFDC2626)));
+    }
+  }
+
+  Widget _editBanner() {
+    final e = _editing!;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: const Color(0xFFEBFAED), border: Border.all(color: kPrimaryBtn), borderRadius: BorderRadius.circular(4)),
+      child: Row(children: [
+        Expanded(
+          child: Text('Mode Edit — mengubah data SOAP/CPPT tanggal ${e.tglPerawatan} ${e.jamRawat}. Tanggal/Jam dikunci karena jadi kunci data.',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF065F46))),
+        ),
+        const SizedBox(width: 12),
+        OutlinedButton(
+          onPressed: _clearForm,
+          style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: kPrimaryBtn),
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
+          child: const Text('Batal Edit', style: TextStyle(fontSize: 12, color: Color(0xFF065F46))),
+        ),
+      ]),
+    );
   }
 
   @override
@@ -173,8 +296,14 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
     // PemeriksaanRanap.tsx (web), per arahan user.
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return SingleChildScrollView(
+      controller: _scroll,
       padding: const EdgeInsets.all(16),
-      child: Column(children: [isLandscape ? _buildFormLandscape() : _buildFormPortrait(), const SizedBox(height: 16), _buildRiwayat()]),
+      child: Column(children: [
+        if (_editing != null) _editBanner(),
+        isLandscape ? _buildFormLandscape() : _buildFormPortrait(),
+        const SizedBox(height: 16),
+        _buildRiwayat(),
+      ]),
     );
   }
 
@@ -268,14 +397,45 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
           const SizedBox(height: 12),
           child,
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saving ? null : _submit,
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryBtn, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
-              child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Simpan SOAP'),
+          // Simpan + Clear (kosongkan form / batal edit) + Grafik TTV
+          // (modal grafik tanda vital dari riwayat SOAP kunjungan ini).
+          Row(children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _saving ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimaryBtn,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+                child: _saving
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(_editing != null ? 'Update SOAP' : 'Simpan SOAP'),
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _clearForm,
+              icon: const Icon(Icons.clear_all, size: 18, color: Color(0xFF4B5563)),
+              label: const Text('Clear', style: TextStyle(color: Color(0xFF4B5563))),
+              style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  side: const BorderSide(color: Color(0xFFCFD1D1)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton.icon(
+              onPressed: _openGrafikTtv,
+              icon: const Icon(Icons.show_chart, size: 18, color: kPrimaryBtn),
+              label: const Text('Grafik TTV', style: TextStyle(color: kPrimaryBtn)),
+              style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  side: const BorderSide(color: kPrimaryBtn),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+            ),
+          ]),
         ],
       ),
     );
@@ -394,27 +554,51 @@ class _PemeriksaanTabState extends State<PemeriksaanTab> {
           else if (_riwayat.isEmpty)
             const Padding(padding: EdgeInsets.all(16), child: Center(child: Text('Belum ada riwayat SOAP/CPPT', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))))
           else
-            ..._riwayat.map((s) => _RiwayatCard(item: s)),
+            ..._riwayat.map((s) => _RiwayatCard(
+                  item: s,
+                  editing: identical(_editing, s),
+                  onEdit: () => _edit(s),
+                  onCopy: () => _copy(s),
+                  onDelete: () => _hapus(s),
+                )),
         ],
       ),
     );
   }
 }
 
+/// Satu baris riwayat SOAP/CPPT + aksi Edit/Copy/Hapus — SAMA dgn kartu
+/// riwayat Pemeriksaan Rawat Jalan.
 class _RiwayatCard extends StatelessWidget {
   final SoapItem item;
-  const _RiwayatCard({required this.item});
+  final bool editing;
+  final VoidCallback onEdit;
+  final VoidCallback onCopy;
+  final VoidCallback onDelete;
+  const _RiwayatCard({required this.item, required this.editing, required this.onEdit, required this.onCopy, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: const Color(0xFFF4F5F5), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: editing ? const Color(0xFFEBFAED) : const Color(0xFFF4F5F5),
+        border: Border.all(color: editing ? kPrimaryBtn : Colors.transparent),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${item.tglPerawatan} ${item.jamRawat} · ${item.nama}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+          Row(children: [
+            Expanded(
+              child: Text('${item.tglPerawatan} ${item.jamRawat} · ${item.nama}',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+            ),
+            _action('Edit', Icons.edit_outlined, kPrimaryBtn, onEdit),
+            _action('Copy', Icons.copy_outlined, const Color(0xFF6B7280), onCopy),
+            _action('Hapus', Icons.delete_outline, const Color(0xFFDC2626), onDelete),
+          ]),
           const SizedBox(height: 4),
           Text('S: ${item.keluhan}', style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
           Text('O: ${item.pemeriksaan}', style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -426,4 +610,11 @@ class _RiwayatCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _action(String label, IconData icon, Color color, VoidCallback onPressed) => TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 14, color: color),
+        label: Text(label, style: TextStyle(fontSize: 12, color: color)),
+        style: TextButton.styleFrom(minimumSize: Size.zero, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      );
 }

@@ -17,3 +17,6 @@ frontend/dist-presensi/
 # OS
 .DS_Store
 Thumbs.db
+
+# APK rilis ERM Tablet (diunggah lewat web, bukan bagian repo)
+backend/uploads/tablet/

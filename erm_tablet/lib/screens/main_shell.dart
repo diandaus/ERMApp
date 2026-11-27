@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../widgets/dalam_pengembangan.dart';
+import 'dashboard_screen.dart';
+import '../services/akses_service.dart';
 import 'landscape_shell.dart';
+import 'pengaturan_screen.dart';
 import 'poli_screen.dart';
 import 'ranap_list_screen.dart';
 
@@ -26,7 +29,15 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _index = 2; // default buka tab Ranap — satu-satunya fitur nyata
+  // Posisi ASLI tab portrait: 0 Home, 1 IGD, 2 Ranap, 3 Poli, 4 Saya.
+  // Kunci hak akses tiap tab (Saya selalu ada — tempat Pengaturan/Keluar).
+  static const _aksesTab = ['menu.dashboard', 'menu.igd', 'menu.ranap', 'menu.poli', ''];
+  List<int> get _tabAktif => [
+        for (var i = 0; i < _aksesTab.length; i++)
+          if (_aksesTab[i].isEmpty || AksesService.aktif(_aksesTab[i])) i,
+      ];
+  // Halaman awal = Home (Dashboard); dinonaktifkan -> tab aktif pertama.
+  late int _index = _tabAktif.first;
 
   @override
   Widget build(BuildContext context) {
@@ -35,39 +46,32 @@ class _MainShellState extends State<MainShell> {
     }
 
     final tabs = [
-      const DalamPengembangan(title: 'Home', icon: Icons.home_outlined),
+      // Home (portrait) = Dashboard, dibungkus Scaffold+SafeArea krn tab
+      // portrait tidak punya navbar atas.
+      Scaffold(
+        appBar: AppBar(
+          title: const Text('Dashboard', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          backgroundColor: kPrimary,
+          foregroundColor: Colors.white,
+        ),
+        body: DashboardScreen(user: widget.user),
+      ),
       const DalamPengembangan(title: 'IGD', icon: Icons.emergency_outlined),
       RanapListScreen(user: widget.user, onLogout: widget.onLogout),
       PoliScreen(user: widget.user, active: _index == 3),
-      DalamPengembangan(
-        title: 'Saya',
-        icon: Icons.person_outline,
-        extraActions: [
-          Text(widget.user.fullName,
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151))),
-          Text(widget.user.role,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: () => confirmLogout(context, widget.onLogout),
-            icon: const Icon(Icons.logout, size: 16, color: Color(0xFFDC2626)),
-            label: const Text('Keluar',
-                style: TextStyle(color: Color(0xFFDC2626))),
-            style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFFECACA))),
-          ),
-        ],
-      ),
+      // Tab "Saya" = halaman Pengaturan langsung (profil, kata sandi,
+      // server, pembaruan aplikasi, keluar) — tanpa tombol kembali.
+      PengaturanScreen(user: widget.user, onLogout: widget.onLogout, embedded: true),
     ];
 
     return Scaffold(
       body: IndexedStack(index: _index, children: tabs),
+      // NavigationBar cuma menampilkan tab yg aktif; _index tetap posisi
+      // ASLI di `tabs` (dipetakan lewat _tabAktif).
       // Navbar bawah putih (garis tipis di atas). Hanya tab AKTIF yg hijau
       // (ikon terisi + teks tebal + pil mint); lainnya abu.
-      bottomNavigationBar: Container(
+      // NavigationBar butuh >= 2 tab; semua menu nonaktif -> cuma "Saya".
+      bottomNavigationBar: _tabAktif.length < 2 ? null : Container(
         decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: Color(0xFFE6E8E8)))),
         child: NavigationBarTheme(
@@ -91,30 +95,9 @@ class _MainShellState extends State<MainShell> {
                 )),
           ),
           child: NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() => _index = i),
-            destinations: const [
-              NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home, color: kPrimary),
-                  label: 'Home'),
-              NavigationDestination(
-                  icon: Icon(Icons.emergency_outlined),
-                  selectedIcon: Icon(Icons.emergency, color: kPrimary),
-                  label: 'IGD'),
-              NavigationDestination(
-                  icon: Icon(Icons.bed_outlined),
-                  selectedIcon: Icon(Icons.bed, color: kPrimary),
-                  label: 'Ranap'),
-              NavigationDestination(
-                  icon: Icon(Icons.local_hospital_outlined),
-                  selectedIcon: Icon(Icons.local_hospital, color: kPrimary),
-                  label: 'Poli'),
-              NavigationDestination(
-                  icon: Icon(Icons.person_outline),
-                  selectedIcon: Icon(Icons.person, color: kPrimary),
-                  label: 'Saya'),
-            ],
+            selectedIndex: _tabAktif.indexOf(_index),
+            onDestinationSelected: (n) => setState(() => _index = _tabAktif[n]),
+            destinations: [for (final i in _tabAktif) _kDest[i]],
           ),
         ),
       ),
@@ -147,3 +130,26 @@ void confirmLogout(BuildContext context, VoidCallback onLogout) {
     ),
   );
 }
+
+const _kDest = [
+              NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home, color: kPrimary),
+                  label: 'Home'),
+              NavigationDestination(
+                  icon: Icon(Icons.emergency_outlined),
+                  selectedIcon: Icon(Icons.emergency, color: kPrimary),
+                  label: 'IGD'),
+              NavigationDestination(
+                  icon: Icon(Icons.bed_outlined),
+                  selectedIcon: Icon(Icons.bed, color: kPrimary),
+                  label: 'Ranap'),
+              NavigationDestination(
+                  icon: Icon(Icons.local_hospital_outlined),
+                  selectedIcon: Icon(Icons.local_hospital, color: kPrimary),
+                  label: 'Poli'),
+              NavigationDestination(
+                  icon: Icon(Icons.person_outline),
+                  selectedIcon: Icon(Icons.person, color: kPrimary),
+                  label: 'Saya'),
+];

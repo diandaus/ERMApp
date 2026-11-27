@@ -90,6 +90,18 @@ type DiagnosaPasienItem struct {
 	StatusPenyakit string `json:"status_penyakit"`
 }
 
+// statusRawatDx — kolom status diagnosa_pasien/prosedur_pasien ('Ralan'/
+// 'Ranap'). Opsional dari frontend (query ?status= / field "status");
+// kosong/tak dikenal = 'Ralan' supaya pemanggil lama (web Pemeriksaan.tsx
+// dll) tetap persis spt sebelumnya. ERM Tablet layar Rawat Inap kirim
+// 'Ranap' (padanan diagnosa dari DlgRawatInap di Khanza).
+func statusRawatDx(s string) string {
+	if strings.EqualFold(strings.TrimSpace(s), "Ranap") {
+		return "Ranap"
+	}
+	return "Ralan"
+}
+
 func getDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		noRawat := strings.TrimPrefix(c.Param("no_rawat"), "/")
@@ -97,9 +109,9 @@ func getDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 			SELECT dp.kd_penyakit, COALESCE(p.nm_penyakit, ''), dp.status, dp.prioritas, dp.status_penyakit
 			FROM diagnosa_pasien dp
 			LEFT JOIN penyakit p ON dp.kd_penyakit = p.kd_penyakit
-			WHERE dp.no_rawat = ? AND dp.status = 'Ralan'
+			WHERE dp.no_rawat = ? AND dp.status = ?
 			ORDER BY dp.prioritas
-		`, noRawat)
+		`, noRawat, statusRawatDx(c.Query("status")))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -127,6 +139,7 @@ func saveDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 			NoRkmMedis string `json:"no_rkm_medis" binding:"required"`
 			KdPenyakit string `json:"kd_penyakit" binding:"required"`
 			Prioritas  int    `json:"prioritas"`
+			Status     string `json:"status"`
 		}
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -135,7 +148,7 @@ func saveDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 
 		if payload.Prioritas <= 0 {
 			var maxPrioritas sql.NullInt64
-			db.QueryRow(`SELECT MAX(prioritas) FROM diagnosa_pasien WHERE no_rawat = ? AND status = 'Ralan'`, payload.NoRawat).Scan(&maxPrioritas)
+			db.QueryRow(`SELECT MAX(prioritas) FROM diagnosa_pasien WHERE no_rawat = ? AND status = ?`, payload.NoRawat, statusRawatDx(payload.Status)).Scan(&maxPrioritas)
 			payload.Prioritas = int(maxPrioritas.Int64) + 1
 		}
 
@@ -155,8 +168,8 @@ func saveDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 
 		_, err := db.Exec(`
 			INSERT INTO diagnosa_pasien (no_rawat, kd_penyakit, status, prioritas, status_penyakit)
-			VALUES (?, ?, 'Ralan', ?, ?)
-		`, payload.NoRawat, payload.KdPenyakit, payload.Prioritas, statusPenyakit)
+			VALUES (?, ?, ?, ?, ?)
+		`, payload.NoRawat, payload.KdPenyakit, statusRawatDx(payload.Status), payload.Prioritas, statusPenyakit)
 		if err != nil {
 			if strings.Contains(err.Error(), "Duplicate entry") {
 				c.JSON(http.StatusConflict, gin.H{"error": "Diagnosa ini sudah ada untuk kunjungan ini"})
@@ -177,7 +190,7 @@ func deleteDiagnosaPasien(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat dan kd_penyakit wajib diisi"})
 			return
 		}
-		_, err := db.Exec(`DELETE FROM diagnosa_pasien WHERE no_rawat = ? AND kd_penyakit = ? AND status = 'Ralan'`, noRawat, kdPenyakit)
+		_, err := db.Exec(`DELETE FROM diagnosa_pasien WHERE no_rawat = ? AND kd_penyakit = ? AND status = ?`, noRawat, kdPenyakit, statusRawatDx(c.Query("status")))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -252,9 +265,9 @@ func getProsedurPasien(db *sql.DB) gin.HandlerFunc {
 			SELECT pp.kode, COALESCE(i.deskripsi_panjang, ''), pp.status, pp.prioritas, pp.jumlah
 			FROM prosedur_pasien pp
 			LEFT JOIN icd9 i ON pp.kode = i.kode
-			WHERE pp.no_rawat = ? AND pp.status = 'Ralan'
+			WHERE pp.no_rawat = ? AND pp.status = ?
 			ORDER BY pp.prioritas
-		`, noRawat)
+		`, noRawat, statusRawatDx(c.Query("status")))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -280,6 +293,7 @@ func saveProsedurPasien(db *sql.DB) gin.HandlerFunc {
 			Kode      string `json:"kode" binding:"required"`
 			Prioritas int    `json:"prioritas"`
 			Jumlah    string `json:"jumlah"`
+			Status    string `json:"status"`
 		}
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -288,7 +302,7 @@ func saveProsedurPasien(db *sql.DB) gin.HandlerFunc {
 
 		if payload.Prioritas <= 0 {
 			var maxPrioritas sql.NullInt64
-			db.QueryRow(`SELECT MAX(prioritas) FROM prosedur_pasien WHERE no_rawat = ? AND status = 'Ralan'`, payload.NoRawat).Scan(&maxPrioritas)
+			db.QueryRow(`SELECT MAX(prioritas) FROM prosedur_pasien WHERE no_rawat = ? AND status = ?`, payload.NoRawat, statusRawatDx(payload.Status)).Scan(&maxPrioritas)
 			payload.Prioritas = int(maxPrioritas.Int64) + 1
 		}
 		if payload.Jumlah == "" {
@@ -297,8 +311,8 @@ func saveProsedurPasien(db *sql.DB) gin.HandlerFunc {
 
 		_, err := db.Exec(`
 			INSERT INTO prosedur_pasien (no_rawat, kode, status, prioritas, jumlah)
-			VALUES (?, ?, 'Ralan', ?, ?)
-		`, payload.NoRawat, payload.Kode, payload.Prioritas, payload.Jumlah)
+			VALUES (?, ?, ?, ?, ?)
+		`, payload.NoRawat, payload.Kode, statusRawatDx(payload.Status), payload.Prioritas, payload.Jumlah)
 		if err != nil {
 			if strings.Contains(err.Error(), "Duplicate entry") {
 				c.JSON(http.StatusConflict, gin.H{"error": "Prosedur ini sudah ada untuk kunjungan ini"})
@@ -319,7 +333,7 @@ func deleteProsedurPasien(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "no_rawat dan kode wajib diisi"})
 			return
 		}
-		_, err := db.Exec(`DELETE FROM prosedur_pasien WHERE no_rawat = ? AND kode = ? AND status = 'Ralan'`, noRawat, kode)
+		_, err := db.Exec(`DELETE FROM prosedur_pasien WHERE no_rawat = ? AND kode = ? AND status = ?`, noRawat, kode, statusRawatDx(c.Query("status")))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

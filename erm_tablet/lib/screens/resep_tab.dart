@@ -53,6 +53,12 @@ class _ResepTabState extends State<ResepTab> {
   bool _loading = true;
   String? _error;
   List<ResepRanapResult> _list = [];
+  // Riwayat Resep Pulang (khusus Rawat Inap) — /api/resep-pulang-req/list.
+  List<Map<String, dynamic>> _pulang = [];
+
+  /// Input/Edit/Batalkan resep: Rawat Jalan, atau Rawat Inap yg DPJP-nya
+  /// diketahui (dokter peresep = DPJP, sama dgn ResepModal.tsx isRanap).
+  bool get _bisaInput => widget.ralan || widget.kdDokter.isNotEmpty;
 
   @override
   void initState() {
@@ -80,9 +86,16 @@ class _ResepTabState extends State<ResepTab> {
     });
     try {
       final list = widget.ralan ? await ResepRanapService.getRalanList(noRkmMedis: widget.patient.noRkmMedis, noRawat: widget.patient.noRawat) : await ResepRanapService.getList(widget.patient.noRawat);
+      var pulang = <Map<String, dynamic>>[];
+      if (!widget.ralan) {
+        try {
+          pulang = await ResepRanapService.getResepPulang(widget.patient.noRawat);
+        } catch (_) {/* riwayat resep pulang opsional */}
+      }
       if (!mounted) return;
       setState(() {
         _list = list;
+        _pulang = pulang;
         _loading = false;
       });
     } catch (_) {
@@ -103,7 +116,14 @@ class _ResepTabState extends State<ResepTab> {
   /// [edit] diisi = mode edit resep yg belum terlayani.
   Future<void> _openInput({ResepRanapResult? edit}) async {
     final p = widget.patient;
-    final saved = await showResepInputPanel(context, noRawat: p.noRawat, noRkmMedis: p.noRkmMedis, nmPasien: p.nmPasien, umur: p.umur, kdDokter: widget.kdDokter, editResep: edit);
+    final saved = await showResepInputPanel(context,
+        noRawat: p.noRawat,
+        noRkmMedis: p.noRkmMedis,
+        nmPasien: p.nmPasien,
+        umur: p.umur,
+        kdDokter: widget.kdDokter,
+        editResep: edit,
+        mode: widget.ralan ? ResepMode.ralan : ResepMode.ranap);
     if (!mounted) return;
     if (saved) _toast('Resep berhasil disimpan');
     // Dimuat ulang walau tidak tersimpan: simpan mode edit bisa gagal
@@ -128,7 +148,7 @@ class _ResepTabState extends State<ResepTab> {
     );
     if (ok != true || !mounted) return;
     try {
-      await ResepRanapService.deleteRalan(resep.noResep);
+      widget.ralan ? await ResepRanapService.deleteRalan(resep.noResep) : await ResepRanapService.deleteRanap(resep.noResep);
       if (!mounted) return;
       _toast('Resep berhasil dihapus');
       await _load();
@@ -138,28 +158,68 @@ class _ResepTabState extends State<ResepTab> {
     }
   }
 
+  /// + Resep Pulang (khusus Rawat Inap) — ResepPulangModal.tsx.
+  Future<void> _openResepPulang() async {
+    final p = widget.patient;
+    final saved = await showResepInputPanel(context,
+        noRawat: p.noRawat, noRkmMedis: p.noRkmMedis, nmPasien: p.nmPasien, umur: p.umur, kdDokter: widget.kdDokter, mode: ResepMode.pulang);
+    if (!mounted) return;
+    if (saved) {
+      _toast('Resep pulang berhasil disimpan');
+      await _load();
+    }
+  }
+
+  Future<void> _hapusResepPulang(String noPermintaan) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Resep Pulang?'),
+        content: Text('Hapus $noPermintaan?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Batal')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Ya, Hapus', style: TextStyle(color: Color(0xFFDC2626)))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ResepRanapService.deleteResepPulang(noPermintaan);
+      if (!mounted) return;
+      _toast('Resep pulang berhasil dihapus');
+      await _load();
+    } catch (e) {
+      if (mounted) _toast(e is ApiException ? e.message : 'Gagal menghapus resep pulang', error: true);
+    }
+  }
+
+  Widget _tombol(String label, Color color, VoidCallback onPressed) => ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.add, size: 20, color: Colors.white),
+        label: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
-    // Input Resep baru ada utk Rawat Jalan; Rawat Inap tetap riwayat saja.
-    if (!widget.ralan) return _buildRiwayat();
+    if (!_bisaInput) return _buildRiwayat();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: ElevatedButton.icon(
-            onPressed: _openInput,
-            icon: const Icon(Icons.add, size: 20, color: Colors.white),
-            label: const Text('Input Resep', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF04C99E),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              minimumSize: const Size(0, 44),
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            ),
-          ),
+          child: Wrap(spacing: 10, runSpacing: 10, children: [
+            _tombol('Input Resep', const Color(0xFF04C99E), _openInput),
+            // Khusus Rawat Inap, sejajar "+ Input Resep" (sama dgn web).
+            if (!widget.ralan) _tombol('Resep Pulang', const Color(0xFF16A34A), _openResepPulang),
+          ]),
         ),
         Expanded(child: _buildRiwayat()),
       ],
@@ -173,7 +233,7 @@ class _ResepTabState extends State<ResepTab> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: const TextStyle(fontSize: 13, color: Color(0xFFDC2626)))))
-              : _list.isEmpty
+              : _list.isEmpty && _pulang.isEmpty
                   ? ListView(
                       padding: const EdgeInsets.all(24),
                       children: const [
@@ -185,16 +245,24 @@ class _ResepTabState extends State<ResepTab> {
                         Center(child: Text('Belum ada permintaan resep untuk pasien ini.', style: TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)), textAlign: TextAlign.center)),
                       ],
                     )
-                  : ListView.builder(
+                  : ListView(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _list.length,
-                      itemBuilder: (context, i) => _ResepCard(
-                        resep: _list[i],
-                        flat: widget.ralan,
-                        // Edit/Batalkan baru ada utk Rawat Jalan.
-                        onEdit: widget.ralan ? () => _openInput(edit: _list[i]) : null,
-                        onBatalkan: widget.ralan ? () => _batalkan(_list[i]) : null,
-                      ),
+                      children: [
+                        for (final r in _list)
+                          _ResepCard(
+                            resep: r,
+                            flat: widget.ralan,
+                            onEdit: _bisaInput ? () => _openInput(edit: r) : null,
+                            onBatalkan: _bisaInput ? () => _batalkan(r) : null,
+                          ),
+                        if (_pulang.isNotEmpty) ...[
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12, bottom: 10),
+                            child: Text('Riwayat Resep Pulang', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF282A2A))),
+                          ),
+                          for (final rp in _pulang) _ResepPulangCard(data: rp, onHapus: _bisaInput ? () => _hapusResepPulang('${rp['no_permintaan']}') : null),
+                        ],
+                      ],
                     ),
     );
   }
@@ -374,5 +442,83 @@ class _ResepCard extends StatelessWidget {
     final parts = tgl.split('-');
     if (parts.length != 3) return tgl;
     return '${parts[2]}/${parts[1]}/${parts[0]}';
+  }
+}
+
+/// Kartu Riwayat Resep Pulang — gaya disamakan dgn kartu resep di atasnya
+/// (padanan blok "Riwayat Resep Pulang" PemeriksaanRanap.tsx).
+class _ResepPulangCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final VoidCallback? onHapus;
+  const _ResepPulangCard({required this.data, this.onHapus});
+
+  String _tgl(String v) {
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(v);
+    return m == null ? v : '${m[3]}/${m[2]}/${m[1]}';
+  }
+
+  String _num(dynamic v) {
+    final n = (v as num?) ?? 0;
+    return n % 1 == 0 ? n.toInt().toString() : n.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sudah = '${data['status'] ?? ''}' == 'Sudah';
+    final items = (data['items'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().toList();
+    final racikan = (data['racikan'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().toList();
+    const st = TextStyle(fontSize: 15, color: Color(0xFF282A2A));
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder))),
+          child: Row(children: [
+            Expanded(
+              child: Wrap(spacing: 10, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text('${data['no_permintaan'] ?? '-'}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF282A2A))),
+                Text('${_tgl('${data['tgl_permintaan'] ?? ''}')} ${'${data['jam'] ?? ''}'.padRight(5).substring(0, 5).trim()}',
+                    style: const TextStyle(fontSize: 15, color: Color(0xFF4B5150))),
+                if ('${data['nm_dokter'] ?? ''}'.isNotEmpty) Text('${data['nm_dokter']}', style: const TextStyle(fontSize: 15, color: Color(0xFF7C3AED))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  color: sudah ? const Color(0xFFD1FAE5) : const Color(0xFFFEF3C7),
+                  child: Text(sudah ? 'Sudah' : 'Belum', style: TextStyle(fontSize: 13, color: sudah ? const Color(0xFF065F46) : const Color(0xFF92400E))),
+                ),
+              ]),
+            ),
+            if (onHapus != null && !sudah)
+              InkWell(
+                onTap: onHapus,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  color: const Color(0xFFEF4444),
+                  child: const Text('Batalkan', style: TextStyle(fontSize: 14, color: Colors.white)),
+                ),
+              ),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final it in items)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Text('${it['nama_brng'] ?? it['kode_brng']}  ·  ${_num(it['jml'])} ${it['kode_sat'] ?? ''}  ·  ${it['dosis'] ?? ''}', style: st),
+              ),
+            for (final r in racikan)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Text(
+                    'R/ ${r['nama_racik'] ?? ''} (${r['nm_racik'] ?? r['kd_racik'] ?? ''}) · ${r['jml_dr'] ?? ''} · ${r['aturan_pakai'] ?? ''}'
+                    '\n   ${(r['detail'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().map((d) => '${d['nama_brng'] ?? d['kode_brng']} ${_num(d['jml'])}').join(', ')}',
+                    style: st),
+              ),
+          ]),
+        ),
+      ]),
+    );
   }
 }

@@ -1,13 +1,16 @@
 name: erm_tablet
 description: "ERM Tablet — app klinis Rawat Inap (daftar pasien, Pemeriksaan SOAP/CPPT, Jadwal Obat) utk tablet, terpisah dari e_presensi (khusus presensi/self-service)."
 publish_to: 'none'
-version: 0.1.0
+version: 0.2.0+2
 
 environment:
   sdk: ^3.6.1
 
 dependencies:
   flutter:
+    sdk: flutter
+  # Kalender/date picker berbahasa Indonesia (MaterialApp locale id_ID).
+  flutter_localizations:
     sdk: flutter
   cupertino_icons: ^1.0.8
 
@@ -20,6 +23,8 @@ dependencies:
   shared_preferences: ^2.3.3
   # Format tanggal Indonesia.
   intl: ^0.19.0
+  package_info_plus: 8.3.1
+  device_info_plus: ^11.3.0
 
 dev_dependencies:
   flutter_test:

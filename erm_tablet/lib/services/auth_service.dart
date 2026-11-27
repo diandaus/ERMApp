@@ -45,6 +45,22 @@ class AuthService {
     return prefs.getString(_rememberedUsernameKey);
   }
 
+  /// Ganti kata sandi akun sendiri — endpoint SAMA dgn web
+  /// (POST /api/auth/change-password, cek password lama di backend).
+  static Future<void> changePassword(int id, String oldPassword, String newPassword) async {
+    await ApiClient.postJson('/api/auth/change-password', {
+      'id': id,
+      'old_password': oldPassword,
+      'new_password': newPassword,
+    });
+  }
+
+  /// Hapus username yg diingat di layar login ("Ingat saya").
+  static Future<void> forgetRememberedUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_rememberedUsernameKey);
+  }
+
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);

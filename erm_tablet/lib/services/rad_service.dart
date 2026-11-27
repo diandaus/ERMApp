@@ -25,8 +25,8 @@ class RadService {
     return ApiClient.deleteJson('/api/radiologi/permintaan/${Uri.encodeComponent(noorder)}');
   }
 
-  static Future<List<Map<String, dynamic>>> searchJenisPerawatan(String search) {
-    return ApiClient.getJsonArray('/api/radiologi/jenis-perawatan', query: {'search': search});
+  static Future<List<Map<String, dynamic>>> searchJenisPerawatan(String search, {String kdPj = '', String kelas = ''}) {
+    return ApiClient.getJsonArray('/api/radiologi/jenis-perawatan', query: {'search': search, 'kd_pj': kdPj, 'kelas': kelas});
   }
 
   /// Status kunjungan ('ralan'/'ranap') utk permintaan baru.

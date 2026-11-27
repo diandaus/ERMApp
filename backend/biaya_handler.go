@@ -672,6 +672,41 @@ func computeBillingPreview(db *sql.DB, noRawat string, obatModeOverride string) 
 		}
 	}
 
+	// Tambahan Biaya (tambahan_biaya) & Potongan Biaya (pengurangan_biaya) —
+	// padanan kelompok "Tambahan Biaya"/"Potongan Biaya" di DlgBilingRalan/
+	// Ranap: tambahan positif, potongan NEGATIF (mengurangi total). Potongan
+	// diinput dokter dari tab Billing ERM Tablet (billing_potongan_handler.go).
+	// Sengaja TIDAK ikut pengaturan sembunyikan kategori — keduanya
+	// mengubah total yg ditagihkan.
+	addBiayaLain := func(judul, query string, tanda float64) {
+		rows, err := db.Query(query, noRawat)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		var subtotal float64
+		ada := false
+		for rows.Next() {
+			var nm string
+			var besar float64
+			if rows.Scan(&nm, &besar) != nil {
+				continue
+			}
+			if !ada {
+				items = append(items, BillingRow{No: judul, NmPerawatan: ":"})
+				ada = true
+			}
+			v := tanda * besar
+			addItem(nm, v, 1, 0, v)
+			subtotal += v
+		}
+		if ada {
+			addSubtotal(judul, subtotal)
+		}
+	}
+	addBiayaLain("Tambahan Biaya", `SELECT nama_biaya, IFNULL(besar_biaya, 0) FROM tambahan_biaya WHERE no_rawat = ? ORDER BY nama_biaya`, 1)
+	addBiayaLain("Potongan Biaya", `SELECT nama_pengurangan, IFNULL(besar_pengurangan, 0) FROM pengurangan_biaya WHERE no_rawat = ? ORDER BY nama_pengurangan`, -1)
+
 	return items, nil
 }
 

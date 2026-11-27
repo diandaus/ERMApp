@@ -1,5 +1,6 @@
 import React from 'react';
 import { ModalCariPetugas } from '../components/ModalCariPetugas';
+import { TabletRilisTab } from '../components/TabletRilisTab';
 import { JENIS_MAPPING_PETUGAS, type JenisMappingPetugas } from '../utils/mappingPetugas';
 import Swal from 'sweetalert2';
 import { AddUserModal } from '../components/AddUserModal';
@@ -228,7 +229,7 @@ const SET_TARIF_DEFAULT: Record<SetTarifKey, 'Yes' | 'No'> = {
 };
 
 export const AdminView: React.FC = () => {
-  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif' | 'poli-dokter' | 'petugas-mapping'>('users');
+  const [activeTab, setActiveTab] = React.useState<'users' | 'settings' | 'bridging' | 'set-tarif' | 'poli-dokter' | 'petugas-mapping' | 'tablet'>('users');
   const [users, setUsers] = React.useState<AppUser[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -956,7 +957,7 @@ export const AdminView: React.FC = () => {
       {/* Tab Navigation */}
       <div style={{ marginBottom: 24, borderBottom: '2px solid #e5e7eb' }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['users', 'settings', 'bridging', 'set-tarif', 'poli-dokter', 'petugas-mapping'] as const).map((tab) => (
+          {(['users', 'settings', 'bridging', 'set-tarif', 'poli-dokter', 'petugas-mapping', 'tablet'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -969,7 +970,7 @@ export const AdminView: React.FC = () => {
                 marginBottom: -2, transition: 'all 0.2s'
               }}
             >
-              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : tab === 'set-tarif' ? 'Set Penggunaan Tarif' : tab === 'poli-dokter' ? 'Mapping Dokter Poliklinik' : 'Mapping Petugas'}
+              {tab === 'users' ? 'Manajemen User' : tab === 'settings' ? 'Pengaturan Instansi' : tab === 'bridging' ? 'Pengaturan Bridging' : tab === 'set-tarif' ? 'Set Penggunaan Tarif' : tab === 'poli-dokter' ? 'Mapping Dokter Poliklinik' : tab === 'petugas-mapping' ? 'Mapping Petugas' : 'Aplikasi Tablet'}
             </button>
           ))}
         </div>
@@ -1621,6 +1622,8 @@ export const AdminView: React.FC = () => {
           )}
         </div>
       )}
+
+      {activeTab === 'tablet' && <TabletRilisTab />}
 
       <ModalCariPetugas
         isOpen={showPmPetugasPicker}

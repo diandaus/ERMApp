@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../services/resep_ranap_service.dart';
 import '../services/soap_history_service.dart';
 import '../services/soap_ralan_service.dart';
+import '../services/soap_service.dart';
 import '../theme/app_theme.dart' show kPrimary, kPrimaryDark, kText;
 
 const _kBorder = Color(0xFFE6E8E8);
@@ -80,6 +81,11 @@ class _HistoryField extends StatelessWidget {
   }
 }
 
+/// Jenis resep yg diinput panel ini (endpoint & payload beda):
+/// ralan = /api/resep/submit; ranap = /api/resep-ranap (ResepModal.tsx
+/// isRanap); pulang = /api/resep-pulang-req (ResepPulangModal.tsx).
+enum ResepMode { ralan, ranap, pulang }
+
 String _fmtNum(num n) => n % 1 == 0 ? n.toInt().toString() : n.toString();
 num _round2(num n) => double.parse(n.toStringAsFixed(2));
 String _rupiah(num n) => NumberFormat.decimalPattern('id_ID').format(n.round());
@@ -98,6 +104,7 @@ Future<bool> showResepInputPanel(
   // Diisi = mode EDIT: form terisi isi resep ini, dan saat Simpan resep
   // lama dihapus dulu baru dibuat ulang (sama dgn web).
   ResepRanapResult? editResep,
+  ResepMode mode = ResepMode.ralan,
 }) async {
   final saved = await showGeneralDialog<bool>(
     context: context,
@@ -110,7 +117,7 @@ Future<bool> showResepInputPanel(
       child: FractionallySizedBox(
         widthFactor: 0.5,
         heightFactor: 1,
-        child: _ResepInputPanel(noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, editResep: editResep),
+        child: _ResepInputPanel(noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, editResep: editResep, mode: mode),
       ),
     ),
     transitionBuilder: (context, anim, __, child) => SlideTransition(
@@ -214,7 +221,8 @@ class _ResepInputPanel extends StatefulWidget {
   final String umur;
   final String kdDokter;
   final ResepRanapResult? editResep;
-  const _ResepInputPanel({required this.noRawat, required this.noRkmMedis, required this.nmPasien, required this.umur, required this.kdDokter, this.editResep});
+  final ResepMode mode;
+  const _ResepInputPanel({required this.noRawat, required this.noRkmMedis, required this.nmPasien, required this.umur, required this.kdDokter, this.editResep, this.mode = ResepMode.ralan});
 
   @override
   State<_ResepInputPanel> createState() => _ResepInputPanelState();
@@ -300,10 +308,25 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
   /// ini, entri PALING BARU yg beratnya terisi (endpoint urut lama->baru).
   Future<void> _loadBeratBadan() async {
     try {
-      final riwayat = await SoapRalanService.getRiwayat(widget.noRawat);
-      final terbaru = riwayat.reversed.where((s) => s.berat.trim().isNotEmpty).firstOrNull;
+      // Ralan: urut lama->baru; Ranap: urut baru->lama (sama catatan web).
+      final terbaru = widget.mode == ResepMode.ralan
+          ? (await SoapRalanService.getRiwayat(widget.noRawat)).reversed.where((s) => s.berat.trim().isNotEmpty).firstOrNull
+          : (await SoapService.getRiwayat(widget.noRawat)).where((s) => s.berat.trim().isNotEmpty).firstOrNull;
       if (terbaru != null && mounted) setState(() => _beratBadan = terbaru.berat.trim());
     } catch (_) {/* diam, header tampil tanpa berat badan */}
+  }
+
+  /// Cari obat sesuai jenis resep (Ralan: /api/obat/search; Ranap &
+  /// Resep Pulang: /api/resep-ranap/obat, sama dgn web).
+  Future<List<Map<String, dynamic>>> _cariObat(String q) {
+    switch (widget.mode) {
+      case ResepMode.ralan:
+        return ResepRanapService.searchObatRalan(q, widget.noRawat);
+      case ResepMode.ranap:
+        return ResepRanapService.searchObatRanap(q, noRawat: widget.noRawat);
+      case ResepMode.pulang:
+        return ResepRanapService.searchObatRanap(q);
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -323,7 +346,7 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
 
   Future<void> _search(String q) async {
     try {
-      final list = await ResepRanapService.searchObatRalan(q, widget.noRawat);
+      final list = await _cariObat(q);
       // Hasil pencarian lama (user sudah mengetik lagi) dibuang.
       if (!mounted || _searchCtrl.text.trim() != q) return;
       setState(() {
@@ -509,7 +532,7 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
 
     final stokList = await Future.wait(detail.map((d) async {
       try {
-        final list = await ResepRanapService.searchObatRalan(d.kodeBrng, widget.noRawat);
+        final list = await _cariObat(d.kodeBrng);
         return list.where((o) => o['kode_brng'] == d.kodeBrng).map((o) => o['stok'] as num?).firstOrNull;
       } catch (_) {
         return null; // gagal cek stok — baris tetap tanpa info stok
@@ -583,7 +606,9 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
     try {
       // Mode edit: hapus resep lama dulu, baru buat yg baru (sama dgn web).
       final edit = widget.editResep;
-      if (edit != null) await ResepRanapService.deleteRalan(edit.noResep);
+      if (edit != null) {
+        widget.mode == ResepMode.ranap ? await ResepRanapService.deleteRanap(edit.noResep) : await ResepRanapService.deleteRalan(edit.noResep);
+      }
       // Riwayat saran racikan dicatat saat simpan (sama dgn web); Aturan
       // Pakai non-racikan sudah dicatat modal Jumlah/Aturan Pakai-nya.
       for (final r in racikanTerisi) {
@@ -591,25 +616,54 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
         _history[_kHistKeterangan] = await SoapHistoryService.add(_kHistKeterangan, r.keterangan.text, _history[_kHistKeterangan] ?? const []);
         _history[_kHistAturanPakai] = await SoapHistoryService.add(_kHistAturanPakai, r.aturanPakai.text, _history[_kHistAturanPakai] ?? const []);
       }
-      await ResepRanapService.submitRalan(
-        noRawat: widget.noRawat,
-        kdDokter: widget.kdDokter,
-        nonRacikan: _lines.map((l) {
-          final aturan = l.aturanPakai.text.trim();
-          return {'kode_brng': l.kodeBrng, 'jml': l.jmlValue, 'aturan_pakai': aturan.isEmpty ? _kAturanPakaiDefault : aturan};
-        }).toList(),
-        racikan: racikanTerisi.map((r) {
-          final aturan = r.aturanPakai.text.trim();
-          return {
-            'nama_racikan': r.namaOrDefault,
-            'keterangan': r.keterangan.text.trim(),
-            'metode_racik': r.metode,
-            'jml_dr': r.jmlDrValue,
-            'aturan_pakai': aturan.isEmpty ? _kRacikanAturanPakaiDefault : aturan,
-            'detail': r.detail.map((d) => {'kode_brng': d.kodeBrng, 'kandungan': d.kandungan, 'jml': d.jml}).toList(),
-          };
-        }).toList(),
-      );
+      final nonRacikan = _lines.map((l) {
+        final aturan = l.aturanPakai.text.trim();
+        return {'kode_brng': l.kodeBrng, 'jml': l.jmlValue, 'aturan_pakai': aturan.isEmpty ? _kAturanPakaiDefault : aturan};
+      }).toList();
+      final racikan = racikanTerisi.map((r) {
+        final aturan = r.aturanPakai.text.trim();
+        return {
+          'nama_racikan': r.namaOrDefault,
+          'keterangan': r.keterangan.text.trim(),
+          'metode_racik': r.metode,
+          'jml_dr': r.jmlDrValue,
+          'aturan_pakai': aturan.isEmpty ? _kRacikanAturanPakaiDefault : aturan,
+          'detail': r.detail.map((d) => {'kode_brng': d.kodeBrng, 'kandungan': d.kandungan, 'jml': d.jml}).toList(),
+        };
+      }).toList();
+      switch (widget.mode) {
+        case ResepMode.ralan:
+          await ResepRanapService.submitRalan(noRawat: widget.noRawat, kdDokter: widget.kdDokter, nonRacikan: nonRacikan, racikan: racikan);
+        case ResepMode.ranap:
+          // Tgl/Jam peresepan = sekarang (padanan "Otomatis" ResepModal.tsx).
+          final n = DateTime.now();
+          String p2(int v) => v.toString().padLeft(2, '0');
+          await ResepRanapService.submitRanap(
+            noRawat: widget.noRawat,
+            kdDokter: widget.kdDokter,
+            tgl: '${n.year}-${p2(n.month)}-${p2(n.day)}',
+            jam: '${p2(n.hour)}:${p2(n.minute)}:${p2(n.second)}',
+            nonRacikan: nonRacikan,
+            racikan: racikan,
+          );
+        case ResepMode.pulang:
+          // Payload Resep Pulang beda nama field (ResepPulangModal.tsx).
+          await ResepRanapService.submitResepPulang(
+            noRawat: widget.noRawat,
+            kdDokter: widget.kdDokter,
+            items: nonRacikan.map((o) => {'kode_brng': o['kode_brng'], 'jml': o['jml'], 'dosis': o['aturan_pakai']}).toList(),
+            racikan: racikan
+                .map((r) => {
+                      'nama_racik': r['nama_racikan'],
+                      'kd_racik': r['metode_racik'],
+                      'jml_dr': r['jml_dr'],
+                      'aturan_pakai': r['aturan_pakai'],
+                      'keterangan': r['keterangan'],
+                      'detail': r['detail'],
+                    })
+                .toList(),
+          );
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -768,7 +822,14 @@ class _ResepInputPanelState extends State<_ResepInputPanel> {
       title: widget.nmPasien,
       subtitle: info,
       trailing: widget.editResep == null
-          ? null
+          ? (widget.mode == ResepMode.ralan
+              ? null
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: kPrimaryDark, borderRadius: BorderRadius.circular(6)),
+                  child: Text(widget.mode == ResepMode.pulang ? 'RESEP PULANG' : 'RESEP RANAP',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                ))
           : Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: kPrimaryDark, borderRadius: BorderRadius.circular(6)),

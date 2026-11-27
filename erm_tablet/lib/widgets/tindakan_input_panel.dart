@@ -22,6 +22,8 @@ Future<bool> showTindakanInputPanel(
   required String kdDokter,
   required String kdPj,
   required String userNip,
+  // true = Rawat Inap (tarif per bangsal/kelas, simpan ke rawat_inap_*).
+  bool isRanap = false,
 }) async {
   final saved = await showGeneralDialog<bool>(
     context: context,
@@ -39,7 +41,7 @@ Future<bool> showTindakanInputPanel(
         child: FractionallySizedBox(
           widthFactor: 0.64,
           heightFactor: 1,
-          child: _TindakanInputPanel(noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, kdPj: kdPj, userNip: userNip),
+          child: _TindakanInputPanel(noRawat: noRawat, noRkmMedis: noRkmMedis, nmPasien: nmPasien, umur: umur, kdDokter: kdDokter, kdPj: kdPj, userNip: userNip, isRanap: isRanap),
         ),
       ),
     ),
@@ -67,7 +69,8 @@ class _TindakanInputPanel extends StatefulWidget {
   final String kdDokter;
   final String kdPj;
   final String userNip;
-  const _TindakanInputPanel({required this.noRawat, required this.noRkmMedis, required this.nmPasien, required this.umur, required this.kdDokter, required this.kdPj, required this.userNip});
+  final bool isRanap;
+  const _TindakanInputPanel({required this.noRawat, required this.noRkmMedis, required this.nmPasien, required this.umur, required this.kdDokter, required this.kdPj, required this.userNip, this.isRanap = false});
 
   @override
   State<_TindakanInputPanel> createState() => _TindakanInputPanelState();
@@ -147,7 +150,7 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
     _debounce = Timer(const Duration(milliseconds: 300), () async {
       var list = <Map<String, dynamic>>[];
       try {
-        list = await TindakanService.searchJenis(q, kdPj: widget.kdPj);
+        list = await TindakanService.searchJenis(q, kdPj: widget.kdPj, ranapNoRawat: widget.isRanap ? widget.noRawat : null);
       } catch (_) {/* diam, tampil "Tidak ada hasil pencarian" */}
       if (!mounted || _searchCtrl.text.trim() != q) return;
       setState(() {
@@ -216,7 +219,7 @@ class _TindakanInputPanelState extends State<_TindakanInputPanel> {
           'kso': _n(item, 'kso'),
           'menejemen': _n(item, 'menejemen'),
           'biaya_rawat': _tarif(item),
-        });
+        }, ranap: widget.isRanap);
         ok++;
       } catch (_) {
         gagal++;

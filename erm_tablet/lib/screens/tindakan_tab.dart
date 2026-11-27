@@ -30,6 +30,10 @@ class TindakanTab extends StatefulWidget {
 }
 
 class _TindakanTabState extends State<TindakanTab> {
+  /// Input/Hapus: Rawat Jalan, atau Rawat Inap yg DPJP-nya diketahui
+  /// (TindakanTab.tsx isRanap — dokter pelaksana = DPJP).
+  bool get _bisaInput => widget.ralan || widget.kdDokter.isNotEmpty;
+
   bool _loading = true;
   String? _error;
   TindakanRanapResult _data = TindakanRanapResult(tindakanDokter: [], tindakanParamedis: [], tindakanDokterParamedis: []);
@@ -69,7 +73,7 @@ class _TindakanTabState extends State<TindakanTab> {
 
   Future<void> _openInput() async {
     final p = widget.patient;
-    final saved = await showTindakanInputPanel(context, noRawat: p.noRawat, noRkmMedis: p.noRkmMedis, nmPasien: p.nmPasien, umur: p.umur, kdDokter: widget.kdDokter, kdPj: widget.kdPj, userNip: widget.userNip);
+    final saved = await showTindakanInputPanel(context, noRawat: p.noRawat, noRkmMedis: p.noRkmMedis, nmPasien: p.nmPasien, umur: p.umur, kdDokter: widget.kdDokter, kdPj: widget.kdPj, userNip: widget.userNip, isRanap: !widget.ralan);
     if (!saved || !mounted) return;
     _toast('Tindakan berhasil disimpan');
     await _load();
@@ -91,7 +95,7 @@ class _TindakanTabState extends State<TindakanTab> {
     );
     if (ok != true || !mounted) return;
     try {
-      await TindakanService.hapus(endpoint, {'no_rawat': widget.patient.noRawat, ...params});
+      await TindakanService.hapus(endpoint, {'no_rawat': widget.patient.noRawat, ...params}, ranap: !widget.ralan);
       if (!mounted) return;
       _toast('Tindakan berhasil dihapus');
       await _load();
@@ -101,9 +105,17 @@ class _TindakanTabState extends State<TindakanTab> {
   }
 
   /// Tindakan Dokter: tgl_perawatan ISO -> ambil bagian tanggalnya.
+  /// Tanggal dari API bisa ISO ("2026-11-28T00:00:00+07:00", Ralan) atau
+  /// DD/MM/YYYY (Ranap) — DELETE butuh YYYY-MM-DD.
+  String _tglApi(String v) {
+    if (v.contains('T')) return v.split('T').first;
+    final p = v.split('/');
+    return p.length == 3 ? '${p[2]}-${p[1]}-${p[0]}' : v;
+  }
+
   void _hapusDokter(TindakanDokterItem it) => _hapus(it.nmPerawatan, 'delete', {
         'kd_jenis_prw': it.kdJenisPrw,
-        'tgl_perawatan': it.tglPerawatan.split('T').first,
+        'tgl_perawatan': _tglApi(it.tglPerawatan),
         'jam_rawat': it.jamRawat,
         'kd_dokter': it.kdDokter,
       });
@@ -111,8 +123,7 @@ class _TindakanTabState extends State<TindakanTab> {
   /// Perawat / Dokter & Perawat: tgl_perawatan DD/MM/YYYY -> YYYY-MM-DD.
   /// [drpr] true = kelompok Dokter & Perawat (kuncinya kd_dokter + nip).
   void _hapusParamedis(TindakanParamedisItem it, {required bool drpr}) {
-    final parts = it.tglPerawatan.split('/');
-    final tgl = parts.length == 3 ? '${parts[2]}-${parts[1]}-${parts[0]}' : it.tglPerawatan;
+    final tgl = _tglApi(it.tglPerawatan);
     _hapus(it.nmPerawatan, drpr ? 'delete-dokter-petugas' : 'delete-petugas', {
       'kd_jenis_prw': it.kdJenisPrw,
       'tgl_perawatan': tgl,
@@ -125,7 +136,7 @@ class _TindakanTabState extends State<TindakanTab> {
   @override
   Widget build(BuildContext context) {
     // Input/Hapus baru ada utk Rawat Jalan; Rawat Inap tetap riwayat saja.
-    if (!widget.ralan) return _buildContent();
+    if (!_bisaInput) return _buildContent();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -189,18 +200,18 @@ class _TindakanTabState extends State<TindakanTab> {
       clipBehavior: Clip.antiAlias,
       child: Table(
         border: const TableBorder(top: BorderSide(color: kBorder), horizontalInside: BorderSide(color: kBorder)),
-        columnWidths: {0: const FlexColumnWidth(3), 1: const FlexColumnWidth(2), if (widget.ralan) 2: const FixedColumnWidth(_aksiWidth)},
+        columnWidths: {0: const FlexColumnWidth(3), 1: const FlexColumnWidth(2), if (_bisaInput) 2: const FixedColumnWidth(_aksiWidth)},
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
             decoration: const BoxDecoration(color: Colors.white),
-            children: [_cell('Perawatan/Tindakan', color: const Color(0xFF5F6665), bold: true), _cell('Biaya', color: const Color(0xFF5F6665), bold: true, align: TextAlign.right), if (widget.ralan) _cell('Aksi', color: const Color(0xFF5F6665), bold: true, align: TextAlign.center)],
+            children: [_cell('Perawatan/Tindakan', color: const Color(0xFF5F6665), bold: true), _cell('Biaya', color: const Color(0xFF5F6665), bold: true, align: TextAlign.right), if (_bisaInput) _cell('Aksi', color: const Color(0xFF5F6665), bold: true, align: TextAlign.center)],
           ),
           for (final it in items)
             TableRow(children: [
               _cell(it.nmPerawatan.isEmpty ? '-' : it.nmPerawatan, color: const Color(0xFF111827)),
               _cell(_rupiah(it.biayaRawat), color: const Color(0xFF111827), align: TextAlign.right),
-              if (widget.ralan) _hapusButton(() => _hapusDokter(it)),
+              if (_bisaInput) _hapusButton(() => _hapusDokter(it)),
             ]),
         ],
       ),
@@ -214,7 +225,7 @@ class _TindakanTabState extends State<TindakanTab> {
       clipBehavior: Clip.antiAlias,
       child: Table(
         border: const TableBorder(top: BorderSide(color: kBorder), horizontalInside: BorderSide(color: kBorder)),
-        columnWidths: {0: const FlexColumnWidth(3), 1: const FlexColumnWidth(2), 2: const FlexColumnWidth(2), if (widget.ralan) 3: const FixedColumnWidth(_aksiWidth)},
+        columnWidths: {0: const FlexColumnWidth(3), 1: const FlexColumnWidth(2), 2: const FlexColumnWidth(2), if (_bisaInput) 3: const FixedColumnWidth(_aksiWidth)},
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
@@ -223,7 +234,7 @@ class _TindakanTabState extends State<TindakanTab> {
               _cell('Perawatan/Tindakan', color: const Color(0xFF5F6665), bold: true),
               _cell('Petugas Yg Menangani', color: const Color(0xFF5F6665), bold: true),
               _cell('Biaya', color: const Color(0xFF5F6665), bold: true, align: TextAlign.right),
-              if (widget.ralan) _cell('Aksi', color: const Color(0xFF5F6665), bold: true, align: TextAlign.center),
+              if (_bisaInput) _cell('Aksi', color: const Color(0xFF5F6665), bold: true, align: TextAlign.center),
             ],
           ),
           for (final it in items)
@@ -231,7 +242,7 @@ class _TindakanTabState extends State<TindakanTab> {
               _cell(it.nmPerawatan.isEmpty ? '-' : it.nmPerawatan, color: const Color(0xFF111827)),
               _cell(it.namaParamedis.isEmpty ? '-' : it.namaParamedis, color: const Color(0xFF374151)),
               _cell(_rupiah(it.biayaRawat), color: const Color(0xFF111827), align: TextAlign.right),
-              if (widget.ralan) _hapusButton(() => _hapusParamedis(it, drpr: drpr)),
+              if (_bisaInput) _hapusButton(() => _hapusParamedis(it, drpr: drpr)),
             ]),
         ],
       ),

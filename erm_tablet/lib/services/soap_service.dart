@@ -12,6 +12,8 @@ class SoapService {
   /// tglPerawatan/jamRawat dibiarkan kosong -> backend otomatis pakai
   /// waktu sekarang (padanan checkbox "Otomatis" di web, default aktif).
   static Future<void> simpan({
+    String? tglPerawatan, // diisi = mode EDIT (PUT), YYYY-MM-DD
+    String? jamRawat, // HH:MM:SS, kunci data baris yg diedit
     required String noRawat,
     required String nip,
     required String keluhan,
@@ -37,8 +39,10 @@ class SoapService {
     // tidak punya kolom lingkar_perut". Web msh nampilin field L.P. di form
     // Ranap tapi nilainya dibuang diam2 oleh backend, jadi SENGAJA tidak
     // direplikasi di sini spy tidak menyesatkan (nurse ngisi tp gak kesimpan).
-    return ApiClient.postJson('/api/pemeriksaan-ranap', {
+    final body = <String, dynamic>{
       'no_rawat': noRawat,
+      if (tglPerawatan != null) 'tgl_perawatan': tglPerawatan,
+      if (jamRawat != null) 'jam_rawat': jamRawat,
       'nip': nip,
       'keluhan': keluhan,
       'pemeriksaan': pemeriksaan,
@@ -56,6 +60,17 @@ class SoapService {
       'gcs': gcs,
       'kesadaran': kesadaran,
       'alergi': alergi,
-    });
+    };
+    // Edit = PUT (WHERE no_rawat+tgl_perawatan+jam_rawat), sama dgn
+    // PemeriksaanRanap.tsx isEditMode.
+    return tglPerawatan != null
+        ? ApiClient.putJson('/api/pemeriksaan-ranap', body)
+        : ApiClient.postJson('/api/pemeriksaan-ranap', body);
+  }
+
+  /// DELETE ?no_rawat=&tgl_perawatan=YYYY-MM-DD&jam_rawat=HH:MM:SS
+  static Future<void> hapus({required String noRawat, required String tglPerawatan, required String jamRawat}) {
+    final q = Uri(queryParameters: {'no_rawat': noRawat, 'tgl_perawatan': tglPerawatan, 'jam_rawat': jamRawat}).query;
+    return ApiClient.deleteJson('/api/pemeriksaan-ranap?$q');
   }
 }

@@ -23,4 +23,26 @@ class LabService {
     final hasil = res['hasil'] as List<dynamic>? ?? [];
     return hasil.map((e) => LabHasilItem.fromJson(e as Map<String, dynamic>, kategori.toLowerCase())).toList();
   }
+
+  // ── Buat Permintaan Lab (padanan ModalInputLab.tsx) ──
+
+  /// [kategori] 'PK' / 'PA'.
+  static Future<List<Map<String, dynamic>>> searchJenis(String kategori, String search, String kdPj) {
+    return ApiClient.getJsonArray('/api/lab/jenis-perawatan', query: {'kategori': kategori, 'search': search, 'kd_pj': kdPj});
+  }
+
+  /// Parameter (template_laboratorium) satu pemeriksaan PK.
+  static Future<List<Map<String, dynamic>>> getTemplate(String kdJenisPrw) {
+    return ApiClient.getJsonArray('/api/lab/template', query: {'kd_jenis_prw': kdJenisPrw});
+  }
+
+  static Future<String> createPermintaanPK(Map<String, dynamic> payload) async {
+    final res = await ApiClient.postJson('/api/lab/permintaan-pk', payload);
+    return res['noorder'] as String? ?? '';
+  }
+
+  static Future<String> createPermintaanPA(Map<String, dynamic> payload) async {
+    final res = await ApiClient.postJson('/api/lab/permintaan-pa', payload);
+    return res['noorder'] as String? ?? '';
+  }
 }
